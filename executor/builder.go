@@ -110,8 +110,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildReloadExprPushdownBlacklist(v)
 	case *plannercore.ReloadOptRuleBlacklist:
 		return b.buildReloadOptRuleBlacklist(v)
-	case *plannercore.AdminPlugins:
-		return b.buildAdminPlugins(v)
 	case *plannercore.DDL:
 		return b.buildDDL(v)
 	case *plannercore.Deallocate:
@@ -527,10 +525,6 @@ func (b *executorBuilder) buildReloadExprPushdownBlacklist(v *plannercore.Reload
 
 func (b *executorBuilder) buildReloadOptRuleBlacklist(v *plannercore.ReloadOptRuleBlacklist) Executor {
 	return &ReloadOptRuleBlacklistExec{baseExecutor{ctx: b.ctx}}
-}
-
-func (b *executorBuilder) buildAdminPlugins(v *plannercore.AdminPlugins) Executor {
-	return &AdminPluginsExec{baseExecutor: baseExecutor{ctx: b.ctx}, Action: v.Action, Plugins: v.Plugins}
 }
 
 func (b *executorBuilder) buildDeallocate(v *plannercore.Deallocate) Executor {

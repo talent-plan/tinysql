@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
@@ -89,8 +88,6 @@ const (
 	nmMetricsInterval  = "metrics-interval"
 	nmDdlLease         = "lease"
 	nmTokenLimit       = "token-limit"
-	nmPluginDir        = "plugin-dir"
-	nmPluginLoad       = "plugin-load"
 	nmRepairMode       = "repair-mode"
 	nmRepairList       = "repair-list"
 
@@ -117,8 +114,6 @@ var (
 	runDDL           = flagBoolean(nmRunDDL, true, "run ddl worker on this tidb-server")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
-	pluginDir        = flag.String(nmPluginDir, "/data/deploy/plugin", "the folder that hold plugin")
-	pluginLoad       = flag.String(nmPluginLoad, "", "wait load plugin name(separated by comma)")
 	affinityCPU      = flag.String(nmAffinityCPU, "", "affinity cpu (cpu-no. separated by comma, e.g. 1,2,3)")
 	repairMode       = flagBoolean(nmRepairMode, false, "enable admin repair mode")
 	repairList       = flag.String(nmRepairList, "", "admin repair table list")
@@ -468,12 +463,6 @@ func overrideConfig() {
 	if actualFlags[nmTokenLimit] {
 		cfg.TokenLimit = uint(*tokenLimit)
 	}
-	if actualFlags[nmPluginLoad] {
-		cfg.Plugin.Load = *pluginLoad
-	}
-	if actualFlags[nmPluginDir] {
-		cfg.Plugin.Dir = *pluginDir
-	}
 	if actualFlags[nmRepairMode] {
 		cfg.RepairMode = *repairMode
 	}
@@ -671,7 +660,6 @@ func cleanup() {
 	} else {
 		svr.TryGracefulDown()
 	}
-	plugin.Shutdown(context.Background())
 	closeDomainAndStorage()
 }
 

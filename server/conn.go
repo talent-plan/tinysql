@@ -57,7 +57,6 @@ import (
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/arena"
@@ -1487,25 +1486,6 @@ func (cc *clientConn) handleChangeUser(ctx context.Context, data []byte) error {
 		logutil.Logger(ctx).Debug("close old context failed", zap.Error(err))
 	}
 	err = cc.openSessionAndDoAuth(pass)
-	if err != nil {
-		return err
-	}
-
-	if plugin.IsEnable(plugin.Audit) {
-		cc.ctx.GetSessionVars().ConnectionInfo = cc.connectInfo()
-	}
-
-	err = plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-		authPlugin := plugin.DeclareAuditManifest(p.Manifest)
-		if authPlugin.OnConnectionEvent != nil {
-			connInfo := cc.ctx.GetSessionVars().ConnectionInfo
-			err = authPlugin.OnConnectionEvent(context.Background(), plugin.ChangeUser, connInfo)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 	if err != nil {
 		return err
 	}

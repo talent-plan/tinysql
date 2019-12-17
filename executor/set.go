@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -138,16 +137,6 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 			return err
 		}
 		err = sessionVars.GlobalVarsAccessor.SetGlobalSysVar(name, valStr)
-		if err != nil {
-			return err
-		}
-		err = plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-			auditPlugin := plugin.DeclareAuditManifest(p.Manifest)
-			if auditPlugin.OnGlobalVariableEvent != nil {
-				auditPlugin.OnGlobalVariableEvent(context.Background(), e.ctx.GetSessionVars(), name, valStr)
-			}
-			return nil
-		})
 		if err != nil {
 			return err
 		}

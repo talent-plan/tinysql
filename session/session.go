@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/sessionctx"
@@ -1569,19 +1568,6 @@ func loadSystemTZ(se *session) (string, error) {
 
 // BootstrapSession runs the first time when the TiDB server start.
 func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
-	cfg := config.GetGlobalConfig()
-	if len(cfg.Plugin.Load) > 0 {
-		err := plugin.Load(context.Background(), plugin.Config{
-			Plugins:        strings.Split(cfg.Plugin.Load, ","),
-			PluginDir:      cfg.Plugin.Dir,
-			GlobalSysVar:   &variable.SysVars,
-			PluginVarNames: &variable.PluginVarNames,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	initLoadCommonGlobalVarsSQL()
 
 	ver := getStoreBootstrapVersion(store)
@@ -1607,13 +1593,6 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 
 	if !config.GetGlobalConfig().Security.SkipGrantTable {
 		err = dom.LoadPrivilegeLoop(se)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(cfg.Plugin.Load) > 0 {
-		err := plugin.Init(context.Background(), plugin.Config{EtcdClient: dom.GetEtcdClient()})
 		if err != nil {
 			return nil, err
 		}
@@ -1859,10 +1838,7 @@ var (
 
 func initLoadCommonGlobalVarsSQL() {
 	loadCommonGlobalVarsSQLOnce.Do(func() {
-		vars := append(make([]string, 0, len(builtinGlobalVariable)+len(variable.PluginVarNames)), builtinGlobalVariable...)
-		if len(variable.PluginVarNames) > 0 {
-			vars = append(vars, variable.PluginVarNames...)
-		}
+		vars := append(make([]string, 0, len(builtinGlobalVariable)), builtinGlobalVariable...)
 		loadCommonGlobalVarsSQL = "select HIGH_PRIORITY * from mysql.global_variables where variable_name in ('" + strings.Join(vars, quoteCommaQuote) + "')"
 	})
 }

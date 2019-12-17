@@ -135,10 +135,6 @@ func GetSessionOnlySysVars(s *SessionVars, key string) (string, bool, error) {
 		return strconv.FormatUint(uint64(atomic.LoadUint32(&DDLSlowOprThreshold)), 10), true, nil
 	case TiDBQueryLogMaxLen:
 		return strconv.FormatUint(atomic.LoadUint64(&config.GetGlobalConfig().Log.QueryLogMaxLen), 10), true, nil
-	case PluginDir:
-		return config.GetGlobalConfig().Plugin.Dir, true, nil
-	case PluginLoad:
-		return config.GetGlobalConfig().Plugin.Load, true, nil
 	case TiDBCheckMb4ValueInUTF8:
 		return BoolToIntStr(config.GetGlobalConfig().CheckMb4ValueInUTF8), true, nil
 	}

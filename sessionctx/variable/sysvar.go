@@ -58,9 +58,6 @@ func GetSysVar(name string) *SysVar {
 	return SysVars[name]
 }
 
-// PluginVarNames is global plugin var names set.
-var PluginVarNames []string
-
 // Variable errors
 var (
 	ErrUnsupportedValueForVar      = terror.ClassVariable.New(mysql.ErrUnsupportedValueForVar, mysql.MySQLErrName[mysql.ErrUnsupportedValueForVar])
@@ -328,8 +325,6 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, "sort_buffer_size", "262144"},
 	{ScopeGlobal, "innodb_flush_neighbors", "1"},
 	{ScopeNone, "innodb_use_sys_malloc", "1"},
-	{ScopeSession, PluginLoad, ""},
-	{ScopeSession, PluginDir, "/data/deploy/plugin"},
 	{ScopeNone, "performance_schema_max_socket_classes", "10"},
 	{ScopeNone, "performance_schema_max_stage_classes", "150"},
 	{ScopeGlobal, "innodb_purge_batch_size", "300"},
@@ -852,10 +847,6 @@ const (
 	ValidatePasswordNumberCount = "validate_password_number_count"
 	// ValidatePasswordLength is the name of 'validate_password_length' system variable.
 	ValidatePasswordLength = "validate_password_length"
-	// PluginDir is the name of 'plugin_dir' system variable.
-	PluginDir = "plugin_dir"
-	// PluginLoad is the name of 'plugin_load' system variable.
-	PluginLoad = "plugin_load"
 	// Port is the name for 'port' system variable.
 	Port = "port"
 	// DataDir is the name for 'datadir' system variable.

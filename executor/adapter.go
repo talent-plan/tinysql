@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv"
@@ -151,7 +150,6 @@ func (a *recordSet) Close() error {
 	sessVars := a.stmt.Ctx.GetSessionVars()
 	pps := types.CloneRow(sessVars.PreparedParams)
 	sessVars.PrevStmt = FormatSQL(a.stmt.OriginText(), pps)
-	a.stmt.logAudit()
 	a.stmt.SummaryStmt()
 	return err
 }
@@ -504,7 +502,6 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 	var err error
 	defer func() {
 		terror.Log(e.Close())
-		a.logAudit()
 	}()
 
 	err = Next(ctx, e, newFirstChunk(e))
@@ -723,25 +720,6 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 
 // QueryReplacer replaces new line and tab for grep result including query string.
 var QueryReplacer = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
-
-func (a *ExecStmt) logAudit() {
-	sessVars := a.Ctx.GetSessionVars()
-	if sessVars.InRestrictedSQL {
-		return
-	}
-	err := plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-		audit := plugin.DeclareAuditManifest(p.Manifest)
-		if audit.OnGeneralEvent != nil {
-			cmd := mysql.Command2Str[byte(atomic.LoadUint32(&a.Ctx.GetSessionVars().CommandValue))]
-			ctx := context.WithValue(context.Background(), plugin.ExecStartTimeCtxKey, a.Ctx.GetSessionVars().StartTime)
-			audit.OnGeneralEvent(ctx, sessVars, plugin.Log, cmd)
-		}
-		return nil
-	})
-	if err != nil {
-		log.Error("log audit log failure", zap.Error(err))
-	}
-}
 
 // FormatSQL is used to format the original SQL, e.g. truncating long SQL, appending prepared arguments.
 func FormatSQL(sql string, pps variable.PreparedParams) stringutil.StringerFunc {

@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -168,8 +167,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 	case ast.ShowStatsHealthy:
 		e.fetchShowStatsHealthy()
 		return nil
-	case ast.ShowPlugins:
-		return e.fetchShowPlugins()
 	case ast.ShowProfiles:
 		// empty result
 	case ast.ShowMasterStatus:
@@ -1044,16 +1041,6 @@ func (e *ShowExec) fetchShowTriggers() error {
 }
 
 func (e *ShowExec) fetchShowProcedureStatus() error {
-	return nil
-}
-
-func (e *ShowExec) fetchShowPlugins() error {
-	tiPlugins := plugin.GetAll()
-	for _, ps := range tiPlugins {
-		for _, p := range ps {
-			e.appendRow([]interface{}{p.Name, p.StateValue(), p.Kind.String(), p.Path, p.License, strconv.Itoa(int(p.Version))})
-		}
-	}
 	return nil
 }
 

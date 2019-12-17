@@ -364,21 +364,6 @@ var sessionVarCols = []columnInfo{
 	{"VARIABLE_VALUE", mysql.TypeVarchar, 1024, 0, nil, nil},
 }
 
-// See https://dev.mysql.com/doc/refman/5.7/en/plugins-table.html
-var pluginsCols = []columnInfo{
-	{"PLUGIN_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PLUGIN_VERSION", mysql.TypeVarchar, 20, 0, nil, nil},
-	{"PLUGIN_STATUS", mysql.TypeVarchar, 10, 0, nil, nil},
-	{"PLUGIN_TYPE", mysql.TypeVarchar, 80, 0, nil, nil},
-	{"PLUGIN_TYPE_VERSION", mysql.TypeVarchar, 20, 0, nil, nil},
-	{"PLUGIN_LIBRARY", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PLUGIN_LIBRARY_VERSION", mysql.TypeVarchar, 20, 0, nil, nil},
-	{"PLUGIN_AUTHOR", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PLUGIN_DESCRIPTION", mysql.TypeLongBlob, types.UnspecifiedLength, 0, nil, nil},
-	{"PLUGIN_LICENSE", mysql.TypeVarchar, 80, 0, nil, nil},
-	{"LOAD_OPTION", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
 // See https://dev.mysql.com/doc/refman/5.7/en/partitions-table.html
 var partitionsCols = []columnInfo{
 	{"TABLE_CATALOG", mysql.TypeVarchar, 512, 0, nil, nil},
@@ -2274,7 +2259,6 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableKeyColumm:                          keyColumnUsageCols,
 	tableReferConst:                         referConstCols,
 	tableSessionVar:                         sessionVarCols,
-	tablePlugins:                            pluginsCols,
 	tableConstraints:                        tableConstraintsCols,
 	tableTriggers:                           tableTriggersCols,
 	tableUserPrivileges:                     tableUserPrivilegesCols,
@@ -2373,7 +2357,7 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 	case tableKeyColumm:
 		fullRows = dataForKeyColumnUsage(dbs)
 	case tableReferConst:
-	case tablePlugins, tableTriggers:
+	case tableTriggers:
 	case tableUserPrivileges:
 		fullRows = dataForUserPrivileges(ctx)
 	case tableEngines:

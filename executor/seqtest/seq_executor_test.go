@@ -313,7 +313,6 @@ func (s *seqTestSuite) TestShow(c *C) {
 	tk.MustQuery("SHOW PROCESSLIST;").Check(testkit.Rows())
 	tk.MustQuery("SHOW FULL PROCESSLIST;").Check(testkit.Rows())
 	tk.MustQuery("SHOW EVENTS WHERE Db = 'test'").Check(testkit.Rows())
-	tk.MustQuery("SHOW PLUGINS").Check(testkit.Rows())
 	tk.MustQuery("SHOW PROFILES").Check(testkit.Rows())
 
 	// +-------------+--------------------+--------------+------------------+-------------------+
@@ -458,8 +457,6 @@ func (s *seqTestSuite) TestShow(c *C) {
 
 	// for issue #4255
 	result = tk.MustQuery(`show function status like '%'`)
-	result.Check(result.Rows())
-	result = tk.MustQuery(`show plugins like '%'`)
 	result.Check(result.Rows())
 
 	// for issue #4740

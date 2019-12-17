@@ -135,23 +135,6 @@ type ReloadOptRuleBlacklist struct {
 	baseSchemaProducer
 }
 
-// AdminPluginsAction indicate action will be taken on plugins.
-type AdminPluginsAction int
-
-const (
-	// Enable indicates enable plugins.
-	Enable AdminPluginsAction = iota + 1
-	// Disable indicates disable plugins.
-	Disable
-)
-
-// AdminPlugins administrates tidb plugins.
-type AdminPlugins struct {
-	baseSchemaProducer
-	Action  AdminPluginsAction
-	Plugins []string
-}
-
 // Change represents a change plan.
 type Change struct {
 	baseSchemaProducer

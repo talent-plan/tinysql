@@ -830,10 +830,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 		return &ReloadExprPushdownBlacklist{}, nil
 	case ast.AdminReloadOptRuleBlacklist:
 		return &ReloadOptRuleBlacklist{}, nil
-	case ast.AdminPluginEnable:
-		return &AdminPlugins{Action: Enable, Plugins: as.Plugins}, nil
-	case ast.AdminPluginDisable:
-		return &AdminPlugins{Action: Disable, Plugins: as.Plugins}, nil
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.AdminStmt(%T) for buildAdmin", as)
 	}
@@ -2754,11 +2750,6 @@ func buildShowSchema(s *ast.ShowStmt, isView bool) (schema *expression.Schema, o
 		ftypes = []byte{mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeLonglong,
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeLonglong,
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowPlugins:
-		names = []string{"Name", "Status", "Type", "Library", "License", "Version"}
-		ftypes = []byte{
-			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar,
-		}
 	case ast.ShowProcessList:
 		names = []string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}
 		ftypes = []byte{mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeVarchar,

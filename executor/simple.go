@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -1037,14 +1036,6 @@ func (e *SimpleExec) executeFlush(s *ast.FlushStmt) error {
 		defer sysSessionPool.Put(ctx)
 		err = dom.PrivilegeHandle().Update(ctx.(sessionctx.Context))
 		return err
-	case ast.FlushTiDBPlugin:
-		dom := domain.GetDomain(e.ctx)
-		for _, pluginName := range s.Plugins {
-			err := plugin.NotifyFlush(dom, pluginName)
-			if err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }

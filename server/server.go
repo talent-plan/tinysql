@@ -54,7 +54,6 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/metrics"
-	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
@@ -339,28 +338,6 @@ func (s *Server) Run() error {
 
 		clientConn := s.newConn(conn)
 
-		err = plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-			authPlugin := plugin.DeclareAuditManifest(p.Manifest)
-			if authPlugin.OnConnectionEvent != nil {
-				host, err := clientConn.PeerHost("")
-				if err != nil {
-					logutil.BgLogger().Error("get peer host failed", zap.Error(err))
-					terror.Log(clientConn.Close())
-					return errors.Trace(err)
-				}
-				err = authPlugin.OnConnectionEvent(context.Background(), plugin.PreAuth, &variable.ConnectionInfo{Host: host})
-				if err != nil {
-					logutil.BgLogger().Info("do connection event failed", zap.Error(err))
-					terror.Log(clientConn.Close())
-					return errors.Trace(err)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			continue
-		}
-
 		go s.onConn(clientConn)
 	}
 	err := s.listener.Close()
@@ -432,39 +409,7 @@ func (s *Server) onConn(conn *clientConn) {
 	s.rwlock.Unlock()
 	metrics.ConnGauge.Set(float64(connections))
 
-	if plugin.IsEnable(plugin.Audit) {
-		conn.ctx.GetSessionVars().ConnectionInfo = conn.connectInfo()
-	}
-	err := plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-		authPlugin := plugin.DeclareAuditManifest(p.Manifest)
-		if authPlugin.OnConnectionEvent != nil {
-			sessionVars := conn.ctx.GetSessionVars()
-			return authPlugin.OnConnectionEvent(context.Background(), plugin.Connected, sessionVars.ConnectionInfo)
-		}
-		return nil
-	})
-	if err != nil {
-		return
-	}
-
-	connectedTime := time.Now()
 	conn.Run(ctx)
-
-	err = plugin.ForeachPlugin(plugin.Audit, func(p *plugin.Plugin) error {
-		authPlugin := plugin.DeclareAuditManifest(p.Manifest)
-		if authPlugin.OnConnectionEvent != nil {
-			sessionVars := conn.ctx.GetSessionVars()
-			sessionVars.ConnectionInfo.Duration = float64(time.Since(connectedTime)) / float64(time.Millisecond)
-			err := authPlugin.OnConnectionEvent(context.Background(), plugin.Disconnect, sessionVars.ConnectionInfo)
-			if err != nil {
-				logutil.BgLogger().Warn("do connection event failed", zap.String("plugin", authPlugin.Name), zap.Error(err))
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return
-	}
 }
 
 func (cc *clientConn) connectInfo() *variable.ConnectionInfo {

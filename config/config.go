@@ -87,7 +87,6 @@ type Config struct {
 	TiKVClient          TiKVClient        `toml:"tikv-client" json:"tikv-client"`
 	Binlog              Binlog            `toml:"binlog" json:"binlog"`
 	CompatibleKillQuery bool              `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	Plugin              Plugin            `toml:"plugin" json:"plugin"`
 	PessimisticTxn      PessimisticTxn    `toml:"pessimistic-txn" json:"pessimistic-txn"`
 	CheckMb4ValueInUTF8 bool              `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
@@ -397,12 +396,6 @@ type Binlog struct {
 	BinlogSocket string `toml:"binlog-socket" json:"binlog-socket"`
 	// The strategy for sending binlog to pump, value can be "range" or "hash" now.
 	Strategy string `toml:"strategy" json:"strategy"`
-}
-
-// Plugin is the config for plugin
-type Plugin struct {
-	Dir  string `toml:"dir" json:"dir"`
-	Load string `toml:"load" json:"load"`
 }
 
 // PessimisticTxn is the config for pessimistic transaction.
