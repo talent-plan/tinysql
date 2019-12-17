@@ -218,20 +218,6 @@ const (
 		index hist(table_id, is_index, hist_id)
 	);`
 
-	// CreateBindInfoTable stores the sql bind info which is used to update globalBindCache.
-	CreateBindInfoTable = `CREATE TABLE IF NOT EXISTS mysql.bind_info (
-		original_sql text NOT NULL  ,
-      	bind_sql text NOT NULL ,
-      	default_db text  NOT NULL,
-		status text NOT NULL,
-		create_time timestamp(3) NOT NULL,
-		update_time timestamp(3) NOT NULL,
-		charset text NOT NULL,
-		collation text NOT NULL,
-		INDEX sql_index(original_sql(1024),default_db(1024)) COMMENT "accelerate the speed when add global binding query",
-		INDEX time_index(update_time) COMMENT "accelerate the speed when querying with last update time"
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-
 	// CreateRoleEdgesTable stores the role and user relationship information.
 	CreateRoleEdgesTable = `CREATE TABLE IF NOT EXISTS mysql.role_edges (
 		FROM_HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '',
@@ -840,14 +826,10 @@ func upgradeToVer27(s Session) {
 	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `correlation` double NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
 }
 
-func upgradeToVer28(s Session) {
-	doReentrantDDL(s, CreateBindInfoTable)
+func upgradeToVer28(_ Session) {
 }
 
-func upgradeToVer29(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.bind_info change create_time create_time timestamp(3)")
-	doReentrantDDL(s, "ALTER TABLE mysql.bind_info change update_time update_time timestamp(3)")
-	doReentrantDDL(s, "ALTER TABLE mysql.bind_info add index sql_index (original_sql(1024),default_db(1024))", ddl.ErrDupKeyName)
+func upgradeToVer29(_ Session) {
 }
 
 func upgradeToVer30(s Session) {
@@ -943,8 +925,6 @@ func doDDLWorks(s Session) {
 	mustExecute(s, CreateRoleEdgesTable)
 	// Create default_roles table.
 	mustExecute(s, CreateDefaultRolesTable)
-	// Create bind_info table.
-	mustExecute(s, CreateBindInfoTable)
 	// Create stats_topn_store table.
 	mustExecute(s, CreateStatsTopNTable)
 	// Create expr_pushdown_blacklist table.

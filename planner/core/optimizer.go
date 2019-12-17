@@ -115,20 +115,20 @@ func CheckTableLock(ctx sessionctx.Context, is infoschema.InfoSchema, vs []visit
 }
 
 // DoOptimize optimizes a logical plan to a physical plan.
-func DoOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (PhysicalPlan, float64, error) {
+func DoOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (PhysicalPlan, error) {
 	logic, err := logicalOptimize(ctx, flag, logic)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if !AllowCartesianProduct.Load() && existsCartesianProduct(logic) {
-		return nil, 0, errors.Trace(ErrCartesianProductUnsupported)
+		return nil, errors.Trace(ErrCartesianProductUnsupported)
 	}
-	physical, cost, err := physicalOptimize(logic)
+	physical, err := physicalOptimize(logic)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	finalPlan := postOptimize(physical)
-	return finalPlan, cost, nil
+	return finalPlan, nil
 }
 
 func postOptimize(plan PhysicalPlan) PhysicalPlan {
@@ -159,9 +159,9 @@ func isLogicalRuleDisabled(r logicalOptRule) bool {
 	return disabled
 }
 
-func physicalOptimize(logic LogicalPlan) (PhysicalPlan, float64, error) {
+func physicalOptimize(logic LogicalPlan) (PhysicalPlan, error) {
 	if _, err := logic.recursiveDeriveStats(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	preparePossibleProperties(logic)
@@ -173,14 +173,14 @@ func physicalOptimize(logic LogicalPlan) (PhysicalPlan, float64, error) {
 
 	t, err := logic.findBestTask(prop)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if t.invalid() {
-		return nil, 0, ErrInternal.GenWithStackByArgs("Can't find a proper physical plan for this query")
+		return nil, ErrInternal.GenWithStackByArgs("Can't find a proper physical plan for this query")
 	}
 
 	err = t.plan().ResolveIndices()
-	return t.plan(), t.cost(), err
+	return t.plan(), err
 }
 
 func existsCartesianProduct(p LogicalPlan) bool {

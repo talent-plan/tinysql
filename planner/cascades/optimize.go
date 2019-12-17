@@ -102,22 +102,22 @@ func (opt *Optimizer) GetImplementationRules(node plannercore.LogicalPlan) []Imp
 // for each expression in each group under the required physical property. A
 // memo structure is used for a group to reduce the repeated search on the same
 // required physical property.
-func (opt *Optimizer) FindBestPlan(sctx sessionctx.Context, logical plannercore.LogicalPlan) (p plannercore.PhysicalPlan, cost float64, err error) {
+func (opt *Optimizer) FindBestPlan(sctx sessionctx.Context, logical plannercore.LogicalPlan) (p plannercore.PhysicalPlan, err error) {
 	logical, err = opt.onPhasePreprocessing(sctx, logical)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	rootGroup := memo.Convert2Group(logical)
 	err = opt.onPhaseExploration(sctx, rootGroup)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	p, cost, err = opt.onPhaseImplementation(sctx, rootGroup)
+	p, err = opt.onPhaseImplementation(sctx, rootGroup)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	err = p.ResolveIndices()
-	return p, cost, err
+	return p, err
 }
 
 func (opt *Optimizer) onPhasePreprocessing(sctx sessionctx.Context, plan plannercore.LogicalPlan) (plannercore.LogicalPlan, error) {
@@ -242,7 +242,7 @@ func (opt *Optimizer) fillGroupStats(g *memo.Group) (err error) {
 }
 
 // onPhaseImplementation starts implementation physical operators from given root Group.
-func (opt *Optimizer) onPhaseImplementation(sctx sessionctx.Context, g *memo.Group) (plannercore.PhysicalPlan, float64, error) {
+func (opt *Optimizer) onPhaseImplementation(sctx sessionctx.Context, g *memo.Group) (plannercore.PhysicalPlan, error) {
 	prop := &property.PhysicalProperty{
 		ExpectedCnt: math.MaxFloat64,
 	}
@@ -250,12 +250,12 @@ func (opt *Optimizer) onPhaseImplementation(sctx sessionctx.Context, g *memo.Gro
 	// TODO replace MaxFloat64 costLimit by variable from sctx, or other sources.
 	impl, err := opt.implGroup(g, prop, math.MaxFloat64)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if impl == nil {
-		return nil, 0, plannercore.ErrInternal.GenWithStackByArgs("Can't find a proper physical plan for this query")
+		return nil, plannercore.ErrInternal.GenWithStackByArgs("Can't find a proper physical plan for this query")
 	}
-	return impl.GetPlan(), impl.GetCost(), nil
+	return impl.GetPlan(), nil
 }
 
 // implGroup finds the best Implementation which satisfies the required

@@ -119,12 +119,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		return in, true
 	case *ast.Join:
 		p.checkNonUniqTableAlias(node)
-	case *ast.CreateBindingStmt:
-		p.checkBindGrammar(node.OriginSel, node.HintedSel)
-	case *ast.DropBindingStmt:
-		if node.HintedSel != nil {
-			p.checkBindGrammar(node.OriginSel, node.HintedSel)
-		}
 	case *ast.RecoverTableStmt, *ast.FlashBackTableStmt:
 		// The specified table in recover table statement maybe already been dropped.
 		// So skip check table name here, otherwise, recover table [table_name] syntax will return
@@ -138,15 +132,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.flag &= ^parentIsJoin
 	}
 	return in, p.err != nil
-}
-
-func (p *preprocessor) checkBindGrammar(originSel, hintedSel ast.StmtNode) {
-	originSQL := parser.Normalize(originSel.(*ast.SelectStmt).Text())
-	hintedSQL := parser.Normalize(hintedSel.(*ast.SelectStmt).Text())
-
-	if originSQL != hintedSQL {
-		p.err = errors.Errorf("hinted sql and origin sql don't match when hinted sql erase the hint info, after erase hint info, originSQL:%s, hintedSQL:%s", originSQL, hintedSQL)
-	}
 }
 
 func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {

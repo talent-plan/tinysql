@@ -185,21 +185,6 @@ func (s *testSuite) TearDownTest(c *C) {
 	}
 }
 
-func (s *testSuiteP1) TestBind(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists testbind")
-
-	tk.MustExec("create table testbind(i int, s varchar(20))")
-	tk.MustExec("create index index_t on testbind(i,s)")
-	tk.MustExec("create global binding for select * from testbind using select * from testbind use index for join(index_t)")
-	c.Assert(len(tk.MustQuery("show global bindings").Rows()), Equals, 1)
-
-	tk.MustExec("create session binding for select * from testbind using select * from testbind use index for join(index_t)")
-	c.Assert(len(tk.MustQuery("show session bindings").Rows()), Equals, 1)
-	tk.MustExec("drop session binding for select * from testbind")
-}
-
 func (s *testSuiteP1) TestChange(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

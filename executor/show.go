@@ -33,9 +33,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/etcd"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb-tools/tidb-binlog/node"
-	"github.com/pingcap/tidb/bindinfo"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -178,8 +176,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowMasterStatus()
 	case ast.ShowPrivileges:
 		return e.fetchShowPrivileges()
-	case ast.ShowBindings:
-		return e.fetchShowBind()
 	case ast.ShowAnalyzeStatus:
 		e.fetchShowAnalyzeStatus()
 		return nil
@@ -187,31 +183,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowTableRegions()
 	case ast.ShowBuiltins:
 		return e.fetchShowBuiltins()
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowBind() error {
-	var bindRecords []*bindinfo.BindRecord
-	if !e.GlobalScope {
-		handle := e.ctx.Value(bindinfo.SessionBindInfoKeyType).(*bindinfo.SessionHandle)
-		bindRecords = handle.GetAllBindRecord()
-	} else {
-		bindRecords = domain.GetDomain(e.ctx).BindHandle().GetAllBindRecord()
-	}
-	for _, bindData := range bindRecords {
-		for _, hint := range bindData.Bindings {
-			e.appendRow([]interface{}{
-				bindData.OriginalSQL,
-				hint.BindSQL,
-				bindData.Db,
-				hint.Status,
-				hint.CreateTime,
-				hint.UpdateTime,
-				hint.Charset,
-				hint.Collation,
-			})
-		}
 	}
 	return nil
 }

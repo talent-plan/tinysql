@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/bindinfo"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain/infosync"
@@ -61,7 +60,6 @@ type Domain struct {
 	store                kv.Storage
 	infoHandle           *infoschema.Handle
 	privHandle           *privileges.Handle
-	bindHandle           *bindinfo.BindHandle
 	statsHandle          unsafe.Pointer
 	statsLease           time.Duration
 	ddl                  ddl.DDL
@@ -824,76 +822,6 @@ func (do *Domain) LoadPrivilegeLoop(ctx sessionctx.Context) error {
 // PrivilegeHandle returns the MySQLPrivilege.
 func (do *Domain) PrivilegeHandle() *privileges.Handle {
 	return do.privHandle
-}
-
-// BindHandle returns domain's bindHandle.
-func (do *Domain) BindHandle() *bindinfo.BindHandle {
-	return do.bindHandle
-}
-
-// LoadBindInfoLoop create a goroutine loads BindInfo in a loop, it should
-// be called only once in BootstrapSession.
-func (do *Domain) LoadBindInfoLoop(ctxForHandle sessionctx.Context, ctxForEvolve sessionctx.Context) error {
-	ctxForHandle.GetSessionVars().InRestrictedSQL = true
-	ctxForEvolve.GetSessionVars().InRestrictedSQL = true
-	do.bindHandle = bindinfo.NewBindHandle(ctxForHandle)
-	err := do.bindHandle.Update(true)
-	if err != nil || bindinfo.Lease == 0 {
-		return err
-	}
-
-	do.globalBindHandleWorkerLoop()
-	do.handleEvolvePlanTasksLoop(ctxForEvolve)
-	return nil
-}
-
-func (do *Domain) globalBindHandleWorkerLoop() {
-	do.wg.Add(1)
-	go func() {
-		defer do.wg.Done()
-		defer recoverInDomain("globalBindHandleWorkerLoop", false)
-		bindWorkerTicker := time.NewTicker(bindinfo.Lease)
-		defer bindWorkerTicker.Stop()
-		for {
-			select {
-			case <-do.exit:
-				return
-			case <-bindWorkerTicker.C:
-				err := do.bindHandle.Update(false)
-				if err != nil {
-					logutil.BgLogger().Error("update bindinfo failed", zap.Error(err))
-				}
-				if !variable.TiDBOptOn(variable.CapturePlanBaseline.GetVal()) {
-					continue
-				}
-				do.bindHandle.DropInvalidBindRecord()
-				do.bindHandle.CaptureBaselines()
-				do.bindHandle.SaveEvolveTasksToStore()
-			}
-		}
-	}()
-}
-
-func (do *Domain) handleEvolvePlanTasksLoop(ctx sessionctx.Context) {
-	do.wg.Add(1)
-	go func() {
-		defer do.wg.Done()
-		defer recoverInDomain("handleEvolvePlanTasksLoop", false)
-		owner := do.newOwnerManager(bindinfo.Prompt, bindinfo.OwnerKey)
-		for {
-			select {
-			case <-do.exit:
-				return
-			case <-time.After(bindinfo.Lease):
-			}
-			if owner.IsOwner() {
-				err := do.bindHandle.HandleEvolvePlanTask(ctx)
-				if err != nil {
-					logutil.BgLogger().Info("evolve plan failed", zap.Error(err))
-				}
-			}
-		}
-	}()
 }
 
 // StatsHandle returns the statistic handle.
