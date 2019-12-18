@@ -386,7 +386,7 @@ func loadConfig() string {
 // hotReloadConfigItems lists all config items which support hot-reload.
 var hotReloadConfigItems = []string{"Performance.MaxProcs", "Performance.MaxMemory", "Performance.CrossJoin",
 	"Performance.FeedbackProbability", "Performance.QueryFeedbackLimit", "Performance.PseudoEstimateRatio",
-	"OOMUseTmpStorage", "OOMAction", "MemQuotaQuery", "StmtSummary.MaxStmtCount", "StmtSummary.MaxSQLLength", "Log.QueryLogMaxLen",
+	"OOMUseTmpStorage", "OOMAction", "MemQuotaQuery", "Log.QueryLogMaxLen",
 	"TiKVClient.EnableChunkRPC", "TiKVClient.StoreLimit"}
 
 func reloadConfig(nc, c *config.Config) {

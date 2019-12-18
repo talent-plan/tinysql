@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/gcutil"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/stmtsummary"
 	"go.uber.org/zap"
 )
 
@@ -184,17 +183,6 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 			// This will print too many unnecessary log info.
 			logutil.BgLogger().Debug("set session var", zap.Uint64("conn", sessionVars.ConnectionID), zap.String("name", name), zap.String("val", valStr))
 		}
-	}
-
-	switch name {
-	case variable.TiDBEnableStmtSummary:
-		stmtsummary.StmtSummaryByDigestMap.SetEnabled(valStr, !v.IsGlobal)
-	case variable.TiDBStmtSummaryRefreshInterval:
-		stmtsummary.StmtSummaryByDigestMap.SetRefreshInterval(valStr, !v.IsGlobal)
-	case variable.TiDBStmtSummaryHistorySize:
-		stmtsummary.StmtSummaryByDigestMap.SetHistorySize(valStr, !v.IsGlobal)
-	case variable.TiDBCapturePlanBaseline:
-		variable.CapturePlanBaseline.Set(valStr, !v.IsGlobal)
 	}
 
 	return nil

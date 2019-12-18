@@ -639,8 +639,8 @@ func (r *Region) incVersion() {
 
 // Store is the Store's meta data.
 type Store struct {
-	meta       *metapb.Store
-	cancel     bool // return context.Cancelled error when cancel is true.
+	meta   *metapb.Store
+	cancel bool // return context.Cancelled error when cancel is true.
 }
 
 func newStore(storeID uint64, addr string) *Store {

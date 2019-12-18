@@ -1752,13 +1752,7 @@ var builtinGlobalVariable = []string{
 	variable.TiDBEnableNoopFuncs,
 	variable.TiDBEnableIndexMerge,
 	variable.TiDBTxnMode,
-	variable.TiDBEnableStmtSummary,
-	variable.TiDBStmtSummaryRefreshInterval,
-	variable.TiDBStmtSummaryHistorySize,
 	variable.TiDBMaxDeltaSchemaCount,
-	variable.TiDBCapturePlanBaseline,
-	variable.TiDBUsePlanBaselines,
-	variable.TiDBEvolvePlanBaselines,
 	variable.TiDBIsolationReadEngines,
 	variable.TiDBStoreLimit,
 }

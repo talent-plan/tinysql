@@ -613,13 +613,13 @@ func (p *LogicalJoin) buildIndexJoinInner2IndexScan(
 type indexJoinBuildHelper struct {
 	join *LogicalJoin
 
-	maxUsedCols     int
-	chosenAccess    []expression.Expression
-	chosenRemained  []expression.Expression
-	idxOff2KeyOff   []int
-	lastColManager  *ColWithCmpFuncManager
-	chosenRanges    []*ranger.Range
-	chosenPath      *util.AccessPath
+	maxUsedCols    int
+	chosenAccess   []expression.Expression
+	chosenRemained []expression.Expression
+	idxOff2KeyOff  []int
+	lastColManager *ColWithCmpFuncManager
+	chosenRanges   []*ranger.Range
+	chosenPath     *util.AccessPath
 
 	curPossibleUsedKeys []*expression.Column
 	curNotUsedIndexCols []*expression.Column

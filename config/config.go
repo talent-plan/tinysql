@@ -93,9 +93,8 @@ type Config struct {
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
 	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
 	// Currently not support dynamic modify, because this need to reload all old version schema.
-	TreatOldVersionUTF8AsUTF8MB4 bool        `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
-	SplitRegionMaxNum            uint64      `toml:"split-region-max-num" json:"split-region-max-num"`
-	StmtSummary                  StmtSummary `toml:"stmt-summary" json:"stmt-summary"`
+	TreatOldVersionUTF8AsUTF8MB4 bool   `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
+	SplitRegionMaxNum            uint64 `toml:"split-region-max-num" json:"split-region-max-num"`
 	// RepairMode indicates that the TiDB is in the repair mode for table meta.
 	RepairMode      bool     `toml:"repair-mode" json:"repair-mode"`
 	RepairTableList []string `toml:"repair-table-list" json:"repair-table-list"`
@@ -402,20 +401,6 @@ type PessimisticTxn struct {
 	MaxRetryCount uint `toml:"max-retry-count" json:"max-retry-count"`
 }
 
-// StmtSummary is the config for statement summary.
-type StmtSummary struct {
-	// Enable statement summary or not.
-	Enable bool `toml:"enable" json:"enable"`
-	// The maximum number of statements kept in memory.
-	MaxStmtCount uint `toml:"max-stmt-count" json:"max-stmt-count"`
-	// The maximum length of displayed normalized SQL and sample SQL.
-	MaxSQLLength uint `toml:"max-sql-length" json:"max-sql-length"`
-	// The refresh interval of statement summary.
-	RefreshInterval int `toml:"refresh-interval" json:"refresh-interval"`
-	// The maximum history size of statement summary.
-	HistorySize int `toml:"history-size" json:"history-size"`
-}
-
 var defaultConf = Config{
 	Host:                         "0.0.0.0",
 	AdvertiseAddress:             "",
@@ -518,13 +503,6 @@ var defaultConf = Config{
 	PessimisticTxn: PessimisticTxn{
 		Enable:        true,
 		MaxRetryCount: 256,
-	},
-	StmtSummary: StmtSummary{
-		Enable:          false,
-		MaxStmtCount:    100,
-		MaxSQLLength:    4096,
-		RefreshInterval: 1800,
-		HistorySize:     24,
 	},
 }
 
@@ -710,13 +688,6 @@ func (c *Config) Valid() error {
 	}
 	if c.Performance.TxnTotalSizeLimit > 10<<30 {
 		return fmt.Errorf("txn-total-size-limit should be less than %d", 10<<30)
-	}
-
-	if c.StmtSummary.HistorySize < 0 {
-		return fmt.Errorf("history-size in [stmt-summary] should be greater than or equal to 0")
-	}
-	if c.StmtSummary.RefreshInterval <= 0 {
-		return fmt.Errorf("refresh-interval in [stmt-summary] should be greater than 0")
 	}
 	return nil
 }

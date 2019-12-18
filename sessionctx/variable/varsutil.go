@@ -520,14 +520,13 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		TIDBMemQuotaNestedLoopApply,
 		TiDBRetryLimit,
 		TiDBSlowLogThreshold,
-		TiDBQueryLogMaxLen,
-		TiDBEvolvePlanTaskMaxTime:
+		TiDBQueryLogMaxLen:
 		_, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return value, ErrWrongValueForVar.GenWithStackByArgs(name)
 		}
 		return value, nil
-	case TiDBAutoAnalyzeStartTime, TiDBAutoAnalyzeEndTime, TiDBEvolvePlanTaskStartTime, TiDBEvolvePlanTaskEndTime:
+	case TiDBAutoAnalyzeStartTime, TiDBAutoAnalyzeEndTime:
 		v, err := setDayTime(vars, value)
 		if err != nil {
 			return "", err
@@ -614,7 +613,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		default:
 			return value, ErrWrongValueForVar.GenWithStackByArgs(TiDBTxnMode, value)
 		}
-	case TiDBAllowRemoveAutoInc, TiDBUsePlanBaselines, TiDBEvolvePlanBaselines:
+	case TiDBAllowRemoveAutoInc:
 		switch {
 		case strings.EqualFold(value, "ON") || value == "1":
 			return "on", nil
@@ -622,36 +621,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 			return "off", nil
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-	case TiDBCapturePlanBaseline:
-		switch {
-		case strings.EqualFold(value, "ON") || value == "1":
-			return "on", nil
-		case strings.EqualFold(value, "OFF") || value == "0":
-			return "off", nil
-		case value == "":
-			return "", nil
-		}
-		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-	case TiDBEnableStmtSummary:
-		switch {
-		case strings.EqualFold(value, "ON") || value == "1":
-			return "1", nil
-		case strings.EqualFold(value, "OFF") || value == "0":
-			return "0", nil
-		case value == "":
-			return "", nil
-		}
-		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-	case TiDBStmtSummaryRefreshInterval:
-		if value == "" {
-			return "", nil
-		}
-		return checkUInt64SystemVar(name, value, 1, math.MaxUint32, vars)
-	case TiDBStmtSummaryHistorySize:
-		if value == "" {
-			return "", nil
-		}
-		return checkUInt64SystemVar(name, value, 0, math.MaxUint8, vars)
 	case TiDBIsolationReadEngines:
 		engines := strings.Split(value, ",")
 		var formatVal string

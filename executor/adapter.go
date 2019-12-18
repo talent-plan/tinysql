@@ -45,7 +45,6 @@ import (
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/pingcap/tidb/util/stmtsummary"
 	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -150,7 +149,6 @@ func (a *recordSet) Close() error {
 	sessVars := a.stmt.Ctx.GetSessionVars()
 	pps := types.CloneRow(sessVars.PreparedParams)
 	sessVars.PrevStmt = FormatSQL(a.stmt.OriginText(), pps)
-	a.stmt.SummaryStmt()
 	return err
 }
 
@@ -830,39 +828,4 @@ func getPlanDigest(sctx sessionctx.Context, p plannercore.Plan) (normalized, pla
 	normalized, planDigest = plannercore.NormalizePlan(p)
 	sctx.GetSessionVars().StmtCtx.SetPlanDigest(normalized, planDigest)
 	return
-}
-
-// SummaryStmt collects statements for performance_schema.events_statements_summary_by_digest
-func (a *ExecStmt) SummaryStmt() {
-	sessVars := a.Ctx.GetSessionVars()
-	if sessVars.InRestrictedSQL || !stmtsummary.StmtSummaryByDigestMap.Enabled() {
-		return
-	}
-	stmtCtx := sessVars.StmtCtx
-	normalizedSQL, digest := stmtCtx.SQLDigest()
-	costTime := time.Since(sessVars.StartTime)
-
-	execDetail := stmtCtx.GetExecDetails()
-	copTaskInfo := stmtCtx.CopTasksDetails()
-	memMax := stmtCtx.MemTracker.MaxConsumed()
-	var userString string
-	if sessVars.User != nil {
-		userString = sessVars.User.String()
-	}
-
-	stmtsummary.StmtSummaryByDigestMap.AddStatement(&stmtsummary.StmtExecInfo{
-		SchemaName:     strings.ToLower(sessVars.CurrentDB),
-		OriginalSQL:    a.Text,
-		NormalizedSQL:  normalizedSQL,
-		Digest:         digest,
-		User:           userString,
-		TotalLatency:   costTime,
-		ParseLatency:   sessVars.DurationParse,
-		CompileLatency: sessVars.DurationCompile,
-		StmtCtx:        stmtCtx,
-		CopTasks:       copTaskInfo,
-		ExecDetail:     &execDetail,
-		MemMax:         memMax,
-		StartTime:      sessVars.StartTime,
-	})
 }

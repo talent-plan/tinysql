@@ -155,14 +155,6 @@ const (
 
 	// TiDBAllowRemoveAutoInc indicates whether a user can drop the auto_increment column attribute or not.
 	TiDBAllowRemoveAutoInc = "tidb_allow_remove_auto_inc"
-
-	// TiDBEvolvePlanTaskMaxTime controls the max time of a single evolution task.
-	TiDBEvolvePlanTaskMaxTime = "tidb_evolve_plan_task_max_time"
-
-	// TiDBEvolvePlanTaskStartTime is the start time of evolution task.
-	TiDBEvolvePlanTaskStartTime = "tidb_evolve_plan_task_start_time"
-	// TiDBEvolvePlanTaskEndTime is the end time of evolution task.
-	TiDBEvolvePlanTaskEndTime = "tidb_evolve_plan_task_end_time"
 )
 
 // TiDB system variable names that both in session and global scope.
@@ -335,24 +327,6 @@ const (
 	// TiDBEnableNoopFuncs set true will enable using fake funcs(like get_lock release_lock)
 	TiDBEnableNoopFuncs = "tidb_enable_noop_functions"
 
-	// TiDBEnableStmtSummary indicates whether the statement summary is enabled.
-	TiDBEnableStmtSummary = "tidb_enable_stmt_summary"
-
-	// TiDBStmtSummaryRefreshInterval indicates the refresh interval in seconds for each statement summary.
-	TiDBStmtSummaryRefreshInterval = "tidb_stmt_summary_refresh_interval"
-
-	// TiDBStmtSummaryHistorySize indicates the history size of each statement summary.
-	TiDBStmtSummaryHistorySize = "tidb_stmt_summary_history_size"
-
-	// TiDBCapturePlanBaseline indicates whether the capture of plan baselines is enabled.
-	TiDBCapturePlanBaseline = "tidb_capture_plan_baselines"
-
-	// TiDBUsePlanBaselines indicates whether the use of plan baselines is enabled.
-	TiDBUsePlanBaselines = "tidb_use_plan_baselines"
-
-	// TiDBEvolvePlanBaselines indicates whether the evolution of plan baselines is enabled.
-	TiDBEvolvePlanBaselines = "tidb_evolve_plan_baselines"
-
 	// TiDBIsolationReadEngines indicates the tidb only read from the stores whose engine type is involved in IsolationReadEngines.
 	// Now, only support TiKV and TiFlash.
 	TiDBIsolationReadEngines = "tidb_isolation_read_engines"
@@ -435,11 +409,6 @@ const (
 	DefWaitSplitRegionTimeout          = 300 // 300s
 	DefTiDBEnableNoopFuncs             = false
 	DefTiDBAllowRemoveAutoInc          = false
-	DefTiDBUsePlanBaselines            = true
-	DefTiDBEvolvePlanBaselines         = false
-	DefTiDBEvolvePlanTaskMaxTime       = 600 // 600s
-	DefTiDBEvolvePlanTaskStartTime     = "00:00 +0000"
-	DefTiDBEvolvePlanTaskEndTime       = "23:59 +0000"
 	DefInnodbLockWaitTimeout           = 50 // 50s
 	DefTiDBStoreLimit                  = 0
 )

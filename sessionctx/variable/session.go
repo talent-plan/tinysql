@@ -451,12 +451,6 @@ type SessionVars struct {
 	// AllowRemoveAutoInc indicates whether a user can drop the auto_increment column attribute or not.
 	AllowRemoveAutoInc bool
 
-	// UsePlanBaselines indicates whether we will use plan baselines to adjust plan.
-	UsePlanBaselines bool
-
-	// EvolvePlanBaselines indicates whether we will evolve the plan baselines.
-	EvolvePlanBaselines bool
-
 	// Unexported fields should be accessed and set through interfaces like GetReplicaRead() and SetReplicaRead().
 
 	// allowInSubqToJoinAndAgg can be set to false to forbid rewriting the semi join to inner join with agg.
@@ -552,8 +546,6 @@ func NewSessionVars() *SessionVars {
 		EnableNoopFuncs:             DefTiDBEnableNoopFuncs,
 		replicaRead:                 kv.ReplicaReadLeader,
 		AllowRemoveAutoInc:          DefTiDBAllowRemoveAutoInc,
-		UsePlanBaselines:            DefTiDBUsePlanBaselines,
-		EvolvePlanBaselines:         DefTiDBEvolvePlanBaselines,
 		isolationReadEngines:        map[kv.StoreType]struct{}{kv.TiKV: {}, kv.TiFlash: {}, kv.TiDB: {}},
 		LockWaitTimeout:             DefInnodbLockWaitTimeout * 1000,
 	}
@@ -1002,10 +994,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 	// It's a global variable, but it also wants to be cached in server.
 	case TiDBMaxDeltaSchemaCount:
 		SetMaxDeltaSchemaCount(tidbOptInt64(val, DefTiDBMaxDeltaSchemaCount))
-	case TiDBUsePlanBaselines:
-		s.UsePlanBaselines = TiDBOptOn(val)
-	case TiDBEvolvePlanBaselines:
-		s.EvolvePlanBaselines = TiDBOptOn(val)
 	case TiDBIsolationReadEngines:
 		s.isolationReadEngines = make(map[kv.StoreType]struct{})
 		for _, engine := range strings.Split(val, ",") {

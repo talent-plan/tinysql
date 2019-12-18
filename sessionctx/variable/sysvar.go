@@ -106,13 +106,6 @@ func BoolToIntStr(b bool) string {
 	return "0"
 }
 
-func boolToOnOff(b bool) string {
-	if b {
-		return "on"
-	}
-	return "off"
-}
-
 // BoolToInt32 converts bool to int32
 func BoolToInt32(b bool) int32 {
 	if b {
@@ -722,15 +715,6 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, TiDBEnableNoopFuncs, BoolToIntStr(DefTiDBEnableNoopFuncs)},
 	{ScopeSession, TiDBReplicaRead, "leader"},
 	{ScopeSession, TiDBAllowRemoveAutoInc, BoolToIntStr(DefTiDBAllowRemoveAutoInc)},
-	{ScopeGlobal | ScopeSession, TiDBEnableStmtSummary, BoolToIntStr(config.GetGlobalConfig().StmtSummary.Enable)},
-	{ScopeGlobal | ScopeSession, TiDBStmtSummaryRefreshInterval, strconv.Itoa(config.GetGlobalConfig().StmtSummary.RefreshInterval)},
-	{ScopeGlobal | ScopeSession, TiDBStmtSummaryHistorySize, strconv.Itoa(config.GetGlobalConfig().StmtSummary.HistorySize)},
-	{ScopeGlobal | ScopeSession, TiDBCapturePlanBaseline, "off"},
-	{ScopeGlobal | ScopeSession, TiDBUsePlanBaselines, boolToOnOff(DefTiDBUsePlanBaselines)},
-	{ScopeGlobal | ScopeSession, TiDBEvolvePlanBaselines, boolToOnOff(DefTiDBEvolvePlanBaselines)},
-	{ScopeGlobal, TiDBEvolvePlanTaskMaxTime, strconv.Itoa(DefTiDBEvolvePlanTaskMaxTime)},
-	{ScopeGlobal, TiDBEvolvePlanTaskStartTime, DefTiDBEvolvePlanTaskStartTime},
-	{ScopeGlobal, TiDBEvolvePlanTaskEndTime, DefTiDBEvolvePlanTaskEndTime},
 	{ScopeGlobal | ScopeSession, TiDBIsolationReadEngines, "tikv,tiflash,tidb"},
 	{ScopeGlobal | ScopeSession, TiDBStoreLimit, strconv.FormatInt(atomic.LoadInt64(&config.GetGlobalConfig().TiKVClient.StoreLimit), 10)},
 }
