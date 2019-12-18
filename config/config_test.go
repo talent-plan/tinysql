@@ -175,9 +175,7 @@ unrecognized-option-test = true
 
 	_, err = f.WriteString(`
 token-limit = 0
-enable-table-lock = true
 alter-primary-key = true
-delay-clean-table-lock = 5
 split-region-max-num=10000
 enable-batch-dml = true
 server-version = "test_version"
@@ -217,8 +215,6 @@ history-size=100
 	c.Assert(conf.TiKVClient.RegionCacheTTL, Equals, uint(6000))
 	c.Assert(conf.TiKVClient.StoreLimit, Equals, int64(0))
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
-	c.Assert(conf.EnableTableLock, IsTrue)
-	c.Assert(conf.DelayCleanTableLock, Equals, uint64(5))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.StmtSummary.Enable, Equals, true)
 	c.Assert(conf.StmtSummary.MaxStmtCount, Equals, uint(1000))

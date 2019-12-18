@@ -105,12 +105,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeRenameTable(x)
 	case *ast.TruncateTableStmt:
 		err = e.executeTruncateTable(x)
-	case *ast.LockTablesStmt:
-		err = e.executeLockTables(x)
-	case *ast.UnlockTablesStmt:
-		err = e.executeUnlockTables(x)
-	case *ast.CleanupTableLockStmt:
-		err = e.executeCleanupTableLock(x)
 	case *ast.RepairTableStmt:
 		err = e.executeRepairTable(x)
 
@@ -491,25 +485,6 @@ func (e *DDLExec) executeFlashbackTable(s *ast.FlashBackTableStmt) error {
 	// Call DDL RecoverTable.
 	err = domain.GetDomain(e.ctx).DDL().RecoverTable(e.ctx, tblInfo, job.SchemaID, autoID, job.ID, job.StartTS)
 	return err
-}
-
-func (e *DDLExec) executeLockTables(s *ast.LockTablesStmt) error {
-	if !config.TableLockEnabled() {
-		return nil
-	}
-	return domain.GetDomain(e.ctx).DDL().LockTables(e.ctx, s)
-}
-
-func (e *DDLExec) executeUnlockTables(s *ast.UnlockTablesStmt) error {
-	if !config.TableLockEnabled() {
-		return nil
-	}
-	lockedTables := e.ctx.GetAllTableLocks()
-	return domain.GetDomain(e.ctx).DDL().UnlockTables(e.ctx, lockedTables)
-}
-
-func (e *DDLExec) executeCleanupTableLock(s *ast.CleanupTableLockStmt) error {
-	return domain.GetDomain(e.ctx).DDL().CleanupTableLock(e.ctx, s.Tables)
 }
 
 func (e *DDLExec) executeRepairTable(s *ast.RepairTableStmt) error {

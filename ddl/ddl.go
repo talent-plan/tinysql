@@ -243,9 +243,6 @@ type DDL interface {
 	AlterTable(ctx sessionctx.Context, tableIdent ast.Ident, spec []*ast.AlterTableSpec) error
 	TruncateTable(ctx sessionctx.Context, tableIdent ast.Ident) error
 	RenameTable(ctx sessionctx.Context, oldTableIdent, newTableIdent ast.Ident, isAlterTable bool) error
-	LockTables(ctx sessionctx.Context, stmt *ast.LockTablesStmt) error
-	UnlockTables(ctx sessionctx.Context, lockedTables []model.TableLockTpInfo) error
-	CleanupTableLock(ctx sessionctx.Context, tables []*ast.TableName) error
 	UpdateTableReplicaInfo(ctx sessionctx.Context, tid int64, available bool) error
 	RepairTable(ctx sessionctx.Context, table *ast.TableName, createStmt *ast.CreateTableStmt) error
 

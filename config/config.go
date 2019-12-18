@@ -93,13 +93,9 @@ type Config struct {
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
 	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
 	// Currently not support dynamic modify, because this need to reload all old version schema.
-	TreatOldVersionUTF8AsUTF8MB4 bool `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
-	// EnableTableLock indicate whether enable table lock.
-	// TODO: remove this after table lock features stable.
-	EnableTableLock     bool        `toml:"enable-table-lock" json:"enable-table-lock"`
-	DelayCleanTableLock uint64      `toml:"delay-clean-table-lock" json:"delay-clean-table-lock"`
-	SplitRegionMaxNum   uint64      `toml:"split-region-max-num" json:"split-region-max-num"`
-	StmtSummary         StmtSummary `toml:"stmt-summary" json:"stmt-summary"`
+	TreatOldVersionUTF8AsUTF8MB4 bool        `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
+	SplitRegionMaxNum            uint64      `toml:"split-region-max-num" json:"split-region-max-num"`
+	StmtSummary                  StmtSummary `toml:"stmt-summary" json:"stmt-summary"`
 	// RepairMode indicates that the TiDB is in the repair mode for table meta.
 	RepairMode      bool     `toml:"repair-mode" json:"repair-mode"`
 	RepairTableList []string `toml:"repair-table-list" json:"repair-table-list"`
@@ -439,8 +435,6 @@ var defaultConf = Config{
 	CheckMb4ValueInUTF8:          true,
 	AlterPrimaryKey:              false,
 	TreatOldVersionUTF8AsUTF8MB4: true,
-	EnableTableLock:              false,
-	DelayCleanTableLock:          0,
 	SplitRegionMaxNum:            1000,
 	RepairMode:                   false,
 	RepairTableList:              []string{},
@@ -729,16 +723,6 @@ func (c *Config) Valid() error {
 
 func hasRootPrivilege() bool {
 	return os.Geteuid() == 0
-}
-
-// TableLockEnabled uses to check whether enabled the table lock feature.
-func TableLockEnabled() bool {
-	return GetGlobalConfig().EnableTableLock
-}
-
-// TableLockDelayClean uses to get the time of delay clean table lock.
-var TableLockDelayClean = func() uint64 {
-	return GetGlobalConfig().DelayCleanTableLock
 }
 
 // ToLogConfig converts *Log to *logutil.LogConfig.

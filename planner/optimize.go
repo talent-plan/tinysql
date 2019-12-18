@@ -60,10 +60,6 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 		}
 	}
 
-	if err := plannercore.CheckTableLock(sctx, is, builder.GetVisitInfo()); err != nil {
-		return nil, nil, err
-	}
-
 	// Handle the execute statement.
 	if execPlan, ok := p.(*plannercore.Execute); ok {
 		err := execPlan.OptimizePreparedPlan(ctx, sctx, is)

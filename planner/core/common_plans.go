@@ -239,8 +239,7 @@ func (e *Execute) checkPreparedPriv(ctx context.Context, sctx sessionctx.Context
 			return err
 		}
 	}
-	err := CheckTableLock(sctx, is, preparedObj.VisitInfos)
-	return err
+	return nil
 }
 
 func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, is infoschema.InfoSchema, preparedStmt *CachedPrepareStmt) error {

@@ -100,8 +100,6 @@ func TestT(t *testing.T) {
 
 	cfg := config.GetGlobalConfig()
 	newCfg := *cfg
-	// Test for table lock.
-	newCfg.EnableTableLock = true
 	newCfg.Log.SlowThreshold = 10000
 	// Test for add/drop primary key.
 	newCfg.AlterPrimaryKey = true
