@@ -46,7 +46,7 @@ VB_FILE =
 VB_FUNC =
 
 
-.PHONY: all build update clean todo test gotest interpreter server dev benchkv benchraw check checklist parser tidy ddltest
+.PHONY: all build update clean todo test gotest interpreter server dev check checklist parser tidy
 
 default: server buildsucc
 
@@ -127,15 +127,9 @@ clean:
 test: test_part_1 test_part_2
 	@>&2 echo "Great, all tests passed."
 
-test_part_1: checklist explaintest
+test_part_1: checklist
 
 test_part_2: checkdep gotest gogenerate
-
-explaintest: server
-	@cd cmd/explaintest && ./run-tests.sh -s ../../bin/tidb-server
-
-ddltest:
-	@cd cmd/ddltest && $(GO) test -o ../../bin/ddltest -c
 
 upload-coverage: SHELL:=/bin/bash
 upload-coverage:
@@ -214,18 +208,6 @@ ifeq ($(TARGET), "")
 else
 	$(GOBUILDCOVERAGE) $(RACE_FLAG) -ldflags '$(LDFLAGS) $(COVERAGE_SERVER_LDFLAGS) $(CHECK_FLAG)' -o '$(TARGET)'
 endif
-
-benchkv:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/benchkv cmd/benchkv/main.go
-
-benchraw:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/benchraw cmd/benchraw/main.go
-
-benchdb:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/benchdb cmd/benchdb/main.go
-
-importer:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/importer ./cmd/importer
 
 checklist:
 	cat checklist.md
