@@ -57,7 +57,7 @@ func init() {
 func isClusterTableByName(dbName, tableName string) bool {
 	dbName = strings.ToUpper(dbName)
 	switch dbName {
-	case util.InformationSchemaName, util.PerformanceSchemaName:
+	case util.InformationSchemaName:
 		break
 	default:
 		return false

@@ -2032,8 +2032,8 @@ func (s *testSuiteP2) TestTableScan(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use information_schema")
 	result := tk.MustQuery("select * from schemata")
-	// There must be these tables: information_schema, mysql, performance_schema and test.
-	c.Assert(len(result.Rows()), GreaterEqual, 4)
+	// There must be these tables: information_schema, mysql and test.
+	c.Assert(len(result.Rows()), GreaterEqual, 3)
 	tk.MustExec("use test")
 	tk.MustExec("create database mytest")
 	rowStr1 := fmt.Sprintf("%s %s %s %s %v", "def", "mysql", "utf8mb4", "utf8mb4_bin", nil)

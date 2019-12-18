@@ -38,8 +38,6 @@ const (
 	SystemSchemaIDFlag = 1 << 62
 	// InformationSchemaDBID is the information_schema schema id, it's exports for test.
 	InformationSchemaDBID int64 = SystemSchemaIDFlag | 1
-	// PerformanceSchemaDBID is the performance_schema schema id, it's exports for test.
-	PerformanceSchemaDBID int64 = SystemSchemaIDFlag | 10000
 )
 
 const (

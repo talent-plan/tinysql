@@ -2081,8 +2081,6 @@ func (s *testDBSuite5) TestRepairTable(c *C) {
 	// Test memory and system database is not for repair.
 	domainutil.RepairInfo.SetRepairMode(true)
 	domainutil.RepairInfo.SetRepairTableList([]string{"test.xxx"})
-	_, err = s.tk.Exec("admin repair table performance_schema.xxx CREATE TABLE yyy (a int);")
-	c.Assert(err.Error(), Equals, "[ddl:8215]Failed to repair table: memory or system database is not for repair")
 
 	// Test the repair detail.
 	turnRepairModeAndInit(true)

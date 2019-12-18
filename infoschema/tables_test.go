@@ -721,7 +721,6 @@ func (s *testTableSuite) TestTableRowIDShardingInfo(c *C) {
 
 	testFunc("information_schema", nil)
 	testFunc("mysql", nil)
-	testFunc("performance_schema", nil)
 	testFunc("uucc", "NOT_SHARDED")
 
 	tk.MustExec("DROP DATABASE `sharding_info_test_db`")
@@ -960,7 +959,6 @@ func (s *testClusterTableSuite) TestForClusterServerInfo(c *C) {
 func (s *testTableSuite) TestSystemSchemaID(c *C) {
 	uniqueIDMap := make(map[int64]string)
 	s.checkSystemSchemaTableID(c, "information_schema", autoid.SystemSchemaIDFlag|1, 1, 10000, uniqueIDMap)
-	s.checkSystemSchemaTableID(c, "performance_schema", autoid.SystemSchemaIDFlag|10000, 10000, 20000, uniqueIDMap)
 }
 
 func (s *testTableSuite) checkSystemSchemaTableID(c *C, dbName string, dbID, start, end int64, uniqueIDMap map[int64]string) {

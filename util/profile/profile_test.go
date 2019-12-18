@@ -14,16 +14,12 @@
 package profile_test
 
 import (
-	"testing"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util/profile"
-	"github.com/pingcap/tidb/util/testkit"
+	"testing"
 )
 
 type profileSuite struct {
@@ -49,19 +45,4 @@ func (s *profileSuite) SetUpSuite(c *C) {
 func (s *profileSuite) TearDownSuite(c *C) {
 	s.dom.Close()
 	s.store.Close()
-}
-
-func (s *profileSuite) TestProfiles(c *C) {
-	oldValue := profile.CPUProfileInterval
-	profile.CPUProfileInterval = 2 * time.Second
-	defer func() {
-		profile.CPUProfileInterval = oldValue
-	}()
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("select * from performance_schema.tidb_profile_cpu")
-	tk.MustExec("select * from performance_schema.tidb_profile_memory")
-	tk.MustExec("select * from performance_schema.tidb_profile_allocs")
-	tk.MustExec("select * from performance_schema.tidb_profile_mutex")
-	tk.MustExec("select * from performance_schema.tidb_profile_block")
-	tk.MustExec("select * from performance_schema.tidb_profile_goroutines")
 }
