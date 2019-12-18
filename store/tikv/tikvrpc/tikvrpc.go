@@ -45,8 +45,6 @@ const (
 	CmdResolveLock
 	CmdGC
 	CmdDeleteRange
-	CmdPessimisticLock
-	CmdPessimisticRollback
 	CmdTxnHeartBeat
 	CmdCheckTxnStatus
 
@@ -81,10 +79,6 @@ func (t CmdType) String() string {
 		return "Scan"
 	case CmdPrewrite:
 		return "Prewrite"
-	case CmdPessimisticLock:
-		return "PessimisticLock"
-	case CmdPessimisticRollback:
-		return "PessimisticRollback"
 	case CmdCommit:
 		return "Commit"
 	case CmdCleanup:
@@ -291,16 +285,6 @@ func (req *Request) SplitRegion() *kvrpcpb.SplitRegionRequest {
 	return req.req.(*kvrpcpb.SplitRegionRequest)
 }
 
-// PessimisticLock returns PessimisticLockRequest in request.
-func (req *Request) PessimisticLock() *kvrpcpb.PessimisticLockRequest {
-	return req.req.(*kvrpcpb.PessimisticLockRequest)
-}
-
-// PessimisticRollback returns PessimisticRollbackRequest in request.
-func (req *Request) PessimisticRollback() *kvrpcpb.PessimisticRollbackRequest {
-	return req.req.(*kvrpcpb.PessimisticRollbackRequest)
-}
-
 // DebugGetRegionProperties returns GetRegionPropertiesRequest in request.
 func (req *Request) DebugGetRegionProperties() *debugpb.GetRegionPropertiesRequest {
 	return req.req.(*debugpb.GetRegionPropertiesRequest)
@@ -364,10 +348,6 @@ func (req *Request) ToBatchCommandsRequest() *tikvpb.BatchCommandsRequest_Reques
 		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawScan{RawScan: req.RawScan()}}
 	case CmdCop:
 		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Coprocessor{Coprocessor: req.Cop()}}
-	case CmdPessimisticLock:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_PessimisticLock{PessimisticLock: req.PessimisticLock()}}
-	case CmdPessimisticRollback:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_PessimisticRollback{PessimisticRollback: req.PessimisticRollback()}}
 	case CmdEmpty:
 		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Empty{Empty: req.Empty()}}
 	case CmdCheckTxnStatus:
@@ -435,10 +415,6 @@ func FromBatchCommandsResponse(res *tikvpb.BatchCommandsResponse_Response) *Resp
 		return &Response{Resp: res.RawScan}
 	case *tikvpb.BatchCommandsResponse_Response_Coprocessor:
 		return &Response{Resp: res.Coprocessor}
-	case *tikvpb.BatchCommandsResponse_Response_PessimisticLock:
-		return &Response{Resp: res.PessimisticLock}
-	case *tikvpb.BatchCommandsResponse_Response_PessimisticRollback:
-		return &Response{Resp: res.PessimisticRollback}
 	case *tikvpb.BatchCommandsResponse_Response_Empty:
 		return &Response{Resp: res.Empty}
 	case *tikvpb.BatchCommandsResponse_Response_TxnHeartBeat:
@@ -475,10 +451,6 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 		req.Scan().Context = ctx
 	case CmdPrewrite:
 		req.Prewrite().Context = ctx
-	case CmdPessimisticLock:
-		req.PessimisticLock().Context = ctx
-	case CmdPessimisticRollback:
-		req.PessimisticRollback().Context = ctx
 	case CmdCommit:
 		req.Commit().Context = ctx
 	case CmdCleanup:
@@ -551,14 +523,6 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 		}
 	case CmdPrewrite:
 		p = &kvrpcpb.PrewriteResponse{
-			RegionError: e,
-		}
-	case CmdPessimisticLock:
-		p = &kvrpcpb.PessimisticLockResponse{
-			RegionError: e,
-		}
-	case CmdPessimisticRollback:
-		p = &kvrpcpb.PessimisticRollbackResponse{
 			RegionError: e,
 		}
 	case CmdCommit:
@@ -699,10 +663,6 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = client.KvScan(ctx, req.Scan())
 	case CmdPrewrite:
 		resp.Resp, err = client.KvPrewrite(ctx, req.Prewrite())
-	case CmdPessimisticLock:
-		resp.Resp, err = client.KvPessimisticLock(ctx, req.PessimisticLock())
-	case CmdPessimisticRollback:
-		resp.Resp, err = client.KVPessimisticRollback(ctx, req.PessimisticRollback())
 	case CmdCommit:
 		resp.Resp, err = client.KvCommit(ctx, req.Commit())
 	case CmdCleanup:

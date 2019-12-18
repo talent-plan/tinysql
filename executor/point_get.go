@@ -156,7 +156,7 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 
 func (e *PointGetExecutor) lockKeyIfNeeded(ctx context.Context, key []byte) error {
 	if e.lock {
-		return doLockKeys(ctx, e.ctx, newLockCtx(e.ctx.GetSessionVars(), e.lockWaitTime), key)
+		return doLockKeys(ctx, e.ctx, newLockCtx(e.ctx.GetSessionVars()), key)
 	}
 	return nil
 }
@@ -167,8 +167,6 @@ func (e *PointGetExecutor) get(ctx context.Context, key kv.Key) (val []byte, err
 		return nil, err
 	}
 	if txn != nil && txn.Valid() && !txn.IsReadOnly() {
-		// We cannot use txn.Get directly here because the snapshot in txn and the snapshot of e.snapshot may be
-		// different for pessimistic transaction.
 		val, err = txn.GetMemBuffer().Get(ctx, key)
 		if err == nil {
 			return val, err

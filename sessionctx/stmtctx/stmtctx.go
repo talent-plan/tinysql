@@ -141,11 +141,10 @@ type StatementContext struct {
 		digest     string
 	}
 	// planNormalized use for cache the normalized plan, avoid duplicate builds.
-	planNormalized    string
-	planDigest        string
-	Tables            []TableEntry
-	PointExec         bool       // for point update cached execution, Constant expression need to set "paramMarker"
-	lockWaitStartTime *time.Time // LockWaitStartTime stores the pessimistic lock wait start time
+	planNormalized string
+	planDigest     string
+	Tables         []TableEntry
+	PointExec      bool // for point update cached execution, Constant expression need to set "paramMarker"
 }
 
 // StmtHints are SessionVars related sql hints.
@@ -596,15 +595,6 @@ func (sc *StatementContext) SetFlagsFromPBFlag(flags uint64) {
 	sc.OverflowAsWarning = (flags & model.FlagOverflowAsWarning) > 0
 	sc.IgnoreZeroInDate = (flags & model.FlagIgnoreZeroInDate) > 0
 	sc.DividedByZeroAsWarning = (flags & model.FlagDividedByZeroAsWarning) > 0
-}
-
-// GetLockWaitStartTime returns the statement pessimistic lock wait start time
-func (sc *StatementContext) GetLockWaitStartTime() time.Time {
-	if sc.lockWaitStartTime == nil {
-		curTime := time.Now()
-		sc.lockWaitStartTime = &curTime
-	}
-	return *sc.lockWaitStartTime
 }
 
 //CopTasksDetails collects some useful information of cop-tasks during execution.

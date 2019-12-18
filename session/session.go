@@ -396,7 +396,6 @@ func (s *session) doCommitWithRetry(ctx context.Context) error {
 		return nil
 	}
 	txnSize := s.txn.Size()
-	isPessimistic := s.txn.IsPessimistic()
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("session.doCommitWitRetry", opentracing.ChildOf(span.Context()))
 		defer span1.Finish()
@@ -411,7 +410,7 @@ func (s *session) doCommitWithRetry(ctx context.Context) error {
 		// Don't retry in BatchInsert mode. As a counter-example, insert into t1 select * from t2,
 		// BatchInsert already commit the first batch 1000 rows, then it commit 1000-2000 and retry the statement,
 		// Finally t1 will have more data than t2, with no errors return to user!
-		if s.isTxnRetryableError(err) && !s.sessionVars.BatchInsert && commitRetryLimit > 0 && !isPessimistic {
+		if s.isTxnRetryableError(err) && !s.sessionVars.BatchInsert && commitRetryLimit > 0 {
 			logutil.Logger(ctx).Warn("sql",
 				zap.String("label", s.getSQLLabel()),
 				zap.Error(err),
@@ -426,7 +425,6 @@ func (s *session) doCommitWithRetry(ctx context.Context) error {
 				zap.String("label", s.getSQLLabel()),
 				zap.Error(err),
 				zap.Bool("IsBatchInsert", s.sessionVars.BatchInsert),
-				zap.Bool("IsPessimistic", isPessimistic),
 				zap.Bool("InRestrictedSQL", s.sessionVars.InRestrictedSQL),
 				zap.Int64("tidb_retry_limit", s.sessionVars.RetryLimit),
 				zap.Bool("tidb_disable_txn_auto_retry", s.sessionVars.DisableTxnAutoRetry))
@@ -1275,9 +1273,6 @@ func (s *session) Txn(active bool) (kv.Transaction, error) {
 			return &s.txn, err
 		}
 		s.sessionVars.TxnCtx.StartTS = s.txn.StartTS()
-		if s.sessionVars.TxnCtx.IsPessimistic {
-			s.txn.SetOption(kv.Pessimistic, true)
-		}
 		if !s.sessionVars.IsAutocommit() {
 			s.sessionVars.SetStatusFlag(mysql.ServerStatusInTrans, true)
 		}
@@ -1290,17 +1285,11 @@ func (s *session) Txn(active bool) (kv.Transaction, error) {
 }
 
 // isTxnRetryable (if returns true) means the transaction could retry.
-// If the transaction is in pessimistic mode, do not retry.
 // If the session is already in transaction, enable retry or internal SQL could retry.
 // If not, the transaction could always retry, because it should be auto committed transaction.
 // Anyway the retry limit is 0, the transaction could not retry.
 func (s *session) isTxnRetryable() bool {
 	sessVars := s.sessionVars
-
-	// The pessimistic transaction no need to retry.
-	if sessVars.TxnCtx.IsPessimistic {
-		return false
-	}
 
 	// If retry limit is 0, the transaction could not retry.
 	if sessVars.RetryLimit == 0 {
@@ -1749,7 +1738,6 @@ var builtinGlobalVariable = []string{
 	variable.TiDBEnableFastAnalyze,
 	variable.TiDBEnableNoopFuncs,
 	variable.TiDBEnableIndexMerge,
-	variable.TiDBTxnMode,
 	variable.TiDBMaxDeltaSchemaCount,
 	variable.TiDBIsolationReadEngines,
 	variable.TiDBStoreLimit,
@@ -1832,14 +1820,6 @@ func (s *session) PrepareTxnCtx(ctx context.Context) {
 		InfoSchema:    is,
 		SchemaVersion: is.SchemaMetaVersion(),
 		CreateTime:    time.Now(),
-	}
-	if !s.sessionVars.IsAutocommit() {
-		pessTxnConf := config.GetGlobalConfig().PessimisticTxn
-		if pessTxnConf.Enable {
-			if s.sessionVars.TxnMode == ast.Pessimistic {
-				s.sessionVars.TxnCtx.IsPessimistic = true
-			}
-		}
 	}
 }
 

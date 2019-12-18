@@ -192,10 +192,6 @@ func finishStmt(ctx context.Context, sctx sessionctx.Context, se *session, sessV
 			logutil.BgLogger().Info("rollbackTxn for ddl/autocommit failed")
 			se.RollbackTxn(ctx)
 			recordAbortTxnDuration(sessVars)
-		} else if se.txn.Valid() && se.txn.IsPessimistic() && executor.ErrDeadlock.Equal(meetsErr) {
-			logutil.BgLogger().Info("rollbackTxn for deadlock", zap.Uint64("txn", se.txn.StartTS()))
-			se.RollbackTxn(ctx)
-			recordAbortTxnDuration(sessVars)
 		}
 		return meetsErr
 	}

@@ -87,7 +87,6 @@ type Config struct {
 	TiKVClient          TiKVClient        `toml:"tikv-client" json:"tikv-client"`
 	Binlog              Binlog            `toml:"binlog" json:"binlog"`
 	CompatibleKillQuery bool              `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	PessimisticTxn      PessimisticTxn    `toml:"pessimistic-txn" json:"pessimistic-txn"`
 	CheckMb4ValueInUTF8 bool              `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
@@ -393,14 +392,6 @@ type Binlog struct {
 	Strategy string `toml:"strategy" json:"strategy"`
 }
 
-// PessimisticTxn is the config for pessimistic transaction.
-type PessimisticTxn struct {
-	// Enable must be true for 'begin lock' or session variable to start a pessimistic transaction.
-	Enable bool `toml:"enable" json:"enable"`
-	// The max count of retry for a single statement in a pessimistic transaction.
-	MaxRetryCount uint `toml:"max-retry-count" json:"max-retry-count"`
-}
-
 var defaultConf = Config{
 	Host:                         "0.0.0.0",
 	AdvertiseAddress:             "",
@@ -499,10 +490,6 @@ var defaultConf = Config{
 	Binlog: Binlog{
 		WriteTimeout: "15s",
 		Strategy:     "range",
-	},
-	PessimisticTxn: PessimisticTxn{
-		Enable:        true,
-		MaxRetryCount: 256,
 	},
 }
 

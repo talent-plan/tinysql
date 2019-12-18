@@ -112,10 +112,4 @@ func (s *testBatchPointGetSuite) TestBatchPointGetInTxn(c *C) {
 	tk.MustExec("insert into t values (4, 'name')")
 	tk.MustQuery("select * from t where id in (4)").Check(testkit.Rows("4 name"))
 	tk.MustExec("rollback")
-
-	// Pessimistic transaction doesn't use BatchPointGet! Make sure this work.
-	tk.MustExec("begin pessimistic")
-	tk.MustExec("insert into t values (4, 'name')")
-	tk.MustQuery("select * from t where id in (4)").Check(testkit.Rows("4 name"))
-	tk.MustExec("rollback")
 }

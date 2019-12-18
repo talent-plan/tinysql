@@ -299,28 +299,6 @@ func (s *testLockSuite) TestCheckTxnStatus(c *C) {
 	timeBeforeExpire, _, err := resolver.ResolveLocks(bo, currentTS, []*Lock{lock})
 	c.Assert(err, IsNil)
 	c.Assert(timeBeforeExpire > int64(0), IsTrue)
-
-	// Force rollback the lock using lock.TTL = 0.
-	lock.TTL = uint64(0)
-	timeBeforeExpire, _, err = resolver.ResolveLocks(bo, currentTS, []*Lock{lock})
-	c.Assert(err, IsNil)
-	c.Assert(timeBeforeExpire, Equals, int64(0))
-
-	// Then call getTxnStatus again and check the lock status.
-	currentTS, err = oracle.GetTimestamp(context.Background())
-	c.Assert(err, IsNil)
-	status, err = newLockResolver(s.store).getTxnStatus(bo, txn.StartTS(), []byte("key"), currentTS, 0, true)
-	c.Assert(err, IsNil)
-	c.Assert(status.ttl, Equals, uint64(0))
-	c.Assert(status.commitTS, Equals, uint64(0))
-	c.Assert(status.action, Equals, kvrpcpb.Action_NoAction)
-
-	// Call getTxnStatus on a committed transaction.
-	startTS, commitTS := s.putKV(c, []byte("a"), []byte("a"))
-	status, err = newLockResolver(s.store).getTxnStatus(bo, startTS, []byte("a"), currentTS, currentTS, true)
-	c.Assert(err, IsNil)
-	c.Assert(status.ttl, Equals, uint64(0))
-	c.Assert(status.commitTS, Equals, commitTS)
 }
 
 func (s *testLockSuite) TestCheckTxnStatusNoWait(c *C) {
@@ -519,10 +497,4 @@ func (s *testLockSuite) TestZeroMinCommitTS(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(pushed, HasLen, 0)
 	c.Assert(expire, Greater, int64(0))
-
-	// Clean up this test.
-	lock.TTL = uint64(0)
-	expire, _, err = newLockResolver(s.store).ResolveLocks(bo, 0, []*Lock{lock})
-	c.Assert(err, IsNil)
-	c.Assert(expire, Equals, int64(0))
 }

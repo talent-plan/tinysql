@@ -71,7 +71,6 @@ func (s testMockSuite) TestInterface(c *C) {
 	err = transaction.Rollback()
 	c.Check(err, IsNil)
 	c.Assert(transaction.Valid(), Equals, false)
-	c.Assert(transaction.IsPessimistic(), Equals, false)
 	c.Assert(transaction.Delete(nil), IsNil)
 
 	// Test for mockStorage interface.

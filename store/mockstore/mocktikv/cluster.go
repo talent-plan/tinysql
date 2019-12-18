@@ -419,19 +419,6 @@ func (c *Cluster) ScheduleDelay(startTS, regionID uint64, dur time.Duration) {
 	c.delayMu.Unlock()
 }
 
-func (c *Cluster) handleDelay(startTS, regionID uint64) {
-	key := delayKey{startTS: startTS, regionID: regionID}
-	c.delayMu.Lock()
-	dur, ok := c.delayEvents[key]
-	if ok {
-		delete(c.delayEvents, key)
-	}
-	c.delayMu.Unlock()
-	if ok {
-		time.Sleep(dur)
-	}
-}
-
 func (c *Cluster) splitRange(mvccStore MVCCStore, start, end MvccKey, count int) {
 	c.Lock()
 	defer c.Unlock()

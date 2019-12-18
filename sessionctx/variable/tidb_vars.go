@@ -130,9 +130,6 @@ const (
 	// tidb_optimizer_selectivity_level is used to control the selectivity estimation level.
 	TiDBOptimizerSelectivityLevel = "tidb_optimizer_selectivity_level"
 
-	// tidb_txn_mode is used to control the transaction behavior.
-	TiDBTxnMode = "tidb_txn_mode"
-
 	// tidb_enable_table_partition is used to control table partition feature.
 	// The valid value include auto/on/off:
 	// auto: enable table partition when that feature is implemented.

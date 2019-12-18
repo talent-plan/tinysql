@@ -53,20 +53,6 @@ func (*testSysVarSuite) TestSysVar(c *C) {
 	c.Assert(f.Value, Equals, "leader")
 }
 
-func (*testSysVarSuite) TestTxnMode(c *C) {
-	seVar := NewSessionVars()
-	c.Assert(seVar, NotNil)
-	c.Assert(seVar.TxnMode, Equals, "")
-	err := seVar.setTxnMode("pessimistic")
-	c.Assert(err, IsNil)
-	err = seVar.setTxnMode("optimistic")
-	c.Assert(err, IsNil)
-	err = seVar.setTxnMode("")
-	c.Assert(err, IsNil)
-	err = seVar.setTxnMode("something else")
-	c.Assert(err, NotNil)
-}
-
 func (*testSysVarSuite) TestBoolToInt32(c *C) {
 	c.Assert(BoolToInt32(true), Equals, int32(1))
 	c.Assert(BoolToInt32(false), Equals, int32(0))

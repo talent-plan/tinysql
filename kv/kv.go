@@ -47,8 +47,6 @@ const (
 	SyncLog
 	// KeyOnly retrieve only keys, it can be used in scan now.
 	KeyOnly
-	// Pessimistic is defined for pessimistic lock
-	Pessimistic
 	// SnapshotTS is defined to set snapshot ts.
 	SnapshotTS
 	// Set replica read
@@ -189,15 +187,12 @@ type Transaction interface {
 	// Do not use len(value) == 0 or value == nil to represent non-exist.
 	// If a key doesn't exist, there shouldn't be any corresponding entry in the result map.
 	BatchGet(ctx context.Context, keys []Key) (map[string][]byte, error)
-	IsPessimistic() bool
 }
 
 // LockCtx contains information for LockKeys method.
 type LockCtx struct {
-	Killed        *uint32
-	ForUpdateTS   uint64
-	LockWaitTime  int64
-	WaitStartTime time.Time
+	Killed      *uint32
+	ForUpdateTS uint64
 }
 
 // Client is used to send request to KV layer.
@@ -374,11 +369,3 @@ type SplittableStore interface {
 	WaitScatterRegionFinish(regionID uint64, backOff int) error
 	CheckRegionInScattering(regionID uint64) (bool, error)
 }
-
-// Used for pessimistic lock wait time
-// these two constants are special for lock protocol with tikv
-// 0 means always wait, -1 means nowait, others meaning lock wait in milliseconds
-var (
-	LockAlwaysWait = int64(0)
-	LockNoWait     = int64(-1)
-)

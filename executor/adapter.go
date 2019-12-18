@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -39,7 +38,6 @@ import (
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -176,7 +174,6 @@ type ExecStmt struct {
 	Cacheable         bool
 	isPreparedStmt    bool
 	isSelectForUpdate bool
-	retryCount        uint
 
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
@@ -337,14 +334,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		}
 	}
 
-	isPessimistic := sctx.GetSessionVars().TxnCtx.IsPessimistic
-
-	// Special handle for "select for update statement" in pessimistic transaction.
-	if isPessimistic && a.isSelectForUpdate {
-		return a.handlePessimisticSelectForUpdate(ctx, e)
-	}
-
-	if handled, result, err := a.handleNoDelay(ctx, e, isPessimistic); handled {
+	if handled, result, err := a.handleNoDelay(ctx, e); handled {
 		return result, err
 	}
 
@@ -363,7 +353,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	}, nil
 }
 
-func (a *ExecStmt) handleNoDelay(ctx context.Context, e Executor, isPessimistic bool) (bool, sqlexec.RecordSet, error) {
+func (a *ExecStmt) handleNoDelay(ctx context.Context, e Executor) (bool, sqlexec.RecordSet, error) {
 	toCheck := e
 	if explain, ok := e.(*ExplainExec); ok {
 		if explain.analyzeExec != nil {
@@ -373,9 +363,6 @@ func (a *ExecStmt) handleNoDelay(ctx context.Context, e Executor, isPessimistic 
 
 	// If the executor doesn't return any result to the client, we execute it without delay.
 	if toCheck.Schema().Len() == 0 {
-		if isPessimistic {
-			return true, nil, a.handlePessimisticDML(ctx, e)
-		}
 		r, err := a.handleNoDelayExecutor(ctx, e)
 		return true, r, err
 	} else if proj, ok := toCheck.(*ProjectionExec); ok && proj.calculateNoDelay {
@@ -401,78 +388,6 @@ func getMaxExecutionTime(sctx sessionctx.Context, stmtNode ast.StmtNode) uint64 
 		}
 	}
 	return ret
-}
-
-type chunkRowRecordSet struct {
-	rows   []chunk.Row
-	idx    int
-	fields []*ast.ResultField
-	e      Executor
-}
-
-func (c *chunkRowRecordSet) Fields() []*ast.ResultField {
-	return c.fields
-}
-
-func (c *chunkRowRecordSet) Next(ctx context.Context, chk *chunk.Chunk) error {
-	chk.Reset()
-	for !chk.IsFull() && c.idx < len(c.rows) {
-		chk.AppendRow(c.rows[c.idx])
-		c.idx++
-	}
-	return nil
-}
-
-func (c *chunkRowRecordSet) NewChunk() *chunk.Chunk {
-	return newFirstChunk(c.e)
-}
-
-func (c *chunkRowRecordSet) Close() error {
-	return nil
-}
-
-func (a *ExecStmt) handlePessimisticSelectForUpdate(ctx context.Context, e Executor) (sqlexec.RecordSet, error) {
-	for {
-		rs, err := a.runPessimisticSelectForUpdate(ctx, e)
-		e, err = a.handlePessimisticLockError(ctx, err)
-		if err != nil {
-			return nil, err
-		}
-		if e == nil {
-			return rs, nil
-		}
-	}
-}
-
-func (a *ExecStmt) runPessimisticSelectForUpdate(ctx context.Context, e Executor) (sqlexec.RecordSet, error) {
-	rs := &recordSet{
-		executor: e,
-		stmt:     a,
-	}
-	defer func() {
-		terror.Log(rs.Close())
-	}()
-
-	var rows []chunk.Row
-	var err error
-	fields := rs.Fields()
-	req := rs.NewChunk()
-	for {
-		err = rs.Next(ctx, req)
-		if err != nil {
-			// Handle 'write conflict' error.
-			break
-		}
-		if req.NumRows() == 0 {
-			return &chunkRowRecordSet{rows: rows, fields: fields, e: e}, nil
-		}
-		iter := chunk.NewIterator4Chunk(req)
-		for r := iter.Begin(); r != iter.End(); r = iter.Next() {
-			rows = append(rows, r)
-		}
-		req = chunk.Renew(req, a.Ctx.GetSessionVars().MaxChunkSize)
-	}
-	return nil, err
 }
 
 func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlexec.RecordSet, error) {
@@ -507,153 +422,6 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 		return nil, err
 	}
 	return nil, err
-}
-
-func (a *ExecStmt) handlePessimisticDML(ctx context.Context, e Executor) error {
-	sctx := a.Ctx
-	txn, err := sctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	txnCtx := sctx.GetSessionVars().TxnCtx
-	for {
-		_, err = a.handleNoDelayExecutor(ctx, e)
-		if err != nil {
-			// It is possible the DML has point get plan that locks the key.
-			e, err = a.handlePessimisticLockError(ctx, err)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-		keys, err1 := txn.(pessimisticTxn).KeysNeedToLock()
-		if err1 != nil {
-			return err1
-		}
-		keys = txnCtx.CollectUnchangedRowKeys(keys)
-		if len(keys) == 0 {
-			return nil
-		}
-		seVars := sctx.GetSessionVars()
-		lockCtx := &kv.LockCtx{
-			Killed:        &seVars.Killed,
-			ForUpdateTS:   txnCtx.GetForUpdateTS(),
-			LockWaitTime:  seVars.LockWaitTimeout,
-			WaitStartTime: seVars.StmtCtx.GetLockWaitStartTime(),
-		}
-		err = txn.LockKeys(ctx, lockCtx, keys...)
-		if err == nil {
-			return nil
-		}
-		e, err = a.handlePessimisticLockError(ctx, err)
-		if err != nil {
-			return err
-		}
-	}
-}
-
-// UpdateForUpdateTS updates the ForUpdateTS, if newForUpdateTS is 0, it obtain a new TS from PD.
-func UpdateForUpdateTS(seCtx sessionctx.Context, newForUpdateTS uint64) error {
-	if newForUpdateTS == 0 {
-		version, err := seCtx.GetStore().CurrentVersion()
-		if err != nil {
-			return err
-		}
-		newForUpdateTS = version.Ver
-	}
-	txn, err := seCtx.Txn(true)
-	if err != nil {
-		return err
-	}
-	seCtx.GetSessionVars().TxnCtx.SetForUpdateTS(newForUpdateTS)
-	txn.SetOption(kv.SnapshotTS, newForUpdateTS)
-	return nil
-}
-
-// handlePessimisticLockError updates TS and rebuild executor if the err is write conflict.
-func (a *ExecStmt) handlePessimisticLockError(ctx context.Context, err error) (Executor, error) {
-	txnCtx := a.Ctx.GetSessionVars().TxnCtx
-	var newForUpdateTS uint64
-	if deadlock, ok := errors.Cause(err).(*tikv.ErrDeadlock); ok {
-		if !deadlock.IsRetryable {
-			return nil, ErrDeadlock
-		}
-		logutil.Logger(ctx).Info("single statement deadlock, retry statement",
-			zap.Uint64("txn", txnCtx.StartTS),
-			zap.Uint64("lockTS", deadlock.LockTs),
-			zap.Stringer("lockKey", kv.Key(deadlock.LockKey)),
-			zap.Uint64("deadlockKeyHash", deadlock.DeadlockKeyHash))
-	} else if terror.ErrorEqual(kv.ErrWriteConflict, err) {
-		errStr := err.Error()
-		conflictCommitTS := extractConflictCommitTS(errStr)
-		forUpdateTS := txnCtx.GetForUpdateTS()
-		logutil.Logger(ctx).Info("pessimistic write conflict, retry statement",
-			zap.Uint64("txn", txnCtx.StartTS),
-			zap.Uint64("forUpdateTS", forUpdateTS),
-			zap.String("err", errStr))
-		if conflictCommitTS > forUpdateTS {
-			newForUpdateTS = conflictCommitTS
-		}
-	} else {
-		// this branch if err not nil, always update forUpdateTS to avoid problem described below
-		// for nowait, when ErrLock happened, ErrLockAcquireFailAndNoWaitSet will be returned, and in the same txn
-		// the select for updateTs must be updated, otherwise there maybe rollback problem.
-		// begin;  select for update key1(here ErrLocked or other errors(or max_execution_time like util),
-		//         key1 lock not get and async rollback key1 is raised)
-		//         select for update key1 again(this time lock succ(maybe lock released by others))
-		//         the async rollback operation rollbacked the lock just acquired
-		if err != nil {
-			tsErr := UpdateForUpdateTS(a.Ctx, 0)
-			if tsErr != nil {
-				logutil.Logger(ctx).Warn("UpdateForUpdateTS failed", zap.Error(tsErr))
-			}
-		}
-		return nil, err
-	}
-	if a.retryCount >= config.GetGlobalConfig().PessimisticTxn.MaxRetryCount {
-		return nil, errors.New("pessimistic lock retry limit reached")
-	}
-	a.retryCount++
-	err = UpdateForUpdateTS(a.Ctx, newForUpdateTS)
-	if err != nil {
-		return nil, err
-	}
-	e, err := a.buildExecutor()
-	if err != nil {
-		return nil, err
-	}
-	// Rollback the statement change before retry it.
-	a.Ctx.StmtRollback()
-	a.Ctx.GetSessionVars().StmtCtx.ResetForRetry()
-
-	if err = e.Open(ctx); err != nil {
-		return nil, err
-	}
-	return e, nil
-}
-
-func extractConflictCommitTS(errStr string) uint64 {
-	strs := strings.Split(errStr, "conflictCommitTS=")
-	if len(strs) != 2 {
-		return 0
-	}
-	tsPart := strs[1]
-	length := strings.IndexByte(tsPart, ',')
-	if length < 0 {
-		return 0
-	}
-	tsStr := tsPart[:length]
-	ts, err := strconv.ParseUint(tsStr, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return ts
-}
-
-type pessimisticTxn interface {
-	kv.Transaction
-	// KeysNeedToLock returns the keys need to be locked.
-	KeysNeedToLock() ([]kv.Key, error)
 }
 
 // buildExecutor build a executor from plan, prepared statement may need additional procedure.

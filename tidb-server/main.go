@@ -334,8 +334,7 @@ func flagBoolean(name string, defaultVal bool, usage string) *bool {
 }
 
 var deprecatedConfig = map[string]struct{}{
-	"pessimistic-txn.ttl": {},
-	"log.rotate":          {},
+	"log.rotate": {},
 }
 
 func isDeprecatedConfigItem(items []string) bool {

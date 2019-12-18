@@ -80,17 +80,6 @@ func (e *ErrConflict) Error() string {
 	return "write conflict"
 }
 
-// ErrDeadlock is returned when deadlock error is detected.
-type ErrDeadlock struct {
-	LockTS         uint64
-	LockKey        []byte
-	DealockKeyHash uint64
-}
-
-func (e *ErrDeadlock) Error() string {
-	return "deadlock"
-}
-
 // ErrCommitTSExpired is returned when commit.CommitTS < lock.MinCommitTS
 type ErrCommitTSExpired struct {
 	kvrpcpb.CommitTsExpired

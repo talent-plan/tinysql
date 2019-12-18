@@ -18,7 +18,6 @@ import (
 	"math"
 	"sync"
 
-	"github.com/dgryski/go-farm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/goleveldb/leveldb"
 	"github.com/pingcap/goleveldb/leveldb/iterator"
@@ -27,10 +26,8 @@ import (
 	"github.com/pingcap/goleveldb/leveldb/util"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/deadlock"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -63,8 +60,7 @@ type MVCCLevelDB struct {
 	// mu used for lock
 	// leveldb can not guarantee multiple operations to be atomic, for example, read
 	// then write, another write may happen during it, so this lock is necessory.
-	mu               sync.RWMutex
-	deadlockDetector *deadlock.Detector
+	mu sync.RWMutex
 }
 
 const lockVer uint64 = math.MaxUint64
@@ -125,7 +121,7 @@ func NewMVCCLevelDB(path string) (*MVCCLevelDB, error) {
 		d, err = leveldb.OpenFile(path, &opt.Options{BlockCacheCapacity: 600 * 1024 * 1024})
 	}
 
-	return &MVCCLevelDB{db: d, deadlockDetector: deadlock.NewDetector()}, errors.Trace(err)
+	return &MVCCLevelDB{db: d}, errors.Trace(err)
 }
 
 // Iterator wraps iterator.Iterator to provide Valid() method.
@@ -466,133 +462,6 @@ func reverse(values []mvccValue) {
 	}
 }
 
-// PessimisticLock writes the pessimistic lock.
-func (mvcc *MVCCLevelDB) PessimisticLock(mutations []*kvrpcpb.Mutation, primary []byte, startTS,
-	forUpdateTS uint64, ttl uint64, lockWaitTime int64) []error {
-	mvcc.mu.Lock()
-	defer mvcc.mu.Unlock()
-
-	anyError := false
-	batch := &leveldb.Batch{}
-	errs := make([]error, 0, len(mutations))
-	for _, m := range mutations {
-		err := mvcc.pessimisticLockMutation(batch, m, startTS, forUpdateTS, primary, ttl)
-		errs = append(errs, err)
-		if err != nil {
-			anyError = true
-		}
-		if lockWaitTime == kv.LockNoWait {
-			if _, ok := err.(*ErrLocked); ok {
-				break
-			}
-		}
-	}
-	if anyError {
-		return errs
-	}
-	if err := mvcc.db.Write(batch, nil); err != nil {
-		return []error{err}
-	}
-
-	return errs
-}
-
-func (mvcc *MVCCLevelDB) pessimisticLockMutation(batch *leveldb.Batch, mutation *kvrpcpb.Mutation, startTS, forUpdateTS uint64, primary []byte, ttl uint64) error {
-	startKey := mvccEncode(mutation.Key, lockVer)
-	iter := newIterator(mvcc.db, &util.Range{
-		Start: startKey,
-	})
-	defer iter.Release()
-
-	dec := lockDecoder{
-		expectKey: mutation.Key,
-	}
-	ok, err := dec.Decode(iter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if ok {
-		if dec.lock.startTS != startTS {
-			errDeadlock := mvcc.deadlockDetector.Detect(startTS, dec.lock.startTS, farm.Fingerprint64(mutation.Key))
-			if errDeadlock != nil {
-				return &ErrDeadlock{
-					LockKey:        mutation.Key,
-					LockTS:         dec.lock.startTS,
-					DealockKeyHash: errDeadlock.KeyHash,
-				}
-			}
-			return dec.lock.lockErr(mutation.Key)
-		}
-		return nil
-	}
-	if err = checkConflictValue(iter, mutation, forUpdateTS); err != nil {
-		return err
-	}
-
-	lock := mvccLock{
-		startTS:     startTS,
-		primary:     primary,
-		op:          kvrpcpb.Op_PessimisticLock,
-		ttl:         ttl,
-		forUpdateTS: forUpdateTS,
-	}
-	writeKey := mvccEncode(mutation.Key, lockVer)
-	writeValue, err := lock.MarshalBinary()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	batch.Put(writeKey, writeValue)
-	return nil
-}
-
-// PessimisticRollback implements the MVCCStore interface.
-func (mvcc *MVCCLevelDB) PessimisticRollback(keys [][]byte, startTS, forUpdateTS uint64) []error {
-	mvcc.mu.Lock()
-	defer mvcc.mu.Unlock()
-
-	anyError := false
-	batch := &leveldb.Batch{}
-	errs := make([]error, 0, len(keys))
-	for _, key := range keys {
-		err := pessimisticRollbackKey(mvcc.db, batch, key, startTS, forUpdateTS)
-		errs = append(errs, err)
-		if err != nil {
-			anyError = true
-		}
-	}
-	if anyError {
-		return errs
-	}
-	if err := mvcc.db.Write(batch, nil); err != nil {
-		return []error{err}
-	}
-	return errs
-}
-
-func pessimisticRollbackKey(db *leveldb.DB, batch *leveldb.Batch, key []byte, startTS, forUpdateTS uint64) error {
-	startKey := mvccEncode(key, lockVer)
-	iter := newIterator(db, &util.Range{
-		Start: startKey,
-	})
-	defer iter.Release()
-
-	dec := lockDecoder{
-		expectKey: key,
-	}
-	ok, err := dec.Decode(iter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if ok {
-		lock := dec.lock
-		if lock.op == kvrpcpb.Op_PessimisticLock && lock.startTS == startTS && lock.forUpdateTS <= forUpdateTS {
-			batch.Delete(startKey)
-		}
-	}
-	return nil
-}
-
 // Prewrite implements the MVCCStore interface.
 func (mvcc *MVCCLevelDB) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 	mutations := req.Mutations
@@ -607,7 +476,7 @@ func (mvcc *MVCCLevelDB) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 	batch := &leveldb.Batch{}
 	errs := make([]error, 0, len(mutations))
 	txnSize := req.TxnSize
-	for i, m := range mutations {
+	for _, m := range mutations {
 		// If the operation is Insert, check if key is exists at first.
 		var err error
 		if m.GetOp() == kvrpcpb.Op_Insert {
@@ -626,8 +495,7 @@ func (mvcc *MVCCLevelDB) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 				continue
 			}
 		}
-		isPessimisticLock := len(req.IsPessimisticLock) > 0 && req.IsPessimisticLock[i]
-		err = prewriteMutation(mvcc.db, batch, m, startTS, primary, ttl, txnSize, isPessimisticLock, minCommitTS)
+		err = prewriteMutation(mvcc.db, batch, m, startTS, primary, ttl, txnSize, minCommitTS)
 		errs = append(errs, err)
 		if err != nil {
 			anyError = true
@@ -671,13 +539,6 @@ func checkConflictValue(iter *Iterator, m *kvrpcpb.Mutation, startTS uint64) err
 				}
 			} else if dec.value.valueType == typeDelete {
 				break
-			} else {
-				if m.Op == kvrpcpb.Op_PessimisticLock {
-					return &ErrKeyAlreadyExist{
-						Key: m.Key,
-					}
-				}
-				break
 			}
 		}
 	}
@@ -686,8 +547,7 @@ func checkConflictValue(iter *Iterator, m *kvrpcpb.Mutation, startTS uint64) err
 
 func prewriteMutation(db *leveldb.DB, batch *leveldb.Batch,
 	mutation *kvrpcpb.Mutation, startTS uint64,
-	primary []byte, ttl uint64, txnSize uint64,
-	isPessimisticLock bool, minCommitTS uint64) error {
+	primary []byte, ttl uint64, txnSize uint64, minCommitTS uint64) error {
 	startKey := mvccEncode(mutation.Key, lockVer)
 	iter := newIterator(db, &util.Range{
 		Start: startKey,
@@ -703,26 +563,9 @@ func prewriteMutation(db *leveldb.DB, batch *leveldb.Batch,
 	}
 	if ok {
 		if dec.lock.startTS != startTS {
-			if isPessimisticLock {
-				// NOTE: A special handling.
-				// When pessimistic txn prewrite meets lock, set the TTL = 0 means
-				// telling TiDB to rollback the transaction **unconditionly**.
-				dec.lock.ttl = 0
-			}
 			return dec.lock.lockErr(mutation.Key)
 		}
-		if dec.lock.op != kvrpcpb.Op_PessimisticLock {
-			return nil
-		}
-		// Overwrite the pessimistic lock.
-		if ttl < dec.lock.ttl {
-			// Maybe ttlManager has already set the lock TTL, don't decrease it.
-			ttl = dec.lock.ttl
-		}
 	} else {
-		if isPessimisticLock {
-			return ErrAbort("pessimistic lock not found")
-		}
 		err = checkConflictValue(iter, mutation, startTS)
 		if err != nil {
 			return err
@@ -761,7 +604,6 @@ func (mvcc *MVCCLevelDB) Commit(keys [][]byte, startTS, commitTS uint64) error {
 	mvcc.mu.Lock()
 	defer func() {
 		mvcc.mu.Unlock()
-		mvcc.deadlockDetector.CleanUp(startTS)
 	}()
 
 	batch := &leveldb.Batch{}
@@ -848,7 +690,6 @@ func (mvcc *MVCCLevelDB) Rollback(keys [][]byte, startTS uint64) error {
 	mvcc.mu.Lock()
 	defer func() {
 		mvcc.mu.Unlock()
-		mvcc.deadlockDetector.CleanUp(startTS)
 	}()
 
 	batch := &leveldb.Batch{}
@@ -954,7 +795,6 @@ func (mvcc *MVCCLevelDB) Cleanup(key []byte, startTS, currentTS uint64) error {
 	mvcc.mu.Lock()
 	defer func() {
 		mvcc.mu.Unlock()
-		mvcc.deadlockDetector.CleanUp(startTS)
 	}()
 
 	batch := &leveldb.Batch{}
@@ -1118,10 +958,7 @@ func (mvcc *MVCCLevelDB) CheckTxnStatus(primaryKey []byte, lockTS, callerStartTS
 		}
 	}
 
-	// If current transaction is not prewritted before, it may be pessimistic lock.
-	// When pessimistic txn rollback statement, it may not leave a 'rollbacked' tombstone.
-
-	// Or maybe caused by concurrent prewrite operation.
+	// Maybe caused by concurrent prewrite operation.
 	// Especially in the non-block reading case, the secondary lock is likely to be
 	// written before the primary lock.
 

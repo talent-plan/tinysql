@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/privilege"
@@ -532,24 +531,8 @@ func (e *SimpleExec) executeBegin(ctx context.Context, s *ast.BeginStmt) error {
 	// reverts to its previous state.
 	e.ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusInTrans, true)
 	// Call ctx.Txn(true) to active pending txn.
-	pTxnConf := config.GetGlobalConfig().PessimisticTxn
-	if pTxnConf.Enable {
-		txnMode := s.Mode
-		if txnMode == "" {
-			txnMode = e.ctx.GetSessionVars().TxnMode
-		}
-		if txnMode == ast.Pessimistic {
-			e.ctx.GetSessionVars().TxnCtx.IsPessimistic = true
-		}
-	}
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	if e.ctx.GetSessionVars().TxnCtx.IsPessimistic {
-		txn.SetOption(kv.Pessimistic, true)
-	}
-	return nil
+	_, err := e.ctx.Txn(true)
+	return err
 }
 
 func (e *SimpleExec) executeRevokeRole(s *ast.RevokeRoleStmt) error {

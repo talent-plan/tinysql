@@ -161,19 +161,6 @@ func (s *baseTestSuite) TearDownSuite(c *C) {
 	s.store.Close()
 }
 
-func (s *testSuiteP1) TestPessimisticSelectForUpdate(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(id int primary key, a int)")
-	tk.MustExec("insert into t values(1, 1)")
-	tk.MustExec("begin PESSIMISTIC")
-	tk.MustQuery("select a from t where id=1 for update").Check(testkit.Rows("1"))
-	tk.MustExec("update t set a=a+1 where id=1")
-	tk.MustExec("commit")
-	tk.MustQuery("select a from t where id=1").Check(testkit.Rows("2"))
-}
-
 func (s *testSuite) TearDownTest(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

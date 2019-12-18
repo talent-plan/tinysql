@@ -316,7 +316,6 @@ func (lr *LockResolver) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks 
 			}
 		} else {
 			tikvLockResolverCountWithNotExpired.Inc()
-			// If the lock is valid, the txn may be a pessimistic transaction.
 			// Update the txn expire time.
 			msBeforeLockExpired := lr.store.GetOracle().UntilExpired(l.TxnID, status.ttl)
 			msBeforeTxnExpired.update(msBeforeLockExpired)
@@ -385,17 +384,9 @@ func (lr *LockResolver) getTxnStatusFromLock(bo *Backoffer, l *Lock, callerStart
 	var currentTS uint64
 	var err error
 	var status TxnStatus
-	if l.TTL == 0 {
-		// NOTE: l.TTL = 0 is a special protocol!!!
-		// When the pessimistic txn prewrite meets locks of a txn, it should resolve the lock **unconditionally**.
-		// In this case, TiKV use lock TTL = 0 to notify TiDB, and TiDB should resolve the lock!
-		// Set currentTS to max uint64 to make the lock expired.
-		currentTS = math.MaxUint64
-	} else {
-		currentTS, err = lr.store.GetOracle().GetLowResolutionTimestamp(bo.ctx)
-		if err != nil {
-			return TxnStatus{}, err
-		}
+	currentTS, err = lr.store.GetOracle().GetLowResolutionTimestamp(bo.ctx)
+	if err != nil {
+		return TxnStatus{}, err
 	}
 
 	rollbackIfNotExist := false
@@ -408,10 +399,6 @@ func (lr *LockResolver) getTxnStatusFromLock(bo *Backoffer, l *Lock, callerStart
 		// unavailable, tikv down, backoff timeout etc) to the caller.
 		if _, ok := errors.Cause(err).(txnNotFoundErr); !ok {
 			return TxnStatus{}, err
-		}
-
-		if l.LockType == kvrpcpb.Op_PessimisticLock {
-			return TxnStatus{ttl: l.TTL}, nil
 		}
 
 		// Handle txnNotFound error.
@@ -452,7 +439,7 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 	// 2. NO LOCK
 	// 2.1 Txn Committed
 	// 2.2 Txn Rollbacked -- rollback itself, rollback by others, GC tomb etc.
-	// 2.3 No lock -- pessimistic lock rollback, concurrence prewrite.
+	// 2.3 No lock -- concurrence prewrite.
 
 	var status TxnStatus
 	req := tikvrpc.NewRequest(tikvrpc.CmdCheckTxnStatus, &kvrpcpb.CheckTxnStatusRequest{

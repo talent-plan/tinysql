@@ -38,8 +38,8 @@ type ProcessInfo struct {
 	// If the query takes too long, kill it.
 	MaxExecutionTime uint64
 
-	State                     uint16
-	Command                   byte
+	State   uint16
+	Command byte
 }
 
 // ToRowForShow returns []interface{} for the row data of "SHOW [FULL] PROCESSLIST".

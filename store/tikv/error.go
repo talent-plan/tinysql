@@ -15,7 +15,6 @@ package tikv
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 )
@@ -43,17 +42,6 @@ var (
 	ErrLockWaitTimeout             = terror.ClassTiKV.New(mysql.ErrLockWaitTimeout, mysql.MySQLErrName[mysql.ErrLockWaitTimeout])
 	ErrTokenLimit                  = terror.ClassTiKV.New(mysql.ErrTiKVStoreLimit, mysql.MySQLErrName[mysql.ErrTiKVStoreLimit])
 )
-
-// ErrDeadlock wraps *kvrpcpb.Deadlock to implement the error interface.
-// It also marks if the deadlock is retryable.
-type ErrDeadlock struct {
-	*kvrpcpb.Deadlock
-	IsRetryable bool
-}
-
-func (d *ErrDeadlock) Error() string {
-	return d.Deadlock.String()
-}
 
 func init() {
 	tikvMySQLErrCodes := map[terror.ErrCode]uint16{

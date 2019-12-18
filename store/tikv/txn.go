@@ -17,14 +17,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/sessionctx"
@@ -228,10 +225,6 @@ func (txn *tikvTxn) DelOption(opt kv.Option) {
 	txn.us.DelOption(opt)
 }
 
-func (txn *tikvTxn) IsPessimistic() bool {
-	return txn.us.GetOption(kv.Pessimistic) != nil
-}
-
 func (txn *tikvTxn) Commit(ctx context.Context) error {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("tikvTxn.Commit", opentracing.ChildOf(span.Context()))
@@ -264,7 +257,6 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 	}
 
 	var err error
-	// If the txn use pessimistic lock, committer is initialized.
 	committer := txn.committer
 	if committer == nil {
 		committer, err = newTwoPhaseCommitter(txn, connID)
@@ -272,7 +264,6 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-	defer committer.ttlManager.close()
 	if err := committer.initKeysAndMutations(); err != nil {
 		return errors.Trace(err)
 	}
@@ -292,8 +283,7 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 		}
 	}()
 	// latches disabled
-	// pessimistic transaction should also bypass latch.
-	if txn.store.txnLatches == nil || txn.IsPessimistic() {
+	if txn.store.txnLatches == nil {
 		err = committer.execute(ctx)
 		logutil.Logger(ctx).Debug("[kv] txnLatches disabled, 2pc directly", zap.Error(err))
 		return errors.Trace(err)
@@ -328,26 +318,11 @@ func (txn *tikvTxn) Rollback() error {
 	if !txn.valid {
 		return kv.ErrInvalidTxn
 	}
-	// Clean up pessimistic lock.
-	if txn.IsPessimistic() && txn.committer != nil {
-		err := txn.rollbackPessimisticLocks()
-		txn.committer.ttlManager.close()
-		if err != nil {
-			logutil.BgLogger().Error(err.Error())
-		}
-	}
 	txn.close()
 	logutil.BgLogger().Debug("[kv] rollback txn", zap.Uint64("txnStartTS", txn.StartTS()))
 	tikvTxnCmdCountWithRollback.Inc()
 
 	return nil
-}
-
-func (txn *tikvTxn) rollbackPessimisticLocks() error {
-	if len(txn.lockKeys) == 0 {
-		return nil
-	}
-	return txn.committer.pessimisticRollbackKeys(NewBackoffer(context.Background(), cleanupMaxBackoff), txn.lockKeys)
 }
 
 // lockWaitTime in ms, except that kv.LockAlwaysWait(0) means always wait lock, kv.LockNowait(-1) means nowait lock
@@ -365,64 +340,6 @@ func (txn *tikvTxn) LockKeys(ctx context.Context, lockCtx *kv.LockCtx, keysInput
 		return nil
 	}
 	tikvTxnCmdHistogramWithLockKeys.Inc()
-	if txn.IsPessimistic() && lockCtx.ForUpdateTS > 0 {
-		if txn.committer == nil {
-			// connID is used for log.
-			var connID uint64
-			var err error
-			val := ctx.Value(sessionctx.ConnID)
-			if val != nil {
-				connID = val.(uint64)
-			}
-			txn.committer, err = newTwoPhaseCommitter(txn, connID)
-			if err != nil {
-				return err
-			}
-		}
-		var assignedPrimaryKey bool
-		if txn.committer.primaryKey == nil {
-			txn.committer.primaryKey = keys[0]
-			assignedPrimaryKey = true
-		}
-
-		bo := NewBackoffer(ctx, pessimisticLockMaxBackoff).WithVars(txn.vars)
-		txn.committer.forUpdateTS = lockCtx.ForUpdateTS
-		// If the number of keys greater than 1, it can be on different region,
-		// concurrently execute on multiple regions may lead to deadlock.
-		txn.committer.isFirstLock = len(txn.lockKeys) == 0 && len(keys) == 1
-		err := txn.committer.pessimisticLockKeys(bo, lockCtx, keys)
-		if lockCtx.Killed != nil {
-			// If the kill signal is received during waiting for pessimisticLock,
-			// pessimisticLockKeys would handle the error but it doesn't reset the flag.
-			// We need to reset the killed flag here.
-			atomic.CompareAndSwapUint32(lockCtx.Killed, 1, 0)
-		}
-		if err != nil {
-			for _, key := range keys {
-				txn.us.DeleteKeyExistErrInfo(key)
-			}
-			keyMayBeLocked := terror.ErrorNotEqual(kv.ErrWriteConflict, err) && terror.ErrorNotEqual(kv.ErrKeyExists, err)
-			// If there is only 1 key and lock fails, no need to do pessimistic rollback.
-			if len(keys) > 1 || keyMayBeLocked {
-				wg := txn.asyncPessimisticRollback(ctx, keys)
-				if dl, ok := errors.Cause(err).(*ErrDeadlock); ok && hashInKeys(dl.DeadlockKeyHash, keys) {
-					dl.IsRetryable = true
-					// Wait for the pessimistic rollback to finish before we retry the statement.
-					wg.Wait()
-					// Sleep a little, wait for the other transaction that blocked by this transaction to acquire the lock.
-					time.Sleep(time.Millisecond * 5)
-				}
-			}
-			if assignedPrimaryKey {
-				// unset the primary key if we assigned primary key when failed to lock it.
-				txn.committer.primaryKey = nil
-			}
-			return err
-		}
-		if assignedPrimaryKey {
-			txn.committer.ttlManager.run(txn.committer, lockCtx.Killed)
-		}
-	}
 	txn.mu.Lock()
 	txn.lockKeys = append(txn.lockKeys, keys...)
 	for _, key := range keys {
@@ -431,39 +348,6 @@ func (txn *tikvTxn) LockKeys(ctx context.Context, lockCtx *kv.LockCtx, keysInput
 	txn.dirty = true
 	txn.mu.Unlock()
 	return nil
-}
-
-func (txn *tikvTxn) asyncPessimisticRollback(ctx context.Context, keys [][]byte) *sync.WaitGroup {
-	// Clone a new committer for execute in background.
-	committer := &twoPhaseCommitter{
-		store:       txn.committer.store,
-		connID:      txn.committer.connID,
-		startTS:     txn.committer.startTS,
-		forUpdateTS: txn.committer.forUpdateTS,
-		primaryKey:  txn.committer.primaryKey,
-	}
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		failpoint.Inject("AsyncRollBackSleep", func() {
-			time.Sleep(100 * time.Millisecond)
-		})
-		err := committer.pessimisticRollbackKeys(NewBackoffer(ctx, pessimisticRollbackMaxBackoff), keys)
-		if err != nil {
-			logutil.Logger(ctx).Warn("[kv] pessimisticRollback failed.", zap.Error(err))
-		}
-		wg.Done()
-	}()
-	return wg
-}
-
-func hashInKeys(deadlockKeyHash uint64, keys [][]byte) bool {
-	for _, key := range keys {
-		if farm.Fingerprint64(key) == deadlockKeyHash {
-			return true
-		}
-	}
-	return false
 }
 
 func (txn *tikvTxn) IsReadOnly() bool {

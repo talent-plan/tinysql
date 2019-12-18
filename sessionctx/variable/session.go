@@ -105,32 +105,11 @@ type TransactionContext struct {
 	Shard         *int64
 	TableDeltaMap map[int64]TableDelta
 
-	// unchangedRowKeys is used to store the unchanged rows that needs to lock for pessimistic transaction.
-	unchangedRowKeys map[string]struct{}
-
 	// CreateTime For metrics.
 	CreateTime     time.Time
 	StatementCount int
 	ForUpdate      bool
 	CouldRetry     bool
-	IsPessimistic  bool
-}
-
-// AddUnchangedRowKey adds an unchanged row key in update statement for pessimistic lock.
-func (tc *TransactionContext) AddUnchangedRowKey(key []byte) {
-	if tc.unchangedRowKeys == nil {
-		tc.unchangedRowKeys = map[string]struct{}{}
-	}
-	tc.unchangedRowKeys[string(key)] = struct{}{}
-}
-
-// CollectUnchangedRowKeys collects unchanged row keys for pessimistic lock.
-func (tc *TransactionContext) CollectUnchangedRowKeys(buf []kv.Key) []kv.Key {
-	for key := range tc.unchangedRowKeys {
-		buf = append(buf, kv.Key(key))
-	}
-	tc.unchangedRowKeys = nil
-	return buf
 }
 
 // UpdateDeltaForTable updates the delta info for some table.
@@ -416,9 +395,6 @@ type SessionVars struct {
 	// EnableFastAnalyze indicates whether to take fast analyze.
 	EnableFastAnalyze bool
 
-	// TxnMode indicates should be pessimistic or optimistic.
-	TxnMode string
-
 	// LowResolutionTSO is used for reading data with low resolution TSO which is updated once every two seconds.
 	LowResolutionTSO bool
 
@@ -466,10 +442,6 @@ type SessionVars struct {
 	isolationReadEngines map[kv.StoreType]struct{}
 
 	PlannerSelectBlockAsName []ast.HintTable
-
-	// LockWaitTimeout is the duration waiting for pessimistic lock in milliseconds
-	// negative value means nowait, 0 means default behavior, others means actual wait time
-	LockWaitTimeout int64
 }
 
 // PreparedParams contains the parameters of the current prepared statement when executing it.
@@ -547,7 +519,6 @@ func NewSessionVars() *SessionVars {
 		replicaRead:                 kv.ReplicaReadLeader,
 		AllowRemoveAutoInc:          DefTiDBAllowRemoveAutoInc,
 		isolationReadEngines:        map[kv.StoreType]struct{}{kv.TiKV: {}, kv.TiFlash: {}, kv.TiDB: {}},
-		LockWaitTimeout:             DefInnodbLockWaitTimeout * 1000,
 	}
 	vars.Concurrency = Concurrency{
 		IndexLookupConcurrency:     DefIndexLookupConcurrency,
@@ -838,9 +809,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 	case MaxExecutionTime:
 		timeoutMS := tidbOptPositiveInt32(val, 0)
 		s.MaxExecutionTime = uint64(timeoutMS)
-	case InnodbLockWaitTimeout:
-		lockWaitSec := tidbOptInt64(val, DefInnodbLockWaitTimeout)
-		s.LockWaitTimeout = int64(lockWaitSec * 1000)
 	case TiDBSkipUTF8Check:
 		s.SkipUTF8Check = TiDBOptOn(val)
 	case TiDBOptAggPushDown:
@@ -973,8 +941,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.WaitSplitRegionFinish = TiDBOptOn(val)
 	case TiDBWaitSplitRegionTimeout:
 		s.WaitSplitRegionTimeout = uint64(tidbOptPositiveInt32(val, DefWaitSplitRegionTimeout))
-	case TiDBTxnMode:
-		s.TxnMode = strings.ToUpper(val)
 	case TiDBLowResolutionTSO:
 		s.LowResolutionTSO = TiDBOptOn(val)
 	case TiDBEnableIndexMerge:
@@ -1008,20 +974,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		storeutil.StoreLimit.Store(tidbOptInt64(val, DefTiDBStoreLimit))
 	}
 	s.systems[name] = val
-	return nil
-}
-
-func (s *SessionVars) setTxnMode(val string) error {
-	switch strings.ToUpper(val) {
-	case ast.Pessimistic:
-		s.TxnMode = ast.Pessimistic
-	case ast.Optimistic:
-		s.TxnMode = ast.Optimistic
-	case "":
-		s.TxnMode = ""
-	default:
-		return ErrWrongValueForVar.FastGenByArgs(TiDBTxnMode, val)
-	}
 	return nil
 }
 

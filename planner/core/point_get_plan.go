@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/parser/opcode"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
@@ -279,10 +278,6 @@ func TryFastPlan(ctx sessionctx.Context, node ast.Node) Plan {
 				if !sessVars.IsAutocommit() || sessVars.InTxn() {
 					fp.Lock = true
 					fp.IsForUpdate = true
-					fp.LockWaitTime = sessVars.LockWaitTimeout
-					if x.LockTp == ast.SelectLockForUpdateNoWait {
-						fp.LockWaitTime = kv.LockNoWait
-					}
 				}
 			}
 			return fp
@@ -633,12 +628,11 @@ func tryPointGetPlan(ctx sessionctx.Context, selStmt *ast.SelectStmt) *PointGetP
 
 func newPointGetPlan(ctx sessionctx.Context, dbName string, schema *expression.Schema, tbl *model.TableInfo, names []*types.FieldName) *PointGetPlan {
 	p := &PointGetPlan{
-		basePlan:     newBasePlan(ctx, plancodec.TypePointGet, 0),
-		dbName:       dbName,
-		schema:       schema,
-		TblInfo:      tbl,
-		outputNames:  names,
-		LockWaitTime: ctx.GetSessionVars().LockWaitTimeout,
+		basePlan:    newBasePlan(ctx, plancodec.TypePointGet, 0),
+		dbName:      dbName,
+		schema:      schema,
+		TblInfo:     tbl,
+		outputNames: names,
 	}
 	ctx.GetSessionVars().StmtCtx.Tables = []stmtctx.TableEntry{{DB: ctx.GetSessionVars().CurrentDB, Table: tbl.Name.L}}
 	return p
@@ -870,9 +864,6 @@ func tryUpdatePointPlan(ctx sessionctx.Context, updateStmt *ast.UpdateStmt) Plan
 			names: fastSelect.outputNames,
 		}.Init(ctx, &property.StatsInfo{}, 0)
 	}
-	if ctx.GetSessionVars().TxnCtx.IsPessimistic {
-		fastSelect.Lock = true
-	}
 	orderedList, allAssignmentsAreConstant := buildOrderedList(ctx, fastSelect, updateStmt.List)
 	if orderedList == nil {
 		return nil
@@ -950,9 +941,6 @@ func tryDeletePointPlan(ctx sessionctx.Context, delStmt *ast.DeleteStmt) Plan {
 		return PhysicalTableDual{
 			names: fastSelect.outputNames,
 		}.Init(ctx, &property.StatsInfo{}, 0)
-	}
-	if ctx.GetSessionVars().TxnCtx.IsPessimistic {
-		fastSelect.Lock = true
 	}
 	handleCol := fastSelect.findHandleCol()
 	delPlan := Delete{

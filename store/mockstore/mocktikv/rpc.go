@@ -80,15 +80,6 @@ func convertToKeyError(err error) *kvrpcpb.KeyError {
 			},
 		}
 	}
-	if dead, ok := errors.Cause(err).(*ErrDeadlock); ok {
-		return &kvrpcpb.KeyError{
-			Deadlock: &kvrpcpb.Deadlock{
-				LockTs:          dead.LockTS,
-				LockKey:         dead.LockKey,
-				DeadlockKeyHash: dead.DealockKeyHash,
-			},
-		}
-	}
 	if retryable, ok := errors.Cause(err).(ErrRetryable); ok {
 		return &kvrpcpb.KeyError{
 			Retryable: retryable.Error(),
@@ -310,47 +301,6 @@ func (h *rpcHandler) handleKvPrewrite(req *kvrpcpb.PrewriteRequest) *kvrpcpb.Pre
 	}
 	errs := h.mvccStore.Prewrite(req)
 	return &kvrpcpb.PrewriteResponse{
-		Errors: convertToKeyErrors(errs),
-	}
-}
-
-func (h *rpcHandler) handleKvPessimisticLock(req *kvrpcpb.PessimisticLockRequest) *kvrpcpb.PessimisticLockResponse {
-	for _, m := range req.Mutations {
-		if !h.checkKeyInRegion(m.Key) {
-			panic("KvPessimisticLock: key not in region")
-		}
-	}
-	startTS := req.StartVersion
-	regionID := req.Context.RegionId
-	h.cluster.handleDelay(startTS, regionID)
-	errs := h.mvccStore.PessimisticLock(req.Mutations, req.PrimaryLock, req.GetStartVersion(), req.GetForUpdateTs(),
-		req.GetLockTtl(), req.WaitTimeout)
-	if req.WaitTimeout == kv.LockAlwaysWait {
-		// TODO: remove this when implement sever side wait.
-		h.simulateServerSideWaitLock(errs)
-	}
-	return &kvrpcpb.PessimisticLockResponse{
-		Errors: convertToKeyErrors(errs),
-	}
-}
-
-func (h *rpcHandler) simulateServerSideWaitLock(errs []error) {
-	for _, err := range errs {
-		if _, ok := err.(*ErrLocked); ok {
-			time.Sleep(time.Millisecond * 5)
-			break
-		}
-	}
-}
-
-func (h *rpcHandler) handleKvPessimisticRollback(req *kvrpcpb.PessimisticRollbackRequest) *kvrpcpb.PessimisticRollbackResponse {
-	for _, key := range req.Keys {
-		if !h.checkKeyInRegion(key) {
-			panic("KvPessimisticRollback: key not in region")
-		}
-	}
-	errs := h.mvccStore.PessimisticRollback(req.Keys, req.StartVersion, req.ForUpdateTs)
-	return &kvrpcpb.PessimisticRollbackResponse{
 		Errors: convertToKeyErrors(errs),
 	}
 }
@@ -785,20 +735,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvPrewrite(r)
-	case tikvrpc.CmdPessimisticLock:
-		r := req.PessimisticLock()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.PessimisticLockResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvPessimisticLock(r)
-	case tikvrpc.CmdPessimisticRollback:
-		r := req.PessimisticRollback()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.PessimisticRollbackResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvPessimisticRollback(r)
 	case tikvrpc.CmdCommit:
 		failpoint.Inject("rpcCommitResult", func(val failpoint.Value) {
 			switch val.(string) {
