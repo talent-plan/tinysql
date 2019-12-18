@@ -97,13 +97,7 @@ const (
 	tableTiKVRegionStatus                   = "TIKV_REGION_STATUS"
 	tableTiKVRegionPeers                    = "TIKV_REGION_PEERS"
 	tableTiDBServersInfo                    = "TIDB_SERVERS_INFO"
-	tableClusterInfo                        = "CLUSTER_INFO"
-	// TableClusterConfig is the string constant of cluster configuration memory table
-	TableClusterConfig = "CLUSTER_CONFIG"
-	// TableClusterLog is the string constant of cluster log memory table
-	TableClusterLog     = "CLUSTER_LOG"
-	tableClusterLoad    = "CLUSTER_LOAD"
-	tableTiFlashReplica = "TIFLASH_REPLICA"
+	tableTiFlashReplica                     = "TIFLASH_REPLICA"
 )
 
 var tableIDMap = map[string]int64{
@@ -148,13 +142,7 @@ var tableIDMap = map[string]int64{
 	tableTiKVRegionStatus:                   autoid.InformationSchemaDBID + 39,
 	tableTiKVRegionPeers:                    autoid.InformationSchemaDBID + 40,
 	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 41,
-	tableClusterInfo:                        autoid.InformationSchemaDBID + 42,
-	TableClusterConfig:                      autoid.InformationSchemaDBID + 43,
-	tableClusterLoad:                        autoid.InformationSchemaDBID + 44,
-	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 45,
-	clusterTableSlowLog:                     autoid.InformationSchemaDBID + 46,
-	clusterTableProcesslist:                 autoid.InformationSchemaDBID + 47,
-	TableClusterLog:                         autoid.InformationSchemaDBID + 48,
+	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 42,
 }
 
 type columnInfo struct {
@@ -2278,17 +2266,12 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableCollationCharacterSetApplicability: tableCollationCharacterSetApplicabilityCols,
 	tableProcesslist:                        tableProcesslistCols,
 	tableTiDBIndexes:                        tableTiDBIndexesCols,
-	tableSlowLog:                            slowQueryCols,
 	tableTiDBHotRegions:                     tableTiDBHotRegionsCols,
 	tableTiKVStoreStatus:                    tableTiKVStoreStatusCols,
 	tableAnalyzeStatus:                      tableAnalyzeStatusCols,
 	tableTiKVRegionStatus:                   tableTiKVRegionStatusCols,
 	tableTiKVRegionPeers:                    tableTiKVRegionPeersCols,
 	tableTiDBServersInfo:                    tableTiDBServersInfoCols,
-	tableClusterInfo:                        tableClusterInfoCols,
-	TableClusterConfig:                      tableClusterConfigCols,
-	TableClusterLog:                         tableClusterLogCols,
-	tableClusterLoad:                        tableClusterLoadCols,
 	tableTiFlashReplica:                     tableTableTiFlashReplicaCols,
 }
 
@@ -2298,9 +2281,6 @@ func createInfoSchemaTable(_ autoid.Allocator, meta *model.TableInfo) (table.Tab
 		columns[i] = table.ToColumn(col)
 	}
 	tp := table.VirtualTable
-	if isClusterTableByName(util.InformationSchemaName, meta.Name.L) {
-		tp = table.ClusterTable
-	}
 	return &infoschemaTable{meta: meta, cols: columns, tp: tp}, nil
 }
 
@@ -2380,8 +2360,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForCollationCharacterSetApplicability()
 	case tableProcesslist:
 		fullRows = dataForProcesslist(ctx)
-	case tableSlowLog:
-		fullRows, err = dataForSlowLog(ctx)
 	case tableTiDBHotRegions:
 		fullRows, err = dataForTiDBHotRegions(ctx)
 	case tableTiKVStoreStatus:
@@ -2394,15 +2372,8 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows, err = dataForTikVRegionPeers(ctx)
 	case tableTiDBServersInfo:
 		fullRows, err = dataForServersInfo()
-	case tableClusterInfo:
-		fullRows, err = dataForTiDBClusterInfo(ctx)
-	case tableClusterLoad:
-		fullRows, err = dataForClusterLoadInfo(ctx)
 	case tableTiFlashReplica:
 		fullRows = dataForTableTiFlashReplica(dbs)
-	// Data for cluster memory table.
-	case clusterTableSlowLog, clusterTableProcesslist:
-		fullRows, err = getClusterMemTableRows(ctx, it.meta.Name.O)
 	}
 	if err != nil {
 		return nil, err
