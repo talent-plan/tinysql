@@ -19,7 +19,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -116,8 +115,6 @@ func GetSessionOnlySysVars(s *SessionVars, key string) (string, bool, error) {
 		return fmt.Sprintf("%d", s.TxnCtx.StartTS), true, nil
 	case TiDBGeneralLog:
 		return fmt.Sprintf("%d", atomic.LoadUint32(&ProcessGeneralLog)), true, nil
-	case TiDBExpensiveQueryTimeThreshold:
-		return fmt.Sprintf("%d", atomic.LoadUint64(&ExpensiveQueryTimeThreshold)), true, nil
 	case TiDBConfig:
 		conf := config.GetGlobalConfig()
 		j, err := json.MarshalIndent(conf, "", "\t")
@@ -455,8 +452,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		return checkUInt64SystemVar(name, value, uint64(MinDDLReorgBatchSize), uint64(MaxDDLReorgBatchSize), vars)
 	case TiDBDDLErrorCountLimit:
 		return checkUInt64SystemVar(name, value, uint64(0), math.MaxInt64, vars)
-	case TiDBExpensiveQueryTimeThreshold:
-		return checkUInt64SystemVar(name, value, MinExpensiveQueryTimeThreshold, math.MaxInt64, vars)
 	case TiDBIndexLookupConcurrency, TiDBIndexLookupJoinConcurrency, TiDBIndexJoinBatchSize,
 		TiDBIndexLookupSize,
 		TiDBHashJoinConcurrency,
@@ -756,32 +751,4 @@ func setDayTime(s *SessionVars, val string) (string, error) {
 		return "", err
 	}
 	return t.Format(FullDayTimeFormat), nil
-}
-
-// serverGlobalVariable is used to handle variables that acts in server and global scope.
-type serverGlobalVariable struct {
-	sync.Mutex
-	serverVal string
-	globalVal string
-}
-
-// Set sets the value according to variable scope.
-func (v *serverGlobalVariable) Set(val string, isServer bool) {
-	v.Lock()
-	if isServer {
-		v.serverVal = val
-	} else {
-		v.globalVal = val
-	}
-	v.Unlock()
-}
-
-// GetVal gets the value.
-func (v *serverGlobalVariable) GetVal() string {
-	v.Lock()
-	defer v.Unlock()
-	if v.serverVal != "" {
-		return v.serverVal
-	}
-	return v.globalVal
 }

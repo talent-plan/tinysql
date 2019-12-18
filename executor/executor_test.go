@@ -4475,7 +4475,6 @@ func (s *testSuite) TestOOMPanicAction(c *C) {
 		PS: make([]*util.ProcessInfo, 0),
 	}
 	tk.Se.SetSessionManager(sm)
-	s.domain.ExpensiveQueryHandle().SetSessionManager(sm)
 	orgAction := config.GetGlobalConfig().OOMAction
 	setOOMAction(config.OOMActionCancel)
 	defer func() {

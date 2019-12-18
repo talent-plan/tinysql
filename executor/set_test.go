@@ -381,9 +381,6 @@ func (s *testSuite5) TestSetVar(c *C) {
 	tk.MustExec("set global tidb_backoff_weight = 10")
 	tk.MustQuery("select @@global.tidb_backoff_weight;").Check(testkit.Rows("10"))
 
-	tk.MustExec("set @@tidb_expensive_query_time_threshold=70")
-	tk.MustQuery("select @@tidb_expensive_query_time_threshold;").Check(testkit.Rows("70"))
-
 	tk.MustExec("set @@tidb_record_plan_in_slow_log = 1")
 	tk.MustQuery("select @@tidb_record_plan_in_slow_log;").Check(testkit.Rows("1"))
 	tk.MustExec("set @@tidb_record_plan_in_slow_log = 0")

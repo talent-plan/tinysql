@@ -40,7 +40,6 @@ type ProcessInfo struct {
 
 	State                     uint16
 	Command                   byte
-	ExceedExpensiveTimeThresh bool
 }
 
 // ToRowForShow returns []interface{} for the row data of "SHOW [FULL] PROCESSLIST".

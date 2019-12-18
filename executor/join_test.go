@@ -64,7 +64,6 @@ func (s *testSuite) TestJoinInDisk(c *C) {
 		PS: make([]*util.ProcessInfo, 0),
 	}
 	tk.Se.SetSessionManager(sm)
-	s.domain.ExpensiveQueryHandle().SetSessionManager(sm)
 
 	// TODO(fengliyuan): how to ensure that it is using disk really?
 	tk.MustExec("set @@tidb_mem_quota_query=1;")

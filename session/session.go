@@ -1523,7 +1523,6 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 
 	timeutil.SetSystemTZ(tz)
 	dom := domain.GetDomain(se)
-	dom.InitExpensiveQueryHandle()
 
 	if !config.GetGlobalConfig().Security.SkipGrantTable {
 		err = dom.LoadPrivilegeLoop(se)
@@ -1748,7 +1747,6 @@ var builtinGlobalVariable = []string{
 	variable.TiDBEnableTablePartition,
 	variable.TiDBEnableVectorizedExpression,
 	variable.TiDBEnableFastAnalyze,
-	variable.TiDBExpensiveQueryTimeThreshold,
 	variable.TiDBEnableNoopFuncs,
 	variable.TiDBEnableIndexMerge,
 	variable.TiDBTxnMode,

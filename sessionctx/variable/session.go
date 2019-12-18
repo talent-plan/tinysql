@@ -973,8 +973,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.WaitSplitRegionFinish = TiDBOptOn(val)
 	case TiDBWaitSplitRegionTimeout:
 		s.WaitSplitRegionTimeout = uint64(tidbOptPositiveInt32(val, DefWaitSplitRegionTimeout))
-	case TiDBExpensiveQueryTimeThreshold:
-		atomic.StoreUint64(&ExpensiveQueryTimeThreshold, uint64(tidbOptPositiveInt32(val, DefTiDBExpensiveQueryTimeThreshold)))
 	case TiDBTxnMode:
 		s.TxnMode = strings.ToUpper(val)
 	case TiDBLowResolutionTSO:
