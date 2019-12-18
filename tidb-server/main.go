@@ -53,8 +53,6 @@ import (
 	"github.com/pingcap/tidb/util/printer"
 	"github.com/pingcap/tidb/util/signal"
 	"github.com/pingcap/tidb/util/storeutil"
-	"github.com/pingcap/tidb/util/sys/linux"
-	"github.com/pingcap/tidb/util/systimemon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/struCoder/pidusage"
@@ -161,7 +159,6 @@ func main() {
 		os.Exit(0)
 	}
 	setGlobalVars()
-	setCPUAffinity()
 	setupLog()
 	// If configStrict had been specified, and there had been an error, the server would already
 	// have exited by now. If configWarning is not an empty string, write it to the log now that
@@ -191,30 +188,6 @@ func syncLog() {
 		fmt.Fprintln(os.Stderr, "sync log err:", err)
 		os.Exit(1)
 	}
-}
-
-func setCPUAffinity() {
-	if affinityCPU == nil || len(*affinityCPU) == 0 {
-		return
-	}
-	var cpu []int
-	for _, af := range strings.Split(*affinityCPU, ",") {
-		af = strings.TrimSpace(af)
-		if len(af) > 0 {
-			c, err := strconv.Atoi(af)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "wrong affinity cpu config: %s", *affinityCPU)
-				exit()
-			}
-			cpu = append(cpu, c)
-		}
-	}
-	err := linux.SetAffinity(cpu)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "set cpu affinity failure: %v", err)
-		exit()
-	}
-	runtime.GOMAXPROCS(len(cpu))
 }
 
 func registerStores() {
@@ -584,21 +557,6 @@ func serverShutdown(isgraceful bool) {
 func setupMetrics() {
 	// Enable the mutex profile, 1/10 of mutex blocking event sampling.
 	runtime.SetMutexProfileFraction(10)
-	systimeErrHandler := func() {
-		metrics.TimeJumpBackCounter.Inc()
-	}
-	callBackCount := 0
-	sucessCallBack := func() {
-		callBackCount++
-		// It is callback by monitor per second, we increase metrics.KeepAliveCounter per 5s.
-		if callBackCount >= 5 {
-			callBackCount = 0
-			metrics.KeepAliveCounter.Inc()
-			updateCPUUsageMetrics()
-		}
-	}
-	go systimemon.StartMonitor(time.Now, systimeErrHandler, sucessCallBack)
-
 	pushMetric(cfg.Status.MetricsAddr, time.Duration(cfg.Status.MetricsInterval)*time.Second)
 }
 
