@@ -36,16 +36,6 @@ var _ = check.Suite(&testUtilSuite{})
 type testUtilSuite struct {
 }
 
-func (s *testUtilSuite) checkPanic(f func()) (ret bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			ret = true
-		}
-	}()
-	f()
-	return false
-}
-
 func (s *testUtilSuite) TestBaseBuiltin(c *check.C) {
 	ctx := mock.NewContext()
 	bf := newBaseBuiltinFuncWithTp(ctx, nil, types.ETTimestamp)

@@ -427,17 +427,6 @@ func (c *RegionCache) LocateKey(bo *Backoffer, key []byte) (*KeyLocation, error)
 	}, nil
 }
 
-func (c *RegionCache) loadAndInsertRegion(bo *Backoffer, key []byte) (*Region, error) {
-	r, err := c.loadRegion(bo, key, false)
-	if err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	c.insertRegionToCache(r)
-	c.mu.Unlock()
-	return r, nil
-}
-
 // LocateEndKey searches for the region and range that the key is located.
 // Unlike LocateKey, start key of a region is exclusive and end key is inclusive.
 func (c *RegionCache) LocateEndKey(bo *Backoffer, key []byte) (*KeyLocation, error) {

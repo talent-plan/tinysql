@@ -329,7 +329,6 @@ const (
 	version26 = 26
 	version27 = 27
 	version28 = 28
-	version29 = 29
 	version30 = 30
 	version31 = 31
 	version32 = 32

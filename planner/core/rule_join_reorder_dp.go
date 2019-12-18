@@ -281,14 +281,3 @@ func findNodeIndexInGroup(group []LogicalPlan, col *expression.Column) (int, err
 	}
 	return -1, ErrUnknownColumn.GenWithStackByArgs(col, "JOIN REORDER RULE")
 }
-
-func (s *joinReorderDPSolver) newJoinWithConds(leftPlan, rightPlan LogicalPlan, eqConds []*expression.ScalarFunction, otherConds []expression.Expression) LogicalPlan {
-	join := s.newCartesianJoin(leftPlan, rightPlan)
-	join.EqualConditions = eqConds
-	join.OtherConditions = otherConds
-	for _, eqCond := range join.EqualConditions {
-		join.LeftJoinKeys = append(join.LeftJoinKeys, eqCond.GetArgs()[0].(*expression.Column))
-		join.RightJoinKeys = append(join.RightJoinKeys, eqCond.GetArgs()[1].(*expression.Column))
-	}
-	return join
-}

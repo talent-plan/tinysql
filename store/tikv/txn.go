@@ -67,13 +67,6 @@ type tikvTxn struct {
 	vars      *kv.Variables
 	committer *twoPhaseCommitter
 
-	// For data consistency check.
-	// assertions[:confirmed] is the assertion of current transaction.
-	// assertions[confirmed:len(assertions)] is the assertions of current statement.
-	// StmtCommit/StmtRollback may change the confirmed position.
-	assertions []assertionPair
-	confirmed  int
-
 	valid bool
 	dirty bool
 }
@@ -101,15 +94,6 @@ func newTikvTxnWithStartTS(store *tikvStore, startTS uint64, replicaReadSeed uin
 		valid:     true,
 		vars:      kv.DefaultVars,
 	}, nil
-}
-
-type assertionPair struct {
-	key       kv.Key
-	assertion kv.AssertionType
-}
-
-func (a assertionPair) String() string {
-	return fmt.Sprintf("key: %s, assertion type: %d", a.key, a.assertion)
 }
 
 func (txn *tikvTxn) SetVars(vars *kv.Variables) {

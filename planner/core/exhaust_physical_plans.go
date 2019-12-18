@@ -20,7 +20,6 @@ import (
 	"sort"
 
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
@@ -614,7 +613,6 @@ func (p *LogicalJoin) buildIndexJoinInner2IndexScan(
 type indexJoinBuildHelper struct {
 	join *LogicalJoin
 
-	chosenIndexInfo *model.IndexInfo
 	maxUsedCols     int
 	chosenAccess    []expression.Expression
 	chosenRemained  []expression.Expression

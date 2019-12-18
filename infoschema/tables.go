@@ -27,13 +27,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/diagnosticspb"
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
@@ -50,9 +47,6 @@ import (
 	"github.com/pingcap/tidb/util/pdapi"
 	"github.com/pingcap/tidb/util/set"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -705,30 +699,6 @@ var tableTiDBServersInfoCols = []columnInfo{
 	{"BINLOG_STATUS", mysql.TypeVarchar, 64, 0, nil, nil},
 }
 
-var tableClusterConfigCols = []columnInfo{
-	{"TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"KEY", mysql.TypeVarchar, 256, 0, nil, nil},
-	{"VALUE", mysql.TypeVarchar, 128, 0, nil, nil},
-}
-
-var tableClusterLogCols = []columnInfo{
-	{"TIME", mysql.TypeVarchar, 32, 0, nil, nil},
-	{"TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"LEVEL", mysql.TypeVarchar, 8, 0, nil, nil},
-	{"MESSAGE", mysql.TypeVarString, 1024, 0, nil, nil},
-}
-
-var tableClusterLoadCols = []columnInfo{
-	{"TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"DEVICE_TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"DEVICE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"LOAD_NAME", mysql.TypeVarchar, 256, 0, nil, nil},
-	{"LOAD_VALUE", mysql.TypeVarchar, 128, 0, nil, nil},
-}
-
 func dataForTiKVRegionStatus(ctx sessionctx.Context) (records [][]types.Datum, err error) {
 	tikvStore, ok := ctx.GetStore().(tikv.Storage)
 	if !ok {
@@ -1081,14 +1051,6 @@ var filesCols = []columnInfo{
 	{"CHECKSUM", mysql.TypeLonglong, 21, 0, nil, nil},
 	{"STATUS", mysql.TypeVarchar, 20, 0, nil, nil},
 	{"EXTRA", mysql.TypeVarchar, 255, 0, nil, nil},
-}
-
-var tableClusterInfoCols = []columnInfo{
-	{"TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"STATUS_ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"VERSION", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"GIT_HASH", mysql.TypeVarchar, 64, 0, nil, nil},
 }
 
 var tableTableTiFlashReplicaCols = []columnInfo{
@@ -2109,106 +2071,6 @@ func GetTiKVServerInfo(ctx sessionctx.Context) ([]ServerInfo, error) {
 		})
 	}
 	return servers, nil
-}
-
-func dataForTiDBClusterInfo(ctx sessionctx.Context) ([][]types.Datum, error) {
-	servers, err := GetClusterServerInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows := make([][]types.Datum, 0, len(servers))
-	for _, server := range servers {
-		row := types.MakeDatums(
-			server.ServerType,
-			server.Address,
-			server.StatusAddr,
-			server.Version,
-			server.GitHash,
-		)
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-func dataForClusterLoadInfo(ctx sessionctx.Context) ([][]types.Datum, error) {
-	serversInfo, err := GetClusterServerInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ipMap := make(map[string]struct{}, len(serversInfo))
-	rows := make([][]types.Datum, 0, len(serversInfo)*10)
-	for _, srv := range serversInfo {
-		// TODO: remove this after PD/TiKV support diagnostic grpc service.
-		if srv.ServerType == "pd" || srv.ServerType == "tikv" {
-			continue
-		}
-		addr := srv.StatusAddr
-		ip := addr
-		if idx := strings.Index(addr, ":"); idx != -1 {
-			ip = addr[:idx]
-		}
-		if _, ok := ipMap[ip]; ok {
-			continue
-		}
-		ipMap[ip] = struct{}{}
-		items, err := getServerInfoByGRPC(srv.StatusAddr, diagnosticspb.ServerInfoType_LoadInfo)
-		if err != nil {
-			return nil, err
-		}
-		partRows := serverInfoItemToRows(items, srv.ServerType, srv.StatusAddr)
-		rows = append(rows, partRows...)
-	}
-	return rows, nil
-}
-
-func serverInfoItemToRows(items []*diagnosticspb.ServerInfoItem, tp, addr string) [][]types.Datum {
-	rows := make([][]types.Datum, 0, len(items))
-	for _, v := range items {
-		for _, item := range v.Pairs {
-			row := types.MakeDatums(
-				tp,
-				addr,
-				v.Tp,
-				v.Name,
-				item.Key,
-				item.Value,
-			)
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-func getServerInfoByGRPC(address string, tp diagnosticspb.ServerInfoType) ([]*diagnosticspb.ServerInfoItem, error) {
-	opt := grpc.WithInsecure()
-	security := config.GetGlobalConfig().Security
-	if len(security.ClusterSSLCA) != 0 {
-		tlsConfig, err := security.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		opt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-	}
-	conn, err := grpc.Dial(address, opt)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			log.Error("close grpc connection error", zap.Error(err))
-		}
-	}()
-
-	cli := diagnosticspb.NewDiagnosticsClient(conn)
-	// FIXME: use session context instead of context.Background().
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	r, err := cli.ServerInfo(ctx, &diagnosticspb.ServerInfoRequest{Tp: tp})
-	if err != nil {
-		return nil, err
-	}
-	return r.Items, nil
 }
 
 // dataForTableTiFlashReplica constructs data for table tiflash replica info.

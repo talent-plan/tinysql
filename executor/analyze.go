@@ -245,7 +245,6 @@ type AnalyzeIndexExec struct {
 	physicalTableID int64
 	idxInfo         *model.IndexInfo
 	concurrency     int
-	priority        int
 	analyzePB       *tipb.AnalyzeReq
 	result          distsql.SelectResult
 	countNullRes    distsql.SelectResult
@@ -397,7 +396,6 @@ type AnalyzeColumnsExec struct {
 	colsInfo        []*model.ColumnInfo
 	pkInfo          *model.ColumnInfo
 	concurrency     int
-	priority        int
 	analyzePB       *tipb.AnalyzeReq
 	resultHandler   *tableResultHandler
 	opts            map[ast.AnalyzeOptionType]uint64

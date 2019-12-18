@@ -131,7 +131,6 @@ func (s *testMemoSuite) TestGroupGetFirstElem(c *C) {
 }
 
 type fakeImpl struct {
-	cost float64
 	plan plannercore.PhysicalPlan
 }
 

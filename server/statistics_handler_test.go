@@ -69,18 +69,6 @@ func (ds *testDumpStatsSuite) startServer(c *C) {
 	ds.sh = &StatsHandler{do}
 }
 
-func (ds *testDumpStatsSuite) stopServer(c *C) {
-	if ds.domain != nil {
-		ds.domain.Close()
-	}
-	if ds.store != nil {
-		ds.store.Close()
-	}
-	if ds.server != nil {
-		ds.server.Close()
-	}
-}
-
 func (ds *testDumpStatsSuite) TestDumpStatsAPI(c *C) {
 	ds.startServer(c)
 	ds.prepareData(c)
@@ -233,16 +221,4 @@ func (ds *testDumpStatsSuite) checkData(c *C, path string) {
 	dbt.Check(tableName, Equals, "test")
 	dbt.Check(modifyCount, Equals, int64(3))
 	dbt.Check(count, Equals, int64(4))
-}
-
-func (ds *testDumpStatsSuite) clearData(c *C, path string) {
-	db, err := sql.Open("mysql", getDSN())
-	c.Assert(err, IsNil, Commentf("Error connecting"))
-	defer db.Close()
-
-	dbt := &DBTest{c, db}
-	dbt.mustExec("drop database tidb")
-	dbt.mustExec("truncate table mysql.stats_meta")
-	dbt.mustExec("truncate table mysql.stats_histograms")
-	dbt.mustExec("truncate table mysql.stats_buckets")
 }

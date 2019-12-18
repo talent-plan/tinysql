@@ -343,7 +343,6 @@ func NewPhysicalHashJoin(p *LogicalJoin, innerIdx int, useOuterToBuild bool, new
 type PhysicalIndexJoin struct {
 	basePhysicalJoin
 
-	outerSchema *expression.Schema
 	innerTask   task
 
 	// Ranges stores the IndexRanges when the inner plan is index scan.

@@ -15,16 +15,12 @@ package infoschema_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/fn"
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -37,11 +33,8 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/statistics/handle"
-	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/pdapi"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
 )
@@ -68,62 +61,6 @@ func (s *testTableSuite) TearDownSuite(c *C) {
 	s.dom.Close()
 	s.store.Close()
 	testleak.AfterTest(c)()
-}
-
-func setUpMockPDHTTPSercer() (*httptest.Server, string) {
-	// mock PD http server
-	router := mux.NewRouter()
-	server := httptest.NewServer(router)
-	// mock store stats stat
-	mockAddr := strings.TrimPrefix(server.URL, "http://")
-	router.Handle(pdapi.Stores, fn.Wrap(func() (*helper.StoresStat, error) {
-		return &helper.StoresStat{
-			Count: 1,
-			Stores: []helper.StoreStat{
-				{
-					Store: helper.StoreBaseStat{
-						ID:            1,
-						Address:       "127.0.0.1:20160",
-						State:         0,
-						StateName:     "Up",
-						Version:       "4.0.0-alpha",
-						StatusAddress: mockAddr,
-						GitHash:       "mock-tikv-githash",
-					},
-				},
-			},
-		}, nil
-	}))
-	// mock PD API
-	router.Handle(pdapi.ClusterVersion, fn.Wrap(func() (string, error) { return "4.0.0-alpha", nil }))
-	router.Handle(pdapi.Status, fn.Wrap(func() (interface{}, error) {
-		return struct {
-			GitHash string `json:"git_hash"`
-		}{GitHash: "mock-pd-githash"}, nil
-	}))
-	var mockConfig = func() (map[string]interface{}, error) {
-		configuration := map[string]interface{}{
-			"key1": "value1",
-			"key2": map[string]string{
-				"nest1": "n-value1",
-				"nest2": "n-value2",
-			},
-			"key3": map[string]interface{}{
-				"nest1": "n-value1",
-				"nest2": "n-value2",
-				"key4": map[string]string{
-					"nest3": "n-value4",
-					"nest4": "n-value5",
-				},
-			},
-		}
-		return configuration, nil
-	}
-	// pd config
-	router.Handle(pdapi.Config, fn.Wrap(mockConfig))
-	// TiDB/TiKV config
-	router.Handle("/config", fn.Wrap(mockConfig))
-	return server, mockAddr
 }
 
 func (s *testTableSuite) TestInfoschemaFieldValue(c *C) {
@@ -699,15 +636,6 @@ func (s *testTableSuite) TestColumnStatistics(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustQuery("select * from information_schema.column_statistics").Check(testkit.Rows())
 }
-
-type mockStore struct {
-	tikv.Storage
-	host string
-}
-
-func (s *mockStore) EtcdAddrs() []string    { return []string{s.host} }
-func (s *mockStore) TLSConfig() *tls.Config { panic("not implemented") }
-func (s *mockStore) StartGCWorker() error   { panic("not implemented") }
 
 func (s *testTableSuite) TestReloadDropDatabase(c *C) {
 	tk := testkit.NewTestKit(c, s.store)

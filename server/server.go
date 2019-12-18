@@ -38,8 +38,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
-	"os/user"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,7 +55,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/sys/linux"
 	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -65,24 +62,7 @@ import (
 
 var (
 	baseConnID uint32
-	serverPID  int
-	osUser     string
-	osVersion  string
 )
-
-func init() {
-	serverPID = os.Getpid()
-	currentUser, err := user.Current()
-	if err != nil {
-		osUser = ""
-	} else {
-		osUser = currentUser.Name
-	}
-	osVersion, err = linux.OSVersion()
-	if err != nil {
-		osVersion = ""
-	}
-}
 
 var (
 	errUnknownFieldType  = terror.ClassServer.New(mysql.ErrUnknownFieldType, mysql.MySQLErrName[mysql.ErrUnknownFieldType])
@@ -412,32 +392,6 @@ func (s *Server) onConn(conn *clientConn) {
 	conn.Run(ctx)
 }
 
-func (cc *clientConn) connectInfo() *variable.ConnectionInfo {
-	connType := "Socket"
-	if cc.server.isUnixSocket() {
-		connType = "UnixSocket"
-	} else if cc.tlsConn != nil {
-		connType = "SSL/TLS"
-	}
-	connInfo := &variable.ConnectionInfo{
-		ConnectionID:      cc.connectionID,
-		ConnectionType:    connType,
-		Host:              cc.peerHost,
-		ClientIP:          cc.peerHost,
-		ClientPort:        cc.peerPort,
-		ServerID:          1,
-		ServerPort:        int(cc.server.cfg.Port),
-		User:              cc.user,
-		ServerOSLoginUser: osUser,
-		OSVersion:         osVersion,
-		ServerVersion:     mysql.TiDBReleaseVersion,
-		SSLVersion:        "v1.2.0", // for current go version
-		PID:               serverPID,
-		DB:                cc.dbname,
-	}
-	return connInfo
-}
-
 // ShowProcessList implements the SessionManager interface.
 func (s *Server) ShowProcessList() map[uint64]*util.ProcessInfo {
 	s.rwlock.RLock()
@@ -580,13 +534,6 @@ func setSystemTimeZoneVariable() {
 	}
 	variable.SysVars["system_time_zone"].Value = tz
 }
-
-// Server error codes.
-const (
-	codeUnknownFieldType = 1
-	codeInvalidSequence  = 3
-	codeInvalidType      = 4
-)
 
 func init() {
 	serverMySQLErrCodes := map[terror.ErrCode]uint16{

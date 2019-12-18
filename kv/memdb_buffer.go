@@ -28,7 +28,6 @@ import (
 type memDbBuffer struct {
 	db              *memdb.DB
 	entrySizeLimit  int
-	bufferLenLimit  uint64
 	bufferSizeLimit uint64
 }
 

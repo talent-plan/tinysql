@@ -48,8 +48,6 @@ type PointGetPlan struct {
 	HandleParam      *driver.ParamMarkerExpr
 	IndexValues      []types.Datum
 	IndexValueParams []*driver.ParamMarkerExpr
-	expr             expression.Expression
-	ctx              sessionctx.Context
 	UnsignedHandle   bool
 	IsTableDual      bool
 	Lock             bool

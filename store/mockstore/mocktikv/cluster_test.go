@@ -22,7 +22,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
@@ -34,7 +33,6 @@ import (
 var _ = Suite(&testClusterSuite{})
 
 type testClusterSuite struct {
-	store kv.Storage
 }
 
 func (s *testClusterSuite) TestClusterSplit(c *C) {

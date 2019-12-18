@@ -4282,19 +4282,6 @@ func (s *testIntegrationSuite) TestFilterExtractFromDNF(c *C) {
 	}
 }
 
-func (s *testIntegrationSuite) testTiDBIsOwnerFunc(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	result := tk.MustQuery("select tidb_is_ddl_owner()")
-	ddlOwnerChecker := tk.Se.DDLOwnerChecker()
-	c.Assert(ddlOwnerChecker, NotNil)
-	var ret int64
-	if ddlOwnerChecker.IsOwner() {
-		ret = 1
-	}
-	result.Check(testkit.Rows(fmt.Sprintf("%v", ret)))
-}
-
 func (s *testIntegrationSuite) TestTiDBDecodePlanFunc(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	defer s.cleanEnv(c)
@@ -4739,9 +4726,9 @@ from
     (select * from t1) a
 left join
     (select bussid,date(from_unixtime(ct)) date8 from t2) b
-on 
+on
     a.period_id = b.bussid
-where 
+where
     datediff(b.date8, date(from_unixtime(a.starttime))) >= 0`
 	tk.MustQuery(q)
 }

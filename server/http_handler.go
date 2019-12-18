@@ -562,13 +562,6 @@ type FrameItem struct {
 	IndexValues []string `json:"index_values,omitempty"`
 }
 
-// RegionFrameRange contains a frame range info which the region covered.
-type RegionFrameRange struct {
-	first  *FrameItem        // start frame of the region
-	last   *FrameItem        // end frame of the region
-	region *tikv.KeyLocation // the region
-}
-
 func (t *tikvHandlerTool) getRegionsMeta(regionIDs []uint64) ([]RegionMeta, error) {
 	regions := make([]RegionMeta, len(regionIDs))
 	for i, regionID := range regionIDs {
@@ -1200,24 +1193,6 @@ func (h tableHandler) handleDiskUsageRequest(schema infoschema.InfoSchema, tbl t
 		return
 	}
 	writeData(w, stats.StorageSize)
-}
-
-type hotRegion struct {
-	helper.TblIndex
-	helper.RegionMetric
-}
-type hotRegions []hotRegion
-
-func (rs hotRegions) Len() int {
-	return len(rs)
-}
-
-func (rs hotRegions) Less(i, j int) bool {
-	return rs[i].MaxHotDegree > rs[j].MaxHotDegree || (rs[i].MaxHotDegree == rs[j].MaxHotDegree && rs[i].FlowBytes > rs[j].FlowBytes)
-}
-
-func (rs hotRegions) Swap(i, j int) {
-	rs[i], rs[j] = rs[j], rs[i]
 }
 
 // ServeHTTP handles request of get region by ID.

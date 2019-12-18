@@ -51,7 +51,6 @@ type testEvaluatorSuite struct {
 
 type testEvaluatorSerialSuites struct {
 	*parser.Parser
-	ctx sessionctx.Context
 }
 
 func (s *testEvaluatorSuite) SetUpSuite(c *C) {

@@ -255,10 +255,6 @@ func (sr *simpleRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok boo
 	return originInNode, true
 }
 
-func (sr *simpleRewriter) useCache() bool {
-	return sr.ctx.GetSessionVars().StmtCtx.UseCache
-}
-
 func (sr *simpleRewriter) binaryOpToExpression(v *ast.BinaryOperationExpr) {
 	right := sr.pop()
 	left := sr.pop()

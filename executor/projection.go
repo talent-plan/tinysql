@@ -321,7 +321,6 @@ type projectionInputFetcher struct {
 	child          Executor
 	globalFinishCh <-chan struct{}
 	globalOutputCh chan<- *projectionOutput
-	wg             sync.WaitGroup
 
 	inputCh  chan *projectionInput
 	outputCh chan *projectionOutput
