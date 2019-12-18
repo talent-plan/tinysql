@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/plancodec"
 	"github.com/pingcap/tidb/util/ranger"
 )
 
@@ -162,7 +161,7 @@ func (s *partitionProcessor) prune(ds *DataSource) (LogicalPlan, error) {
 
 		// Not a deep copy.
 		newDataSource := *ds
-		newDataSource.baseLogicalPlan = newBaseLogicalPlan(ds.SCtx(), plancodec.TypeTableScan, &newDataSource, ds.blockOffset)
+		newDataSource.baseLogicalPlan = newBaseLogicalPlan(ds.SCtx(), TypeTableScan, &newDataSource, ds.blockOffset)
 		newDataSource.isPartition = true
 		newDataSource.physicalTableID = pi.Definitions[i].ID
 		newDataSource.possibleAccessPaths = make([]*util.AccessPath, len(ds.possibleAccessPaths))

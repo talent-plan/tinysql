@@ -34,7 +34,6 @@ import (
 	driver "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/texttree"
 )
 
 var planCacheCounter = metrics.PlanCacheCounter.WithLabelValues("prepare")
@@ -650,7 +649,7 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, indent string, isLast
 	e.explainedPlans[p.ID()] = true
 
 	// For every child we create a new sub-tree rooted by it.
-	childIndent := texttree.Indent4Child(indent, isLastChild)
+	childIndent := Indent4Child(indent, isLastChild)
 
 	if physPlan, ok := p.(PhysicalPlan); ok {
 		for i, child := range physPlan.Children() {
@@ -711,6 +710,72 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, indent string, isLast
 	return
 }
 
+const (
+	// TreeBody indicates the current operator sub-tree is not finished, still
+	// has child operators to be attached on.
+	TreeBody = '│'
+	// TreeMiddleNode indicates this operator is not the last child of the
+	// current sub-tree rooted by its parent.
+	TreeMiddleNode = '├'
+	// TreeLastNode indicates this operator is the last child of the current
+	// sub-tree rooted by its parent.
+	TreeLastNode = '└'
+	// TreeGap is used to represent the gap between the branches of the tree.
+	TreeGap = ' '
+	// TreeNodeIdentifier is used to replace the treeGap once we need to attach
+	// a node to a sub-tree.
+	TreeNodeIdentifier = '─'
+)
+
+// Indent4Child appends more blank to the `indent` string
+func Indent4Child(indent string, isLastChild bool) string {
+	if !isLastChild {
+		return string(append([]rune(indent), TreeBody, TreeGap))
+	}
+
+	// If the current node is the last node of the current operator tree, we
+	// need to end this sub-tree by changing the closest treeBody to a treeGap.
+	indentBytes := []rune(indent)
+	for i := len(indentBytes) - 1; i >= 0; i-- {
+		if indentBytes[i] == TreeBody {
+			indentBytes[i] = TreeGap
+			break
+		}
+	}
+
+	return string(append(indentBytes, TreeBody, TreeGap))
+}
+
+// PrettyIdentifier returns a pretty identifier which contains indent and tree node hierarchy indicator
+func PrettyIdentifier(id, indent string, isLastChild bool) string {
+	if len(indent) == 0 {
+		return id
+	}
+
+	indentBytes := []rune(indent)
+	for i := len(indentBytes) - 1; i >= 0; i-- {
+		if indentBytes[i] != TreeBody {
+			continue
+		}
+
+		// Here we attach a new node to the current sub-tree by changing
+		// the closest treeBody to a:
+		// 1. treeLastNode, if this operator is the last child.
+		// 2. treeMiddleNode, if this operator is not the last child..
+		if isLastChild {
+			indentBytes[i] = TreeLastNode
+		} else {
+			indentBytes[i] = TreeMiddleNode
+		}
+		break
+	}
+
+	// Replace the treeGap between the treeBody and the node to a
+	// treeNodeIdentifier.
+	indentBytes[len(indentBytes)-1] = TreeNodeIdentifier
+	return string(indentBytes) + id
+}
+
 // prepareOperatorInfo generates the following information for every plan:
 // operator id, task type, operator info, and the estemated row count.
 func (e *Explain) prepareOperatorInfo(p Plan, taskType string, indent string, isLastChild bool) {
@@ -720,7 +785,7 @@ func (e *Explain) prepareOperatorInfo(p Plan, taskType string, indent string, is
 		count = strconv.FormatFloat(si.RowCount, 'f', 2, 64)
 	}
 	explainID := p.ExplainID().String()
-	row := []string{texttree.PrettyIdentifier(explainID, indent, isLastChild), count, taskType, operatorInfo}
+	row := []string{PrettyIdentifier(explainID, indent, isLastChild), count, taskType, operatorInfo}
 	if e.Analyze {
 		runtimeStatsColl := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl
 		// There maybe some mock information for cop task to let runtimeStatsColl.Exists(p.ExplainID()) is true.

@@ -55,7 +55,6 @@ import (
 	"github.com/pingcap/tidb/util/storeutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
-	"github.com/struCoder/pidusage"
 	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
@@ -90,7 +89,6 @@ const (
 
 	nmProxyProtocolNetworks      = "proxy-protocol-networks"
 	nmProxyProtocolHeaderTimeout = "proxy-protocol-header-timeout"
-	nmAffinityCPU                = "affinity-cpus"
 )
 
 var (
@@ -111,7 +109,6 @@ var (
 	runDDL           = flagBoolean(nmRunDDL, true, "run ddl worker on this tidb-server")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
-	affinityCPU      = flag.String(nmAffinityCPU, "", "affinity cpu (cpu-no. separated by comma, e.g. 1,2,3)")
 	repairMode       = flagBoolean(nmRepairMode, false, "enable admin repair mode")
 	repairList       = flag.String(nmRepairList, "", "admin repair table list")
 
@@ -176,11 +173,6 @@ func main() {
 	runServer()
 	cleanup()
 	syncLog()
-}
-
-func exit() {
-	syncLog()
-	os.Exit(0)
 }
 
 func syncLog() {
@@ -558,14 +550,6 @@ func setupMetrics() {
 	// Enable the mutex profile, 1/10 of mutex blocking event sampling.
 	runtime.SetMutexProfileFraction(10)
 	pushMetric(cfg.Status.MetricsAddr, time.Duration(cfg.Status.MetricsInterval)*time.Second)
-}
-
-func updateCPUUsageMetrics() {
-	sysInfo, err := pidusage.GetStat(os.Getpid())
-	if err != nil {
-		return
-	}
-	metrics.CPUUsagePercentageGauge.Set(sysInfo.CPU)
 }
 
 func setupTracing() {

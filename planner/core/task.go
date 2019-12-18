@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/plancodec"
 )
 
 // task is a new version of `PhysicalPlanInfo`. It stores cost information for a task.
@@ -1045,7 +1044,7 @@ func (p *basePhysicalAgg) newPartialAggregate(copTaskType kv.StoreType) (partial
 	p.schema = partialSchema
 	partialAgg := p.self
 	// Create physical "final" aggregation.
-	if p.tp == plancodec.TypeStreamAgg {
+	if p.tp == TypeStreamAgg {
 		finalAgg := basePhysicalAgg{
 			AggFuncs:     finalAggFuncs,
 			GroupByItems: finalGbyItems,
