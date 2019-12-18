@@ -1006,10 +1006,6 @@ func (er *expressionRewriter) checkTimePrecision(ft *types.FieldType) error {
 	return nil
 }
 
-func (er *expressionRewriter) useCache() bool {
-	return er.sctx.GetSessionVars().StmtCtx.UseCache
-}
-
 func (er *expressionRewriter) rewriteVariable(v *ast.VariableExpr) {
 	stkLen := len(er.ctxStack)
 	name := strings.ToLower(v.Name)
@@ -1481,14 +1477,8 @@ func (er *expressionRewriter) funcCallToExpression(v *ast.FuncCallExpr) {
 
 	var function expression.Expression
 	er.ctxStackPop(len(v.Args))
-	if _, ok := expression.DeferredFunctions[v.FnName.L]; er.useCache() && ok {
-		function, er.err = expression.NewFunctionBase(er.sctx, v.FnName.L, &v.Type, args...)
-		c := &expression.Constant{Value: types.NewDatum(nil), RetType: function.GetType().Clone(), DeferredExpr: function}
-		er.ctxStackAppend(c, types.EmptyName)
-	} else {
-		function, er.err = er.newFunction(v.FnName.L, &v.Type, args...)
-		er.ctxStackAppend(function, types.EmptyName)
-	}
+	function, er.err = er.newFunction(v.FnName.L, &v.Type, args...)
+	er.ctxStackAppend(function, types.EmptyName)
 }
 
 func (er *expressionRewriter) toColumn(v *ast.ColumnName) {

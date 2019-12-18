@@ -28,13 +28,11 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	driver "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/texttree"
 )
@@ -232,16 +230,6 @@ func (e *Execute) OptimizePreparedPlan(ctx context.Context, sctx sessionctx.Cont
 	return nil
 }
 
-func (e *Execute) checkPreparedPriv(ctx context.Context, sctx sessionctx.Context,
-	preparedObj *CachedPrepareStmt, is infoschema.InfoSchema) error {
-	if pm := privilege.GetPrivilegeManager(sctx); pm != nil {
-		if err := CheckPrivilege(sctx.GetSessionVars().ActiveRoles, pm, preparedObj.VisitInfos); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, is infoschema.InfoSchema, preparedStmt *CachedPrepareStmt) error {
 	prepared := preparedStmt.PreparedAst
 	if prepared.CachedPlan != nil {
@@ -265,29 +253,6 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 		sctx.GetSessionVars().StmtCtx.PointExec = true
 		return nil
 	}
-	var cacheKey kvcache.Key
-	sctx.GetSessionVars().StmtCtx.UseCache = prepared.UseCache
-	if prepared.UseCache {
-		cacheKey = NewPSTMTPlanCacheKey(sctx.GetSessionVars(), e.ExecID, prepared.SchemaVersion)
-		if cacheValue, exists := sctx.PreparedPlanCache().Get(cacheKey); exists {
-			if err := e.checkPreparedPriv(ctx, sctx, preparedStmt, is); err != nil {
-				return err
-			}
-			if metrics.ResettablePlanCacheCounterFortTest {
-				metrics.PlanCacheCounter.WithLabelValues("prepare").Inc()
-			} else {
-				planCacheCounter.Inc()
-			}
-			cachedVal := cacheValue.(*PSTMTPlanCacheValue)
-			err := e.rebuildRange(cachedVal.Plan)
-			if err != nil {
-				return err
-			}
-			e.names = cachedVal.OutPutNames
-			e.Plan = cachedVal.Plan
-			return nil
-		}
-	}
 	p, names, err := OptimizeAstNode(ctx, sctx, prepared.Stmt, is)
 	if err != nil {
 		return err
@@ -298,10 +263,6 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 	}
 	e.names = names
 	e.Plan = p
-	_, isTableDual := p.(*PhysicalTableDual)
-	if !isTableDual && prepared.UseCache {
-		sctx.PreparedPlanCache().Put(cacheKey, NewPSTMTPlanCacheValue(p, names))
-	}
 	return err
 }
 

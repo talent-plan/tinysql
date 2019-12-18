@@ -174,7 +174,6 @@ func (e *PrepareExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		Params:        sorter.markers,
 		SchemaVersion: e.is.SchemaMetaVersion(),
 	}
-	prepared.UseCache = plannercore.PreparedPlanCacheEnabled() && plannercore.Cacheable(stmt)
 
 	// We try to build the real statement of preparedStmt.
 	for i := range prepared.Params {
@@ -270,17 +269,11 @@ func (e *DeallocateExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		return errors.Trace(plannercore.ErrStmtNotFound)
 	}
 	preparedPointer := vars.PreparedStmts[id]
-	preparedObj, ok := preparedPointer.(*plannercore.CachedPrepareStmt)
+	_, ok = preparedPointer.(*plannercore.CachedPrepareStmt)
 	if !ok {
 		return errors.Errorf("invalid CachedPrepareStmt type")
 	}
-	prepared := preparedObj.PreparedAst
 	delete(vars.PreparedStmtNameToID, e.Name)
-	if plannercore.PreparedPlanCacheEnabled() {
-		e.ctx.PreparedPlanCache().Delete(plannercore.NewPSTMTPlanCacheKey(
-			vars, id, prepared.SchemaVersion,
-		))
-	}
 	vars.RemovePreparedStmt(id)
 	return nil
 }

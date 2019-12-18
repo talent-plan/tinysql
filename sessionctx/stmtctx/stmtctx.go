@@ -67,7 +67,6 @@ type StatementContext struct {
 	TruncateAsWarning      bool
 	OverflowAsWarning      bool
 	InShowWarning          bool
-	UseCache               bool
 	PadCharToFullLength    bool
 	BatchCheck             bool
 	InNullRejectCheck      bool

@@ -75,19 +75,18 @@ type Config struct {
 	TxnLocalLatches  TxnLocalLatches `toml:"txn-local-latches" json:"txn-local-latches"`
 	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
 	// TODO: We actually only support mode 2, which keeps the original case, but the comparison is case-insensitive.
-	LowerCaseTableNames int               `toml:"lower-case-table-names" json:"lower-case-table-names"`
-	ServerVersion       string            `toml:"server-version" json:"server-version"`
-	Log                 Log               `toml:"log" json:"log"`
-	Security            Security          `toml:"security" json:"security"`
-	Status              Status            `toml:"status" json:"status"`
-	Performance         Performance       `toml:"performance" json:"performance"`
-	PreparedPlanCache   PreparedPlanCache `toml:"prepared-plan-cache" json:"prepared-plan-cache"`
-	OpenTracing         OpenTracing       `toml:"opentracing" json:"opentracing"`
-	ProxyProtocol       ProxyProtocol     `toml:"proxy-protocol" json:"proxy-protocol"`
-	TiKVClient          TiKVClient        `toml:"tikv-client" json:"tikv-client"`
-	Binlog              Binlog            `toml:"binlog" json:"binlog"`
-	CompatibleKillQuery bool              `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	CheckMb4ValueInUTF8 bool              `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
+	LowerCaseTableNames int           `toml:"lower-case-table-names" json:"lower-case-table-names"`
+	ServerVersion       string        `toml:"server-version" json:"server-version"`
+	Log                 Log           `toml:"log" json:"log"`
+	Security            Security      `toml:"security" json:"security"`
+	Status              Status        `toml:"status" json:"status"`
+	Performance         Performance   `toml:"performance" json:"performance"`
+	OpenTracing         OpenTracing   `toml:"opentracing" json:"opentracing"`
+	ProxyProtocol       ProxyProtocol `toml:"proxy-protocol" json:"proxy-protocol"`
+	TiKVClient          TiKVClient    `toml:"tikv-client" json:"tikv-client"`
+	Binlog              Binlog        `toml:"binlog" json:"binlog"`
+	CompatibleKillQuery bool          `toml:"compatible-kill-query" json:"compatible-kill-query"`
+	CheckMb4ValueInUTF8 bool          `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
 	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
@@ -303,13 +302,6 @@ type TxnLocalLatches struct {
 	Capacity uint `toml:"capacity" json:"capacity"`
 }
 
-// PreparedPlanCache is the PreparedPlanCache section of the config.
-type PreparedPlanCache struct {
-	Enabled          bool    `toml:"enabled" json:"enabled"`
-	Capacity         uint    `toml:"capacity" json:"capacity"`
-	MemoryGuardRatio float64 `toml:"memory-guard-ratio" json:"memory-guard-ratio"`
-}
-
 // OpenTracing is the opentracing section of the config.
 type OpenTracing struct {
 	Enable     bool                `toml:"enable" json:"enable"`
@@ -457,11 +449,6 @@ var defaultConf = Config{
 	ProxyProtocol: ProxyProtocol{
 		Networks:      "",
 		HeaderTimeout: 5,
-	},
-	PreparedPlanCache: PreparedPlanCache{
-		Enabled:          false,
-		Capacity:         100,
-		MemoryGuardRatio: 0.1,
 	},
 	OpenTracing: OpenTracing{
 		Enable: false,

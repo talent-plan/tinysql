@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/disk"
-	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/stringutil"
@@ -46,7 +45,6 @@ type Context struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	sm          util.SessionManager
-	pcache      *kvcache.SimpleLRUCache
 }
 
 type wrapTxn struct {
@@ -122,11 +120,6 @@ func (c *Context) SetGlobalSysVar(ctx sessionctx.Context, name string, value str
 	}
 	v.Value = value
 	return nil
-}
-
-// PreparedPlanCache implements the sessionctx.Context interface.
-func (c *Context) PreparedPlanCache() *kvcache.SimpleLRUCache {
-	return c.pcache
 }
 
 // NewTxn implements the sessionctx.Context interface.

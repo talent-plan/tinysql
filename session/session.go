@@ -62,7 +62,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/timeutil"
@@ -174,8 +173,6 @@ type session struct {
 
 	parser *parser.Parser
 
-	preparedPlanCache *kvcache.SimpleLRUCache
-
 	sessionVars    *variable.SessionVars
 	sessionManager util.SessionManager
 
@@ -207,26 +204,7 @@ func (s *session) cleanRetryInfo() {
 		return
 	}
 
-	planCacheEnabled := plannercore.PreparedPlanCacheEnabled()
-	var cacheKey kvcache.Key
-	var preparedAst *ast.Prepared
-	if planCacheEnabled {
-		firstStmtID := retryInfo.DroppedPreparedStmtIDs[0]
-		if preparedPointer, ok := s.sessionVars.PreparedStmts[firstStmtID]; ok {
-			preparedObj, ok := preparedPointer.(*plannercore.CachedPrepareStmt)
-			if ok {
-				preparedAst = preparedObj.PreparedAst
-				cacheKey = plannercore.NewPSTMTPlanCacheKey(s.sessionVars, firstStmtID, preparedAst.SchemaVersion)
-			}
-		}
-	}
-	for i, stmtID := range retryInfo.DroppedPreparedStmtIDs {
-		if planCacheEnabled {
-			if i > 0 && preparedAst != nil {
-				plannercore.SetPstmtIDSchemaVersion(cacheKey, stmtID, preparedAst.SchemaVersion)
-			}
-			s.PreparedPlanCache().Delete(cacheKey)
-		}
+	for _, stmtID := range retryInfo.DroppedPreparedStmtIDs {
 		s.sessionVars.RemovePreparedStmt(stmtID)
 	}
 }
@@ -279,10 +257,6 @@ func (s *session) SetCollation(coID int) error {
 	}
 	terror.Log(s.sessionVars.SetSystemVar(variable.CollationConnection, co))
 	return nil
-}
-
-func (s *session) PreparedPlanCache() *kvcache.SimpleLRUCache {
-	return s.preparedPlanCache
 }
 
 func (s *session) SetSessionManager(sm util.SessionManager) {
@@ -1586,10 +1560,6 @@ func createSession(store kv.Storage) (*session, error) {
 		ddlOwnerChecker: dom.DDL().OwnerManager(),
 		client:          store.GetClient(),
 	}
-	if plannercore.PreparedPlanCacheEnabled() {
-		s.preparedPlanCache = kvcache.NewSimpleLRUCache(plannercore.PreparedPlanCacheCapacity,
-			plannercore.PreparedPlanCacheMemoryGuardRatio, plannercore.PreparedPlanCacheMaxMemory.Load())
-	}
 	s.mu.values = make(map[fmt.Stringer]interface{})
 	domain.BindDomain(s, dom)
 	// session implements variable.GlobalVarAccessor. Bind it to ctx.
@@ -1609,10 +1579,6 @@ func CreateSessionWithDomain(store kv.Storage, dom *domain.Domain) (*session, er
 		parser:      parser.New(),
 		sessionVars: variable.NewSessionVars(),
 		client:      store.GetClient(),
-	}
-	if plannercore.PreparedPlanCacheEnabled() {
-		s.preparedPlanCache = kvcache.NewSimpleLRUCache(plannercore.PreparedPlanCacheCapacity,
-			plannercore.PreparedPlanCacheMemoryGuardRatio, plannercore.PreparedPlanCacheMaxMemory.Load())
 	}
 	s.mu.values = make(map[fmt.Stringer]interface{})
 	domain.BindDomain(s, dom)
