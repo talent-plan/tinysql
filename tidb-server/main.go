@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/printer"
 	"github.com/pingcap/tidb/util/signal"
-	"github.com/pingcap/tidb/util/storeutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -344,7 +343,7 @@ func loadConfig() string {
 var hotReloadConfigItems = []string{"Performance.MaxProcs", "Performance.MaxMemory", "Performance.CrossJoin",
 	"Performance.FeedbackProbability", "Performance.QueryFeedbackLimit", "Performance.PseudoEstimateRatio",
 	"OOMUseTmpStorage", "OOMAction", "MemQuotaQuery", "Log.QueryLogMaxLen",
-	"TiKVClient.EnableChunkRPC", "TiKVClient.StoreLimit"}
+	"TiKVClient.EnableChunkRPC"}
 
 func reloadConfig(nc, c *config.Config) {
 	// Just a part of config items need to be reload explicitly.
@@ -363,9 +362,6 @@ func reloadConfig(nc, c *config.Config) {
 	}
 	if nc.Performance.PseudoEstimateRatio != c.Performance.PseudoEstimateRatio {
 		statistics.RatioOfPseudoEstimate.Store(nc.Performance.PseudoEstimateRatio)
-	}
-	if nc.TiKVClient.StoreLimit != c.TiKVClient.StoreLimit {
-		storeutil.StoreLimit.Store(nc.TiKVClient.StoreLimit)
 	}
 }
 
