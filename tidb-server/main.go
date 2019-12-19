@@ -48,7 +48,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/gcworker"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/printer"
 	"github.com/pingcap/tidb/util/signal"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
@@ -87,7 +86,6 @@ const (
 )
 
 var (
-	version      = flagBoolean(nmVersion, false, "print version information and exit")
 	configPath   = flag.String(nmConfig, "", "config file path")
 	configCheck  = flagBoolean(nmConfigCheck, false, "check config file validity and exit")
 	configStrict = flagBoolean(nmConfigStrict, false, "enforce config file validity")
@@ -132,10 +130,6 @@ var (
 
 func main() {
 	flag.Parse()
-	if *version {
-		fmt.Println(printer.GetTiDBInfo())
-		os.Exit(0)
-	}
 	registerStores()
 	registerMetrics()
 	configWarning := loadConfig()
@@ -157,7 +151,6 @@ func main() {
 		log.Warn(configWarning)
 	}
 	setupTracing() // Should before createServer and after setup config.
-	printInfo()
 	setupBinlogClient()
 	setupMetrics()
 	createStoreAndDomain()
@@ -499,14 +492,6 @@ func setupLog() {
 	nopLog := func(string, ...interface{}) {}
 	_, err = maxprocs.Set(maxprocs.Logger(nopLog))
 	terror.MustNil(err)
-}
-
-func printInfo() {
-	// Make sure the TiDB info is always printed.
-	level := log.GetLevel()
-	log.SetLevel(zap.InfoLevel)
-	printer.PrintTiDBInfo()
-	log.SetLevel(level)
 }
 
 func createServer() {

@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/printer"
 )
 
 func (b *builtinDatabaseSig) vectorized() bool {
@@ -62,20 +61,6 @@ func (b *builtinConnectionIDSig) vecEvalInt(input *chunk.Chunk, result *chunk.Co
 	i64s := result.Int64s()
 	for i := 0; i < n; i++ {
 		i64s[i] = connectionID
-	}
-	return nil
-}
-
-func (b *builtinTiDBVersionSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinTiDBVersionSig) vecEvalString(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	result.ReserveString(n)
-	info := printer.GetTiDBInfo()
-	for i := 0; i < n; i++ {
-		result.AppendString(info)
 	}
 	return nil
 }

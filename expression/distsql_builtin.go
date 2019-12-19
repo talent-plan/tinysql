@@ -574,8 +574,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinLastInsertIDWithIDSig{base}
 	case tipb.ScalarFuncSig_Version:
 		f = &builtinVersionSig{base}
-	case tipb.ScalarFuncSig_TiDBVersion:
-		f = &builtinTiDBVersionSig{base}
 	case tipb.ScalarFuncSig_RowCount:
 		f = &builtinRowCountSig{base}
 	case tipb.ScalarFuncSig_Sleep:

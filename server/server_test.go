@@ -32,7 +32,6 @@ import (
 	tmysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/printer"
 	"go.uber.org/zap"
 )
 
@@ -973,7 +972,6 @@ func runTestStatusAPI(c *C) {
 	err = decoder.Decode(&data)
 	c.Assert(err, IsNil)
 	c.Assert(data.Version, Equals, tmysql.ServerVersion)
-	c.Assert(data.GitHash, Equals, printer.TiDBGitHash)
 }
 
 func runTestMultiStatements(c *C) {

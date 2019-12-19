@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tidb/util/printer"
 )
 
 func (s *testEvaluatorSuite) TestDatabase(c *C) {
@@ -211,15 +210,6 @@ func (s *testEvaluatorSuite) TestRowCount(c *C) {
 	c.Assert(isNull, IsFalse)
 	c.Assert(intResult, Equals, int64(10))
 	c.Assert(f.Clone().PbCode(), Equals, f.PbCode())
-}
-
-// TestTiDBVersion for tidb_server().
-func (s *testEvaluatorSuite) TestTiDBVersion(c *C) {
-	f, err := newFunctionForTest(s.ctx, ast.TiDBVersion, s.primitiveValsToConstants([]interface{}{})...)
-	c.Assert(err, IsNil)
-	v, err := f.Eval(chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(v.GetString(), Equals, printer.GetTiDBInfo())
 }
 
 func (s *testEvaluatorSuite) TestLastInsertID(c *C) {

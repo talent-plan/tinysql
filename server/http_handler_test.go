@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/printer"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 )
@@ -904,7 +903,6 @@ func (ts *HTTPHandlerTestSuite) TestServerInfo(c *C) {
 	c.Assert(info.StatusPort, Equals, cfg.Status.StatusPort)
 	c.Assert(info.Lease, Equals, cfg.Lease)
 	c.Assert(info.Version, Equals, mysql.ServerVersion)
-	c.Assert(info.GitHash, Equals, printer.TiDBGitHash)
 
 	store := ts.server.newTikvHandlerTool().Store.(kv.Storage)
 	do, err := session.GetDomain(store.(kv.Storage))
@@ -942,7 +940,6 @@ func (ts *HTTPHandlerTestSuite) TestAllServerInfo(c *C) {
 	c.Assert(serverInfo.StatusPort, Equals, cfg.Status.StatusPort)
 	c.Assert(serverInfo.Lease, Equals, cfg.Lease)
 	c.Assert(serverInfo.Version, Equals, mysql.ServerVersion)
-	c.Assert(serverInfo.GitHash, Equals, printer.TiDBGitHash)
 	c.Assert(serverInfo.ID, Equals, ddl.GetID())
 }
 

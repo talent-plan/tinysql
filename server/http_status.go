@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/printer"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/tiancaiamao/appdash/traceapp"
@@ -217,15 +216,6 @@ func (s *Server) startHTTPServer() {
 		_, err = fw.Write(js)
 		terror.Log(err)
 
-		// dump version
-		fw, err = zw.Create("version")
-		if err != nil {
-			serveError(w, http.StatusInternalServerError, fmt.Sprintf("Create zipped %s fail: %v", "version", err))
-			return
-		}
-		_, err = fw.Write([]byte(printer.GetTiDBInfo()))
-		terror.Log(err)
-
 		err = zw.Close()
 		terror.Log(err)
 	})
@@ -317,7 +307,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	st := status{
 		Connections: s.ConnectionCount(),
 		Version:     mysql.ServerVersion,
-		GitHash:     printer.TiDBGitHash,
 	}
 	js, err := json.Marshal(st)
 	if err != nil {

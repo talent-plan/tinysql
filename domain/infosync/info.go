@@ -33,7 +33,6 @@ import (
 	util2 "github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/printer"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -347,6 +346,5 @@ func getServerInfo(id string) *ServerInfo {
 		BinlogStatus: binloginfo.GetStatus().String(),
 	}
 	info.Version = mysql.ServerVersion
-	info.GitHash = printer.TiDBGitHash
 	return info
 }

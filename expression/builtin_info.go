@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/printer"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -48,7 +47,6 @@ var (
 	_ functionClass = &coercibilityFunctionClass{}
 	_ functionClass = &collationFunctionClass{}
 	_ functionClass = &rowCountFunctionClass{}
-	_ functionClass = &tidbVersionFunctionClass{}
 	_ functionClass = &tidbIsDDLOwnerFunctionClass{}
 	_ functionClass = &tidbDecodeKeyFunctionClass{}
 )
@@ -62,7 +60,6 @@ var (
 	_ builtinFunc = &builtinLastInsertIDSig{}
 	_ builtinFunc = &builtinLastInsertIDWithIDSig{}
 	_ builtinFunc = &builtinVersionSig{}
-	_ builtinFunc = &builtinTiDBVersionSig{}
 	_ builtinFunc = &builtinRowCountSig{}
 	_ builtinFunc = &builtinTiDBDecodeKeySig{}
 )
@@ -376,36 +373,6 @@ func (b *builtinVersionSig) Clone() builtinFunc {
 // See https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_version
 func (b *builtinVersionSig) evalString(row chunk.Row) (string, bool, error) {
 	return mysql.ServerVersion, false, nil
-}
-
-type tidbVersionFunctionClass struct {
-	baseFunctionClass
-}
-
-func (c *tidbVersionFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETString)
-	bf.tp.Flen = len(printer.GetTiDBInfo())
-	sig := &builtinTiDBVersionSig{bf}
-	return sig, nil
-}
-
-type builtinTiDBVersionSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinTiDBVersionSig) Clone() builtinFunc {
-	newSig := &builtinTiDBVersionSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalString evals a builtinTiDBVersionSig.
-// This will show git hash and build time for tidb-server.
-func (b *builtinTiDBVersionSig) evalString(_ chunk.Row) (string, bool, error) {
-	return printer.GetTiDBInfo(), false, nil
 }
 
 type tidbIsDDLOwnerFunctionClass struct {
