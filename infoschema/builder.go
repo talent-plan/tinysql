@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/config"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/util/domainutil"
 )
 
 // Builder builds a new InfoSchema.
@@ -57,7 +55,7 @@ func (b *Builder) ApplyDiff(m *meta.Meta, diff *model.SchemaDiff) ([]int64, erro
 	var oldTableID, newTableID int64
 	tblIDs := make([]int64, 0, 2)
 	switch diff.Type {
-	case model.ActionCreateTable, model.ActionRecoverTable, model.ActionRepairTable:
+	case model.ActionCreateTable, model.ActionRecoverTable:
 		newTableID = diff.TableID
 		tblIDs = append(tblIDs, newTableID)
 	case model.ActionDropTable, model.ActionDropView:
@@ -193,15 +191,6 @@ func (b *Builder) applyCreateTable(m *meta.Meta, dbInfo *model.DBInfo, tableID i
 			fmt.Sprintf("(Table ID %d)", tableID),
 		)
 	}
-	// Failpoint check whether tableInfo should be added to repairInfo.
-	// Typically used in repair table test to load mock `bad` tableInfo into repairInfo.
-	failpoint.Inject("repairFetchCreateTable", func(val failpoint.Value) {
-		if val.(bool) {
-			if domainutil.RepairInfo.InRepairMode() && tp != model.ActionRepairTable && domainutil.RepairInfo.CheckAndFetchRepairedTable(dbInfo, tblInfo) {
-				failpoint.Return(nil)
-			}
-		}
-	})
 
 	ConvertCharsetCollateToLowerCaseIfNeed(tblInfo)
 	ConvertOldVersionUTF8ToUTF8MB4IfNeed(tblInfo)

@@ -179,7 +179,6 @@ alter-primary-key = true
 split-region-max-num=10000
 enable-batch-dml = true
 server-version = "test_version"
-repair-mode = true
 [performance]
 txn-total-size-limit=2000
 [tikv-client]
@@ -211,7 +210,6 @@ store-limit=0
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.EnableBatchDML, Equals, true)
-	c.Assert(conf.RepairMode, Equals, true)
 	c.Assert(f.Close(), IsNil)
 	c.Assert(os.Remove(configFile), IsNil)
 

@@ -20,7 +20,6 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -48,7 +47,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/gcworker"
-	"github.com/pingcap/tidb/util/domainutil"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/printer"
 	"github.com/pingcap/tidb/util/signal"
@@ -84,8 +82,6 @@ const (
 	nmMetricsInterval  = "metrics-interval"
 	nmDdlLease         = "lease"
 	nmTokenLimit       = "token-limit"
-	nmRepairMode       = "repair-mode"
-	nmRepairList       = "repair-list"
 
 	nmProxyProtocolNetworks      = "proxy-protocol-networks"
 	nmProxyProtocolHeaderTimeout = "proxy-protocol-header-timeout"
@@ -109,8 +105,6 @@ var (
 	runDDL           = flagBoolean(nmRunDDL, true, "run ddl worker on this tidb-server")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
-	repairMode       = flagBoolean(nmRepairMode, false, "enable admin repair mode")
-	repairList       = flag.String(nmRepairList, "", "admin repair table list")
 
 	// Log
 	logLevel     = flag.String(nmLogLevel, "info", "log level: info, debug, warn, error, fatal")
@@ -423,14 +417,6 @@ func overrideConfig() {
 	if actualFlags[nmTokenLimit] {
 		cfg.TokenLimit = uint(*tokenLimit)
 	}
-	if actualFlags[nmRepairMode] {
-		cfg.RepairMode = *repairMode
-	}
-	if actualFlags[nmRepairList] {
-		if cfg.RepairMode {
-			cfg.RepairTableList = stringToList(*repairList)
-		}
-	}
 
 	// Log
 	if actualFlags[nmLogLevel] {
@@ -505,8 +491,6 @@ func setGlobalVars() {
 
 	tikv.CommitMaxBackoff = int(parseDuration(cfg.TiKVClient.CommitTimeout).Seconds() * 1000)
 	tikv.RegionCacheTTLSec = int64(cfg.TiKVClient.RegionCacheTTL)
-	domainutil.RepairInfo.SetRepairMode(cfg.RepairMode)
-	domainutil.RepairInfo.SetRepairTableList(cfg.RepairTableList)
 }
 
 func setupLog() {
@@ -581,16 +565,4 @@ func cleanup() {
 		svr.TryGracefulDown()
 	}
 	closeDomainAndStorage()
-}
-
-func stringToList(repairString string) []string {
-	if len(repairString) <= 0 {
-		return []string{}
-	}
-	if repairString[0] == '[' && repairString[len(repairString)-1] == ']' {
-		repairString = repairString[1 : len(repairString)-1]
-	}
-	return strings.FieldsFunc(repairString, func(r rune) bool {
-		return r == ',' || r == ' ' || r == '"'
-	})
 }

@@ -93,9 +93,6 @@ type Config struct {
 	// Currently not support dynamic modify, because this need to reload all old version schema.
 	TreatOldVersionUTF8AsUTF8MB4 bool   `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
 	SplitRegionMaxNum            uint64 `toml:"split-region-max-num" json:"split-region-max-num"`
-	// RepairMode indicates that the TiDB is in the repair mode for table meta.
-	RepairMode      bool     `toml:"repair-mode" json:"repair-mode"`
-	RepairTableList []string `toml:"repair-table-list" json:"repair-table-list"`
 }
 
 // nullableBool defaults unset bool options to unset instead of false, which enables us to know if the user has set 2
@@ -404,8 +401,6 @@ var defaultConf = Config{
 	AlterPrimaryKey:              false,
 	TreatOldVersionUTF8AsUTF8MB4: true,
 	SplitRegionMaxNum:            1000,
-	RepairMode:                   false,
-	RepairTableList:              []string{},
 	TxnLocalLatches: TxnLocalLatches{
 		Enabled:  false,
 		Capacity: 2048000,

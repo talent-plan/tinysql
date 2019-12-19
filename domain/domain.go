@@ -43,7 +43,6 @@ import (
 	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/domainutil"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"go.etcd.io/etcd/clientv3"
@@ -203,10 +202,6 @@ func (do *Domain) fetchSchemasWithTables(schemas []*model.DBInfo, m *meta.Meta, 
 				continue
 			}
 			infoschema.ConvertCharsetCollateToLowerCaseIfNeed(tbl)
-			// Check whether the table is in repair mode.
-			if domainutil.RepairInfo.InRepairMode() && domainutil.RepairInfo.CheckAndFetchRepairedTable(di, tbl) {
-				continue
-			}
 			di.Tables = append(di.Tables, tbl)
 		}
 	}

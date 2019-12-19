@@ -105,8 +105,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeRenameTable(x)
 	case *ast.TruncateTableStmt:
 		err = e.executeTruncateTable(x)
-	case *ast.RepairTableStmt:
-		err = e.executeRepairTable(x)
 
 	}
 	if err != nil {
@@ -485,8 +483,4 @@ func (e *DDLExec) executeFlashbackTable(s *ast.FlashBackTableStmt) error {
 	// Call DDL RecoverTable.
 	err = domain.GetDomain(e.ctx).DDL().RecoverTable(e.ctx, tblInfo, job.SchemaID, autoID, job.ID, job.StartTS)
 	return err
-}
-
-func (e *DDLExec) executeRepairTable(s *ast.RepairTableStmt) error {
-	return domain.GetDomain(e.ctx).DDL().RepairTable(e.ctx, s.Table, s.CreateStmt)
 }

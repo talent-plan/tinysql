@@ -84,8 +84,6 @@ var (
 	errRunMultiSchemaChanges = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "multi schema change"))
 	errWaitReorgTimeout      = terror.ClassDDL.New(mysql.ErrLockWaitTimeout, mysql.MySQLErrName[mysql.ErrWaitReorgTimeout])
 	errInvalidStoreVer       = terror.ClassDDL.New(mysql.ErrInvalidStoreVersion, mysql.MySQLErrName[mysql.ErrInvalidStoreVersion])
-	// ErrRepairTableFail is used to repair tableInfo in repair mode.
-	ErrRepairTableFail = terror.ClassDDL.New(mysql.ErrRepairTable, mysql.MySQLErrName[mysql.ErrRepairTable])
 
 	// We don't support dropping column with index covered now.
 	errCantDropColWithIndex      = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "drop column with index"))
@@ -242,7 +240,6 @@ type DDL interface {
 	TruncateTable(ctx sessionctx.Context, tableIdent ast.Ident) error
 	RenameTable(ctx sessionctx.Context, oldTableIdent, newTableIdent ast.Ident, isAlterTable bool) error
 	UpdateTableReplicaInfo(ctx sessionctx.Context, tid int64, available bool) error
-	RepairTable(ctx sessionctx.Context, table *ast.TableName, createStmt *ast.CreateTableStmt) error
 
 	// GetLease returns current schema lease time.
 	GetLease() time.Duration
