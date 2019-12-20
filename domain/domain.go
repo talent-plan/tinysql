@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
-	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics/handle"
@@ -56,7 +55,6 @@ import (
 type Domain struct {
 	store           kv.Storage
 	infoHandle      *infoschema.Handle
-	privHandle      *privileges.Handle
 	statsHandle     unsafe.Pointer
 	statsLease      time.Duration
 	ddl             ddl.DDL
@@ -763,11 +761,6 @@ func (do *Domain) GetEtcdClient() *clientv3.Client {
 // should be called only once in BootstrapSession.
 func (do *Domain) LoadPrivilegeLoop(ctx sessionctx.Context) error {
 	ctx.GetSessionVars().InRestrictedSQL = true
-	do.privHandle = privileges.NewHandle()
-	err := do.privHandle.Update(ctx)
-	if err != nil {
-		return err
-	}
 
 	var watchCh clientv3.WatchChan
 	duration := 5 * time.Minute
@@ -800,19 +793,9 @@ func (do *Domain) LoadPrivilegeLoop(ctx sessionctx.Context) error {
 			}
 
 			count = 0
-			err := do.privHandle.Update(ctx)
-			metrics.LoadPrivilegeCounter.WithLabelValues(metrics.RetLabel(err)).Inc()
-			if err != nil {
-				logutil.BgLogger().Error("load privilege failed", zap.Error(err))
-			}
 		}
 	}()
 	return nil
-}
-
-// PrivilegeHandle returns the MySQLPrivilege.
-func (do *Domain) PrivilegeHandle() *privileges.Handle {
-	return do.privHandle
 }
 
 // StatsHandle returns the statistic handle.

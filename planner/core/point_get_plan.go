@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/planner/property"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
@@ -259,9 +257,6 @@ func TryFastPlan(ctx sessionctx.Context, node ast.Node) Plan {
 		}
 		fp := tryPointGetPlan(ctx, x)
 		if fp != nil {
-			if checkFastPlanPrivilege(ctx, fp.dbName, fp.TblInfo.Name.L, mysql.SelectPriv) != nil {
-				return nil
-			}
 			if fp.IsTableDual {
 				tableDual := PhysicalTableDual{}
 				tableDual.names = fp.outputNames
@@ -510,9 +505,6 @@ func tryWhereIn2BatchPointGet(ctx sessionctx.Context, selStmt *ast.SelectStmt) P
 	if dbName == "" {
 		dbName = ctx.GetSessionVars().CurrentDB
 	}
-	if checkFastPlanPrivilege(ctx, dbName, tbl.Name.L, mysql.SelectPriv) != nil {
-		return nil
-	}
 	return p
 }
 
@@ -635,19 +627,6 @@ func newPointGetPlan(ctx sessionctx.Context, dbName string, schema *expression.S
 	}
 	ctx.GetSessionVars().StmtCtx.Tables = []stmtctx.TableEntry{{DB: ctx.GetSessionVars().CurrentDB, Table: tbl.Name.L}}
 	return p
-}
-
-func checkFastPlanPrivilege(ctx sessionctx.Context, dbName, tableName string, checkTypes ...mysql.PrivilegeType) error {
-	pm := privilege.GetPrivilegeManager(ctx)
-	if pm == nil {
-		return nil
-	}
-	for _, checkType := range checkTypes {
-		if !pm.RequestVerification(ctx.GetSessionVars().ActiveRoles, dbName, tableName, "", checkType) {
-			return errors.New("privilege check fail")
-		}
-	}
-	return nil
 }
 
 func buildSchemaFromFields(
@@ -855,9 +834,6 @@ func tryUpdatePointPlan(ctx sessionctx.Context, updateStmt *ast.UpdateStmt) Plan
 	if fastSelect == nil {
 		return nil
 	}
-	if checkFastPlanPrivilege(ctx, fastSelect.dbName, fastSelect.TblInfo.Name.L, mysql.SelectPriv, mysql.UpdatePriv) != nil {
-		return nil
-	}
 	if fastSelect.IsTableDual {
 		return PhysicalTableDual{
 			names: fastSelect.outputNames,
@@ -931,9 +907,6 @@ func tryDeletePointPlan(ctx sessionctx.Context, delStmt *ast.DeleteStmt) Plan {
 	}
 	fastSelect := tryPointGetPlan(ctx, selStmt)
 	if fastSelect == nil {
-		return nil
-	}
-	if checkFastPlanPrivilege(ctx, fastSelect.dbName, fastSelect.TblInfo.Name.L, mysql.SelectPriv, mysql.DeletePriv) != nil {
 		return nil
 	}
 	if fastSelect.IsTableDual {

@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/planner/util"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table"
@@ -2732,13 +2731,6 @@ func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName model.
 	}
 
 	if tableInfo.View.Security == model.SecurityDefiner {
-		if pm := privilege.GetPrivilegeManager(b.ctx); pm != nil {
-			for _, v := range b.visitInfo {
-				if !pm.RequestVerificationWithUser(v.db, v.table, v.column, v.privilege, tableInfo.View.Definer) {
-					return nil, ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
-				}
-			}
-		}
 		b.visitInfo = b.visitInfo[:0]
 	}
 	b.visitInfo = append(originalVisitInfo, b.visitInfo...)

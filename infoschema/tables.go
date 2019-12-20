@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics"
@@ -964,8 +963,7 @@ func dataForSessionVar(ctx sessionctx.Context) (records [][]types.Datum, err err
 }
 
 func dataForUserPrivileges(ctx sessionctx.Context) [][]types.Datum {
-	pm := privilege.GetPrivilegeManager(ctx)
-	return pm.UserPrivilegesTable()
+	return [][]types.Datum{}
 }
 
 func dataForProcesslist(ctx sessionctx.Context) [][]types.Datum {
@@ -974,23 +972,9 @@ func dataForProcesslist(ctx sessionctx.Context) [][]types.Datum {
 		return nil
 	}
 
-	loginUser := ctx.GetSessionVars().User
-	var hasProcessPriv bool
-	if pm := privilege.GetPrivilegeManager(ctx); pm != nil {
-		if pm.RequestVerification(ctx.GetSessionVars().ActiveRoles, "", "", "", mysql.ProcessPriv) {
-			hasProcessPriv = true
-		}
-	}
-
 	pl := sm.ShowProcessList()
 	records := make([][]types.Datum, 0, len(pl))
 	for _, pi := range pl {
-		// If you have the PROCESS privilege, you can see all threads.
-		// Otherwise, you can see only your own threads.
-		if !hasProcessPriv && loginUser != nil && pi.User != loginUser.Username {
-			continue
-		}
-
 		rows := pi.ToRow(ctx.GetSessionVars().StmtCtx.TimeZone)
 		record := types.MakeDatums(rows...)
 		records = append(records, record)
@@ -1063,7 +1047,6 @@ var tableTableTiFlashReplicaCols = []columnInfo{
 }
 
 func dataForSchemata(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
-	checker := privilege.GetPrivilegeManager(ctx)
 	rows := make([][]types.Datum, 0, len(schemas))
 
 	for _, schema := range schemas {
@@ -1079,9 +1062,6 @@ func dataForSchemata(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.
 			collation = schema.Collate // Overwrite default
 		}
 
-		if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, "", "", mysql.AllPrivMask) {
-			continue
-		}
 		record := types.MakeDatums(
 			catalogVal,    // CATALOG_NAME
 			schema.Name.O, // SCHEMA_NAME
@@ -1223,7 +1203,6 @@ func getAutoIncrementID(ctx sessionctx.Context, schema *model.DBInfo, tblInfo *m
 }
 
 func dataForViews(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Datum, error) {
-	checker := privilege.GetPrivilegeManager(ctx)
 	var rows [][]types.Datum
 	for _, schema := range schemas {
 		for _, table := range schema.Tables {
@@ -1238,9 +1217,7 @@ func dataForViews(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Da
 			if charset == "" {
 				charset = mysql.DefaultCharset
 			}
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, table.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
+
 			record := types.MakeDatums(
 				catalogVal,                      // TABLE_CATALOG
 				schema.Name.O,                   // TABLE_SCHEMA
@@ -1265,8 +1242,6 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 		return nil, err
 	}
 
-	checker := privilege.GetPrivilegeManager(ctx)
-
 	var rows [][]types.Datum
 	createTimeTp := tablesCols[15].tp
 	for _, schema := range schemas {
@@ -1281,10 +1256,6 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 			}
 
 			createOptions := ""
-
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, table.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
 
 			if !table.IsView() {
 				if table.GetPartitionInfo() != nil {
@@ -1399,14 +1370,9 @@ func GetShardingInfo(dbInfo *model.DBInfo, tableInfo *model.TableInfo) interface
 }
 
 func dataForIndexes(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Datum, error) {
-	checker := privilege.GetPrivilegeManager(ctx)
 	var rows [][]types.Datum
 	for _, schema := range schemas {
 		for _, tb := range schema.Tables {
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, tb.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
-
 			if tb.PKIsHandle {
 				var pkCol *model.ColumnInfo
 				for _, col := range tb.Cols() {
@@ -1461,14 +1427,9 @@ func dataForIndexes(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.
 }
 
 func dataForColumns(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
-	checker := privilege.GetPrivilegeManager(ctx)
 	var rows [][]types.Datum
 	for _, schema := range schemas {
 		for _, table := range schema.Tables {
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, table.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
-
 			rs := dataForColumnsInTable(schema, table)
 			rows = append(rows, rs...)
 		}
@@ -1564,14 +1525,9 @@ func dataForColumnsInTable(schema *model.DBInfo, tbl *model.TableInfo) [][]types
 }
 
 func dataForStatistics(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
-	checker := privilege.GetPrivilegeManager(ctx)
 	var rows [][]types.Datum
 	for _, schema := range schemas {
 		for _, table := range schema.Tables {
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, table.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
-
 			rs := dataForStatisticsInTable(schema, table)
 			rows = append(rows, rs...)
 		}
@@ -1653,14 +1609,9 @@ const (
 
 // dataForTableConstraints constructs data for table information_schema.constraints.See https://dev.mysql.com/doc/refman/5.7/en/table-constraints-table.html
 func dataForTableConstraints(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
-	checker := privilege.GetPrivilegeManager(ctx)
 	var rows [][]types.Datum
 	for _, schema := range schemas {
 		for _, tbl := range schema.Tables {
-			if checker != nil && !checker.RequestVerification(ctx.GetSessionVars().ActiveRoles, schema.Name.L, tbl.Name.L, "", mysql.AllPrivMask) {
-				continue
-			}
-
 			if tbl.PKIsHandle {
 				record := types.MakeDatums(
 					catalogVal,           // CONSTRAINT_CATALOG
