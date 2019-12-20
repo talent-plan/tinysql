@@ -249,47 +249,8 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 	if err != nil {
 		return err
 	}
-	err = e.tryCachePointPlan(ctx, sctx, prepared, is, p)
-	if err != nil {
-		return err
-	}
 	e.names = names
 	e.Plan = p
-	return err
-}
-
-// tryCachePointPlan will try to cache point execution plan, there may be some
-// short paths for these executions, currently "point select" and "point update"
-func (e *Execute) tryCachePointPlan(ctx context.Context, sctx sessionctx.Context,
-	prepared *ast.Prepared, is infoschema.InfoSchema, p Plan) error {
-	var (
-		ok    bool
-		err   error
-		names types.NameSlice
-	)
-	switch p.(type) {
-	case *PointGetPlan:
-		ok, err = IsPointGetWithPKOrUniqueKeyByAutoCommit(sctx, p)
-		names = p.OutputNames()
-		if err != nil {
-			return err
-		}
-	case *Update:
-		ok, err = IsPointUpdateByAutoCommit(sctx, p)
-		if err != nil {
-			return err
-		}
-		if ok {
-			// make constant expression store paramMarker
-			sctx.GetSessionVars().StmtCtx.PointExec = true
-			p, names, err = OptimizeAstNode(ctx, sctx, prepared.Stmt, is)
-		}
-	}
-	if ok {
-		// just cache point plan now
-		prepared.CachedPlan = p
-		prepared.CachedNames = names
-	}
 	return err
 }
 
@@ -325,40 +286,6 @@ func (e *Execute) rebuildRange(p Plan) error {
 		is.Ranges, err = e.buildRangeForIndexScan(sctx, is)
 		if err != nil {
 			return err
-		}
-	case *PointGetPlan:
-		if x.HandleParam != nil {
-			x.Handle, err = x.HandleParam.Datum.ToInt64(sc)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-		for i, param := range x.IndexValueParams {
-			if param != nil {
-				x.IndexValues[i] = param.Datum
-			}
-		}
-		return nil
-	case *BatchPointGetPlan:
-		for i, param := range x.HandleParams {
-			if param != nil {
-				x.Handles[i], err = param.Datum.ToInt64(sc)
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-		}
-		for i, params := range x.IndexValueParams {
-			if len(params) < 1 {
-				continue
-			}
-			for j, param := range params {
-				if param != nil {
-					x.IndexValues[i][j] = param.Datum
-				}
-			}
 		}
 	case PhysicalPlan:
 		for _, child := range x.Children() {
@@ -866,11 +793,6 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bo
 	case *PhysicalTableReader:
 		tableScan := v.TablePlans[0].(*PhysicalTableScan)
 		return len(tableScan.Ranges) == 1 && tableScan.Ranges[0].IsPoint(ctx.GetSessionVars().StmtCtx), nil
-	case *PointGetPlan:
-		// If the PointGetPlan needs to read data using unique index (double read), we
-		// can't use max uint64, because using math.MaxUint64 can't guarantee repeatable-read
-		// and the data and index would be inconsistent!
-		return v.IndexInfo == nil, nil
 	default:
 		return false, nil
 	}
@@ -880,21 +802,4 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bo
 // used for fast plan like point get
 func isAutoCommitTxn(ctx sessionctx.Context) bool {
 	return ctx.GetSessionVars().IsAutocommit() && !ctx.GetSessionVars().InTxn()
-}
-
-// IsPointUpdateByAutoCommit checks if plan p is point update and is in autocommit context
-func IsPointUpdateByAutoCommit(ctx sessionctx.Context, p Plan) (bool, error) {
-	if !isAutoCommitTxn(ctx) {
-		return false, nil
-	}
-
-	// check plan
-	updPlan, ok := p.(*Update)
-	if !ok {
-		return false, nil
-	}
-	if _, isFastSel := updPlan.SelectPlan.(*PointGetPlan); isFastSel {
-		return true, nil
-	}
-	return false, nil
 }

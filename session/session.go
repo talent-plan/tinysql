@@ -48,7 +48,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
-	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/privilege/privileges"
@@ -1106,90 +1105,6 @@ func (s *session) CommonExec(ctx context.Context,
 	return runStmt(ctx, s, st)
 }
 
-// CachedPlanExec short path currently ONLY for cached "point select plan" execution
-func (s *session) CachedPlanExec(ctx context.Context,
-	stmtID uint32, prepareStmt *plannercore.CachedPrepareStmt, args []types.Datum) (sqlexec.RecordSet, error) {
-	prepared := prepareStmt.PreparedAst
-	// compile ExecStmt
-	is := infoschema.GetInfoSchema(s)
-	execAst := &ast.ExecuteStmt{ExecID: stmtID}
-	if err := executor.ResetContextOfStmt(s, execAst); err != nil {
-		return nil, err
-	}
-	execAst.BinaryArgs = args
-	execPlan, err := planner.OptimizeExecStmt(ctx, s, execAst, is)
-	if err != nil {
-		return nil, err
-	}
-	stmt := &executor.ExecStmt{
-		InfoSchema:  is,
-		Plan:        execPlan,
-		StmtNode:    execAst,
-		Ctx:         s,
-		OutputNames: execPlan.OutputNames(),
-		PsStmt:      prepareStmt,
-	}
-	s.GetSessionVars().DurationCompile = time.Since(s.sessionVars.StartTime)
-	stmt.Text = prepared.Stmt.Text()
-	s.GetSessionVars().StmtCtx.OriginalSQL = stmt.Text
-	logQuery(stmt.OriginText(), s.sessionVars)
-
-	// run ExecStmt
-	var resultSet sqlexec.RecordSet
-	switch prepared.CachedPlan.(type) {
-	case *plannercore.PointGetPlan:
-		resultSet, err = stmt.PointGet(ctx, is)
-		s.txn.changeToInvalid()
-	case *plannercore.Update:
-		s.PrepareTxnFuture(ctx)
-		s.GetSessionVars().StmtCtx.Priority = kv.PriorityHigh
-		resultSet, err = runStmt(ctx, s, stmt)
-	default:
-		prepared.CachedPlan = nil
-		return nil, errors.Errorf("invalid cached plan type")
-	}
-	return resultSet, err
-}
-
-// IsCachedExecOk check if we can execute using plan cached in prepared structure
-// Be careful for the short path, current precondition is ths cached plan satisfying
-// IsPointGetWithPKOrUniqueKeyByAutoCommit
-func (s *session) IsCachedExecOk(ctx context.Context, preparedStmt *plannercore.CachedPrepareStmt) (bool, error) {
-	prepared := preparedStmt.PreparedAst
-	if prepared.CachedPlan == nil {
-		return false, nil
-	}
-	// check auto commit
-	if !s.GetSessionVars().IsAutocommit() {
-		return false, nil
-	}
-	// check schema version
-	is := infoschema.GetInfoSchema(s)
-	if prepared.SchemaVersion != is.SchemaMetaVersion() {
-		prepared.CachedPlan = nil
-		return false, nil
-	}
-	// maybe we'd better check cached plan type here, current
-	// only point select/update will be cached, see "getPhysicalPlan" func
-	var ok bool
-	var err error
-	switch prepared.CachedPlan.(type) {
-	case *plannercore.PointGetPlan:
-		ok = true
-	case *plannercore.Update:
-		pointUpdate := prepared.CachedPlan.(*plannercore.Update)
-		_, ok = pointUpdate.SelectPlan.(*plannercore.PointGetPlan)
-		if !ok {
-			err = errors.Errorf("cached update plan not point update")
-			prepared.CachedPlan = nil
-			return false, err
-		}
-	default:
-		ok = false
-	}
-	return ok, err
-}
-
 // ExecutePreparedStmt executes a prepared statement.
 func (s *session) ExecutePreparedStmt(ctx context.Context, stmtID uint32, args []types.Datum) (sqlexec.RecordSet, error) {
 	s.PrepareTxnCtx(ctx)
@@ -1204,13 +1119,6 @@ func (s *session) ExecutePreparedStmt(ctx context.Context, stmtID uint32, args [
 	preparedStmt, ok := preparedPointer.(*plannercore.CachedPrepareStmt)
 	if !ok {
 		return nil, errors.Errorf("invalid CachedPrepareStmt type")
-	}
-	ok, err = s.IsCachedExecOk(ctx, preparedStmt)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return s.CachedPlanExec(ctx, stmtID, preparedStmt, args)
 	}
 	return s.CommonExec(ctx, stmtID, preparedStmt, args)
 }

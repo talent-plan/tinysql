@@ -121,10 +121,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildTrace(v)
 	case *plannercore.Explain:
 		return b.buildExplain(v)
-	case *plannercore.PointGetPlan:
-		return b.buildPointGet(v)
-	case *plannercore.BatchPointGetPlan:
-		return b.buildBatchPointGet(v)
 	case *plannercore.Insert:
 		return b.buildInsert(v)
 	case *plannercore.LoadData:
@@ -2353,41 +2349,6 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 		groupChecker:   newVecGroupChecker(b.ctx, groupByItems),
 		numWindowFuncs: len(v.WindowFuncDescs),
 	}
-}
-
-func (b *executorBuilder) buildBatchPointGet(plan *plannercore.BatchPointGetPlan) Executor {
-	startTS, err := b.getStartTS()
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	e := &BatchPointGetExec{
-		baseExecutor: newBaseExecutor(b.ctx, plan.Schema(), plan.ExplainID()),
-		tblInfo:      plan.TblInfo,
-		idxInfo:      plan.IndexInfo,
-		startTS:      startTS,
-	}
-	var capacity int
-	if plan.IndexInfo != nil {
-		e.idxVals = plan.IndexValues
-		capacity = len(e.idxVals)
-	} else {
-		// `SELECT a FROM t WHERE a IN (1, 1, 2, 1, 2)` should not return duplicated rows
-		handles := make([]int64, 0, len(plan.Handles))
-		dedup := make(map[int64]struct{}, len(plan.Handles))
-		for _, handle := range plan.Handles {
-			if _, found := dedup[handle]; found {
-				continue
-			}
-			dedup[handle] = struct{}{}
-			handles = append(handles, handle)
-		}
-		e.handles = handles
-		capacity = len(e.handles)
-	}
-	e.base().initCap = capacity
-	e.base().maxChunkSize = capacity
-	return e
 }
 
 func getPhysicalTableID(t table.Table) int64 {
