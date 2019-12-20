@@ -385,7 +385,7 @@ func (r *ImplTopNAsLimit) OnImplement(expr *memo.GroupExpr, reqProp *property.Ph
 	return impl.NewLimitImpl(physicalLimit), nil
 }
 
-func getImplForHashJoin(expr *memo.GroupExpr, prop *property.PhysicalProperty, innerIdx int, useOuterToBuild bool) memo.Implementation {
+func getImplForHashJoin(expr *memo.GroupExpr, prop *property.PhysicalProperty, innerIdx int) memo.Implementation {
 	join := expr.ExprNode.(*plannercore.LogicalJoin)
 	chReqProps := make([]*property.PhysicalProperty, 2)
 	chReqProps[0] = &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64}
@@ -395,7 +395,7 @@ func getImplForHashJoin(expr *memo.GroupExpr, prop *property.PhysicalProperty, i
 		expCntScale := prop.ExpectedCnt / stats.RowCount
 		chReqProps[1-innerIdx].ExpectedCnt = expr.Children[1-innerIdx].Prop.Stats.RowCount * expCntScale
 	}
-	hashJoin := plannercore.NewPhysicalHashJoin(join, innerIdx, useOuterToBuild, stats.ScaleByExpectCnt(prop.ExpectedCnt), chReqProps...)
+	hashJoin := plannercore.NewPhysicalHashJoin(join, innerIdx, stats.ScaleByExpectCnt(prop.ExpectedCnt), chReqProps...)
 	hashJoin.SetSchema(expr.Group.Prop.Schema)
 	return impl.NewHashJoinImpl(hashJoin)
 }
@@ -420,7 +420,7 @@ func (r *ImplHashJoinBuildLeft) OnImplement(expr *memo.GroupExpr, reqProp *prope
 	join := expr.ExprNode.(*plannercore.LogicalJoin)
 	switch join.JoinType {
 	case plannercore.InnerJoin:
-		return getImplForHashJoin(expr, reqProp, 0, false), nil
+		return getImplForHashJoin(expr, reqProp, 0), nil
 	default:
 		// TODO: deal with other join type.
 		return nil, nil
@@ -441,7 +441,7 @@ func (r *ImplHashJoinBuildRight) OnImplement(expr *memo.GroupExpr, reqProp *prop
 	join := expr.ExprNode.(*plannercore.LogicalJoin)
 	switch join.JoinType {
 	case plannercore.InnerJoin:
-		return getImplForHashJoin(expr, reqProp, 1, false), nil
+		return getImplForHashJoin(expr, reqProp, 1), nil
 	default:
 		// TODO: deal with other join type.
 		return nil, nil

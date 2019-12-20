@@ -16,13 +16,14 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/log"
+	"go.uber.org/zap/zapcore"
 	"math/rand"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
@@ -37,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/stringutil"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -530,14 +530,11 @@ func BenchmarkWindowFunctions(b *testing.B) {
 }
 
 type hashJoinTestCase struct {
-	rows            int
-	cols            []*types.FieldType
-	concurrency     int
-	ctx             sessionctx.Context
-	keyIdx          []int
-	disk            bool
-	joinType        core.JoinType
-	useOuterToBuild bool
+	rows        int
+	cols        []*types.FieldType
+	concurrency int
+	ctx         sessionctx.Context
+	keyIdx      []int
 }
 
 func (tc hashJoinTestCase) columns() []*expression.Column {
@@ -550,11 +547,11 @@ func (tc hashJoinTestCase) columns() []*expression.Column {
 }
 
 func (tc hashJoinTestCase) String() string {
-	return fmt.Sprintf("(rows:%v, cols:%v, concurency:%v, joinKeyIdx: %v, disk:%v)",
-		tc.rows, tc.cols, tc.concurrency, tc.keyIdx, tc.disk)
+	return fmt.Sprintf("(rows:%v, concurency:%v, joinKeyIdx: %v)",
+		tc.rows, tc.concurrency, tc.keyIdx)
 }
 
-func defaultHashJoinTestCase(cols []*types.FieldType, joinType core.JoinType, useOuterToBuild bool) *hashJoinTestCase {
+func defaultHashJoinTestCase(cols []*types.FieldType) *hashJoinTestCase {
 	ctx := mock.NewContext()
 	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
 	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
@@ -563,15 +560,10 @@ func defaultHashJoinTestCase(cols []*types.FieldType, joinType core.JoinType, us
 	ctx.GetSessionVars().IndexLookupJoinConcurrency = 4
 	tc := &hashJoinTestCase{rows: 100000, concurrency: 4, ctx: ctx, keyIdx: []int{0, 1}}
 	tc.cols = cols
-	tc.useOuterToBuild = useOuterToBuild
-	tc.joinType = joinType
 	return tc
 }
 
 func prepare4HashJoin(testCase *hashJoinTestCase, innerExec, outerExec Executor) *HashJoinExec {
-	if testCase.useOuterToBuild {
-		innerExec, outerExec = outerExec, innerExec
-	}
 	cols0 := testCase.columns()
 	cols1 := testCase.columns()
 	joinSchema := expression.NewSchema(cols0...)
@@ -583,14 +575,13 @@ func prepare4HashJoin(testCase *hashJoinTestCase, innerExec, outerExec Executor)
 	e := &HashJoinExec{
 		baseExecutor:      newBaseExecutor(testCase.ctx, joinSchema, stringutil.StringerStr("HashJoin"), innerExec, outerExec),
 		concurrency:       uint(testCase.concurrency),
-		joinType:          testCase.joinType, // 0 for InnerJoin, 1 for LeftOutersJoin, 2 for RightOuterJoin
+		joinType:          0, // InnerJoin
 		isOuterJoin:       false,
 		buildKeys:         joinKeys,
 		probeKeys:         joinKeys,
 		buildSideExec:     innerExec,
 		probeSideExec:     outerExec,
 		buildSideEstCount: float64(testCase.rows),
-		useOuterToBuild:   testCase.useOuterToBuild,
 	}
 	defaultValues := make([]types.Datum, e.buildSideExec.Schema().Len())
 	lhsTypes, rhsTypes := retTypes(innerExec), retTypes(outerExec)
@@ -599,15 +590,6 @@ func prepare4HashJoin(testCase *hashJoinTestCase, innerExec, outerExec Executor)
 		e.joiners[i] = newJoiner(testCase.ctx, e.joinType, true, defaultValues,
 			nil, lhsTypes, rhsTypes)
 	}
-	memLimit := int64(-1)
-	if testCase.disk {
-		memLimit = 1
-	}
-	t := memory.NewTracker(stringutil.StringerStr("root of prepare4HashJoin"), memLimit)
-	t.SetActionOnExceed(nil)
-	t2 := disk.NewTracker(stringutil.StringerStr("root of prepare4HashJoin"), -1)
-	e.ctx.GetSessionVars().StmtCtx.MemTracker = t
-	e.ctx.GetSessionVars().StmtCtx.DiskTracker = t2
 	return e
 }
 
@@ -658,102 +640,17 @@ func benchmarkHashJoinExecWithCase(b *testing.B, casTest *hashJoinTestCase) {
 			b.Fatal(err)
 		}
 		b.StopTimer()
-		if exec.rowContainer.alreadySpilled() != casTest.disk {
-			b.Fatal("wrong usage with disk")
-		}
 	}
 }
 
 func BenchmarkHashJoinExec(b *testing.B) {
-	lvl := log.GetLevel()
-	log.SetLevel(zapcore.ErrorLevel)
-	defer log.SetLevel(lvl)
-
 	cols := []*types.FieldType{
 		types.NewFieldType(mysql.TypeLonglong),
 		types.NewFieldType(mysql.TypeVarString),
 	}
 
 	b.ReportAllocs()
-	cas := defaultHashJoinTestCase(cols, 0, false)
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	cas.disk = true
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	cas.disk = true
-	cas.rows = 1000
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	// Replace the wide string column with double column
-	cols = []*types.FieldType{
-		types.NewFieldType(mysql.TypeLonglong),
-		types.NewFieldType(mysql.TypeDouble),
-	}
-	cas = defaultHashJoinTestCase(cols, 0, false)
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-}
-
-func BenchmarkOuterHashJoinExec(b *testing.B) {
-	lvl := log.GetLevel()
-	log.SetLevel(zapcore.ErrorLevel)
-	defer log.SetLevel(lvl)
-
-	cols := []*types.FieldType{
-		types.NewFieldType(mysql.TypeLonglong),
-		types.NewFieldType(mysql.TypeVarString),
-	}
-
-	b.ReportAllocs()
-	cas := defaultHashJoinTestCase(cols, 2, true)
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	cas.disk = true
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	cas.keyIdx = []int{0}
-	cas.disk = true
-	cas.rows = 1000
-	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-		benchmarkHashJoinExecWithCase(b, cas)
-	})
-
-	// Replace the wide string column with double column
-	cols = []*types.FieldType{
-		types.NewFieldType(mysql.TypeLonglong),
-		types.NewFieldType(mysql.TypeDouble),
-	}
-	cas = defaultHashJoinTestCase(cols, 2, true)
+	cas := defaultHashJoinTestCase(cols)
 	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
 		benchmarkHashJoinExecWithCase(b, cas)
 	})
@@ -784,16 +681,16 @@ func benchmarkBuildHashTableForList(b *testing.B, casTest *hashJoinTestCase) {
 	dataSource2 := buildMockDataSource(opt)
 
 	dataSource1.prepareChunks()
+	exec := prepare4HashJoin(casTest, dataSource1, dataSource2)
+	tmpCtx := context.Background()
+	if err := exec.Open(tmpCtx); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		exec := prepare4HashJoin(casTest, dataSource1, dataSource2)
-		tmpCtx := context.Background()
-		if err := exec.Open(tmpCtx); err != nil {
-			b.Fatal(err)
-		}
-		exec.prepared = true
-
+		exec.rowContainer = nil
+		exec.memTracker = memory.NewTracker(exec.id, exec.ctx.GetSessionVars().MemQuotaHashJoin)
 		innerResultCh := make(chan *chunk.Chunk, len(dataSource1.chunks))
 		for _, chk := range dataSource1.chunks {
 			innerResultCh <- chk
@@ -804,44 +701,32 @@ func benchmarkBuildHashTableForList(b *testing.B, casTest *hashJoinTestCase) {
 		if err := exec.buildHashTableForList(innerResultCh); err != nil {
 			b.Fatal(err)
 		}
-
-		if err := exec.Close(); err != nil {
-			b.Fatal(err)
-		}
 		b.StopTimer()
-		if exec.rowContainer.alreadySpilled() != casTest.disk {
-			b.Fatal("wrong usage with disk")
-		}
 	}
 }
 
 func BenchmarkBuildHashTableForList(b *testing.B) {
-	lvl := log.GetLevel()
-	log.SetLevel(zapcore.ErrorLevel)
-	defer log.SetLevel(lvl)
-
+	b.ReportAllocs()
 	cols := []*types.FieldType{
 		types.NewFieldType(mysql.TypeLonglong),
 		types.NewFieldType(mysql.TypeVarString),
 	}
 
-	b.ReportAllocs()
-	cas := defaultHashJoinTestCase(cols, 0, false)
-	rows := []int{10, 100000}
-	keyIdxs := [][]int{{0, 1}, {0}}
-	disks := []bool{false, true}
-	for _, row := range rows {
-		for _, keyIdx := range keyIdxs {
-			for _, disk := range disks {
-				cas.rows = row
-				cas.keyIdx = keyIdx
-				cas.disk = disk
-				b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-					benchmarkBuildHashTableForList(b, cas)
-				})
-			}
-		}
-	}
+	cas := defaultHashJoinTestCase(cols)
+	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+		benchmarkBuildHashTableForList(b, cas)
+	})
+
+	cas.keyIdx = []int{0}
+	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+		benchmarkBuildHashTableForList(b, cas)
+	})
+
+	cas.keyIdx = []int{0}
+	cas.rows = 10
+	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+		benchmarkBuildHashTableForList(b, cas)
+	})
 }
 
 type indexJoinTestCase struct {

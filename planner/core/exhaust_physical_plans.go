@@ -264,22 +264,18 @@ func (p *LogicalJoin) getHashJoins(prop *property.PhysicalProperty) []PhysicalPl
 	}
 	joins := make([]PhysicalPlan, 0, 2)
 	switch p.JoinType {
-	case SemiJoin, AntiSemiJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
-		joins = append(joins, p.getHashJoin(prop, 1, false))
-	case LeftOuterJoin:
-		joins = append(joins, p.getHashJoin(prop, 1, false))
-		joins = append(joins, p.getHashJoin(prop, 1, true))
+	case SemiJoin, AntiSemiJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin, LeftOuterJoin:
+		joins = append(joins, p.getHashJoin(prop, 1))
 	case RightOuterJoin:
-		joins = append(joins, p.getHashJoin(prop, 0, false))
-		joins = append(joins, p.getHashJoin(prop, 0, true))
+		joins = append(joins, p.getHashJoin(prop, 0))
 	case InnerJoin:
-		joins = append(joins, p.getHashJoin(prop, 1, false))
-		joins = append(joins, p.getHashJoin(prop, 0, false))
+		joins = append(joins, p.getHashJoin(prop, 1))
+		joins = append(joins, p.getHashJoin(prop, 0))
 	}
 	return joins
 }
 
-func (p *LogicalJoin) getHashJoin(prop *property.PhysicalProperty, innerIdx int, useOuterToBuild bool) *PhysicalHashJoin {
+func (p *LogicalJoin) getHashJoin(prop *property.PhysicalProperty, innerIdx int) *PhysicalHashJoin {
 	chReqProps := make([]*property.PhysicalProperty, 2)
 	chReqProps[innerIdx] = &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64}
 	chReqProps[1-innerIdx] = &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64}
@@ -287,7 +283,7 @@ func (p *LogicalJoin) getHashJoin(prop *property.PhysicalProperty, innerIdx int,
 		expCntScale := prop.ExpectedCnt / p.stats.RowCount
 		chReqProps[1-innerIdx].ExpectedCnt = p.children[1-innerIdx].statsInfo().RowCount * expCntScale
 	}
-	hashJoin := NewPhysicalHashJoin(p, innerIdx, useOuterToBuild, p.stats.ScaleByExpectCnt(prop.ExpectedCnt), chReqProps...)
+	hashJoin := NewPhysicalHashJoin(p, innerIdx, p.stats.ScaleByExpectCnt(prop.ExpectedCnt), chReqProps...)
 	hashJoin.SetSchema(p.schema)
 	return hashJoin
 }
@@ -1461,7 +1457,7 @@ func (lt *LogicalTopN) exhaustPhysicalPlans(prop *property.PhysicalProperty) []P
 
 // GetHashJoin is public for cascades planner.
 func (la *LogicalApply) GetHashJoin(prop *property.PhysicalProperty) *PhysicalHashJoin {
-	return la.LogicalJoin.getHashJoin(prop, 1, false)
+	return la.LogicalJoin.getHashJoin(prop, 1)
 }
 
 func (la *LogicalApply) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {

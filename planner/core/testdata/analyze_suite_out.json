@@ -158,7 +158,7 @@
         ],
         "Plan": [
           "Projection_7 0.00 root test.t.a, test.t.b, test.t.a, test.t.b",
-          "└─HashRightJoin_9 0.00 root inner join, inner:TableReader_12, equal:[eq(test.t.b, test.t.b)]",
+          "└─HashRightJoin_9 0.00 root inner join, equal:[eq(test.t.b, test.t.b)]",
           "  ├─TableReader_12 0.00 root data:Selection_11",
           "  │ └─Selection_11 0.00 cop[tikv] isnull(test.t.b), not(isnull(test.t.b))",
           "  │   └─TableScan_10 10000.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
@@ -195,9 +195,9 @@
     "Name": "TestStraightJoin",
     "Cases": [
       [
-        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join, inner:TableReader_23",
-        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join, inner:TableReader_21",
-        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join, inner:TableReader_19",
+        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join",
+        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
+        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
         "│ │ │ └─TableScan_16 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
@@ -208,9 +208,9 @@
         "  └─TableScan_22 10000.00 cop[tikv] table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
-        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join, inner:TableReader_23",
-        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join, inner:TableReader_21",
-        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join, inner:TableReader_19",
+        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join",
+        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
+        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
         "│ │ │ └─TableScan_16 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
@@ -221,9 +221,9 @@
         "  └─TableScan_22 10000.00 cop[tikv] table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
-        "HashLeftJoin_11 1248750000000.00 root inner join, inner:TableReader_26, equal:[eq(test.t1.a, test.t4.a)]",
-        "├─HashLeftJoin_13 999000000000.00 root CARTESIAN inner join, inner:TableReader_23",
-        "│ ├─HashRightJoin_16 99900000.00 root CARTESIAN inner join, inner:TableReader_19",
+        "HashLeftJoin_11 1248750000000.00 root inner join, equal:[eq(test.t1.a, test.t4.a)]",
+        "├─HashLeftJoin_13 999000000000.00 root CARTESIAN inner join",
+        "│ ├─HashRightJoin_16 99900000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_19 9990.00 root data:Selection_18",
         "│ │ │ └─Selection_18 9990.00 cop[tikv] not(isnull(test.t1.a))",
         "│ │ │   └─TableScan_17 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
@@ -267,11 +267,11 @@
     "Cases": [
       [
         "Projection_11 10.00 root Column#14",
-        "└─Apply_13 10.00 root CARTESIAN left outer semi join, inner:StreamAgg_22, other cond:eq(test.t.c, Column#13)",
+        "└─Apply_13 10.00 root CARTESIAN left outer semi join, other cond:eq(test.t.c, Column#13)",
         "  ├─TableReader_15 10.00 root data:TableScan_14",
         "  │ └─TableScan_14 10.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false",
         "  └─StreamAgg_22 1.00 root funcs:count(1)->Column#13",
-        "    └─HashLeftJoin_23 1.00 root inner join, inner:TableReader_33, equal:[eq(test.t.a, test.t.a)]",
+        "    └─HashLeftJoin_23 1.00 root inner join, equal:[eq(test.t.a, test.t.a)]",
         "      ├─TableReader_27 1.00 root data:Selection_26",
         "      │ └─Selection_26 1.00 cop[tikv] eq(test.t.a, test.t.a), not(isnull(test.t.a))",
         "      │   └─TableScan_25 10.00 cop[tikv] table:s, range:[-inf,+inf], keep order:false",
@@ -281,7 +281,7 @@
       ],
       [
         "Projection_8 10.00 root Column#9",
-        "└─Apply_10 10.00 root CARTESIAN left outer join, inner:MaxOneRow_15",
+        "└─Apply_10 10.00 root CARTESIAN left outer join",
         "  ├─TableReader_12 10.00 root data:TableScan_11",
         "  │ └─TableScan_11 10.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false",
         "  └─MaxOneRow_15 1.00 root ",

@@ -122,7 +122,7 @@ func (s *testAnalyzeSuite) TestCBOWithoutAnalyze(c *C) {
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(dom.InfoSchema()), IsNil)
 	testKit.MustQuery("explain select * from t1, t2 where t1.a = t2.a").Check(testkit.Rows(
-		"HashLeftJoin_8 7.49 root inner join, inner:TableReader_15, equal:[eq(test.t1.a, test.t2.a)]",
+		"HashLeftJoin_8 7.49 root inner join, equal:[eq(test.t1.a, test.t2.a)]",
 		"├─TableReader_12 5.99 root data:Selection_11",
 		"│ └─Selection_11 5.99 cop[tikv] not(isnull(test.t1.a))",
 		"│   └─TableScan_10 6.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
