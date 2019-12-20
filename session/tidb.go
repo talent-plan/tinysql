@@ -241,13 +241,10 @@ func runStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) 
 	}
 	se := sctx.(*session)
 	sessVars := se.GetSessionVars()
-	// Save origTxnCtx here to avoid it reset in the transaction retry.
-	origTxnCtx := sessVars.TxnCtx
 	defer func() {
 		// If it is not a select statement, we record its slow log here,
 		// then it could include the transaction commit time.
 		if rs == nil {
-			s.(*executor.ExecStmt).LogSlowQuery(origTxnCtx.StartTS, err == nil, false)
 			pps := types.CloneRow(sessVars.PreparedParams)
 			sessVars.PrevStmt = executor.FormatSQL(s.OriginText(), pps)
 		}

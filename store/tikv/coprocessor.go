@@ -794,14 +794,6 @@ func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *co
 	logutil.BgLogger().Info(logStr)
 }
 
-func appendScanDetail(logStr string, columnFamily string, scanInfo *kvrpcpb.ScanInfo) string {
-	if scanInfo != nil {
-		logStr += fmt.Sprintf(" scan_total_%s:%d", columnFamily, scanInfo.Total)
-		logStr += fmt.Sprintf(" scan_processed_%s:%d", columnFamily, scanInfo.Processed)
-	}
-	return logStr
-}
-
 func (worker *copIteratorWorker) handleCopStreamResult(bo *Backoffer, rpcCtx *RPCContext, stream *tikvrpc.CopStreamResponse, task *copTask, ch chan<- *copResponse, costTime time.Duration) ([]*copTask, error) {
 	defer stream.Close()
 	var resp *coprocessor.Response

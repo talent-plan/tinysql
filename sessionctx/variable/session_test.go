@@ -39,14 +39,6 @@ func (*testSessionSuite) TestSetSystemVariable(c *C) {
 		{variable.TxnIsolation, "SERIALIZABLE", true},
 		{variable.TimeZone, "xyz", true},
 		{variable.TiDBOptAggPushDown, "1", false},
-		{variable.TIDBMemQuotaQuery, "1024", false},
-		{variable.TIDBMemQuotaHashJoin, "1024", false},
-		{variable.TIDBMemQuotaMergeJoin, "1024", false},
-		{variable.TIDBMemQuotaSort, "1024", false},
-		{variable.TIDBMemQuotaTopn, "1024", false},
-		{variable.TIDBMemQuotaIndexLookupReader, "1024", false},
-		{variable.TIDBMemQuotaIndexLookupJoin, "1024", false},
-		{variable.TIDBMemQuotaNestedLoopApply, "1024", false},
 	}
 	for _, t := range tests {
 		err := variable.SetSessionSystemVar(v, t.key, types.NewDatum(t.value))

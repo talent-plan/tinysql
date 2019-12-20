@@ -70,19 +70,6 @@ type lookupTableTask struct {
 	// duplicatedIndexOrder map likes indexOrder. But it's used when checkIndexValue isn't nil and
 	// the same handle of index has multiple values.
 	duplicatedIndexOrder map[int64]int
-
-	// memUsage records the memory usage of this task calculated by table worker.
-	// memTracker is used to release memUsage after task is done and unused.
-	//
-	// The sequence of function calls are:
-	//   1. calculate task.memUsage.
-	//   2. task.memTracker = tableWorker.memTracker
-	//   3. task.memTracker.Consume(task.memUsage)
-	//   4. task.memTracker.Consume(-task.memUsage)
-	//
-	// Step 1~3 are completed in "tableWorker.executeTask".
-	// Step 4   is  completed in "IndexLookUpExecutor.Next".
-	memUsage int64
 }
 
 func (task *lookupTableTask) Len() int {

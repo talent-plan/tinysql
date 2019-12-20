@@ -15,8 +15,6 @@ package executor_test
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -29,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/testkit"
 )
@@ -93,20 +90,6 @@ func generateTableSplitKeyForInt(tid int64, splitNum []int) [][]byte {
 	return results
 }
 
-func generateIndexSplitKeyForInt(tid, idx int64, splitNum []int) [][]byte {
-	results := make([][]byte, 0, len(splitNum))
-	for _, num := range splitNum {
-		d := new(types.Datum)
-		d.SetInt64(int64(num))
-		b, err := codec.EncodeKey(nil, nil, *d)
-		if err != nil {
-			panic(err)
-		}
-		results = append(results, tablecodec.EncodeIndexSeekKey(tid, idx, b))
-	}
-	return results
-}
-
 type testChunkSizeControlKit struct {
 	store   kv.Storage
 	dom     *domain.Domain
@@ -152,23 +135,4 @@ func (s *testChunkSizeControlSuite) SetUpSuite(c *C) {
 		kit.tk = testkit.NewTestKitWithInit(c, kit.store)
 		kit.tk.MustExec(sql)
 	}
-}
-
-func (s *testChunkSizeControlSuite) getKit(name string) (
-	kv.Storage, *domain.Domain, *testkit.TestKit, *testSlowClient, *mocktikv.Cluster) {
-	x := s.m[name]
-	return x.store, x.dom, x.tk, x.client, x.cluster
-}
-
-func (s *testChunkSizeControlSuite) parseTimeCost(c *C, line []interface{}) time.Duration {
-	lineStr := fmt.Sprintf("%v", line)
-	idx := strings.Index(lineStr, "time:")
-	c.Assert(idx, Not(Equals), -1)
-	lineStr = lineStr[idx+len("time:"):]
-	idx = strings.Index(lineStr, ",")
-	c.Assert(idx, Not(Equals), -1)
-	timeStr := lineStr[:idx]
-	d, err := time.ParseDuration(timeStr)
-	c.Assert(err, IsNil)
-	return d
 }

@@ -32,9 +32,6 @@ import (
 
 const (
 	logPattern = `\d\d\d\d/\d\d/\d\d \d\d:\d\d:\d\d\.\d\d\d ([\w_%!$@.,+~-]+|\\.)+:\d+: \[(fatal|error|warning|info|debug)\] .*?\n`
-	// zapLogPatern is used to match the zap log format, such as the following log:
-	// [2019/02/13 15:56:05.385 +08:00] [INFO] [log_test.go:167] ["info message"] ["str key"=val] ["int key"=123]
-	zapLogPattern = `\[\d\d\d\d/\d\d/\d\d \d\d:\d\d:\d\d.\d\d\d\ (\+|-)\d\d:\d\d\] \[(FATAL|ERROR|WARN|INFO|DEBUG)\] \[([\w_%!$@.,+~-]+|\\.)+:\d+\] \[.*\] (\[.*=.*\]).*\n`
 	// [2019/02/13 15:56:05.385 +08:00] [INFO] [log_test.go:167] ["info message"] ["str key"=val] ["int key"=123]
 	zapLogWithConnIDPattern = `\[\d\d\d\d/\d\d/\d\d \d\d:\d\d:\d\d.\d\d\d\ (\+|-)\d\d:\d\d\] \[(FATAL|ERROR|WARN|INFO|DEBUG)\] \[([\w_%!$@.,+~-]+|\\.)+:\d+\] \[.*\] \[conn=.*\] (\[.*=.*\]).*\n`
 	// [2019/02/13 15:56:05.385 +08:00] [INFO] [log_test.go:167] ["info message"] ["str key"=val] ["int key"=123]
@@ -73,7 +70,7 @@ func (s *testLogSuite) TestStringToLogLevel(c *C) {
 
 // TestLogging assure log format and log redirection works.
 func (s *testLogSuite) TestLogging(c *C) {
-	conf := NewLogConfig("warn", DefaultLogFormat, "", NewFileLogConfig(0), false)
+	conf := NewLogConfig("warn", DefaultLogFormat, NewFileLogConfig(0), false)
 	conf.File.Filename = "log_file"
 	c.Assert(InitLogger(conf), IsNil)
 
@@ -95,42 +92,8 @@ func (s *testLogSuite) TestLogging(c *C) {
 	c.Assert(strings.Contains(entry, "log_test.go"), IsTrue)
 }
 
-func (s *testLogSuite) TestSlowQueryLogger(c *C) {
-	fileName := "slow_query"
-	conf := NewLogConfig("info", DefaultLogFormat, fileName, NewFileLogConfig(DefaultLogMaxSize), false)
-	c.Assert(conf.File.MaxSize, Equals, DefaultLogMaxSize)
-	err := InitLogger(conf)
-	c.Assert(err, IsNil)
-	defer os.Remove(fileName)
-
-	SlowQueryLogger.Debug("debug message")
-	SlowQueryLogger.Info("info message")
-	SlowQueryLogger.Warn("warn message")
-	SlowQueryLogger.Error("error message")
-	c.Assert(s.buf.Len(), Equals, 0)
-
-	f, err := os.Open(fileName)
-	c.Assert(err, IsNil)
-	defer f.Close()
-
-	r := bufio.NewReader(f)
-	for {
-		var str string
-		str, err = r.ReadString('\n')
-		if err != nil {
-			break
-		}
-		if strings.HasPrefix(str, "# ") {
-			c.Assert(str, Matches, `# Time: .*?\n`)
-		} else {
-			c.Assert(str, Matches, `.*? message\n`)
-		}
-	}
-	c.Assert(err, Equals, io.EOF)
-}
-
 func (s *testLogSuite) TestLoggerKeepOrder(c *C) {
-	conf := NewLogConfig("warn", DefaultLogFormat, "", EmptyFileLogConfig, true)
+	conf := NewLogConfig("warn", DefaultLogFormat, EmptyFileLogConfig, true)
 	c.Assert(InitLogger(conf), IsNil)
 	logger := log.StandardLogger()
 	ft, ok := logger.Formatter.(*textFormatter)
@@ -167,38 +130,9 @@ func (s *testLogSuite) TestLoggerKeepOrder(c *C) {
 	c.Assert(s.buf.String(), Equals, expectMsg)
 }
 
-func (s *testLogSuite) TestSlowQueryZapLogger(c *C) {
-	fileName := "slow_query"
-	conf := NewLogConfig("info", DefaultLogFormat, fileName, EmptyFileLogConfig, false)
-	err := InitZapLogger(conf)
-	c.Assert(err, IsNil)
-	defer os.Remove(fileName)
-
-	SlowQueryZapLogger.Debug("debug message", zap.String("str key", "val"))
-	SlowQueryZapLogger.Info("info message", zap.String("str key", "val"))
-	SlowQueryZapLogger.Warn("warn", zap.Int("int key", 123))
-	SlowQueryZapLogger.Error("error message", zap.Bool("bool key", true))
-
-	f, err := os.Open(fileName)
-	c.Assert(err, IsNil)
-	defer f.Close()
-
-	r := bufio.NewReader(f)
-	for {
-		var str string
-		str, err = r.ReadString('\n')
-		if err != nil {
-			break
-		}
-		c.Assert(str, Matches, zapLogPattern)
-	}
-	c.Assert(err, Equals, io.EOF)
-
-}
-
 func (s *testLogSuite) TestZapLoggerWithKeys(c *C) {
 	fileCfg := FileLogConfig{zaplog.FileLogConfig{Filename: "zap_log", MaxSize: 4096}}
-	conf := NewLogConfig("info", DefaultLogFormat, "", fileCfg, false)
+	conf := NewLogConfig("info", DefaultLogFormat, fileCfg, false)
 	err := InitZapLogger(conf)
 	c.Assert(err, IsNil)
 	connID := uint32(123)
@@ -240,7 +174,7 @@ func (s *testLogSuite) testZapLogger(ctx context.Context, c *C, fileName, patter
 }
 
 func (s *testLogSuite) TestSetLevel(c *C) {
-	conf := NewLogConfig("info", DefaultLogFormat, "", EmptyFileLogConfig, false)
+	conf := NewLogConfig("info", DefaultLogFormat, EmptyFileLogConfig, false)
 	err := InitZapLogger(conf)
 	c.Assert(err, IsNil)
 

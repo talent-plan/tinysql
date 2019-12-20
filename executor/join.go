@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 var (
@@ -206,8 +204,6 @@ func (e *HashJoinExec) wait4BuildSide() (finished bool, err error) {
 	}
 	return false, nil
 }
-
-var innerResultLabel fmt.Stringer = stringutil.StringerStr("innerResult")
 
 // fetchBuildSideRows fetches all rows from build side executor, and append them
 // to e.buildSideResult.
@@ -558,8 +554,6 @@ func (e *NestedLoopApplyExec) Close() error {
 
 	return e.outerExec.Close()
 }
-
-var innerListLabel fmt.Stringer = stringutil.StringerStr("innerList")
 
 // Open implements the Executor interface.
 func (e *NestedLoopApplyExec) Open(ctx context.Context) error {

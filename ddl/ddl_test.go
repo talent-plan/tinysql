@@ -94,13 +94,12 @@ func TestT(t *testing.T) {
 	CustomVerboseFlag = true
 	*CustomParallelSuiteFlag = true
 	logLevel := os.Getenv("log_level")
-	logutil.InitLogger(logutil.NewLogConfig(logLevel, "", "", logutil.EmptyFileLogConfig, false))
+	logutil.InitLogger(logutil.NewLogConfig(logLevel, "", logutil.EmptyFileLogConfig, false))
 	autoid.SetStep(5000)
 	ReorgWaitTimeout = 30 * time.Millisecond
 
 	cfg := config.GetGlobalConfig()
 	newCfg := *cfg
-	newCfg.Log.SlowThreshold = 10000
 	// Test for add/drop primary key.
 	newCfg.AlterPrimaryKey = true
 	config.StoreGlobalConfig(&newCfg)

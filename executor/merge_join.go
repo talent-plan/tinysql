@@ -15,13 +15,10 @@ package executor
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 // MergeJoinExec implements the merge join algorithm.
@@ -194,8 +191,6 @@ func (e *MergeJoinExec) Close() error {
 
 	return e.baseExecutor.Close()
 }
-
-var innerTableLabel fmt.Stringer = stringutil.StringerStr("innerTable")
 
 // Open implements the Executor Open interface.
 func (e *MergeJoinExec) Open(ctx context.Context) error {

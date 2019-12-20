@@ -75,12 +75,11 @@ func TestT(t *testing.T) {
 	CustomVerboseFlag = true
 	*CustomParallelSuiteFlag = true
 	logLevel := os.Getenv("log_level")
-	logutil.InitLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, "", logutil.EmptyFileLogConfig, false))
+	logutil.InitLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, logutil.EmptyFileLogConfig, false))
 	autoid.SetStep(5000)
 
 	old := config.GetGlobalConfig()
 	new := *old
-	new.Log.SlowThreshold = 30000 // 30s
 	config.StoreGlobalConfig(&new)
 
 	testleak.BeforeTest()

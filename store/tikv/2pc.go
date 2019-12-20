@@ -19,7 +19,6 @@ import (
 	"math"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
@@ -90,7 +89,6 @@ type twoPhaseCommitter struct {
 	priority  pb.CommandPri
 	connID    uint64 // connID is used for log.
 	cleanWg   sync.WaitGroup
-	detail    unsafe.Pointer
 	txnSize   int
 
 	primaryKey  []byte

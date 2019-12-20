@@ -140,13 +140,6 @@ func (s *testSuite5) TestSetVar(c *C) {
 	tk.MustExec("set character_set_results = NULL")
 	tk.MustQuery("select @@character_set_results").Check(testkit.Rows(""))
 
-	tk.MustExec("set @@session.ddl_slow_threshold=12345")
-	tk.MustQuery("select @@session.ddl_slow_threshold").Check(testkit.Rows("12345"))
-	c.Assert(variable.DDLSlowOprThreshold, Equals, uint32(12345))
-	tk.MustExec("set session ddl_slow_threshold=\"54321\"")
-	tk.MustQuery("show variables like 'ddl_slow_threshold'").Check(testkit.Rows("ddl_slow_threshold 54321"))
-	c.Assert(variable.DDLSlowOprThreshold, Equals, uint32(54321))
-
 	// Test set transaction isolation level, which is equivalent to setting variable "tx_isolation".
 	tk.MustExec("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
 	tk.MustQuery("select @@session.tx_isolation").Check(testkit.Rows("READ-COMMITTED"))
@@ -265,13 +258,6 @@ func (s *testSuite5) TestSetVar(c *C) {
 	tk.MustExec("set global tidb_constraint_check_in_place = 0")
 	tk.MustQuery(`select @@global.tidb_constraint_check_in_place;`).Check(testkit.Rows("0"))
 
-	tk.MustExec("set tidb_slow_log_threshold = 0")
-	tk.MustQuery("select @@session.tidb_slow_log_threshold;").Check(testkit.Rows("0"))
-	tk.MustExec("set tidb_slow_log_threshold = 30000")
-	tk.MustQuery("select @@session.tidb_slow_log_threshold;").Check(testkit.Rows("30000"))
-	_, err = tk.Exec("set global tidb_slow_log_threshold = 0")
-	c.Assert(err, NotNil)
-
 	tk.MustExec("set tidb_query_log_max_len = 0")
 	tk.MustQuery("select @@session.tidb_query_log_max_len;").Check(testkit.Rows("0"))
 	tk.MustExec("set tidb_query_log_max_len = 20")
@@ -380,11 +366,6 @@ func (s *testSuite5) TestSetVar(c *C) {
 	c.Assert(err, NotNil)
 	tk.MustExec("set global tidb_backoff_weight = 10")
 	tk.MustQuery("select @@global.tidb_backoff_weight;").Check(testkit.Rows("10"))
-
-	tk.MustExec("set @@tidb_record_plan_in_slow_log = 1")
-	tk.MustQuery("select @@tidb_record_plan_in_slow_log;").Check(testkit.Rows("1"))
-	tk.MustExec("set @@tidb_record_plan_in_slow_log = 0")
-	tk.MustQuery("select @@tidb_record_plan_in_slow_log;").Check(testkit.Rows("0"))
 }
 
 func (s *testSuite5) TestSetCharset(c *C) {
@@ -452,9 +433,6 @@ func (s *testSuite5) TestValidateSetVar(c *C) {
 	tk.MustQuery("select @@tidb_enable_streaming;").Check(testkit.Rows("1"))
 
 	_, err = tk.Exec("set @@tidb_batch_delete=3;")
-	c.Assert(terror.ErrorEqual(err, variable.ErrWrongValueForVar), IsTrue, Commentf("err %v", err))
-
-	_, err = tk.Exec("set @@tidb_mem_quota_mergejoin='tidb';")
 	c.Assert(terror.ErrorEqual(err, variable.ErrWrongValueForVar), IsTrue, Commentf("err %v", err))
 
 	tk.MustExec("set @@group_concat_max_len=1")
