@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/disk"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -69,7 +68,6 @@ type HashJoinExec struct {
 	joinResultCh       chan *hashjoinWorkerResult
 
 	memTracker  *memory.Tracker // track memory usage.
-	diskTracker *disk.Tracker   // track disk usage.
 	prepared    bool
 	isOuterJoin bool
 }
@@ -141,9 +139,6 @@ func (e *HashJoinExec) Open(ctx context.Context) error {
 	e.prepared = false
 	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaHashJoin)
 	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-
-	e.diskTracker = disk.NewTracker(e.id, -1)
-	e.diskTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.DiskTracker)
 
 	e.closeCh = make(chan struct{})
 	e.finished.Store(false)
