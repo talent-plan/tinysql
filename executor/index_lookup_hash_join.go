@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/ranger"
 	"go.uber.org/zap"
 )
@@ -138,8 +137,6 @@ func (e *IndexNestedLoopHashJoin) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaIndexLookupJoin)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 	e.innerPtrBytes = make([][]byte, 0, 8)
 	e.startWorkers(ctx)
 	return nil
@@ -292,10 +289,6 @@ func (e *IndexNestedLoopHashJoin) Close() error {
 		}
 		e.taskCh = nil
 	}
-	if e.runtimeStats != nil {
-		concurrency := cap(e.joinChkResourceCh)
-		e.runtimeStats.SetConcurrencyInfo("Concurrency", concurrency)
-	}
 	for i := range e.joinChkResourceCh {
 		close(e.joinChkResourceCh[i])
 	}
@@ -368,13 +361,12 @@ func (ow *indexHashJoinOuterWorker) pushToChan(ctx context.Context, task *indexH
 func (e *IndexNestedLoopHashJoin) newOuterWorker(innerCh chan *indexHashJoinTask) *indexHashJoinOuterWorker {
 	ow := &indexHashJoinOuterWorker{
 		outerWorker: outerWorker{
-			outerCtx:         e.outerCtx,
-			ctx:              e.ctx,
-			executor:         e.children[0],
-			batchSize:        32,
-			maxBatchSize:     e.ctx.GetSessionVars().IndexJoinBatchSize,
-			parentMemTracker: e.memTracker,
-			lookup:           &e.IndexLookUpJoin,
+			outerCtx:     e.outerCtx,
+			ctx:          e.ctx,
+			executor:     e.children[0],
+			batchSize:    32,
+			maxBatchSize: e.ctx.GetSessionVars().IndexJoinBatchSize,
+			lookup:       &e.IndexLookUpJoin,
 		},
 		innerCh:        innerCh,
 		keepOuterOrder: e.keepOuterOrder,

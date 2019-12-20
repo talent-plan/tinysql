@@ -28,8 +28,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
-	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -116,7 +114,6 @@ func (s *rpcServer) createSession() (session.Session, error) {
 	// TODO: remove this.
 	se.GetSessionVars().HashAggPartialConcurrency = 1
 	se.GetSessionVars().HashAggFinalConcurrency = 1
-	se.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(stringutil.StringerStr("coprocessor"), -1)
 	se.SetSessionManager(s.sm)
 	return se, nil
 }

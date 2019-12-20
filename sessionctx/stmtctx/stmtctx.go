@@ -15,7 +15,6 @@ package stmtctx
 
 import (
 	"math"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -23,8 +22,6 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/pingcap/tidb/util/memory"
 	"go.uber.org/zap"
 )
 
@@ -105,8 +102,6 @@ type StatementContext struct {
 		warnings          []SQLWarn
 		errorCount        uint16
 		histogramsNotLoad bool
-		execDetails       execdetails.ExecDetails
-		allExecDetails    []*execdetails.ExecDetails
 	}
 	// PrevAffectedRows is the affected-rows value(DDL is 0, DML is the number of affected rows).
 	PrevAffectedRows int64
@@ -121,18 +116,16 @@ type StatementContext struct {
 	MaxRowID  int64
 
 	// Copied from SessionVars.TimeZone.
-	TimeZone         *time.Location
-	Priority         mysql.PriorityEnum
-	NotFillCache     bool
-	MemTracker       *memory.Tracker
-	RuntimeStatsColl *execdetails.RuntimeStatsColl
-	TableIDs         []int64
-	IndexNames       []string
-	nowTs            time.Time // use this variable for now/current_timestamp calculation/cache for one stmt
-	stmtTimeCached   bool
-	StmtType         string
-	OriginalSQL      string
-	digestMemo       struct {
+	TimeZone       *time.Location
+	Priority       mysql.PriorityEnum
+	NotFillCache   bool
+	TableIDs       []int64
+	IndexNames     []string
+	nowTs          time.Time // use this variable for now/current_timestamp calculation/cache for one stmt
+	stmtTimeCached bool
+	StmtType       string
+	OriginalSQL    string
+	digestMemo     struct {
 		sync.Once
 		normalized string
 		digest     string
@@ -421,39 +414,11 @@ func (sc *StatementContext) ResetForRetry() {
 	sc.mu.message = ""
 	sc.mu.errorCount = 0
 	sc.mu.warnings = nil
-	sc.mu.execDetails = execdetails.ExecDetails{}
-	sc.mu.allExecDetails = make([]*execdetails.ExecDetails, 0, 4)
 	sc.mu.Unlock()
 	sc.MaxRowID = 0
 	sc.BaseRowID = 0
 	sc.TableIDs = sc.TableIDs[:0]
 	sc.IndexNames = sc.IndexNames[:0]
-}
-
-// MergeExecDetails merges a single region execution details into self, used to print
-// the information in slow query log.
-func (sc *StatementContext) MergeExecDetails(details *execdetails.ExecDetails, commitDetails *execdetails.CommitDetails) {
-	sc.mu.Lock()
-	if details != nil {
-		sc.mu.execDetails.ProcessTime += details.ProcessTime
-		sc.mu.execDetails.WaitTime += details.WaitTime
-		sc.mu.execDetails.BackoffTime += details.BackoffTime
-		sc.mu.execDetails.RequestCount++
-		sc.mu.execDetails.TotalKeys += details.TotalKeys
-		sc.mu.execDetails.ProcessedKeys += details.ProcessedKeys
-		sc.mu.allExecDetails = append(sc.mu.allExecDetails, details)
-	}
-	sc.mu.execDetails.CommitDetail = commitDetails
-	sc.mu.Unlock()
-}
-
-// GetExecDetails gets the execution details for the statement.
-func (sc *StatementContext) GetExecDetails() execdetails.ExecDetails {
-	var details execdetails.ExecDetails
-	sc.mu.Lock()
-	details = sc.mu.execDetails
-	sc.mu.Unlock()
-	return details
 }
 
 // ShouldClipToZero indicates whether values less than 0 should be clipped to 0 for unsigned integer types.
@@ -505,81 +470,6 @@ func (sc *StatementContext) PushDownFlags() uint64 {
 		flags |= model.FlagInLoadDataStmt
 	}
 	return flags
-}
-
-// CopTasksDetails returns some useful information of cop-tasks during execution.
-func (sc *StatementContext) CopTasksDetails() *CopTasksDetails {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	n := len(sc.mu.allExecDetails)
-	d := &CopTasksDetails{
-		NumCopTasks:       n,
-		MaxBackoffTime:    make(map[string]time.Duration),
-		AvgBackoffTime:    make(map[string]time.Duration),
-		P90BackoffTime:    make(map[string]time.Duration),
-		TotBackoffTime:    make(map[string]time.Duration),
-		TotBackoffTimes:   make(map[string]int),
-		MaxBackoffAddress: make(map[string]string),
-	}
-	if n == 0 {
-		return d
-	}
-	d.AvgProcessTime = sc.mu.execDetails.ProcessTime / time.Duration(n)
-	d.AvgWaitTime = sc.mu.execDetails.WaitTime / time.Duration(n)
-
-	sort.Slice(sc.mu.allExecDetails, func(i, j int) bool {
-		return sc.mu.allExecDetails[i].ProcessTime < sc.mu.allExecDetails[j].ProcessTime
-	})
-	d.P90ProcessTime = sc.mu.allExecDetails[n*9/10].ProcessTime
-	d.MaxProcessTime = sc.mu.allExecDetails[n-1].ProcessTime
-	d.MaxProcessAddress = sc.mu.allExecDetails[n-1].CalleeAddress
-
-	sort.Slice(sc.mu.allExecDetails, func(i, j int) bool {
-		return sc.mu.allExecDetails[i].WaitTime < sc.mu.allExecDetails[j].WaitTime
-	})
-	d.P90WaitTime = sc.mu.allExecDetails[n*9/10].WaitTime
-	d.MaxWaitTime = sc.mu.allExecDetails[n-1].WaitTime
-	d.MaxWaitAddress = sc.mu.allExecDetails[n-1].CalleeAddress
-
-	// calculate backoff details
-	type backoffItem struct {
-		callee    string
-		sleepTime time.Duration
-		times     int
-	}
-	backoffInfo := make(map[string][]backoffItem)
-	for _, ed := range sc.mu.allExecDetails {
-		for backoff := range ed.BackoffTimes {
-			backoffInfo[backoff] = append(backoffInfo[backoff], backoffItem{
-				callee:    ed.CalleeAddress,
-				sleepTime: ed.BackoffSleep[backoff],
-				times:     ed.BackoffTimes[backoff],
-			})
-		}
-	}
-	for backoff, items := range backoffInfo {
-		if len(items) == 0 {
-			continue
-		}
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].sleepTime < items[j].sleepTime
-		})
-		n := len(items)
-		d.MaxBackoffAddress[backoff] = items[n-1].callee
-		d.MaxBackoffTime[backoff] = items[n-1].sleepTime
-		d.P90BackoffTime[backoff] = items[n*9/10].sleepTime
-
-		var totalTime time.Duration
-		totalTimes := 0
-		for _, it := range items {
-			totalTime += it.sleepTime
-			totalTimes += it.times
-		}
-		d.AvgBackoffTime[backoff] = totalTime / time.Duration(n)
-		d.TotBackoffTime[backoff] = totalTime
-		d.TotBackoffTimes[backoff] = totalTimes
-	}
-	return d
 }
 
 // SetFlagsFromPBFlag set the flag of StatementContext from a `tipb.SelectRequest.Flags`.

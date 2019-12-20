@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cznic/mathutil"
 	"github.com/opentracing/opentracing-go"
@@ -29,7 +28,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/expression"
@@ -46,10 +44,7 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
-	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 )
 
@@ -88,7 +83,6 @@ type baseExecutor struct {
 	maxChunkSize  int
 	children      []Executor
 	retFieldTypes []*types.FieldType
-	runtimeStats  *execdetails.RuntimeStats
 }
 
 // base returns the baseExecutor of an executor, don't override this method!
@@ -158,11 +152,6 @@ func newBaseExecutor(ctx sessionctx.Context, schema *expression.Schema, id fmt.S
 		initCap:      ctx.GetSessionVars().InitChunkSize,
 		maxChunkSize: ctx.GetSessionVars().MaxChunkSize,
 	}
-	if ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil {
-		if e.id != nil {
-			e.runtimeStats = e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.GetRootStats(e.id.String())
-		}
-	}
 	if schema != nil {
 		cols := schema.Columns
 		e.retFieldTypes = make([]*types.FieldType, len(cols))
@@ -194,10 +183,6 @@ type Executor interface {
 // Next is a wrapper function on e.Next(), it handles some common codes.
 func Next(ctx context.Context, e Executor, req *chunk.Chunk) error {
 	base := e.base()
-	if base.runtimeStats != nil {
-		start := time.Now()
-		defer func() { base.runtimeStats.Record(time.Since(start), req.NumRows()) }()
-	}
 	sessVars := base.ctx.GetSessionVars()
 	if atomic.CompareAndSwapUint32(&sessVars.Killed, 1, 0) {
 		return ErrQueryInterrupted
@@ -698,68 +683,6 @@ func (e *CheckIndexExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		if chk.NumRows() == 0 {
 			break
 		}
-	}
-	return nil
-}
-
-// ShowSlowExec represents the executor of showing the slow queries.
-// It is build from the "admin show slow" statement:
-//	admin show slow top [internal | all] N
-//	admin show slow recent N
-type ShowSlowExec struct {
-	baseExecutor
-
-	ShowSlow *ast.ShowSlow
-	result   []*domain.SlowQueryInfo
-	cursor   int
-}
-
-// Open implements the Executor Open interface.
-func (e *ShowSlowExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-
-	dom := domain.GetDomain(e.ctx)
-	e.result = dom.ShowSlowQuery(e.ShowSlow)
-	return nil
-}
-
-// Next implements the Executor Next interface.
-func (e *ShowSlowExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.Reset()
-	if e.cursor >= len(e.result) {
-		return nil
-	}
-
-	for e.cursor < len(e.result) && req.NumRows() < e.maxChunkSize {
-		slow := e.result[e.cursor]
-		req.AppendString(0, slow.SQL)
-		req.AppendTime(1, types.Time{
-			Time: types.FromGoTime(slow.Start),
-			Type: mysql.TypeTimestamp,
-			Fsp:  types.MaxFsp,
-		})
-		req.AppendDuration(2, types.Duration{Duration: slow.Duration, Fsp: types.MaxFsp})
-		req.AppendString(3, slow.Detail.String())
-		if slow.Succ {
-			req.AppendInt64(4, 1)
-		} else {
-			req.AppendInt64(4, 0)
-		}
-		req.AppendUint64(5, slow.ConnID)
-		req.AppendUint64(6, slow.TxnTS)
-		req.AppendString(7, slow.User)
-		req.AppendString(8, slow.DB)
-		req.AppendString(9, slow.TableIDs)
-		req.AppendString(10, slow.IndexNames)
-		if slow.Internal {
-			req.AppendInt64(11, 1)
-		} else {
-			req.AppendInt64(11, 0)
-		}
-		req.AppendString(12, slow.Digest)
-		e.cursor++
 	}
 	return nil
 }
@@ -1486,24 +1409,9 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 	hints := extractStmtHintsFromStmtNode(s)
 	stmtHints, hintWarns := handleStmtHints(hints)
 	vars := ctx.GetSessionVars()
-	memQuota := vars.MemQuotaQuery
-	if stmtHints.HasMemQuotaHint {
-		memQuota = stmtHints.MemQuotaQuery
-	}
 	sc := &stmtctx.StatementContext{
-		StmtHints:  stmtHints,
-		TimeZone:   vars.Location(),
-		MemTracker: memory.NewTracker(stringutil.MemoizeStr(s.Text), memQuota),
-	}
-	switch config.GetGlobalConfig().OOMAction {
-	case config.OOMActionCancel:
-		action := &memory.PanicOnExceed{ConnID: ctx.GetSessionVars().ConnectionID}
-		sc.MemTracker.SetActionOnExceed(action)
-	case config.OOMActionLog:
-		fallthrough
-	default:
-		action := &memory.LogOnExceed{ConnID: ctx.GetSessionVars().ConnectionID}
-		sc.MemTracker.SetActionOnExceed(action)
+		StmtHints: stmtHints,
+		TimeZone:  vars.Location(),
 	}
 	if execStmt, ok := s.(*ast.ExecuteStmt); ok {
 		s, err = getPreparedStmt(execStmt, vars)

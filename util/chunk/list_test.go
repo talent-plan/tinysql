@@ -14,16 +14,12 @@
 package chunk
 
 import (
-	"math"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
+	"strconv"
+	"strings"
+	"testing"
 )
 
 func (s *testChunkSuite) TestList(c *check.C) {
@@ -81,41 +77,6 @@ func (s *testChunkSuite) TestList(c *check.C) {
 	c.Assert(results, check.DeepEquals, expected)
 }
 
-func (s *testChunkSuite) TestListMemoryUsage(c *check.C) {
-	fieldTypes := make([]*types.FieldType, 0, 5)
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeFloat})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeVarchar})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeJSON})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeDatetime})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeDuration})
-
-	jsonObj, err := json.ParseBinaryFromString("1")
-	c.Assert(err, check.IsNil)
-	timeObj := types.Time{Time: types.FromGoTime(time.Now()), Fsp: 0, Type: mysql.TypeDatetime}
-	durationObj := types.Duration{Duration: math.MaxInt64, Fsp: 0}
-
-	maxChunkSize := 2
-	srcChk := NewChunkWithCapacity(fieldTypes, maxChunkSize)
-	srcChk.AppendFloat32(0, 12.4)
-	srcChk.AppendString(1, "123")
-	srcChk.AppendJSON(2, jsonObj)
-	srcChk.AppendTime(3, timeObj)
-	srcChk.AppendDuration(4, durationObj)
-
-	list := NewList(fieldTypes, maxChunkSize, maxChunkSize*2)
-	c.Assert(list.GetMemTracker().BytesConsumed(), check.Equals, int64(0))
-
-	list.AppendRow(srcChk.GetRow(0))
-	c.Assert(list.GetMemTracker().BytesConsumed(), check.Equals, int64(0))
-
-	memUsage := list.chunks[0].MemoryUsage()
-	list.Reset()
-	c.Assert(list.GetMemTracker().BytesConsumed(), check.Equals, memUsage)
-
-	list.Add(srcChk)
-	c.Assert(list.GetMemTracker().BytesConsumed(), check.Equals, memUsage+srcChk.MemoryUsage())
-}
-
 func (s *testChunkSuite) TestListPrePreAlloc4RowAndInsert(c *check.C) {
 	fieldTypes := make([]*types.FieldType, 0, 4)
 	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeFloat})
@@ -154,33 +115,6 @@ func (s *testChunkSuite) TestListPrePreAlloc4RowAndInsert(c *check.C) {
 		c.Assert(srcRow.GetInt64(1), check.Equals, destRow.GetInt64(1))
 		c.Assert(srcRow.GetMyDecimal(2).Compare(destRow.GetMyDecimal(2)) == 0, check.IsTrue)
 		c.Assert(srcRow.GetString(3), check.Equals, destRow.GetString(3))
-	}
-}
-
-func BenchmarkListMemoryUsage(b *testing.B) {
-	fieldTypes := make([]*types.FieldType, 0, 4)
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeFloat})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeVarchar})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeDatetime})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeDuration})
-
-	chk := NewChunkWithCapacity(fieldTypes, 2)
-	timeObj := types.Time{Time: types.FromGoTime(time.Now()), Fsp: 0, Type: mysql.TypeDatetime}
-	durationObj := types.Duration{Duration: math.MaxInt64, Fsp: 0}
-	chk.AppendFloat64(0, 123.123)
-	chk.AppendString(1, "123")
-	chk.AppendTime(2, timeObj)
-	chk.AppendDuration(3, durationObj)
-	row := chk.GetRow(0)
-
-	initCap := 50
-	list := NewList(fieldTypes, 2, 8)
-	for i := 0; i < initCap; i++ {
-		list.AppendRow(row)
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		list.GetMemTracker().BytesConsumed()
 	}
 }
 

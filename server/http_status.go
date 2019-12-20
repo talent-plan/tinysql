@@ -219,8 +219,6 @@ func (s *Server) startHTTPServer() {
 		err = zw.Close()
 		terror.Log(err)
 	})
-	fetcher := sqlInfoFetcher{store: tikvHandlerTool.Store}
-	serverMux.HandleFunc("/debug/sub-optimal-plan", fetcher.zipInfoForSQL)
 
 	var (
 		httpRouterPage bytes.Buffer

@@ -75,7 +75,6 @@ func (h *rpcHandler) handleAnalyzeIndexReq(req *coprocessor.Request, analyzeReq 
 		isolationLevel: h.isolationLevel,
 		mvccStore:      h.mvccStore,
 		IndexScan:      &tipb.IndexScan{Desc: false},
-		execDetail:     new(execDetail),
 	}
 	statsBuilder := statistics.NewSortedBuilder(flagsToStatementContext(analyzeReq.Flags), analyzeReq.IdxReq.BucketSize, 0, types.NewFieldType(mysql.TypeBlob))
 	var cms *statistics.CMSketch
@@ -147,7 +146,6 @@ func (h *rpcHandler) handleAnalyzeColumnsReq(req *coprocessor.Request, analyzeRe
 			startTS:        startTS,
 			isolationLevel: h.isolationLevel,
 			mvccStore:      h.mvccStore,
-			execDetail:     new(execDetail),
 		},
 	}
 	e.fields = make([]*ast.ResultField, len(columns))

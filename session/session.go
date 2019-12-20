@@ -61,7 +61,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/timeutil"
@@ -441,12 +440,7 @@ func (s *session) CommitTxn(ctx context.Context) error {
 		ctx = opentracing.ContextWithSpan(ctx, span1)
 	}
 
-	var commitDetail *execdetails.CommitDetails
-	ctx = context.WithValue(ctx, execdetails.CommitDetailCtxKey, &commitDetail)
 	err := s.doCommitWithRetry(ctx)
-	if commitDetail != nil {
-		s.sessionVars.StmtCtx.MergeExecDetails(nil, commitDetail)
-	}
 
 	failpoint.Inject("keepHistory", func(val failpoint.Value) {
 		if val.(bool) {

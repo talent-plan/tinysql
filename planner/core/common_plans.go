@@ -43,13 +43,6 @@ type ShowDDL struct {
 	baseSchemaProducer
 }
 
-// ShowSlow is for showing slow queries.
-type ShowSlow struct {
-	baseSchemaProducer
-
-	*ast.ShowSlow
-}
-
 // ShowDDLJobQueries is for showing DDL job queries sql.
 type ShowDDLJobQueries struct {
 	baseSchemaProducer
@@ -583,7 +576,6 @@ type Explain struct {
 
 	TargetPlan Plan
 	Format     string
-	Analyze    bool
 	ExecStmt   ast.StmtNode
 
 	Rows           [][]string
@@ -596,10 +588,8 @@ func (e *Explain) prepareSchema() error {
 	format := strings.ToLower(e.Format)
 
 	switch {
-	case format == ast.ExplainFormatROW && !e.Analyze:
+	case format == ast.ExplainFormatROW:
 		fieldNames = []string{"id", "count", "task", "operator info"}
-	case format == ast.ExplainFormatROW && e.Analyze:
-		fieldNames = []string{"id", "count", "task", "operator info", "execution info", "memory"}
 	case format == ast.ExplainFormatDOT:
 		fieldNames = []string{"dot contents"}
 	case format == ast.ExplainFormatHint:
@@ -786,33 +776,6 @@ func (e *Explain) prepareOperatorInfo(p Plan, taskType string, indent string, is
 	}
 	explainID := p.ExplainID().String()
 	row := []string{PrettyIdentifier(explainID, indent, isLastChild), count, taskType, operatorInfo}
-	if e.Analyze {
-		runtimeStatsColl := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl
-		// There maybe some mock information for cop task to let runtimeStatsColl.Exists(p.ExplainID()) is true.
-		// So check copTaskExecDetail first and print the real cop task information if it's not empty.
-		var analyzeInfo string
-		if runtimeStatsColl.ExistsCopStats(explainID) {
-			analyzeInfo = runtimeStatsColl.GetCopStats(explainID).String()
-		} else if runtimeStatsColl.ExistsRootStats(explainID) {
-			analyzeInfo = runtimeStatsColl.GetRootStats(explainID).String()
-		} else {
-			analyzeInfo = "time:0ns, loops:0, rows:0"
-		}
-		switch p.(type) {
-		case *PhysicalTableReader, *PhysicalIndexReader, *PhysicalIndexLookUpReader:
-			if s := runtimeStatsColl.GetReaderStats(explainID); s != nil && len(s.String()) > 0 {
-				analyzeInfo += ", " + s.String()
-			}
-		}
-		row = append(row, analyzeInfo)
-
-		memTracker := e.ctx.GetSessionVars().StmtCtx.MemTracker.SearchTracker(p.ExplainID().String())
-		if memTracker != nil {
-			row = append(row, memTracker.BytesToString(memTracker.MaxConsumed()))
-		} else {
-			row = append(row, "N/A")
-		}
-	}
 	e.Rows = append(e.Rows, row)
 }
 

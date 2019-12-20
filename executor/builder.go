@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tidb/util/timeutil"
@@ -150,8 +149,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildShowDDLJobs(v)
 	case *plannercore.ShowDDLJobQueries:
 		return b.buildShowDDLJobQueries(v)
-	case *plannercore.ShowSlow:
-		return b.buildShowSlow(v)
 	case *plannercore.PhysicalShow:
 		return b.buildShow(v)
 	case *plannercore.Simple:
@@ -295,14 +292,6 @@ func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQuerie
 	e := &ShowDDLJobQueriesExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		jobIDs:       v.JobIDs,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildShowSlow(v *plannercore.ShowSlow) Executor {
-	e := &ShowSlowExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		ShowSlow:     v.ShowSlow,
 	}
 	return e
 }
@@ -841,10 +830,6 @@ func (b *executorBuilder) buildExplain(v *plannercore.Explain) Executor {
 	explainExec := &ExplainExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		explain:      v,
-	}
-	if v.Analyze {
-		b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl = execdetails.NewRuntimeStatsColl()
-		explainExec.analyzeExec = b.build(v.TargetPlan)
 	}
 	return explainExec
 }
@@ -1920,7 +1905,7 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 	} else {
 		e.feedback = statistics.NewQueryFeedback(getPhysicalTableID(tbl), ts.Hist, int64(ts.StatsCount()), ts.Desc)
 	}
-	collect := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(ts.Ranges))
+	collect := e.feedback.CollectFeedback(len(ts.Ranges))
 	if !collect {
 		e.feedback.Invalidate()
 	}
@@ -1990,7 +1975,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	} else {
 		e.feedback = statistics.NewQueryFeedback(e.physicalTableID, is.Hist, int64(is.StatsCount()), is.Desc)
 	}
-	collect := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(is.Ranges))
+	collect := e.feedback.CollectFeedback(len(is.Ranges))
 	if !collect {
 		e.feedback.Invalidate()
 	}
@@ -2074,7 +2059,7 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 	// do not collect the feedback for table request.
 	collectTable := false
 	e.tableRequest.CollectRangeCounts = &collectTable
-	collectIndex := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(is.Ranges))
+	collectIndex := e.feedback.CollectFeedback(len(is.Ranges))
 	if !collectIndex {
 		e.feedback.Invalidate()
 	}
@@ -2171,7 +2156,7 @@ func (builder *dataReaderBuilder) buildTableReaderForIndexJoin(ctx context.Conte
 }
 
 func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Context, e *TableReaderExecutor, handles []int64) (Executor, error) {
-	if e.runtimeStats != nil && e.dagPB.CollectExecutionSummaries == nil {
+	if e.dagPB.CollectExecutionSummaries == nil {
 		colExec := true
 		e.dagPB.CollectExecutionSummaries = &colExec
 	}

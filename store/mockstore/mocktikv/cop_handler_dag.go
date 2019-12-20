@@ -79,11 +79,6 @@ func (h *rpcHandler) handleCopDAGRequest(req *coprocessor.Request) *coprocessor.
 		rows = append(rows, row)
 	}
 
-	var execDetails []*execDetail
-	if dagReq.CollectExecutionSummaries != nil && *dagReq.CollectExecutionSummaries {
-		execDetails = e.ExecDetails()
-	}
-
 	selResp := h.initSelectResponse(err, dagCtx.evalCtx.sc.GetWarnings(), e.Counts())
 	if err == nil {
 		err = h.fillUpData4SelectResponse(selResp, dagReq, dagCtx, rows)
@@ -91,7 +86,7 @@ func (h *rpcHandler) handleCopDAGRequest(req *coprocessor.Request) *coprocessor.
 	// FIXME: some err such as (overflow) will be include in Response.OtherError with calling this buildResp.
 	//  Such err should only be marshal in the data but not in OtherError.
 	//  However, we can not distinguish such err now.
-	return buildResp(selResp, execDetails, err)
+	return buildResp(selResp, err)
 }
 
 func (h *rpcHandler) buildDAGExecutor(req *coprocessor.Request) (*dagContext, executor, *tipb.DAGRequest, error) {
@@ -165,7 +160,7 @@ func (h *rpcHandler) buildExec(ctx *dagContext, curr *tipb.Executor) (executor, 
 	case tipb.ExecType_TypeTopN:
 		currExec, err = h.buildTopN(ctx, curr)
 	case tipb.ExecType_TypeLimit:
-		currExec = &limitExec{limit: curr.Limit.GetLimit(), execDetail: new(execDetail)}
+		currExec = &limitExec{limit: curr.Limit.GetLimit()}
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet.", curr.GetTp())
@@ -207,7 +202,6 @@ func (h *rpcHandler) buildTableScan(ctx *dagContext, executor *tipb.Executor) (*
 		isolationLevel: h.isolationLevel,
 		resolvedLocks:  h.resolvedLocks,
 		mvccStore:      h.mvccStore,
-		execDetail:     new(execDetail),
 	}
 	if ctx.dagReq.CollectRangeCounts != nil && *ctx.dagReq.CollectRangeCounts {
 		e.counts = make([]int64, len(ranges))
@@ -251,7 +245,6 @@ func (h *rpcHandler) buildIndexScan(ctx *dagContext, executor *tipb.Executor) (*
 		resolvedLocks:  h.resolvedLocks,
 		mvccStore:      h.mvccStore,
 		pkStatus:       pkStatus,
-		execDetail:     new(execDetail),
 	}
 	if ctx.dagReq.CollectRangeCounts != nil && *ctx.dagReq.CollectRangeCounts {
 		e.counts = make([]int64, len(ranges))
@@ -279,7 +272,6 @@ func (h *rpcHandler) buildSelection(ctx *dagContext, executor *tipb.Executor) (*
 		relatedColOffsets: relatedColOffsets,
 		conditions:        conds,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
-		execDetail:        new(execDetail),
 	}, nil
 }
 
@@ -328,7 +320,6 @@ func (h *rpcHandler) buildHashAgg(ctx *dagContext, executor *tipb.Executor) (*ha
 		groupKeys:         make([][]byte, 0),
 		relatedColOffsets: relatedColOffsets,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
-		execDetail:        new(execDetail),
 	}, nil
 }
 
@@ -350,7 +341,6 @@ func (h *rpcHandler) buildStreamAgg(ctx *dagContext, executor *tipb.Executor) (*
 		currGroupByValues: make([][]byte, 0),
 		relatedColOffsets: relatedColOffsets,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
-		execDetail:        new(execDetail),
 	}, nil
 }
 
@@ -385,7 +375,6 @@ func (h *rpcHandler) buildTopN(ctx *dagContext, executor *tipb.Executor) (*topNE
 		relatedColOffsets: relatedColOffsets,
 		orderByExprs:      conds,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
-		execDetail:        new(execDetail),
 	}, nil
 }
 
@@ -666,23 +655,8 @@ func (h *rpcHandler) encodeChunk(selResp *tipb.SelectResponse, rows [][][]byte, 
 	return nil
 }
 
-func buildResp(selResp *tipb.SelectResponse, execDetails []*execDetail, err error) *coprocessor.Response {
+func buildResp(selResp *tipb.SelectResponse, err error) *coprocessor.Response {
 	resp := &coprocessor.Response{}
-
-	if len(execDetails) > 0 {
-		execSummary := make([]*tipb.ExecutorExecutionSummary, 0, len(execDetails))
-		for _, d := range execDetails {
-			costNs := uint64(d.timeProcessed / time.Nanosecond)
-			rows := uint64(d.numProducedRows)
-			numIter := uint64(d.numIterations)
-			execSummary = append(execSummary, &tipb.ExecutorExecutionSummary{
-				TimeProcessedNs: &costNs,
-				NumProducedRows: &rows,
-				NumIterations:   &numIter,
-			})
-		}
-		selResp.ExecutionSummaries = execSummary
-	}
 
 	if err != nil {
 		if locked, ok := errors.Cause(err).(*ErrLocked); ok {

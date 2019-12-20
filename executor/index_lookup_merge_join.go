@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -26,9 +25,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 // IndexLookUpMergeJoin realizes IndexLookUpJoin by merge join
@@ -62,8 +59,6 @@ type IndexLookUpMergeJoin struct {
 
 	// lastColHelper store the information for last col if there's complicated filter like col > x_col and col < x_col + 100.
 	lastColHelper *plannercore.ColWithCmpFuncManager
-
-	memTracker *memory.Tracker // track memory usage
 }
 
 type outerMergeCtx struct {
@@ -98,8 +93,6 @@ type lookUpMergeJoinTask struct {
 
 	doneErr error
 	results chan *indexMergeJoinResult
-
-	memTracker *memory.Tracker
 }
 
 type outerMergeWorker struct {
@@ -117,8 +110,6 @@ type outerMergeWorker struct {
 
 	resultCh chan<- *lookUpMergeJoinTask
 	innerCh  chan<- *lookUpMergeJoinTask
-
-	parentMemTracker *memory.Tracker
 }
 
 type innerMergeWorker struct {
@@ -171,8 +162,6 @@ func (e *IndexLookUpMergeJoin) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaIndexLookupJoin)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 	e.startWorkers(ctx)
 	return nil
 }
@@ -211,7 +200,6 @@ func (e *IndexLookUpMergeJoin) newOuterWorker(resultCh, innerCh chan *lookUpMerg
 		innerCh:               innerCh,
 		batchSize:             32,
 		maxBatchSize:          e.ctx.GetSessionVars().IndexJoinBatchSize,
-		parentMemTracker:      e.memTracker,
 		nextColCompareFilters: e.lastColHelper,
 	}
 	return omw
@@ -336,8 +324,6 @@ func (omw *outerMergeWorker) buildTask(ctx context.Context) (*lookUpMergeJoinTas
 		results:     make(chan *indexMergeJoinResult, numResChkHold),
 		outerResult: chunk.NewList(omw.rowTypes, omw.executor.base().initCap, omw.executor.base().maxChunkSize),
 	}
-	task.memTracker = memory.NewTracker(stringutil.MemoizeStr(func() string { return fmt.Sprintf("lookup join task %p", task) }), -1)
-	task.memTracker.AttachTo(omw.parentMemTracker)
 
 	omw.increaseBatchSize()
 	requiredRows := omw.batchSize
@@ -359,7 +345,6 @@ func (omw *outerMergeWorker) buildTask(ctx context.Context) (*lookUpMergeJoinTas
 
 		task.outerResult.Add(execChk)
 		requiredRows -= execChk.NumRows()
-		task.memTracker.Consume(execChk.MemoryUsage())
 	}
 
 	if task.outerResult.Len() == 0 {
@@ -426,7 +411,6 @@ func (imw *innerMergeWorker) handleTask(ctx context.Context, task *lookUpMergeJo
 			}
 		}
 	}
-	task.memTracker.Consume(int64(cap(task.outerOrderIdx)))
 	// needOuterSort means the outer side property items can't guarantee the order of join keys.
 	// Because the necessary condition of merge join is both outer and inner keep order of join keys.
 	// In this case, we need sort the outer side.
@@ -683,10 +667,5 @@ func (e *IndexLookUpMergeJoin) Close() error {
 		close(e.joinChkResourceCh[i])
 	}
 	e.joinChkResourceCh = nil
-	e.memTracker = nil
-	if e.runtimeStats != nil {
-		concurrency := cap(e.resultCh)
-		e.runtimeStats.SetConcurrencyInfo("Concurrency", concurrency)
-	}
 	return e.baseExecutor.Close()
 }

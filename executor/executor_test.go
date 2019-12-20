@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pb "github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -52,7 +51,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -62,7 +60,6 @@ import (
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
@@ -72,8 +69,6 @@ import (
 	"github.com/pingcap/tidb/util/testutil"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tipb/go-tipb"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func TestT(t *testing.T) {
@@ -111,7 +106,6 @@ var _ = Suite(&testSuite8{&baseTestSuite{}})
 var _ = SerialSuites(&testShowStatsSuite{&baseTestSuite{}})
 var _ = Suite(&testBypassSuite{})
 var _ = Suite(&testUpdateSuite{})
-var _ = Suite(&testOOMSuite{})
 var _ = Suite(&testPointGetSuite{})
 var _ = Suite(&testBatchPointGetSuite{})
 var _ = Suite(&testFlushSuite{})
@@ -4367,147 +4361,6 @@ func (s *testSuiteP2) TestIssue10435(c *C) {
 	tk.MustQuery("SELECT SUM(i) OVER W FROM t1 WINDOW w AS (PARTITION BY j ORDER BY i) ORDER BY 1+SUM(i) OVER w").Check(
 		testkit.Rows("1", "2", "3", "4", "11", "22", "31", "33", "44", "61", "62", "93", "122", "124", "183", "244"),
 	)
-}
-
-func (s *testSuiteP2) TestUnsignedFeedback(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	oriProbability := statistics.FeedbackProbability.Load()
-	statistics.FeedbackProbability.Store(1.0)
-	defer func() { statistics.FeedbackProbability.Store(oriProbability) }()
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a bigint unsigned, b int, primary key(a))")
-	tk.MustExec("insert into t values (1,1),(2,2)")
-	tk.MustExec("analyze table t")
-	tk.MustQuery("select count(distinct b) from t").Check(testkit.Rows("2"))
-	result := tk.MustQuery("explain analyze select count(distinct b) from t")
-	c.Assert(result.Rows()[2][3], Equals, "table:t, range:[0,+inf], keep order:false")
-}
-
-type testOOMSuite struct {
-	store kv.Storage
-	do    *domain.Domain
-	oom   *oomCapturer
-}
-
-func (s *testOOMSuite) SetUpSuite(c *C) {
-	c.Skip("log.ReplaceGlobals(lg, r) in registerHook() may result in data race")
-	testleak.BeforeTest()
-	s.registerHook()
-	var err error
-	s.store, err = mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-	session.SetSchemaLease(0)
-	domain.RunAutoAnalyze = false
-	s.do, err = session.BootstrapSession(s.store)
-	c.Assert(err, IsNil)
-}
-
-func (s *testOOMSuite) registerHook() {
-	conf := &log.Config{Level: os.Getenv("log_level"), File: log.FileLogConfig{}}
-	_, r, _ := log.InitLogger(conf)
-	s.oom = &oomCapturer{r.Core, ""}
-	lg := zap.New(s.oom)
-	log.ReplaceGlobals(lg, r)
-}
-
-func (s *testOOMSuite) TestDistSQLMemoryControl(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, a int, b int, index idx_a(`a`))")
-	tk.MustExec("insert into t values (1,1,1), (2,2,2), (3,3,3)")
-
-	s.oom.tracker = ""
-	tk.MustQuery("select * from t")
-	c.Assert(s.oom.tracker, Equals, "")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = 1
-	tk.MustQuery("select * from t")
-	c.Assert(s.oom.tracker, Equals, "TableReaderDistSQLTracker")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = -1
-
-	s.oom.tracker = ""
-	tk.MustQuery("select a from t")
-	c.Assert(s.oom.tracker, Equals, "")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = 1
-	tk.MustQuery("select a from t use index(idx_a)")
-	c.Assert(s.oom.tracker, Equals, "IndexReaderDistSQLTracker")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = -1
-
-	s.oom.tracker = ""
-	tk.MustQuery("select * from t")
-	c.Assert(s.oom.tracker, Equals, "")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = 1
-	tk.MustQuery("select * from t use index(idx_a)")
-	c.Assert(s.oom.tracker, Equals, "IndexLookupDistSQLTracker")
-	tk.Se.GetSessionVars().MemQuotaDistSQL = -1
-}
-
-func setOOMAction(action string) {
-	old := config.GetGlobalConfig()
-	newConf := *old
-	newConf.OOMAction = action
-	config.StoreGlobalConfig(&newConf)
-}
-
-func (s *testSuite) TestOOMPanicAction(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int primary key, b double);")
-	tk.MustExec("insert into t values (1,1)")
-	sm := &mockSessionManager1{
-		PS: make([]*util.ProcessInfo, 0),
-	}
-	tk.Se.SetSessionManager(sm)
-	orgAction := config.GetGlobalConfig().OOMAction
-	setOOMAction(config.OOMActionCancel)
-	defer func() {
-		setOOMAction(orgAction)
-	}()
-	tk.MustExec("set @@tidb_mem_quota_query=1;")
-	err := tk.QueryToErr("select sum(b) from t group by a;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Matches, "Out Of Memory Quota!.*")
-
-	// Test insert from select oom panic.
-	tk.MustExec("drop table if exists t,t1")
-	tk.MustExec("create table t (a bigint);")
-	tk.MustExec("create table t1 (a bigint);")
-	tk.MustExec("insert into t1 values (1),(2),(3),(4),(5);")
-	tk.MustExec("set @@tidb_mem_quota_query=200;")
-	_, err = tk.Exec("insert into t select a from t1 order by a desc;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Matches, "Out Of Memory Quota!.*")
-}
-
-type oomCapturer struct {
-	zapcore.Core
-	tracker string
-}
-
-func (h *oomCapturer) Write(entry zapcore.Entry, fields []zapcore.Field) error {
-	if strings.Contains(entry.Message, "memory exceeds quota") {
-		err, _ := fields[0].Interface.(error)
-		str := err.Error()
-		begin := strings.Index(str, "8001]")
-		if begin == -1 {
-			panic("begin not found")
-		}
-		end := strings.Index(str, " holds")
-		if end == -1 {
-			panic("end not found")
-		}
-		h.tracker = str[begin+len("8001]") : end]
-	}
-	return nil
-}
-
-func (h *oomCapturer) Check(e zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
-	if h.Enabled(e.Level) {
-		return ce.AddCore(e, h)
-	}
-	return ce
 }
 
 func (s *testSuiteP2) TestPointGetPreparedPlan(c *C) {

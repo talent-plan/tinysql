@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/stringutil"
 )
 
@@ -45,13 +44,10 @@ type SortExec struct {
 	rowChunks *chunk.List
 	// rowPointer store the chunk index and row index for each row.
 	rowPtrs []chunk.RowPtr
-
-	memTracker *memory.Tracker
 }
 
 // Close implements the Executor Close interface.
 func (e *SortExec) Close() error {
-	e.memTracker = nil
 	return e.children[0].Close()
 }
 
@@ -59,12 +55,6 @@ func (e *SortExec) Close() error {
 func (e *SortExec) Open(ctx context.Context) error {
 	e.fetched = false
 	e.Idx = 0
-
-	// To avoid duplicated initialization for TopNExec.
-	if e.memTracker == nil {
-		e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaSort)
-		e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-	}
 	return e.children[0].Open(ctx)
 }
 
@@ -93,8 +83,6 @@ func (e *SortExec) Next(ctx context.Context, req *chunk.Chunk) error {
 func (e *SortExec) fetchRowChunks(ctx context.Context) error {
 	fields := retTypes(e)
 	e.rowChunks = chunk.NewList(fields, e.initCap, e.maxChunkSize)
-	e.rowChunks.GetMemTracker().AttachTo(e.memTracker)
-	e.rowChunks.GetMemTracker().SetLabel(rowChunksLabel)
 	for {
 		chk := newFirstChunk(e.children[0])
 		err := Next(ctx, e.children[0], chk)
@@ -112,7 +100,6 @@ func (e *SortExec) fetchRowChunks(ctx context.Context) error {
 
 func (e *SortExec) initPointers() {
 	e.rowPtrs = make([]chunk.RowPtr, 0, e.rowChunks.Len())
-	e.memTracker.Consume(int64(8 * e.rowChunks.Len()))
 	for chkIdx := 0; chkIdx < e.rowChunks.NumChunks(); chkIdx++ {
 		rowChk := e.rowChunks.GetChunk(chkIdx)
 		for rowIdx := 0; rowIdx < rowChk.NumRows(); rowIdx++ {
@@ -219,8 +206,6 @@ func (h *topNChunkHeap) Swap(i, j int) {
 
 // Open implements the Executor Open interface.
 func (e *TopNExec) Open(ctx context.Context) error {
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaTopn)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 	return e.SortExec.Open(ctx)
 }
 
@@ -254,8 +239,6 @@ func (e *TopNExec) Next(ctx context.Context, req *chunk.Chunk) error {
 func (e *TopNExec) loadChunksUntilTotalLimit(ctx context.Context) error {
 	e.chkHeap = &topNChunkHeap{e}
 	e.rowChunks = chunk.NewList(retTypes(e), e.initCap, e.maxChunkSize)
-	e.rowChunks.GetMemTracker().AttachTo(e.memTracker)
-	e.rowChunks.GetMemTracker().SetLabel(rowChunksLabel)
 	for uint64(e.rowChunks.Len()) < e.totalLimit {
 		srcChk := newFirstChunk(e.children[0])
 		// adjust required rows by total limit
@@ -333,12 +316,7 @@ func (e *TopNExec) doCompaction() error {
 		newRowPtr := newRowChunks.AppendRow(e.rowChunks.GetRow(rowPtr))
 		newRowPtrs = append(newRowPtrs, newRowPtr)
 	}
-	newRowChunks.GetMemTracker().SetLabel(rowChunksLabel)
-	e.memTracker.ReplaceChild(e.rowChunks.GetMemTracker(), newRowChunks.GetMemTracker())
 	e.rowChunks = newRowChunks
-
-	e.memTracker.Consume(int64(-8 * len(e.rowPtrs)))
-	e.memTracker.Consume(int64(8 * len(newRowPtrs)))
 	e.rowPtrs = newRowPtrs
 	return nil
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -41,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
@@ -279,7 +277,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		if r == nil {
 			return
 		}
-		if str, ok := r.(string); !ok || !strings.HasPrefix(str, memory.PanicMemoryExceed) {
+		if _, ok := r.(string); !ok {
 			panic(r)
 		}
 		err = errors.Errorf("%v", r)
@@ -511,17 +509,11 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	}
 	sql := FormatSQL(a.Text, sessVars.PreparedParams)
 
-	var tableIDs, indexNames string
-	if len(sessVars.StmtCtx.TableIDs) > 0 {
-		tableIDs = strings.Replace(fmt.Sprintf("%v", sessVars.StmtCtx.TableIDs), " ", ",", -1)
-	}
+	var indexNames string
 	if len(sessVars.StmtCtx.IndexNames) > 0 {
 		indexNames = strings.Replace(fmt.Sprintf("%v", sessVars.StmtCtx.IndexNames), " ", ",", -1)
 	}
-	execDetail := sessVars.StmtCtx.GetExecDetails()
-	copTaskInfo := sessVars.StmtCtx.CopTasksDetails()
 	statsInfos := plannercore.GetStatsInfo(a.Plan)
-	memMax := sessVars.StmtCtx.MemTracker.MaxConsumed()
 	_, digest := sessVars.StmtCtx.SQLDigest()
 	slowItems := &variable.SlowQueryLogItems{
 		TxnTS:          txnTS,
@@ -532,9 +524,6 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 		TimeCompile:    sessVars.DurationCompile,
 		IndexNames:     indexNames,
 		StatsInfos:     statsInfos,
-		CopTasks:       copTaskInfo,
-		ExecDetail:     execDetail,
-		MemMax:         memMax,
 		Succ:           succ,
 		Prepared:       a.isPreparedStmt,
 		HasMoreResults: hasMoreResults,
@@ -547,26 +536,5 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	} else {
 		logutil.SlowQueryLogger.Warn(sessVars.SlowLogFormat(slowItems))
 		metrics.TotalQueryProcHistogram.Observe(costTime.Seconds())
-		metrics.TotalCopProcHistogram.Observe(execDetail.ProcessTime.Seconds())
-		metrics.TotalCopWaitHistogram.Observe(execDetail.WaitTime.Seconds())
-		var userString string
-		if sessVars.User != nil {
-			userString = sessVars.User.String()
-		}
-		domain.GetDomain(a.Ctx).LogSlowQuery(&domain.SlowQueryInfo{
-			SQL:        sql.String(),
-			Digest:     digest,
-			Start:      sessVars.StartTime,
-			Duration:   costTime,
-			Detail:     sessVars.StmtCtx.GetExecDetails(),
-			Succ:       succ,
-			ConnID:     sessVars.ConnectionID,
-			TxnTS:      txnTS,
-			User:       userString,
-			DB:         sessVars.CurrentDB,
-			TableIDs:   tableIDs,
-			IndexNames: indexNames,
-			Internal:   sessVars.InRestrictedSQL,
-		})
 	}
 }

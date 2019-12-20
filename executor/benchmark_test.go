@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -554,7 +553,6 @@ func defaultHashJoinTestCase(cols []*types.FieldType) *hashJoinTestCase {
 	ctx := mock.NewContext()
 	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
 	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
-	ctx.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(nil, -1)
 	ctx.GetSessionVars().IndexLookupJoinConcurrency = 4
 	tc := &hashJoinTestCase{rows: 100000, concurrency: 4, ctx: ctx, keyIdx: []int{0, 1}}
 	tc.cols = cols
@@ -688,7 +686,6 @@ func benchmarkBuildHashTableForList(b *testing.B, casTest *hashJoinTestCase) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		exec.rowContainer = nil
-		exec.memTracker = memory.NewTracker(exec.id, exec.ctx.GetSessionVars().MemQuotaHashJoin)
 		innerResultCh := make(chan *chunk.Chunk, len(dataSource1.chunks))
 		for _, chk := range dataSource1.chunks {
 			innerResultCh <- chk
@@ -751,7 +748,6 @@ func defaultIndexJoinTestCase() *indexJoinTestCase {
 	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
 	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
 	ctx.GetSessionVars().SnapshotTS = 1
-	ctx.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(nil, -1)
 	tc := &indexJoinTestCase{
 		outerRows:       100000,
 		innerRows:       variable.DefMaxChunkSize * 100,

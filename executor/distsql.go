@@ -16,14 +16,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"math"
-	"runtime"
-	"sort"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"unsafe"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -39,11 +31,15 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
 	"go.uber.org/zap"
+	"math"
+	"runtime"
+	"sort"
+	"sync"
+	"sync/atomic"
 )
 
 var (
@@ -86,8 +82,7 @@ type lookupTableTask struct {
 	//
 	// Step 1~3 are completed in "tableWorker.executeTask".
 	// Step 4   is  completed in "IndexLookUpExecutor.Next".
-	memUsage   int64
-	memTracker *memory.Tracker
+	memUsage int64
 }
 
 func (task *lookupTableTask) Len() int {
@@ -230,8 +225,6 @@ type IndexReaderExecutor struct {
 	colLens        []int
 	plans          []plannercore.PhysicalPlan
 
-	memTracker *memory.Tracker
-
 	selectResultHook // for testing
 }
 
@@ -239,10 +232,6 @@ type IndexReaderExecutor struct {
 func (e *IndexReaderExecutor) Close() error {
 	err := e.result.Close()
 	e.result = nil
-	if e.runtimeStats != nil {
-		copStats := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.GetRootStats(e.plans[0].ExplainID().String())
-		copStats.SetRowNum(e.feedback.Actual())
-	}
 	e.ctx.StoreQueryFeedback(e.feedback)
 	return err
 }
@@ -282,14 +271,8 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		}
 	}
 
-	if e.runtimeStats != nil {
-		collExec := true
-		e.dagPB.CollectExecutionSummaries = &collExec
-	}
 	e.kvRanges = kvRanges
 
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaDistSQL)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 	var builder distsql.RequestBuilder
 	kvReq, err := builder.SetKeyRanges(kvRanges).
 		SetDAGRequest(e.dagPB).
@@ -298,7 +281,6 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		SetKeepOrder(e.keepOrder).
 		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
-		SetMemTracker(e.memTracker).
 		Build()
 	if err != nil {
 		e.feedback.Invalidate()
@@ -345,9 +327,6 @@ type IndexLookUpExecutor struct {
 	resultCurr *lookupTableTask
 	feedback   *statistics.QueryFeedback
 
-	// memTracker is used to track the memory usage of this executor.
-	memTracker *memory.Tracker
-
 	// checkIndexValue is used to check the consistency of the index data.
 	*checkIndexValue
 
@@ -390,13 +369,6 @@ func (e *IndexLookUpExecutor) Open(ctx context.Context) error {
 }
 
 func (e *IndexLookUpExecutor) open(ctx context.Context) error {
-	// We have to initialize "memTracker" and other execution resources in here
-	// instead of in function "Open", because this "IndexLookUpExecutor" may be
-	// constructed by a "IndexLookUpJoin" and "Open" will not be called in that
-	// situation.
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaIndexLookupReader)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-
 	e.finished = make(chan struct{})
 	e.resultCh = make(chan *lookupTableTask, atomic.LoadInt32(&LookupTableTaskChannelSize))
 
@@ -431,13 +403,6 @@ func (e *IndexLookUpExecutor) startWorkers(ctx context.Context, initBatchSize in
 
 // startIndexWorker launch a background goroutine to fetch handles, send the results to workCh.
 func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []kv.KeyRange, workCh chan<- *lookupTableTask, initBatchSize int) error {
-	if e.runtimeStats != nil {
-		collExec := true
-		e.dagPB.CollectExecutionSummaries = &collExec
-	}
-
-	tracker := memory.NewTracker(stringutil.StringerStr("IndexWorker"), e.ctx.GetSessionVars().MemQuotaIndexLookupReader)
-	tracker.AttachTo(e.memTracker)
 	var builder distsql.RequestBuilder
 	kvReq, err := builder.SetKeyRanges(kvRanges).
 		SetDAGRequest(e.dagPB).
@@ -446,7 +411,6 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		SetKeepOrder(e.keepOrder).
 		SetStreaming(e.indexStreaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
-		SetMemTracker(tracker).
 		Build()
 	if err != nil {
 		return err
@@ -479,19 +443,13 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 	e.idxWorkerWg.Add(1)
 	go func() {
 		ctx1, cancel := context.WithCancel(ctx)
-		count, err := worker.fetchHandles(ctx1, result)
+		_, err := worker.fetchHandles(ctx1, result)
 		if err != nil {
 			e.feedback.Invalidate()
 		}
 		cancel()
 		if err := result.Close(); err != nil {
 			logutil.Logger(ctx).Error("close Select result failed", zap.Error(err))
-		}
-		if e.runtimeStats != nil {
-			copStats := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.GetRootStats(e.idxPlans[len(e.idxPlans)-1].ExplainID().String())
-			copStats.SetRowNum(int64(count))
-			copStats = e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.GetRootStats(e.tblPlans[0].ExplainID().String())
-			copStats.SetRowNum(int64(count))
 		}
 		e.ctx.StoreQueryFeedback(e.feedback)
 		close(workCh)
@@ -514,10 +472,7 @@ func (e *IndexLookUpExecutor) startTableWorker(ctx context.Context, workCh <-cha
 			keepOrder:       e.keepOrder,
 			handleIdx:       e.handleIdx,
 			checkIndexValue: e.checkIndexValue,
-			memTracker: memory.NewTracker(stringutil.MemoizeStr(func() string { return "TableWorker_" + strconv.Itoa(i) }),
-				e.ctx.GetSessionVars().MemQuotaIndexLookupReader),
 		}
-		worker.memTracker.AttachTo(e.memTracker)
 		ctx1, cancel := context.WithCancel(ctx)
 		go func() {
 			worker.pickAndExecTask(ctx1)
@@ -563,11 +518,6 @@ func (e *IndexLookUpExecutor) Close() error {
 	e.tblWorkerWg.Wait()
 	e.finished = nil
 	e.workerStarted = false
-	e.memTracker = nil
-	if e.runtimeStats != nil {
-		copStats := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.GetRootStats(e.idxPlans[0].ExplainID().String())
-		copStats.SetRowNum(e.feedback.Actual())
-	}
 	return nil
 }
 
@@ -609,10 +559,6 @@ func (e *IndexLookUpExecutor) getResultTask() (*lookupTableTask, error) {
 		return nil, err
 	}
 
-	// Release the memory usage of last task before we handle a new task.
-	if e.resultCurr != nil {
-		e.resultCurr.memTracker.Consume(-e.resultCurr.memUsage)
-	}
 	e.resultCurr = task
 	return e.resultCurr, nil
 }
@@ -787,9 +733,6 @@ type tableWorker struct {
 	keepOrder      bool
 	handleIdx      int
 
-	// memTracker is used to track the memory usage of this executor.
-	memTracker *memory.Tracker
-
 	// checkIndexValue is used to check the consistency of the index data.
 	*checkIndexValue
 }
@@ -898,10 +841,6 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 		return w.compareData(ctx, task, tableReader)
 	}
 
-	task.memTracker = w.memTracker
-	memUsage := int64(cap(task.handles) * 8)
-	task.memUsage = memUsage
-	task.memTracker.Consume(memUsage)
 	handleCnt := len(task.handles)
 	task.rows = make([]chunk.Row, 0, handleCnt)
 	for {
@@ -914,27 +853,18 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 		if chk.NumRows() == 0 {
 			break
 		}
-		memUsage = chk.MemoryUsage()
-		task.memUsage += memUsage
-		task.memTracker.Consume(memUsage)
 		iter := chunk.NewIterator4Chunk(chk)
 		for row := iter.Begin(); row != iter.End(); row = iter.Next() {
 			task.rows = append(task.rows, row)
 		}
 	}
 
-	memUsage = int64(cap(task.rows)) * int64(unsafe.Sizeof(chunk.Row{}))
-	task.memUsage += memUsage
-	task.memTracker.Consume(memUsage)
 	if w.keepOrder {
 		task.rowIdx = make([]int, 0, len(task.rows))
 		for i := range task.rows {
 			handle := task.rows[i].GetInt64(w.handleIdx)
 			task.rowIdx = append(task.rowIdx, task.indexOrder[handle])
 		}
-		memUsage = int64(cap(task.rowIdx) * 4)
-		task.memUsage += memUsage
-		task.memTracker.Consume(memUsage)
 		sort.Sort(task)
 	}
 

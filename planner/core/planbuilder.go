@@ -817,10 +817,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 		p := &ShowDDLJobQueries{JobIDs: as.JobIDs}
 		p.setSchemaAndNames(buildShowDDLJobQueriesFields())
 		ret = p
-	case ast.AdminShowSlow:
-		p := &ShowSlow{ShowSlow: as.ShowSlow}
-		p.setSchemaAndNames(buildShowSlowSchema())
-		ret = p
 	case ast.AdminReloadExprPushdownBlacklist:
 		return &ReloadExprPushdownBlacklist{}, nil
 	case ast.AdminReloadOptRuleBlacklist:
@@ -1384,29 +1380,6 @@ func buildSplitRegionsSchema() (*expression.Schema, types.NameSlice) {
 func buildShowDDLJobQueriesFields() (*expression.Schema, types.NameSlice) {
 	schema := newColumnsWithNames(1)
 	schema.Append(buildColumnWithName("", "QUERY", mysql.TypeVarchar, 256))
-	return schema.col2Schema(), schema.names
-}
-
-func buildShowSlowSchema() (*expression.Schema, types.NameSlice) {
-	longlongSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeLonglong)
-	tinySize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeTiny)
-	timestampSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeTimestamp)
-	durationSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeDuration)
-
-	schema := newColumnsWithNames(11)
-	schema.Append(buildColumnWithName("", "SQL", mysql.TypeVarchar, 4096))
-	schema.Append(buildColumnWithName("", "START", mysql.TypeTimestamp, timestampSize))
-	schema.Append(buildColumnWithName("", "DURATION", mysql.TypeDuration, durationSize))
-	schema.Append(buildColumnWithName("", "DETAILS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "SUCC", mysql.TypeTiny, tinySize))
-	schema.Append(buildColumnWithName("", "CONN_ID", mysql.TypeLonglong, longlongSize))
-	schema.Append(buildColumnWithName("", "TRANSACTION_TS", mysql.TypeLonglong, longlongSize))
-	schema.Append(buildColumnWithName("", "USER", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName("", "DB", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "TABLE_IDS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "INDEX_IDS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "INTERNAL", mysql.TypeTiny, tinySize))
-	schema.Append(buildColumnWithName("", "DIGEST", mysql.TypeVarchar, 64))
 	return schema.col2Schema(), schema.names
 }
 
@@ -2554,11 +2527,10 @@ func (b *PlanBuilder) buildTrace(trace *ast.TraceStmt) (Plan, error) {
 	return p, nil
 }
 
-func (b *PlanBuilder) buildExplainPlan(targetPlan Plan, format string, analyze bool, execStmt ast.StmtNode) (Plan, error) {
+func (b *PlanBuilder) buildExplainPlan(targetPlan Plan, format string, execStmt ast.StmtNode) (Plan, error) {
 	p := &Explain{
 		TargetPlan: targetPlan,
 		Format:     format,
-		Analyze:    analyze,
 		ExecStmt:   execStmt,
 	}
 	p.ctx = b.ctx
@@ -2585,7 +2557,7 @@ func (b *PlanBuilder) buildExplainFor(explainFor *ast.ExplainForStmt) (Plan, err
 		return &Explain{Format: explainFor.Format}, nil
 	}
 
-	return b.buildExplainPlan(targetPlan, explainFor.Format, false, nil)
+	return b.buildExplainPlan(targetPlan, explainFor.Format, nil)
 }
 
 func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt) (Plan, error) {
@@ -2597,7 +2569,7 @@ func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt
 		return nil, err
 	}
 
-	return b.buildExplainPlan(targetPlan, explain.Format, explain.Analyze, explain.Stmt)
+	return b.buildExplainPlan(targetPlan, explain.Format, explain.Stmt)
 }
 
 func buildShowProcedureSchema() (*expression.Schema, []*types.FieldName) {

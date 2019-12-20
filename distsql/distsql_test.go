@@ -31,8 +31,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -43,8 +41,6 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 		SetDesc(false).
 		SetKeepOrder(false).
 		SetFromSessionVars(variable.NewSessionVars()).
-		SetMemTracker(memory.NewTracker(stringutil.StringerStr("testSuite.createSelectNormal"),
-			s.sctx.GetSessionVars().MemQuotaDistSQL)).
 		Build()
 	c.Assert(err, IsNil)
 
@@ -109,30 +105,6 @@ func (s *testSuite) TestSelectNormal(c *C) {
 	c.Assert(numAllRows, Equals, 2)
 	err := response.Close()
 	c.Assert(err, IsNil)
-	c.Assert(response.memTracker.BytesConsumed(), Equals, int64(0))
-}
-
-func (s *testSuite) TestSelectMemTracker(c *C) {
-	response, colTypes := s.createSelectNormal(2, 6, c, nil)
-	response.Fetch(context.TODO())
-
-	// Test Next.
-	chk := chunk.New(colTypes, 3, 3)
-	err := response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.IsFull(), Equals, true)
-	err = response.Close()
-	c.Assert(err, IsNil)
-	c.Assert(response.memTracker.BytesConsumed(), Equals, int64(0))
-}
-
-func (s *testSuite) TestSelectNormalChunkSize(c *C) {
-	s.sctx.GetSessionVars().EnableChunkRPC = false
-	response, colTypes := s.createSelectNormal(100, 1000000, c, nil)
-	response.Fetch(context.TODO())
-	s.testChunkSize(response, colTypes, c)
-	c.Assert(response.Close(), IsNil)
-	c.Assert(response.memTracker.BytesConsumed(), Equals, int64(0))
 }
 
 func (s *testSuite) TestSelectWithRuntimeStats(c *C) {
@@ -430,11 +402,6 @@ func (r *mockResultSubset) GetData() []byte { return r.data }
 // GetStartKey implements kv.ResultSubset interface.
 func (r *mockResultSubset) GetStartKey() kv.Key { return nil }
 
-// GetExecDetails implements kv.ResultSubset interface.
-func (r *mockResultSubset) GetExecDetails() *execdetails.ExecDetails {
-	return &execdetails.ExecDetails{}
-}
-
 // MemSize implements kv.ResultSubset interface.
 func (r *mockResultSubset) MemSize() int64 { return int64(cap(r.data)) }
 
@@ -447,8 +414,6 @@ func createSelectNormal(batch, totalRows int, ctx sessionctx.Context) (*selectRe
 		SetDesc(false).
 		SetKeepOrder(false).
 		SetFromSessionVars(variable.NewSessionVars()).
-		SetMemTracker(memory.NewTracker(stringutil.StringerStr("testSuite.createSelectNormal"),
-			ctx.GetSessionVars().MemQuotaDistSQL)).
 		Build()
 
 	/// 4 int64 types.

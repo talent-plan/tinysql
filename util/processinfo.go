@@ -81,9 +81,6 @@ func (pi *ProcessInfo) txnStartTs(tz *time.Location) (txnStart string) {
 // "SELECT * FROM INFORMATION_SCHEMA.PROCESSLIST".
 func (pi *ProcessInfo) ToRow(tz *time.Location) []interface{} {
 	bytesConsumed := int64(0)
-	if pi.StmtCtx != nil && pi.StmtCtx.MemTracker != nil {
-		bytesConsumed = pi.StmtCtx.MemTracker.BytesConsumed()
-	}
 	return append(pi.ToRowForShow(true), bytesConsumed, pi.txnStartTs(tz))
 }
 

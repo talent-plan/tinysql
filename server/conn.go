@@ -63,7 +63,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -1274,7 +1273,7 @@ func (cc *clientConn) writeResultset(ctx context.Context, rs ResultSet, binary b
 		if r == nil {
 			return
 		}
-		if str, ok := r.(string); !ok || !strings.HasPrefix(str, memory.PanicMemoryExceed) {
+		if _, ok := r.(string); !ok {
 			panic(r)
 		}
 		// TODO(jianzhang.zj: add metrics here)

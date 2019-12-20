@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/memory"
 )
 
 const (
@@ -103,10 +102,6 @@ func newHashRowContainer(sctx sessionctx.Context, estCount int, hCtx *hashContex
 		hCtx: hCtx,
 	}
 	return c
-}
-
-func (c *hashRowContainer) GetMemTracker() *memory.Tracker {
-	return c.records.GetMemTracker()
 }
 
 // GetMatchedRows get matched rows from probeRow. It can be called

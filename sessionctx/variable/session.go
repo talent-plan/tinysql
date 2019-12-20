@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/timeutil"
 )
@@ -1171,7 +1170,6 @@ type SlowQueryLogItems struct {
 	IndexNames     string
 	StatsInfos     map[string]uint64
 	CopTasks       *stmtctx.CopTasksDetails
-	ExecDetail     execdetails.ExecDetails
 	MemMax         int64
 	Succ           bool
 	Prepared       bool
@@ -1212,10 +1210,6 @@ func (s *SessionVars) SlowLogFormat(logItems *SlowQueryLogItems) string {
 	writeSlowLogItem(&buf, SlowLogQueryTimeStr, strconv.FormatFloat(logItems.TimeTotal.Seconds(), 'f', -1, 64))
 	writeSlowLogItem(&buf, SlowLogParseTimeStr, strconv.FormatFloat(logItems.TimeParse.Seconds(), 'f', -1, 64))
 	writeSlowLogItem(&buf, SlowLogCompileTimeStr, strconv.FormatFloat(logItems.TimeCompile.Seconds(), 'f', -1, 64))
-
-	if execDetailStr := logItems.ExecDetail.String(); len(execDetailStr) > 0 {
-		buf.WriteString(SlowLogRowPrefixStr + execDetailStr + "\n")
-	}
 
 	if len(s.CurrentDB) > 0 {
 		writeSlowLogItem(&buf, SlowLogDBStr, s.CurrentDB)

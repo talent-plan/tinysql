@@ -21,7 +21,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -159,69 +158,6 @@ func (s *testChunkSizeControlSuite) getKit(name string) (
 	kv.Storage, *domain.Domain, *testkit.TestKit, *testSlowClient, *mocktikv.Cluster) {
 	x := s.m[name]
 	return x.store, x.dom, x.tk, x.client, x.cluster
-}
-
-func (s *testChunkSizeControlSuite) TestLimitAndTableScan(c *C) {
-	_, dom, tk, client, cluster := s.getKit("Limit&TableScan")
-	defer client.Close()
-	tbl, err := dom.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tid := tbl.Meta().ID
-
-	// construct two regions split by 100
-	splitKeys := generateTableSplitKeyForInt(tid, []int{100})
-	regionIDs := manipulateCluster(cluster, splitKeys)
-
-	noDelayThreshold := time.Millisecond * 100
-	delayDuration := time.Second
-	delayThreshold := delayDuration * 9 / 10
-	tk.MustExec("insert into t values (1)") // insert one record into region1, and set a delay duration
-	client.SetDelay(regionIDs[0], delayDuration)
-
-	results := tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 1")
-	cost := s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Not(Less), delayThreshold) // have to wait for region1
-
-	tk.MustExec("insert into t values (101)") // insert one record into region2
-	results = tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 1")
-	cost = s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Less, noDelayThreshold) // region2 return quickly
-
-	results = tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 2")
-	cost = s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Not(Less), delayThreshold) // have to wait
-}
-
-func (s *testChunkSizeControlSuite) TestLimitAndIndexScan(c *C) {
-	_, dom, tk, client, cluster := s.getKit("Limit&IndexScan")
-	defer client.Close()
-	tbl, err := dom.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tid := tbl.Meta().ID
-	idx := tbl.Meta().Indices[0].ID
-
-	// construct two regions split by 100
-	splitKeys := generateIndexSplitKeyForInt(tid, idx, []int{100})
-	regionIDs := manipulateCluster(cluster, splitKeys)
-
-	noDelayThreshold := time.Millisecond * 100
-	delayDuration := time.Second
-	delayThreshold := delayDuration * 9 / 10
-	tk.MustExec("insert into t values (1)") // insert one record into region1, and set a delay duration
-	client.SetDelay(regionIDs[0], delayDuration)
-
-	results := tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 1")
-	cost := s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Not(Less), delayThreshold) // have to wait for region1
-
-	tk.MustExec("insert into t values (101)") // insert one record into region2
-	results = tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 1")
-	cost = s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Less, noDelayThreshold) // region2 return quickly
-
-	results = tk.MustQuery("explain analyze select * from t where t.a > 0 and t.a < 200 limit 2")
-	cost = s.parseTimeCost(c, results.Rows()[0])
-	c.Assert(cost, Not(Less), delayThreshold) // have to wait
 }
 
 func (s *testChunkSizeControlSuite) parseTimeCost(c *C, line []interface{}) time.Duration {

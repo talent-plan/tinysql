@@ -23,8 +23,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/util/memory"
-	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tidb/util/testleak"
 )
 
@@ -155,9 +153,7 @@ func (s *testMiscSuite) TestBasicFunc(c *C) {
 		Time:    time.Now(),
 		State:   1,
 		Info:    "test",
-		StmtCtx: &stmtctx.StatementContext{
-			MemTracker: memory.NewTracker(stringutil.StringerStr(""), -1),
-		},
+		StmtCtx: &stmtctx.StatementContext{},
 	}
 	row := pi.ToRowForShow(false)
 	row2 := pi.ToRowForShow(true)

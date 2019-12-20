@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mock"
 )
 
@@ -206,7 +205,6 @@ func defaultCtx() sessionctx.Context {
 	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
 	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
 	ctx.GetSessionVars().MemQuotaSort = variable.DefTiDBMemQuotaSort
-	ctx.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(nil, ctx.GetSessionVars().MemQuotaQuery)
 	ctx.GetSessionVars().SnapshotTS = uint64(1)
 	return ctx
 }

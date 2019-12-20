@@ -18,7 +18,6 @@ import (
 	"context"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
@@ -263,15 +261,11 @@ func (c *twoPhaseCommitter) initKeysAndMutations() error {
 		return errors.Trace(err)
 	}
 
-	commitDetail := &execdetails.CommitDetails{WriteSize: size, WriteKeys: len(keys)}
-	metrics.TiKVTxnWriteKVCountHistogram.Observe(float64(commitDetail.WriteKeys))
-	metrics.TiKVTxnWriteSizeHistogram.Observe(float64(commitDetail.WriteSize))
 	c.keys = keys
 	c.mutations = mutations
 	c.lockTTL = txnLockTTL(txn.startTime, size)
 	c.priority = getTxnPriority(txn)
 	c.syncLog = getTxnSyncLog(txn)
-	c.setDetail(commitDetail)
 	return nil
 }
 
@@ -332,7 +326,6 @@ func (c *twoPhaseCommitter) doActionOnKeys(bo *Backoffer, action twoPhaseCommitA
 			}
 		}
 		sizeFunc = c.keyValueSize
-		atomic.AddInt32(&c.getDetail().PrewriteRegionNum, int32(len(groups)))
 	}
 	// Make sure the group that contains primary key goes first.
 	batches = appendBatchBySize(batches, firstRegion, groups[firstRegion], sizeFunc, txnCommitBatchSize)
@@ -504,13 +497,11 @@ func (actionPrewrite) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, bat
 				zap.Stringer("lock", lock))
 			locks = append(locks, lock)
 		}
-		start := time.Now()
 		// Set callerStartTS to 0 so as not to update minCommitTS.
 		msBeforeExpired, _, err := c.store.lockResolver.ResolveLocks(bo, 0, locks)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		atomic.AddInt64(&c.getDetail().ResolveLockTime, int64(time.Since(start)))
 		if msBeforeExpired > 0 {
 			err = bo.BackoffWithMaxSleep(BoTxnLock, int(msBeforeExpired), errors.Errorf("2PC prewrite lockedKeys: %d", len(locks)))
 			if err != nil {
@@ -543,14 +534,6 @@ func kvPriorityToCommandPri(pri int) pb.CommandPri {
 	default:
 		return pb.CommandPri_Normal
 	}
-}
-
-func (c *twoPhaseCommitter) setDetail(d *execdetails.CommitDetails) {
-	atomic.StorePointer(&c.detail, unsafe.Pointer(d))
-}
-
-func (c *twoPhaseCommitter) getDetail() *execdetails.CommitDetails {
-	return (*execdetails.CommitDetails)(atomic.LoadPointer(&c.detail))
 }
 
 func (c *twoPhaseCommitter) setUndeterminedErr(err error) {
@@ -752,16 +735,7 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 
 	binlogChan := c.prewriteBinlog(ctx)
 	prewriteBo := NewBackoffer(ctx, PrewriteMaxBackoff).WithVars(c.txn.vars)
-	start := time.Now()
 	err = c.prewriteKeys(prewriteBo, c.keys)
-	commitDetail := c.getDetail()
-	commitDetail.PrewriteTime = time.Since(start)
-	if prewriteBo.totalSleep > 0 {
-		atomic.AddInt64(&commitDetail.CommitBackoffTime, int64(prewriteBo.totalSleep)*int64(time.Millisecond))
-		commitDetail.Mu.Lock()
-		commitDetail.Mu.BackoffTypes = append(commitDetail.Mu.BackoffTypes, prewriteBo.types...)
-		commitDetail.Mu.Unlock()
-	}
 	if binlogChan != nil {
 		binlogWriteResult := <-binlogChan
 		if binlogWriteResult != nil {
@@ -779,7 +753,6 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	start = time.Now()
 	logutil.Event(ctx, "start get commit ts")
 	commitTS, err := c.store.getTimestampWithRetry(NewBackoffer(ctx, tsoMaxBackoff).WithVars(c.txn.vars))
 	if err != nil {
@@ -788,7 +761,6 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 			zap.Uint64("txnStartTS", c.startTS))
 		return errors.Trace(err)
 	}
-	commitDetail.GetCommitTsTime = time.Since(start)
 	logutil.Event(ctx, "finish get commit ts")
 	logutil.SetTag(ctx, "commitTs", commitTS)
 
@@ -810,16 +782,8 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 		return err
 	}
 
-	start = time.Now()
 	commitBo := NewBackoffer(ctx, CommitMaxBackoff).WithVars(c.txn.vars)
 	err = c.commitKeys(commitBo, c.keys)
-	commitDetail.CommitTime = time.Since(start)
-	if commitBo.totalSleep > 0 {
-		atomic.AddInt64(&commitDetail.CommitBackoffTime, int64(commitBo.totalSleep)*int64(time.Millisecond))
-		commitDetail.Mu.Lock()
-		commitDetail.Mu.BackoffTypes = append(commitDetail.Mu.BackoffTypes, commitBo.types...)
-		commitDetail.Mu.Unlock()
-	}
 	if err != nil {
 		if undeterminedErr := c.getUndeterminedErr(); undeterminedErr != nil {
 			logutil.Logger(ctx).Error("2PC commit result undetermined",
@@ -969,17 +933,7 @@ func (batchExe *batchExecutor) startWorker(exitCh chan struct{}, ch chan error, 
 					singleBatchBackoffer, singleBatchCancel = batchExe.backoffer.Fork()
 					defer singleBatchCancel()
 				}
-				beforeSleep := singleBatchBackoffer.totalSleep
 				ch <- batchExe.action.handleSingleBatch(batchExe.committer, singleBatchBackoffer, batch)
-				commitDetail := batchExe.committer.getDetail()
-				if commitDetail != nil {
-					if delta := singleBatchBackoffer.totalSleep - beforeSleep; delta > 0 {
-						atomic.AddInt64(&commitDetail.CommitBackoffTime, int64(singleBatchBackoffer.totalSleep-beforeSleep)*int64(time.Millisecond))
-						commitDetail.Mu.Lock()
-						commitDetail.Mu.BackoffTypes = append(commitDetail.Mu.BackoffTypes, singleBatchBackoffer.types...)
-						commitDetail.Mu.Unlock()
-					}
-				}
 			}()
 		} else {
 			logutil.Logger(batchExe.backoffer.ctx).Info("break startWorker",

@@ -24,7 +24,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
@@ -37,9 +36,7 @@ import (
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/ranger"
 	"go.uber.org/zap"
 )
@@ -67,7 +64,6 @@ func (c *CopClient) Send(ctx context.Context, req *kv.Request, vars *kv.Variable
 		concurrency:     req.Concurrency,
 		finishCh:        make(chan struct{}),
 		vars:            vars,
-		memTracker:      req.MemTracker,
 		replicaReadSeed: c.replicaReadSeed,
 	}
 	it.minCommitTSPushed.data = make(map[uint64]struct{}, 5)
@@ -406,8 +402,6 @@ type copIterator struct {
 
 	vars *kv.Variables
 
-	memTracker *memory.Tracker
-
 	replicaReadSeed uint32
 
 	wg sync.WaitGroup
@@ -430,8 +424,6 @@ type copIteratorWorker struct {
 	vars     *kv.Variables
 	clientHelper
 
-	memTracker *memory.Tracker
-
 	replicaReadSeed uint32
 }
 
@@ -447,17 +439,11 @@ type copIteratorTaskSender struct {
 
 type copResponse struct {
 	pbResp   *coprocessor.Response
-	detail   *execdetails.ExecDetails
 	startKey kv.Key
 	err      error
 	respSize int64
 	respTime time.Duration
 }
-
-const (
-	sizeofExecDetails   = int(unsafe.Sizeof(execdetails.ExecDetails{}))
-	sizeofCommitDetails = int(unsafe.Sizeof(execdetails.CommitDetails{}))
-)
 
 // GetData implements the kv.ResultSubset GetData interface.
 func (rs *copResponse) GetData() []byte {
@@ -469,10 +455,6 @@ func (rs *copResponse) GetStartKey() kv.Key {
 	return rs.startKey
 }
 
-func (rs *copResponse) GetExecDetails() *execdetails.ExecDetails {
-	return rs.detail
-}
-
 // MemSize returns how many bytes of memory this response use
 func (rs *copResponse) MemSize() int64 {
 	if rs.respSize != 0 {
@@ -481,12 +463,6 @@ func (rs *copResponse) MemSize() int64 {
 
 	// ignore rs.err
 	rs.respSize += int64(cap(rs.startKey))
-	if rs.detail != nil {
-		rs.respSize += int64(sizeofExecDetails)
-		if rs.detail.CommitDetail != nil {
-			rs.respSize += int64(sizeofCommitDetails)
-		}
-	}
 	if rs.pbResp != nil {
 		// Using a approximate size since it's hard to get a accurate value.
 		rs.respSize += int64(rs.pbResp.Size())
@@ -542,8 +518,6 @@ func (it *copIterator) open(ctx context.Context) {
 				Client:            it.store.client,
 			},
 
-			memTracker: it.memTracker,
-
 			replicaReadSeed: it.replicaReadSeed,
 		}
 		go worker.run(ctx)
@@ -589,9 +563,6 @@ func (sender *copIteratorTaskSender) run() {
 func (it *copIterator) recvFromRespCh(ctx context.Context, respCh <-chan *copResponse) (resp *copResponse, ok bool, exit bool) {
 	select {
 	case resp, ok = <-respCh:
-		if it.memTracker != nil && resp != nil {
-			it.memTracker.Consume(-int64(resp.MemSize()))
-		}
 	case <-it.finishCh:
 		exit = true
 	case <-ctx.Done():
@@ -614,9 +585,6 @@ func (sender *copIteratorTaskSender) sendToTaskCh(t *copTask) (exit bool) {
 }
 
 func (worker *copIteratorWorker) sendToRespCh(resp *copResponse, respCh chan<- *copResponse, checkOOM bool) (exit bool) {
-	if worker.memTracker != nil && checkOOM {
-		worker.memTracker.Consume(int64(resp.MemSize()))
-	}
 	select {
 	case respCh <- resp:
 	case <-worker.finishCh:
@@ -823,39 +791,6 @@ func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *co
 		backoffTypes := strings.Replace(fmt.Sprintf("%v", bo.types), " ", ",", -1)
 		logStr += fmt.Sprintf(" backoff_ms:%d backoff_types:%s", bo.totalSleep, backoffTypes)
 	}
-	var detail *kvrpcpb.ExecDetails
-	if resp.Resp != nil {
-		switch r := resp.Resp.(type) {
-		case *coprocessor.Response:
-			detail = r.ExecDetails
-		case *tikvrpc.CopStreamResponse:
-			// streaming request returns io.EOF, so the first CopStreamResponse.Response maybe nil.
-			if r.Response != nil {
-				detail = r.Response.ExecDetails
-			}
-		default:
-			panic("unreachable")
-		}
-	}
-
-	if detail != nil && detail.HandleTime != nil {
-		processMs := detail.HandleTime.ProcessMs
-		waitMs := detail.HandleTime.WaitMs
-		if processMs > minLogKVProcessTime {
-			logStr += fmt.Sprintf(" kv_process_ms:%d", processMs)
-			if detail.ScanDetail != nil {
-				logStr = appendScanDetail(logStr, "write", detail.ScanDetail.Write)
-				logStr = appendScanDetail(logStr, "data", detail.ScanDetail.Data)
-				logStr = appendScanDetail(logStr, "lock", detail.ScanDetail.Lock)
-			}
-		}
-		if waitMs > minLogKVWaitTime {
-			logStr += fmt.Sprintf(" kv_wait_ms:%d", waitMs)
-			if processMs <= minLogKVProcessTime {
-				logStr = strings.Replace(logStr, "TIME_COP_PROCESS", "TIME_COP_WAIT", 1)
-			}
-		}
-	}
 	logutil.BgLogger().Info(logStr)
 }
 
@@ -950,32 +885,6 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 		resp.startKey = resp.pbResp.Range.Start
 	} else if task.ranges != nil && task.ranges.len() > 0 {
 		resp.startKey = task.ranges.at(0).StartKey
-	}
-	if resp.detail == nil {
-		resp.detail = new(execdetails.ExecDetails)
-	}
-	resp.detail.BackoffTime = time.Duration(bo.totalSleep) * time.Millisecond
-	resp.detail.BackoffSleep, resp.detail.BackoffTimes = make(map[string]time.Duration), make(map[string]int)
-	for backoff := range bo.backoffTimes {
-		backoffName := backoff.String()
-		resp.detail.BackoffTimes[backoffName] = bo.backoffTimes[backoff]
-		resp.detail.BackoffSleep[backoffName] = time.Duration(bo.backoffSleepMS[backoff]) * time.Millisecond
-	}
-	if rpcCtx != nil {
-		resp.detail.CalleeAddress = rpcCtx.Addr
-	}
-	resp.respTime = costTime
-	if pbDetails := resp.pbResp.ExecDetails; pbDetails != nil {
-		if handleTime := pbDetails.HandleTime; handleTime != nil {
-			resp.detail.WaitTime = time.Duration(handleTime.WaitMs) * time.Millisecond
-			resp.detail.ProcessTime = time.Duration(handleTime.ProcessMs) * time.Millisecond
-		}
-		if scanDetail := pbDetails.ScanDetail; scanDetail != nil {
-			if scanDetail.Write != nil {
-				resp.detail.TotalKeys += scanDetail.Write.Total
-				resp.detail.ProcessedKeys += scanDetail.Write.Processed
-			}
-		}
 	}
 	worker.sendToRespCh(resp, ch, true)
 	return nil, nil
