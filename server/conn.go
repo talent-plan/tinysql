@@ -1151,31 +1151,6 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 	return loadStatsInfo.Update(data)
 }
 
-// handleIndexAdvise does the index advise work and returns the advise result for index.
-func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseInfo *executor.IndexAdviseInfo) error {
-	if cc.capability&mysql.ClientLocalFiles == 0 {
-		return errNotAllowedCommand
-	}
-	if indexAdviseInfo == nil {
-		return errors.New("Index Advise: info is empty")
-	}
-
-	data, err := cc.getDataFromPath(indexAdviseInfo.Path)
-	if err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return errors.New("Index Advise: infile is empty")
-	}
-
-	if err := indexAdviseInfo.GetIndexAdvice(ctx, data); err != nil {
-		return err
-	}
-
-	// TODO: Write the rss []ResultSet. It will be done in another PR.
-	return nil
-}
-
 // handleQuery executes the sql query string and writes result set or result ok to the client.
 // As the execution time of this function represents the performance of TiDB, we do time log and metrics here.
 // There is a special query `load data` that does not return result, which is handled differently.
@@ -1212,15 +1187,6 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 		if loadStats != nil {
 			defer cc.ctx.SetValue(executor.LoadStatsVarKey, nil)
 			if err = cc.handleLoadStats(ctx, loadStats.(*executor.LoadStatsInfo)); err != nil {
-				return err
-			}
-		}
-
-		indexAdvise := cc.ctx.Value(executor.IndexAdviseVarKey)
-		if indexAdvise != nil {
-			defer cc.ctx.SetValue(executor.IndexAdviseVarKey, nil)
-			err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseInfo))
-			if err != nil {
 				return err
 			}
 		}

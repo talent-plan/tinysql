@@ -25,15 +25,12 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	pb "github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/terror"
@@ -49,7 +46,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
@@ -959,40 +955,6 @@ func (s *seqTestSuite) TestBatchInsertDelete(c *C) {
 	// Make sure that all rows are gone.
 	r = tk.MustQuery("select count(*) from batch_insert;")
 	r.Check(testkit.Rows("0"))
-}
-
-type checkPrioClient struct {
-	tikv.Client
-	priority pb.CommandPri
-	mu       struct {
-		sync.RWMutex
-		checkPrio bool
-	}
-}
-
-func (c *checkPrioClient) setCheckPriority(priority pb.CommandPri) {
-	atomic.StoreInt32((*int32)(&c.priority), int32(priority))
-}
-
-func (c *checkPrioClient) getCheckPriority() pb.CommandPri {
-	return (pb.CommandPri)(atomic.LoadInt32((*int32)(&c.priority)))
-}
-
-func (c *checkPrioClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
-	resp, err := c.Client.SendRequest(ctx, addr, req, timeout)
-	c.mu.RLock()
-	defer func() {
-		c.mu.RUnlock()
-	}()
-	if c.mu.checkPrio {
-		switch req.Type {
-		case tikvrpc.CmdCop:
-			if c.getCheckPriority() != req.Priority {
-				return nil, errors.New("fail to set priority")
-			}
-		}
-	}
-	return resp, err
 }
 
 func (s *seqTestSuite) TestAutoIDInRetry(c *C) {
