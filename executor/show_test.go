@@ -31,51 +31,9 @@ import (
 	"github.com/pingcap/tidb/util/testutil"
 )
 
-func (s *testSuite5) TestShowVisibility(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database showdatabase")
-	tk.MustExec("use showdatabase")
-	tk.MustExec("create table t1 (id int)")
-	tk.MustExec("create table t2 (id int)")
-	tk.MustExec(`create user 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-
-	tk1 := testkit.NewTestKit(c, s.store)
-	se, err := session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	c.Assert(se.Auth(&auth.UserIdentity{Username: "show", Hostname: "%"}, nil, nil), IsTrue)
-	tk1.Se = se
-
-	// No ShowDatabases privilege, this user would see nothing except INFORMATION_SCHEMA.
-	tk.MustQuery("show databases").Check(testkit.Rows("INFORMATION_SCHEMA"))
-
-	// After grant, the user can see the database.
-	tk.MustExec(`grant select on showdatabase.t1 to 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-	tk1.MustQuery("show databases").Check(testkit.Rows("INFORMATION_SCHEMA", "showdatabase"))
-
-	// The user can see t1 but not t2.
-	tk1.MustExec("use showdatabase")
-	tk1.MustQuery("show tables").Check(testkit.Rows("t1"))
-
-	// After revoke, show database result should be just except INFORMATION_SCHEMA.
-	tk.MustExec(`revoke select on showdatabase.t1 from 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-	tk1.MustQuery("show databases").Check(testkit.Rows("INFORMATION_SCHEMA"))
-
-	// Grant any global privilege would make show databases available.
-	tk.MustExec(`grant CREATE on *.* to 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-	rows := tk1.MustQuery("show databases").Rows()
-	c.Assert(len(rows), GreaterEqual, 2) // At least INFORMATION_SCHEMA and showdatabase
-
-	tk.MustExec(`drop user 'show'@'%'`)
-	tk.MustExec("drop database showdatabase")
-}
-
 func (s *testSuite5) TestShowDatabasesInfoSchemaFirst(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery("show databases").Check(testkit.Rows("INFORMATION_SCHEMA"))
+	tk.MustQuery("show databases").Sort().Check(testkit.Rows("INFORMATION_SCHEMA", "mysql", "test"))
 	tk.MustExec(`create user 'show'@'%'`)
 	tk.MustExec(`flush privileges`)
 
@@ -90,7 +48,7 @@ func (s *testSuite5) TestShowDatabasesInfoSchemaFirst(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(se.Auth(&auth.UserIdentity{Username: "show", Hostname: "%"}, nil, nil), IsTrue)
 	tk1.Se = se
-	tk1.MustQuery("show databases").Check(testkit.Rows("INFORMATION_SCHEMA", "AAAA", "BBBB"))
+	tk1.MustQuery("show databases").Sort().Check(testkit.Rows("AAAA", "BBBB", "INFORMATION_SCHEMA", "mysql", "test"))
 
 	tk.MustExec(`drop user 'show'@'%'`)
 	tk.MustExec(`drop database AAAA`)
@@ -145,21 +103,6 @@ func (s *testSuite5) TestIssue3641(c *C) {
 	c.Assert(err.Error(), Equals, plannercore.ErrNoDB.Error())
 	_, err = tk.Exec("show table status;")
 	c.Assert(err.Error(), Equals, plannercore.ErrNoDB.Error())
-}
-
-func (s *testSuite5) TestIssue10549(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("CREATE DATABASE newdb;")
-	tk.MustExec("CREATE ROLE 'app_developer';")
-	tk.MustExec("GRANT ALL ON newdb.* TO 'app_developer';")
-	tk.MustExec("CREATE USER 'dev';")
-	tk.MustExec("GRANT 'app_developer' TO 'dev';")
-	tk.MustExec("SET DEFAULT ROLE app_developer TO 'dev';")
-
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "dev", Hostname: "localhost", AuthUsername: "dev", AuthHostname: "localhost"}, nil, nil), IsTrue)
-	tk.MustQuery("SHOW DATABASES;").Check(testkit.Rows("INFORMATION_SCHEMA", "newdb"))
-	tk.MustQuery("SHOW GRANTS;").Check(testkit.Rows("GRANT USAGE ON *.* TO 'dev'@'%'", "GRANT ALL PRIVILEGES ON newdb.* TO 'dev'@'%'", "GRANT 'app_developer'@'%' TO 'dev'@'%'"))
-	tk.MustQuery("SHOW GRANTS FOR CURRENT_USER").Check(testkit.Rows("GRANT USAGE ON *.* TO 'dev'@'%'", "GRANT 'app_developer'@'%' TO 'dev'@'%'"))
 }
 
 func (s *testSuite5) TestIssue11165(c *C) {
@@ -284,12 +227,6 @@ func (s *testSuite5) TestShow2(c *C) {
 	r.Check(testkit.Rows(fmt.Sprintf("t InnoDB 10 Compact 0 0 0 0 0 0 <nil> %s <nil> <nil> utf8mb4_bin   注释", createTime)))
 
 	tk.MustQuery("show databases like 'test'").Check(testkit.Rows("test"))
-
-	tk.MustExec(`grant all on *.* to 'root'@'%'`)
-	tk.MustQuery("show grants").Check(testkit.Rows(`GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION`))
-
-	tk.MustQuery("show grants for current_user()").Check(testkit.Rows(`GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION`))
-	tk.MustQuery("show grants for current_user").Check(testkit.Rows(`GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION`))
 }
 
 func (s *testSuite5) TestShowCreateUser(c *C) {
@@ -297,11 +234,11 @@ func (s *testSuite5) TestShowCreateUser(c *C) {
 	// Create a new user.
 	tk.MustExec(`CREATE USER 'test_show_create_user'@'%' IDENTIFIED BY 'root';`)
 	tk.MustQuery("show create user 'test_show_create_user'@'%'").
-		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*81F5E21E35407D884A6CD4A731AEBFB6AF209E1B' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
+		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'%' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
 
 	tk.MustExec(`CREATE USER 'test_show_create_user'@'localhost' IDENTIFIED BY 'test';`)
 	tk.MustQuery("show create user 'test_show_create_user'@'localhost';").
-		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'localhost' IDENTIFIED WITH 'mysql_native_password' AS '*94BDCEBE19083CE2A1F959FD02F964C7AF4CFC29' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
+		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'localhost' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
 
 	// Case: the user exists but the host portion doesn't match
 	err := tk.QueryToErr("show create user 'test_show_create_user'@'asdf';")
@@ -310,58 +247,6 @@ func (s *testSuite5) TestShowCreateUser(c *C) {
 	// Case: a user that doesn't exist
 	err = tk.QueryToErr("show create user 'aaa'@'localhost';")
 	c.Assert(err.Error(), Equals, executor.ErrCannotUser.GenWithStackByArgs("SHOW CREATE USER", "'aaa'@'localhost'").Error())
-
-	tk.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: "127.0.0.1", AuthUsername: "root", AuthHostname: "%"}, nil, nil)
-	rows := tk.MustQuery("show create user current_user")
-	rows.Check(testkit.Rows("CREATE USER 'root'@'127.0.0.1' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"))
-
-	rows = tk.MustQuery("show create user current_user()")
-	rows.Check(testkit.Rows("CREATE USER 'root'@'127.0.0.1' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"))
-
-	tk.MustExec("create user 'check_priv'")
-
-	// "show create user" for other user requires the SELECT privilege on mysql database.
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("use mysql")
-	succ := tk1.Se.Auth(&auth.UserIdentity{Username: "check_priv", Hostname: "127.0.0.1", AuthUsername: "test_show", AuthHostname: "asdf"}, nil, nil)
-	c.Assert(succ, IsTrue)
-	err = tk1.QueryToErr("show create user 'root'@'%'")
-	c.Assert(err, NotNil)
-
-	// "show create user" for current user doesn't check privileges.
-	rows = tk1.MustQuery("show create user current_user")
-	rows.Check(testkit.Rows("CREATE USER 'check_priv'@'127.0.0.1' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"))
-}
-
-func (s *testSuite5) TestUnprivilegedShow(c *C) {
-
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("CREATE DATABASE testshow")
-	tk.MustExec("USE testshow")
-	tk.MustExec("CREATE TABLE t1 (a int)")
-	tk.MustExec("CREATE TABLE t2 (a int)")
-
-	tk.MustExec(`CREATE USER 'lowprivuser'`) // no grants
-	tk.MustExec(`FLUSH PRIVILEGES`)
-
-	tk.Se.Auth(&auth.UserIdentity{Username: "lowprivuser", Hostname: "192.168.0.1", AuthUsername: "lowprivuser", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-	rs, err := tk.Exec("SHOW TABLE STATUS FROM testshow")
-	c.Assert(err, IsNil)
-	c.Assert(rs, NotNil)
-
-	tk.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: "192.168.0.1", AuthUsername: "root", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-	tk.MustExec("GRANT ALL ON testshow.t1 TO 'lowprivuser'")
-	tk.MustExec(`FLUSH PRIVILEGES`)
-	tk.Se.Auth(&auth.UserIdentity{Username: "lowprivuser", Hostname: "192.168.0.1", AuthUsername: "lowprivuser", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-
-	ctx := tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	tblInfo, err := is.TableByName(model.NewCIStr("testshow"), model.NewCIStr("t1"))
-	c.Assert(err, IsNil)
-	createTime := model.TSConvert2Time(tblInfo.Meta().UpdateTS).Format("2006-01-02 15:04:05")
-
-	tk.MustQuery("show table status from testshow").Check(testkit.Rows(fmt.Sprintf("t1 InnoDB 10 Compact 0 0 0 0 0 0 <nil> %s <nil> <nil> utf8mb4_bin   ", createTime)))
-
 }
 
 func (s *testSuite5) TestCollation(c *C) {

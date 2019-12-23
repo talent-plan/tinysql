@@ -500,11 +500,6 @@ func tryWhereIn2BatchPointGet(ctx sessionctx.Context, selStmt *ast.SelectStmt) P
 	if p == nil {
 		return nil
 	}
-
-	dbName := tblName.Schema.L
-	if dbName == "" {
-		dbName = ctx.GetSessionVars().CurrentDB
-	}
 	return p
 }
 

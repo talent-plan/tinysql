@@ -1029,28 +1029,6 @@ func (e *ShowExec) getTable() (table.Table, error) {
 	return tb, nil
 }
 
-func (e *ShowExec) dbAccessDenied() error {
-	user := e.ctx.GetSessionVars().User
-	u := user.Username
-	h := user.Hostname
-	if len(user.AuthUsername) > 0 && len(user.AuthHostname) > 0 {
-		u = user.AuthUsername
-		h = user.AuthHostname
-	}
-	return ErrDBaccessDenied.GenWithStackByArgs(u, h, e.DBName)
-}
-
-func (e *ShowExec) tableAccessDenied(access string, table string) error {
-	user := e.ctx.GetSessionVars().User
-	u := user.Username
-	h := user.Hostname
-	if len(user.AuthUsername) > 0 && len(user.AuthHostname) > 0 {
-		u = user.AuthUsername
-		h = user.AuthHostname
-	}
-	return ErrTableaccessDenied.GenWithStackByArgs(access, u, h, table)
-}
-
 func (e *ShowExec) appendRow(row []interface{}) {
 	for i, col := range row {
 		if col == nil {

@@ -22,7 +22,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -1358,18 +1357,6 @@ func (s *session) GetSessionVars() *variable.SessionVars {
 
 func (s *session) Auth(user *auth.UserIdentity, authentication []byte, salt []byte) bool {
 	return true
-}
-
-func getHostByIP(ip string) []string {
-	if ip == "127.0.0.1" {
-		return []string{variable.DefHostname}
-	}
-	addrs, err := net.LookupAddr(ip)
-	if err != nil {
-		// The error is ignorable.
-		// The empty line here makes the golint tool (which complains err is not checked) happy.
-	}
-	return addrs
 }
 
 // CreateSession4Test creates a new session environment for test.

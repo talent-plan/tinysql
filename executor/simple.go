@@ -392,17 +392,6 @@ func (e *SimpleExec) executeSetRole(s *ast.SetRoleStmt) error {
 	return nil
 }
 
-func (e *SimpleExec) dbAccessDenied(dbname string) error {
-	user := e.ctx.GetSessionVars().User
-	u := user.Username
-	h := user.Hostname
-	if len(user.AuthUsername) > 0 && len(user.AuthHostname) > 0 {
-		u = user.AuthUsername
-		h = user.AuthHostname
-	}
-	return ErrDBaccessDenied.GenWithStackByArgs(u, h, dbname)
-}
-
 func (e *SimpleExec) executeUse(s *ast.UseStmt) error {
 	dbname := model.NewCIStr(s.DBName)
 

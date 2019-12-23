@@ -69,9 +69,7 @@ func (s *testSuite) TestExplainFor(c *C) {
 		"TableReader_5 10000.00 root data:TableScan_4",
 		"└─TableScan_4 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
 	))
-	err := tkUser.ExecToErr(fmt.Sprintf("explain for connection %d", tkRootProcess.ID))
-	c.Check(core.ErrAccessDenied.Equal(err), IsTrue)
-	err = tkUser.ExecToErr("explain for connection 42")
+	err := tkUser.ExecToErr("explain for connection 42")
 	c.Check(core.ErrNoSuchThread.Equal(err), IsTrue)
 
 	tkRootProcess.Plan = nil
