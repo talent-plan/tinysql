@@ -70,9 +70,6 @@ func (ts *TidbTestSuite) SetUpSuite(c *C) {
 	ts.server = server
 	go ts.server.Run()
 	waitUntilServerOnline(cfg.Status.StatusPort)
-
-	// Run this test here because parallel would affect the result of it.
-	runTestStmtCount(c)
 }
 
 func (ts *TidbTestSuite) TearDownSuite(c *C) {
@@ -148,11 +145,6 @@ func (ts *TidbTestSuite) TestDBNameEscape(c *C) {
 func (ts *TidbTestSuite) TestResultFieldTableIsNull(c *C) {
 	c.Parallel()
 	runTestResultFieldTableIsNull(c)
-}
-
-func (ts *TidbTestSuite) TestStatusAPI(c *C) {
-	c.Parallel()
-	runTestStatusAPI(c)
 }
 
 func (ts *TidbTestSuite) TestMultiStatements(c *C) {
