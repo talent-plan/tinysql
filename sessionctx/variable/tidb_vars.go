@@ -35,8 +35,6 @@ import (
 
 // TiDB system variable names that only in session scope.
 const (
-	TiDBDDLSlowOprThreshold = "ddl_slow_threshold"
-
 	// tidb_snapshot is used for reading history data, the default value is empty string.
 	// The value can be a datetime string like '2017-11-11 20:20:20' or a tso string. When this variable is set, the session reads history data of that time.
 	TiDBSnapshot = "tidb_snapshot"
@@ -84,32 +82,8 @@ const (
 	// User could change it to a smaller one to avoid breaking the transaction size limitation.
 	TiDBDMLBatchSize = "tidb_dml_batch_size"
 
-	// The following session variables controls the memory quota during query execution.
-	// "tidb_mem_quota_query":				control the memory quota of a query.
-	// "tidb_mem_quota_hashjoin": 			control the memory quota of "HashJoinExec".
-	// "tidb_mem_quota_mergejoin": 			control the memory quota of "MergeJoinExec".
-	// "tidb_mem_quota_sort":     			control the memory quota of "SortExec".
-	// "tidb_mem_quota_topn":     			control the memory quota of "TopNExec".
-	// "tidb_mem_quota_indexlookupreader":	control the memory quota of "IndexLookUpExecutor".
-	// "tidb_mem_quota_indexlookupjoin":	control the memory quota of "IndexLookUpJoin".
-	// "tidb_mem_quota_nestedloopapply": 	control the memory quota of "NestedLoopApplyExec".
-	TIDBMemQuotaQuery             = "tidb_mem_quota_query"             // Bytes.
-	TIDBMemQuotaHashJoin          = "tidb_mem_quota_hashjoin"          // Bytes.
-	TIDBMemQuotaMergeJoin         = "tidb_mem_quota_mergejoin"         // Bytes.
-	TIDBMemQuotaSort              = "tidb_mem_quota_sort"              // Bytes.
-	TIDBMemQuotaTopn              = "tidb_mem_quota_topn"              // Bytes.
-	TIDBMemQuotaIndexLookupReader = "tidb_mem_quota_indexlookupreader" // Bytes.
-	TIDBMemQuotaIndexLookupJoin   = "tidb_mem_quota_indexlookupjoin"   // Bytes.
-	TIDBMemQuotaNestedLoopApply   = "tidb_mem_quota_nestedloopapply"   // Bytes.
-
 	// tidb_general_log is used to log every query in the server in info level.
 	TiDBGeneralLog = "tidb_general_log"
-
-	// tidb_slow_log_threshold is used to set the slow log threshold in the server.
-	TiDBSlowLogThreshold = "tidb_slow_log_threshold"
-
-	// tidb_record_plan_in_slow_log is used to log the plan of the slow query.
-	TiDBRecordPlanInSlowLog = "tidb_record_plan_in_slow_log"
 
 	// tidb_query_log_max_len is used to set the max length of the query in the log.
 	TiDBQueryLogMaxLen = "tidb_query_log_max_len"
@@ -390,7 +364,6 @@ const (
 	DefEnableWindowFunction          = true
 	DefEnableVectorizedExpression    = true
 	DefTiDBOptJoinReorderThreshold   = 0
-	DefTiDBDDLSlowOprThreshold       = 300
 	DefTiDBUseFastAnalyze            = false
 	DefTiDBSkipIsolationLevelCheck   = false
 	DefTiDBScatterRegion             = false
@@ -410,10 +383,8 @@ var (
 	ddlErrorCountlimit     int64 = DefTiDBDDLErrorCountLimit
 	maxDeltaSchemaCount    int64 = DefTiDBMaxDeltaSchemaCount
 	// Export for testing.
-	MaxDDLReorgBatchSize int32 = 10240
-	MinDDLReorgBatchSize int32 = 32
-	// DDLSlowOprThreshold is the threshold for ddl slow operations, uint is millisecond.
-	DDLSlowOprThreshold   uint32 = DefTiDBDDLSlowOprThreshold
+	MaxDDLReorgBatchSize  int32  = 10240
+	MinDDLReorgBatchSize  int32  = 32
 	ForcePriority                = int32(DefTiDBForcePriority)
 	ServerHostname, _            = os.Hostname()
 	MaxOfMaxAllowedPacket uint64 = 1073741824

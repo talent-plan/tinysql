@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -26,9 +25,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/disk"
-	"github.com/pingcap/tidb/util/memory"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 var (
@@ -68,8 +64,6 @@ type HashJoinExec struct {
 	joinChkResourceCh  []chan *chunk.Chunk
 	joinResultCh       chan *hashjoinWorkerResult
 
-	memTracker  *memory.Tracker // track memory usage.
-	diskTracker *disk.Tracker   // track disk usage.
 	prepared    bool
 	isOuterJoin bool
 }
@@ -122,12 +116,6 @@ func (e *HashJoinExec) Close() error {
 		e.probeChkResourceCh = nil
 		e.joinChkResourceCh = nil
 	}
-	e.memTracker = nil
-
-	if e.runtimeStats != nil {
-		concurrency := cap(e.joiners)
-		e.runtimeStats.SetConcurrencyInfo("Concurrency", concurrency)
-	}
 	err := e.baseExecutor.Close()
 	return err
 }
@@ -139,11 +127,6 @@ func (e *HashJoinExec) Open(ctx context.Context) error {
 	}
 
 	e.prepared = false
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaHashJoin)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-
-	e.diskTracker = disk.NewTracker(e.id, -1)
-	e.diskTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.DiskTracker)
 
 	e.closeCh = make(chan struct{})
 	e.finished.Store(false)
@@ -221,8 +204,6 @@ func (e *HashJoinExec) wait4BuildSide() (finished bool, err error) {
 	}
 	return false, nil
 }
-
-var innerResultLabel fmt.Stringer = stringutil.StringerStr("innerResult")
 
 // fetchBuildSideRows fetches all rows from build side executor, and append them
 // to e.buildSideResult.
@@ -527,8 +508,6 @@ func (e *HashJoinExec) buildHashTableForList(buildSideResultCh <-chan *chunk.Chu
 	}
 	initList := chunk.NewList(allTypes, e.initCap, e.maxChunkSize)
 	e.rowContainer = newHashRowContainer(e.ctx, int(e.buildSideEstCount), hCtx, initList)
-	e.rowContainer.GetMemTracker().AttachTo(e.memTracker)
-	e.rowContainer.GetMemTracker().SetLabel(innerResultLabel)
 	for chk := range buildSideResultCh {
 		if e.finished.Load().(bool) {
 			return nil
@@ -567,19 +546,14 @@ type NestedLoopApplyExec struct {
 	outerRow         *chunk.Row
 	hasMatch         bool
 	hasNull          bool
-
-	memTracker *memory.Tracker // track memory usage.
 }
 
 // Close implements the Executor interface.
 func (e *NestedLoopApplyExec) Close() error {
 	e.innerRows = nil
 
-	e.memTracker = nil
 	return e.outerExec.Close()
 }
-
-var innerListLabel fmt.Stringer = stringutil.StringerStr("innerList")
 
 // Open implements the Executor interface.
 func (e *NestedLoopApplyExec) Open(ctx context.Context) error {
@@ -592,12 +566,6 @@ func (e *NestedLoopApplyExec) Open(ctx context.Context) error {
 	e.outerChunk = newFirstChunk(e.outerExec)
 	e.innerChunk = newFirstChunk(e.innerExec)
 	e.innerList = chunk.NewList(retTypes(e.innerExec), e.initCap, e.maxChunkSize)
-
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaNestedLoopApply)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-
-	e.innerList.GetMemTracker().SetLabel(innerListLabel)
-	e.innerList.GetMemTracker().AttachTo(e.memTracker)
 
 	return nil
 }

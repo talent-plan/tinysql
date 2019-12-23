@@ -43,13 +43,6 @@ type ShowDDL struct {
 	baseSchemaProducer
 }
 
-// ShowSlow is for showing slow queries.
-type ShowSlow struct {
-	baseSchemaProducer
-
-	*ast.ShowSlow
-}
-
 // ShowDDLJobQueries is for showing DDL job queries sql.
 type ShowDDLJobQueries struct {
 	baseSchemaProducer
@@ -256,47 +249,8 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 	if err != nil {
 		return err
 	}
-	err = e.tryCachePointPlan(ctx, sctx, prepared, is, p)
-	if err != nil {
-		return err
-	}
 	e.names = names
 	e.Plan = p
-	return err
-}
-
-// tryCachePointPlan will try to cache point execution plan, there may be some
-// short paths for these executions, currently "point select" and "point update"
-func (e *Execute) tryCachePointPlan(ctx context.Context, sctx sessionctx.Context,
-	prepared *ast.Prepared, is infoschema.InfoSchema, p Plan) error {
-	var (
-		ok    bool
-		err   error
-		names types.NameSlice
-	)
-	switch p.(type) {
-	case *PointGetPlan:
-		ok, err = IsPointGetWithPKOrUniqueKeyByAutoCommit(sctx, p)
-		names = p.OutputNames()
-		if err != nil {
-			return err
-		}
-	case *Update:
-		ok, err = IsPointUpdateByAutoCommit(sctx, p)
-		if err != nil {
-			return err
-		}
-		if ok {
-			// make constant expression store paramMarker
-			sctx.GetSessionVars().StmtCtx.PointExec = true
-			p, names, err = OptimizeAstNode(ctx, sctx, prepared.Stmt, is)
-		}
-	}
-	if ok {
-		// just cache point plan now
-		prepared.CachedPlan = p
-		prepared.CachedNames = names
-	}
 	return err
 }
 
@@ -332,40 +286,6 @@ func (e *Execute) rebuildRange(p Plan) error {
 		is.Ranges, err = e.buildRangeForIndexScan(sctx, is)
 		if err != nil {
 			return err
-		}
-	case *PointGetPlan:
-		if x.HandleParam != nil {
-			x.Handle, err = x.HandleParam.Datum.ToInt64(sc)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-		for i, param := range x.IndexValueParams {
-			if param != nil {
-				x.IndexValues[i] = param.Datum
-			}
-		}
-		return nil
-	case *BatchPointGetPlan:
-		for i, param := range x.HandleParams {
-			if param != nil {
-				x.Handles[i], err = param.Datum.ToInt64(sc)
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-		}
-		for i, params := range x.IndexValueParams {
-			if len(params) < 1 {
-				continue
-			}
-			for j, param := range params {
-				if param != nil {
-					x.IndexValues[i][j] = param.Datum
-				}
-			}
 		}
 	case PhysicalPlan:
 		for _, child := range x.Children() {
@@ -538,17 +458,6 @@ type LoadStats struct {
 	Path string
 }
 
-// IndexAdvise represents a index advise plan.
-type IndexAdvise struct {
-	baseSchemaProducer
-
-	IsLocal     bool
-	Path        string
-	MaxMinutes  uint64
-	MaxIndexNum *ast.MaxIndexNumClause
-	LinesInfo   *ast.LinesClause
-}
-
 // SplitRegion represents a split regions plan.
 type SplitRegion struct {
 	baseSchemaProducer
@@ -583,7 +492,6 @@ type Explain struct {
 
 	TargetPlan Plan
 	Format     string
-	Analyze    bool
 	ExecStmt   ast.StmtNode
 
 	Rows           [][]string
@@ -596,10 +504,8 @@ func (e *Explain) prepareSchema() error {
 	format := strings.ToLower(e.Format)
 
 	switch {
-	case format == ast.ExplainFormatROW && !e.Analyze:
+	case format == ast.ExplainFormatROW:
 		fieldNames = []string{"id", "count", "task", "operator info"}
-	case format == ast.ExplainFormatROW && e.Analyze:
-		fieldNames = []string{"id", "count", "task", "operator info", "execution info", "memory", "disk"}
 	case format == ast.ExplainFormatDOT:
 		fieldNames = []string{"dot contents"}
 	case format == ast.ExplainFormatHint:
@@ -786,40 +692,6 @@ func (e *Explain) prepareOperatorInfo(p Plan, taskType string, indent string, is
 	}
 	explainID := p.ExplainID().String()
 	row := []string{PrettyIdentifier(explainID, indent, isLastChild), count, taskType, operatorInfo}
-	if e.Analyze {
-		runtimeStatsColl := e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl
-		// There maybe some mock information for cop task to let runtimeStatsColl.Exists(p.ExplainID()) is true.
-		// So check copTaskExecDetail first and print the real cop task information if it's not empty.
-		var analyzeInfo string
-		if runtimeStatsColl.ExistsCopStats(explainID) {
-			analyzeInfo = runtimeStatsColl.GetCopStats(explainID).String()
-		} else if runtimeStatsColl.ExistsRootStats(explainID) {
-			analyzeInfo = runtimeStatsColl.GetRootStats(explainID).String()
-		} else {
-			analyzeInfo = "time:0ns, loops:0, rows:0"
-		}
-		switch p.(type) {
-		case *PhysicalTableReader, *PhysicalIndexReader, *PhysicalIndexLookUpReader:
-			if s := runtimeStatsColl.GetReaderStats(explainID); s != nil && len(s.String()) > 0 {
-				analyzeInfo += ", " + s.String()
-			}
-		}
-		row = append(row, analyzeInfo)
-
-		memTracker := e.ctx.GetSessionVars().StmtCtx.MemTracker.SearchTracker(p.ExplainID().String())
-		if memTracker != nil {
-			row = append(row, memTracker.BytesToString(memTracker.MaxConsumed()))
-		} else {
-			row = append(row, "N/A")
-		}
-
-		diskTracker := e.ctx.GetSessionVars().StmtCtx.DiskTracker.SearchTracker(p.ExplainID().String())
-		if diskTracker != nil {
-			row = append(row, diskTracker.BytesToString(diskTracker.MaxConsumed()))
-		} else {
-			row = append(row, "N/A")
-		}
-	}
 	e.Rows = append(e.Rows, row)
 }
 
@@ -910,11 +782,6 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bo
 	case *PhysicalTableReader:
 		tableScan := v.TablePlans[0].(*PhysicalTableScan)
 		return len(tableScan.Ranges) == 1 && tableScan.Ranges[0].IsPoint(ctx.GetSessionVars().StmtCtx), nil
-	case *PointGetPlan:
-		// If the PointGetPlan needs to read data using unique index (double read), we
-		// can't use max uint64, because using math.MaxUint64 can't guarantee repeatable-read
-		// and the data and index would be inconsistent!
-		return v.IndexInfo == nil, nil
 	default:
 		return false, nil
 	}
@@ -924,21 +791,4 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bo
 // used for fast plan like point get
 func isAutoCommitTxn(ctx sessionctx.Context) bool {
 	return ctx.GetSessionVars().IsAutocommit() && !ctx.GetSessionVars().InTxn()
-}
-
-// IsPointUpdateByAutoCommit checks if plan p is point update and is in autocommit context
-func IsPointUpdateByAutoCommit(ctx sessionctx.Context, p Plan) (bool, error) {
-	if !isAutoCommitTxn(ctx) {
-		return false, nil
-	}
-
-	// check plan
-	updPlan, ok := p.(*Update)
-	if !ok {
-		return false, nil
-	}
-	if _, isFastSel := updPlan.SelectPlan.(*PointGetPlan); isFastSel {
-		return true, nil
-	}
-	return false, nil
 }

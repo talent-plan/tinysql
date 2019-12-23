@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -271,17 +270,6 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 		return nil
 	}
 
-	defer func() {
-		ctxValue := ctx.Value(execdetails.CommitDetailCtxKey)
-		if ctxValue != nil {
-			commitDetail := ctxValue.(**execdetails.CommitDetails)
-			if *commitDetail != nil {
-				(*commitDetail).TxnRetry++
-			} else {
-				*commitDetail = committer.getDetail()
-			}
-		}
-	}()
 	// latches disabled
 	if txn.store.txnLatches == nil {
 		err = committer.execute(ctx)
@@ -293,11 +281,6 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 	// for transactions which need to acquire latches
 	start = time.Now()
 	lock := txn.store.txnLatches.Lock(committer.startTS, committer.keys)
-	commitDetail := committer.getDetail()
-	commitDetail.LocalLatchTime = time.Since(start)
-	if commitDetail.LocalLatchTime > 0 {
-		metrics.TiKVLocalLatchWaitTimeHistogram.Observe(commitDetail.LocalLatchTime.Seconds())
-	}
 	defer txn.store.txnLatches.UnLock(lock)
 	if lock.IsStale() {
 		return kv.ErrWriteConflictInTiDB.FastGenByArgs(txn.startTS)

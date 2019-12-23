@@ -2725,29 +2725,11 @@ func (s *testSessionSuite2) TestStmtHints(c *C) {
 	tk.Se, err = session.CreateSession4Test(s.store)
 	c.Assert(err, IsNil)
 
-	// Test MEMORY_QUOTA hint
-	tk.MustExec("select /*+ MEMORY_QUOTA(1 MB) */ 1;")
-	val := int64(1) * 1024 * 1024
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.CheckBytesLimit(val), IsTrue)
-	tk.MustExec("select /*+ MEMORY_QUOTA(1 GB) */ 1;")
-	val = int64(1) * 1024 * 1024 * 1024
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.CheckBytesLimit(val), IsTrue)
-	tk.MustExec("select /*+ MEMORY_QUOTA(1 GB), MEMORY_QUOTA(1 MB) */ 1;")
-	val = int64(1) * 1024 * 1024
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.CheckBytesLimit(val), IsTrue)
-	tk.MustExec("select /*+ MEMORY_QUOTA(0 GB) */ 1;")
-	val = int64(0)
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.MemTracker.CheckBytesLimit(val), IsTrue)
-
 	// Test NO_INDEX_MERGE hint
-	tk.Se.GetSessionVars().SetEnableIndexMerge(true)
 	tk.MustExec("select /*+ NO_INDEX_MERGE() */ 1;")
 	c.Assert(tk.Se.GetSessionVars().StmtCtx.NoIndexMergeHint, IsTrue)
 	tk.MustExec("select /*+ NO_INDEX_MERGE(), NO_INDEX_MERGE() */ 1;")
 	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-	c.Assert(tk.Se.GetSessionVars().GetEnableIndexMerge(), IsTrue)
 
 	// Test USE_TOJA hint
 	tk.Se.GetSessionVars().SetAllowInSubqToJoinAndAgg(true)

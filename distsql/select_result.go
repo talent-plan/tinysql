@@ -27,11 +27,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tipb/go-tipb"
-	"go.uber.org/zap"
 )
 
 var (
@@ -76,7 +72,6 @@ type selectResult struct {
 
 	fetchDuration    time.Duration
 	durationReported bool
-	memTracker       *memory.Tracker
 }
 
 func (r *selectResult) Fetch(ctx context.Context) {
@@ -91,9 +86,6 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 		r.fetchDuration += duration
 		if err != nil {
 			return errors.Trace(err)
-		}
-		if r.selectResp != nil {
-			r.memConsume(-int64(r.selectRespSize))
 		}
 		if resultSubset == nil {
 			r.selectResp = nil
@@ -112,7 +104,6 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		r.selectRespSize = r.selectResp.Size()
-		r.memConsume(int64(r.selectRespSize))
 		if err := r.selectResp.Error; err != nil {
 			return terror.ClassTiKV.New(terror.ErrCode(err.Code), err.Msg)
 		}
@@ -120,10 +111,8 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 		for _, warning := range r.selectResp.Warnings {
 			sc.AppendWarning(terror.ClassTiKV.New(terror.ErrCode(warning.Code), warning.Msg))
 		}
-		r.updateCopRuntimeStats(resultSubset.GetExecDetails(), resultSubset.RespTime())
 		r.feedback.Update(resultSubset.GetStartKey(), r.selectResp.OutputCounts)
 		r.partialCount++
-		sc.MergeExecDetails(resultSubset.GetExecDetails(), nil)
 		if len(r.selectResp.Chunks) != 0 {
 			break
 		}
@@ -219,30 +208,6 @@ func (r *selectResult) readFromChunk(ctx context.Context, chk *chunk.Chunk) erro
 	return nil
 }
 
-func (r *selectResult) updateCopRuntimeStats(detail *execdetails.ExecDetails, respTime time.Duration) {
-	callee := detail.CalleeAddress
-	if r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl == nil || callee == "" {
-		return
-	}
-	if len(r.selectResp.GetExecutionSummaries()) != len(r.copPlanIDs) {
-		logutil.BgLogger().Error("invalid cop task execution summaries length",
-			zap.Int("expected", len(r.copPlanIDs)),
-			zap.Int("received", len(r.selectResp.GetExecutionSummaries())))
-
-		return
-	}
-
-	r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RecordOneReaderStats(r.rootPlanID.String(), respTime, detail)
-	for i, detail := range r.selectResp.GetExecutionSummaries() {
-		if detail != nil && detail.TimeProcessedNs != nil &&
-			detail.NumProducedRows != nil && detail.NumIterations != nil {
-			planID := r.copPlanIDs[i]
-			r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.
-				RecordOneCopTask(planID.String(), callee, detail)
-		}
-	}
-}
-
 func (r *selectResult) readRowsData(chk *chunk.Chunk) (err error) {
 	rowsData := r.selectResp.Chunks[r.respChkIdx].RowsData
 	decoder := codec.NewDecoder(chk, r.ctx.GetSessionVars().Location())
@@ -258,20 +223,11 @@ func (r *selectResult) readRowsData(chk *chunk.Chunk) (err error) {
 	return nil
 }
 
-func (r *selectResult) memConsume(bytes int64) {
-	if r.memTracker != nil {
-		r.memTracker.Consume(bytes)
-	}
-}
-
 // Close closes selectResult.
 func (r *selectResult) Close() error {
 	if r.feedback.Actual() >= 0 {
 		metrics.DistSQLScanKeysHistogram.Observe(float64(r.feedback.Actual()))
 	}
 	metrics.DistSQLPartialCountHistogram.Observe(float64(r.partialCount))
-	if r.selectResp != nil {
-		r.memConsume(-int64(r.selectRespSize))
-	}
 	return r.resp.Close()
 }

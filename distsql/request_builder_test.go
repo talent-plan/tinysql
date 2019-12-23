@@ -28,12 +28,9 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/disk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tidb/util/testleak"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -43,7 +40,7 @@ var _ = Suite(&testSuite{})
 func TestT(t *testing.T) {
 	CustomVerboseFlag = true
 	logLevel := os.Getenv("log_level")
-	logutil.InitLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, "", logutil.EmptyFileLogConfig, false))
+	logutil.InitLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, logutil.EmptyFileLogConfig, false))
 	TestingT(t)
 }
 
@@ -55,10 +52,7 @@ type testSuite struct {
 
 func (s *testSuite) SetUpSuite(c *C) {
 	ctx := mock.NewContext()
-	ctx.GetSessionVars().StmtCtx = &stmtctx.StatementContext{
-		MemTracker:  memory.NewTracker(stringutil.StringerStr("testSuite"), variable.DefTiDBMemQuotaDistSQL),
-		DiskTracker: disk.NewTracker(stringutil.StringerStr("testSuite"), -1),
-	}
+	ctx.GetSessionVars().StmtCtx = &stmtctx.StatementContext{}
 	ctx.Store = &mock.Store{
 		Client: &mock.Client{
 			MockResponse: &mockResponse{

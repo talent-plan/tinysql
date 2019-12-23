@@ -220,14 +220,6 @@ func (tk *TestKit) MustTableDual(sql string, args ...interface{}) *Result {
 	return tk.MustQuery(sql, args...)
 }
 
-// MustPointGet checks whether the plan for the sql is Point_Get.
-func (tk *TestKit) MustPointGet(sql string, args ...interface{}) *Result {
-	rs := tk.MustQuery("explain "+sql, args...)
-	tk.c.Assert(len(rs.rows), check.Equals, 1)
-	tk.c.Assert(strings.Contains(rs.rows[0][0], "Point_Get"), check.IsTrue)
-	return tk.MustQuery(sql, args...)
-}
-
 // MustQuery query the statements and returns result rows.
 // If expected result is set it asserts the query result equals expected result.
 func (tk *TestKit) MustQuery(sql string, args ...interface{}) *Result {

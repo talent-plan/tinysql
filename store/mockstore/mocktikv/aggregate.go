@@ -15,8 +15,6 @@ package mocktikv
 
 import (
 	"context"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
@@ -45,17 +43,8 @@ type hashAggExec struct {
 	executed          bool
 	currGroupIdx      int
 	count             int64
-	execDetail        *execDetail
 
 	src executor
-}
-
-func (e *hashAggExec) ExecDetails() []*execDetail {
-	var suffix []*execDetail
-	if e.src != nil {
-		suffix = e.src.ExecDetails()
-	}
-	return append(suffix, e.execDetail)
 }
 
 func (e *hashAggExec) SetSrcExec(exec executor) {
@@ -94,9 +83,6 @@ func (e *hashAggExec) Cursor() ([]byte, bool) {
 }
 
 func (e *hashAggExec) Next(ctx context.Context) (value [][]byte, err error) {
-	defer func(begin time.Time) {
-		e.execDetail.update(begin, value)
-	}(time.Now())
 	e.count++
 	if e.aggCtxsMap == nil {
 		e.aggCtxsMap = make(aggCtxsMapper)
@@ -216,17 +202,8 @@ type streamAggExec struct {
 	executed          bool
 	hasData           bool
 	count             int64
-	execDetail        *execDetail
 
 	src executor
-}
-
-func (e *streamAggExec) ExecDetails() []*execDetail {
-	var suffix []*execDetail
-	if e.src != nil {
-		suffix = e.src.ExecDetails()
-	}
-	return append(suffix, e.execDetail)
 }
 
 func (e *streamAggExec) SetSrcExec(exec executor) {
@@ -310,9 +287,6 @@ func (e *streamAggExec) Cursor() ([]byte, bool) {
 }
 
 func (e *streamAggExec) Next(ctx context.Context) (retRow [][]byte, err error) {
-	defer func(begin time.Time) {
-		e.execDetail.update(begin, retRow)
-	}(time.Now())
 	e.count++
 	if e.executed {
 		return nil, nil

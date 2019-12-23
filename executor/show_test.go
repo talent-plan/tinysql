@@ -304,19 +304,6 @@ func (s *testSuite5) TestShowTableStatus(c *C) {
 	c.Assert(rows[0].GetString(16), Equals, "partitioned")
 }
 
-func (s *testSuite5) TestShowSlow(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	// The test result is volatile, because
-	// 1. Slow queries is stored in domain, which may be affected by other tests.
-	// 2. Collecting slow queries is a asynchronous process, check immediately may not get the expected result.
-	// 3. Make slow query like "select sleep(1)" would slow the CI.
-	// So, we just cover the code but do not check the result.
-	tk.MustQuery(`admin show slow recent 3`)
-	tk.MustQuery(`admin show slow top 3`)
-	tk.MustQuery(`admin show slow top internal 3`)
-	tk.MustQuery(`admin show slow top all 3`)
-}
-
 func (s *testSuite5) TestShowOpenTables(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustQuery("show open tables")
@@ -523,14 +510,4 @@ func (s *testSuite5) TestShowEscape(c *C) {
 
 	tk.MustExec("rename table \"t`abl\"\"e\" to t")
 	tk.MustExec("set sql_mode=@old_sql_mode")
-}
-
-func (s *testSuite5) TestShowBuiltin(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	res := tk.MustQuery("show builtins;")
-	c.Assert(res, NotNil)
-	rows := res.Rows()
-	c.Assert(260, Equals, len(rows))
-	c.Assert("abs", Equals, rows[0][0].(string))
-	c.Assert("yearweek", Equals, rows[259][0].(string))
 }

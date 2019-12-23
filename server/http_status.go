@@ -14,35 +14,17 @@
 package server
 
 import (
-	"archive/zip"
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"net/url"
-	"runtime"
-	rpprof "runtime/pprof"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/fn"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
-	"github.com/tiancaiamao/appdash/traceapp"
-	"go.uber.org/zap"
-	static "sourcegraph.com/sourcegraph/appdash-data"
 )
 
 const defaultStatusPort = 10080
@@ -51,95 +33,12 @@ func (s *Server) startStatusHTTP() {
 	go s.startHTTPServer()
 }
 
-func serveError(w http.ResponseWriter, status int, txt string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Go-Pprof", "1")
-	w.Header().Del("Content-Disposition")
-	w.WriteHeader(status)
-	_, err := fmt.Fprintln(w, txt)
-	terror.Log(err)
-}
-
-func sleepWithCtx(ctx context.Context, d time.Duration) {
-	select {
-	case <-time.After(d):
-	case <-ctx.Done():
-	}
-}
-
 func (s *Server) startHTTPServer() {
 	router := mux.NewRouter()
-
-	router.HandleFunc("/status", s.handleStatus).Name("Status")
-	// HTTP path for prometheus.
-	router.Handle("/metrics", promhttp.Handler()).Name("Metrics")
-
-	// HTTP path for dump statistics.
-	router.Handle("/stats/dump/{db}/{table}", s.newStatsHandler()).Name("StatsDump")
-	router.Handle("/stats/dump/{db}/{table}/{snapshot}", s.newStatsHistoryHandler()).Name("StatsHistoryDump")
-
-	router.Handle("/settings", settingsHandler{}).Name("Settings")
-	router.Handle("/reload-config", configReloadHandler{}).Name("ConfigReload")
-	router.Handle("/binlog/recover", binlogRecover{}).Name("BinlogRecover")
-
-	tikvHandlerTool := s.newTikvHandlerTool()
-	router.Handle("/schema", schemaHandler{tikvHandlerTool}).Name("Schema")
-	router.Handle("/schema/{db}", schemaHandler{tikvHandlerTool})
-	router.Handle("/schema/{db}/{table}", schemaHandler{tikvHandlerTool})
-	router.Handle("/tables/{colID}/{colTp}/{colFlag}/{colLen}", valueHandler{})
-	router.Handle("/ddl/history", ddlHistoryJobHandler{tikvHandlerTool}).Name("DDL_History")
-	router.Handle("/ddl/owner/resign", ddlResignOwnerHandler{tikvHandlerTool.Store.(kv.Storage)}).Name("DDL_Owner_Resign")
-
-	// HTTP path for get the TiDB config
-	router.Handle("/config", fn.Wrap(func() (*config.Config, error) {
-		return config.GetGlobalConfig(), nil
-	}))
-
-	// HTTP path for get server info.
-	router.Handle("/info", serverInfoHandler{tikvHandlerTool}).Name("Info")
-	router.Handle("/info/all", allServerInfoHandler{tikvHandlerTool}).Name("InfoALL")
-	// HTTP path for get db and table info that is related to the tableID.
-	router.Handle("/db-table/{tableID}", dbTableHandler{tikvHandlerTool})
-	// HTTP path for get table tiflash replica info.
-	router.Handle("/tiflash/replica", flashReplicaHandler{tikvHandlerTool})
-
-	if s.cfg.Store == "tikv" {
-		// HTTP path for tikv.
-		router.Handle("/tables/{db}/{table}/regions", tableHandler{tikvHandlerTool, opTableRegions})
-		router.Handle("/tables/{db}/{table}/scatter", tableHandler{tikvHandlerTool, opTableScatter})
-		router.Handle("/tables/{db}/{table}/stop-scatter", tableHandler{tikvHandlerTool, opStopTableScatter})
-		router.Handle("/tables/{db}/{table}/disk-usage", tableHandler{tikvHandlerTool, opTableDiskUsage})
-		router.Handle("/regions/meta", regionHandler{tikvHandlerTool}).Name("RegionsMeta")
-		router.Handle("/regions/hot", regionHandler{tikvHandlerTool}).Name("RegionHot")
-		router.Handle("/regions/{regionID}", regionHandler{tikvHandlerTool})
-	}
-
-	// HTTP path for get MVCC info
-	router.Handle("/mvcc/key/{db}/{table}/{handle}", mvccTxnHandler{tikvHandlerTool, opMvccGetByKey})
-	router.Handle("/mvcc/txn/{startTS}/{db}/{table}", mvccTxnHandler{tikvHandlerTool, opMvccGetByTxn})
-	router.Handle("/mvcc/hex/{hexKey}", mvccTxnHandler{tikvHandlerTool, opMvccGetByHex})
-	router.Handle("/mvcc/index/{db}/{table}/{index}/{handle}", mvccTxnHandler{tikvHandlerTool, opMvccGetByIdx})
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Status.StatusHost, s.cfg.Status.StatusPort)
 	if s.cfg.Status.StatusPort == 0 {
 		addr = fmt.Sprintf("%s:%d", s.cfg.Status.StatusHost, defaultStatusPort)
-	}
-
-	// HTTP path for web UI.
-	if host, port, err := net.SplitHostPort(addr); err == nil {
-		if host == "" {
-			host = "localhost"
-		}
-		baseURL := &url.URL{
-			Scheme: "http",
-			Host:   fmt.Sprintf("%s:%s", host, port),
-		}
-		router.HandleFunc("/web/trace", traceapp.HandleTiDB).Name("Trace Viewer")
-		sr := router.PathPrefix("/web/trace/").Subrouter()
-		if _, err := traceapp.New(traceapp.NewRouter(sr), baseURL); err != nil {
-			logutil.BgLogger().Error("new failed", zap.Error(err))
-		}
-		router.PathPrefix("/static/").Handler(http.StripPrefix("/static", http.FileServer(static.Data)))
 	}
 
 	serverMux := http.NewServeMux()
@@ -150,77 +49,6 @@ func (s *Server) startHTTPServer() {
 	serverMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	serverMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	serverMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-	serverMux.HandleFunc("/debug/zip", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="tidb_debug"`+time.Now().Format("20060102150405")+".zip"))
-
-		// dump goroutine/heap/mutex
-		items := []struct {
-			name   string
-			gc     int
-			debug  int
-			second int
-		}{
-			{name: "goroutine", debug: 2},
-			{name: "heap", gc: 1},
-			{name: "mutex"},
-		}
-		zw := zip.NewWriter(w)
-		for _, item := range items {
-			p := rpprof.Lookup(item.name)
-			if p == nil {
-				serveError(w, http.StatusNotFound, "Unknown profile")
-				return
-			}
-			if item.gc > 0 {
-				runtime.GC()
-			}
-			fw, err := zw.Create(item.name)
-			if err != nil {
-				serveError(w, http.StatusInternalServerError, fmt.Sprintf("Create zipped %s fail: %v", item.name, err))
-				return
-			}
-			err = p.WriteTo(fw, item.debug)
-			terror.Log(err)
-		}
-
-		// dump profile
-		fw, err := zw.Create("profile")
-		if err != nil {
-			serveError(w, http.StatusInternalServerError, fmt.Sprintf("Create zipped %s fail: %v", "profile", err))
-			return
-		}
-		if err := rpprof.StartCPUProfile(fw); err != nil {
-			serveError(w, http.StatusInternalServerError,
-				fmt.Sprintf("Could not enable CPU profiling: %s", err))
-			return
-		}
-		sec, err := strconv.ParseInt(r.FormValue("seconds"), 10, 64)
-		if sec <= 0 || err != nil {
-			sec = 10
-		}
-		sleepWithCtx(r.Context(), time.Duration(sec)*time.Second)
-		rpprof.StopCPUProfile()
-
-		// dump config
-		fw, err = zw.Create("config")
-		if err != nil {
-			serveError(w, http.StatusInternalServerError, fmt.Sprintf("Create zipped %s fail: %v", "config", err))
-			return
-		}
-		js, err := json.MarshalIndent(config.GetGlobalConfig(), "", " ")
-		if err != nil {
-			serveError(w, http.StatusInternalServerError, fmt.Sprintf("get config info fail%v", err))
-			return
-		}
-		_, err = fw.Write(js)
-		terror.Log(err)
-
-		err = zw.Close()
-		terror.Log(err)
-	})
-	fetcher := sqlInfoFetcher{store: tikvHandlerTool.Store}
-	serverMux.HandleFunc("/debug/sub-optimal-plan", fetcher.zipInfoForSQL)
 
 	var (
 		httpRouterPage bytes.Buffer
@@ -235,8 +63,7 @@ func (s *Server) startHTTPServer() {
 		}
 		name := route.GetName()
 		// If the name attribute is not set, GetName returns "".
-		// "traceapp.xxx" are introduced by the traceapp package and are also ignored.
-		if name != "" && !strings.HasPrefix(name, "traceapp") && err == nil {
+		if name != "" {
 			httpRouterPage.WriteString("<tr><td><a href='" + pathTemplate + "'>" + name + "</a><td></tr>")
 		}
 		return nil
@@ -254,10 +81,10 @@ func (s *Server) startHTTPServer() {
 	})
 
 	logutil.BgLogger().Info("for status and metrics report", zap.String("listening on addr", addr))
-	s.setupStatuServerAndRPCServer(addr, serverMux)
+	s.setupStatusServer(addr, serverMux)
 }
 
-func (s *Server) setupStatuServerAndRPCServer(addr string, serverMux *http.ServeMux) {
+func (s *Server) setupStatusServer(addr string, serverMux *http.ServeMux) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		logutil.BgLogger().Info("listen failed", zap.Error(err))
@@ -267,15 +94,8 @@ func (s *Server) setupStatuServerAndRPCServer(addr string, serverMux *http.Serve
 	// Match connections in order:
 	// First HTTP, and otherwise grpc.
 	httpL := m.Match(cmux.HTTP1Fast())
-	grpcL := m.Match(cmux.Any())
 
 	s.statusServer = &http.Server{Addr: addr, Handler: CorsHandler{handler: serverMux, cfg: s.cfg}}
-	s.grpcServer = NewRPCServer(s.cfg, s.dom, s)
-
-	go util.WithRecovery(func() {
-		err := s.grpcServer.Serve(grpcL)
-		logutil.BgLogger().Error("grpc server error", zap.Error(err))
-	}, nil)
 
 	if len(s.cfg.Security.ClusterSSLCA) != 0 {
 		go util.WithRecovery(func() {
@@ -291,29 +111,5 @@ func (s *Server) setupStatuServerAndRPCServer(addr string, serverMux *http.Serve
 	err = m.Serve()
 	if err != nil {
 		logutil.BgLogger().Error("start status/rpc server error", zap.Error(err))
-	}
-}
-
-// status of TiDB.
-type status struct {
-	Connections int    `json:"connections"`
-	Version     string `json:"version"`
-	GitHash     string `json:"git_hash"`
-}
-
-func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	st := status{
-		Connections: s.ConnectionCount(),
-		Version:     mysql.ServerVersion,
-	}
-	js, err := json.Marshal(st)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		logutil.BgLogger().Error("encode json failed", zap.Error(err))
-	} else {
-		_, err = w.Write(js)
-		terror.Log(errors.Trace(err))
 	}
 }

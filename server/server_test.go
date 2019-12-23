@@ -15,13 +15,10 @@ package server
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"regexp"
-	"strconv"
 	"testing"
 	"time"
 
@@ -38,7 +35,7 @@ import (
 func TestT(t *testing.T) {
 	CustomVerboseFlag = true
 	logLevel := os.Getenv("log_level")
-	logutil.InitZapLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, "", logutil.EmptyFileLogConfig, false))
+	logutil.InitZapLogger(logutil.NewLogConfig(logLevel, logutil.DefaultLogFormat, logutil.EmptyFileLogConfig, false))
 	TestingT(t)
 }
 
@@ -866,17 +863,6 @@ func runTestResultFieldTableIsNull(c *C) {
 	})
 }
 
-func runTestStatusAPI(c *C) {
-	resp, err := http.Get("http://127.0.0.1:10090/status")
-	c.Assert(err, IsNil)
-	defer resp.Body.Close()
-	decoder := json.NewDecoder(resp.Body)
-	var data status
-	err = decoder.Decode(&data)
-	c.Assert(err, IsNil)
-	c.Assert(data.Version, Equals, tmysql.ServerVersion)
-}
-
 func runTestMultiStatements(c *C) {
 	runTestsOnNewDB(c, nil, "MultiStatements", func(dbt *DBTest) {
 		// Create Table
@@ -910,41 +896,6 @@ func runTestMultiStatements(c *C) {
 	})
 }
 
-func runTestStmtCount(t *C) {
-	runTestsOnNewDB(t, nil, "StatementCount", func(dbt *DBTest) {
-		originStmtCnt := getStmtCnt(string(getMetrics(t)))
-
-		dbt.mustExec("create table test (a int)")
-
-		dbt.mustExec("insert into test values(1)")
-		dbt.mustExec("insert into test values(2)")
-		dbt.mustExec("insert into test values(3)")
-		dbt.mustExec("insert into test values(4)")
-		dbt.mustExec("insert into test values(5)")
-
-		dbt.mustExec("delete from test where a = 3")
-		dbt.mustExec("update test set a = 2 where a = 1")
-		dbt.mustExec("select * from test")
-		dbt.mustExec("select 2")
-
-		dbt.mustExec("prepare stmt1 from 'update test set a = 1 where a = 2'")
-		dbt.mustExec("execute stmt1")
-		dbt.mustExec("prepare stmt2 from 'select * from test'")
-		dbt.mustExec("execute stmt2")
-		dbt.mustExec("replace into test(a) values(6);")
-
-		currentStmtCnt := getStmtCnt(string(getMetrics(t)))
-		t.Assert(currentStmtCnt["CreateTable"], Equals, originStmtCnt["CreateTable"]+1)
-		t.Assert(currentStmtCnt["Insert"], Equals, originStmtCnt["Insert"]+5)
-		t.Assert(currentStmtCnt["Delete"], Equals, originStmtCnt["Delete"]+1)
-		t.Assert(currentStmtCnt["Update"], Equals, originStmtCnt["Update"]+2)
-		t.Assert(currentStmtCnt["Select"], Equals, originStmtCnt["Select"]+3)
-		t.Assert(currentStmtCnt["Prepare"], Equals, originStmtCnt["Prepare"]+2)
-		t.Assert(currentStmtCnt["Execute"], Equals, originStmtCnt["Execute"]+2)
-		t.Assert(currentStmtCnt["Replace"], Equals, originStmtCnt["Replace"]+1)
-	})
-}
-
 func runTestTLSConnection(t *C, overrider configOverrider) error {
 	db, err := sql.Open("mysql", getDSN(overrider))
 	t.Assert(err, IsNil)
@@ -973,26 +924,6 @@ func runTestSumAvg(c *C) {
 		c.Assert(outB, Equals, 1.0)
 		c.Assert(outC, Equals, 1.0)
 	})
-}
-
-func getMetrics(t *C) []byte {
-	resp, err := http.Get("http://127.0.0.1:10090/metrics")
-	t.Assert(err, IsNil)
-	content, err := ioutil.ReadAll(resp.Body)
-	t.Assert(err, IsNil)
-	resp.Body.Close()
-	return content
-}
-
-func getStmtCnt(content string) (stmtCnt map[string]int) {
-	stmtCnt = make(map[string]int)
-	r, _ := regexp.Compile("tidb_executor_statement_total{type=\"([A-Z|a-z|-]+)\"} (\\d+)")
-	matchResult := r.FindAllStringSubmatch(content, -1)
-	for _, v := range matchResult {
-		cnt, _ := strconv.Atoi(v[2])
-		stmtCnt[v[1]] = cnt
-	}
-	return stmtCnt
 }
 
 const retryTime = 100

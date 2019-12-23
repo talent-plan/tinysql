@@ -380,16 +380,12 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildExplain(ctx, x)
 	case *ast.ExplainForStmt:
 		return b.buildExplainFor(x)
-	case *ast.TraceStmt:
-		return b.buildTrace(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
 	case *ast.LoadDataStmt:
 		return b.buildLoadData(ctx, x)
 	case *ast.LoadStatsStmt:
 		return b.buildLoadStats(x), nil
-	case *ast.IndexAdviseStmt:
-		return b.buildIndexAdvise(x), nil
 	case *ast.PrepareStmt:
 		return b.buildPrepare(x), nil
 	case *ast.SelectStmt:
@@ -816,10 +812,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 	case ast.AdminShowDDLJobQueries:
 		p := &ShowDDLJobQueries{JobIDs: as.JobIDs}
 		p.setSchemaAndNames(buildShowDDLJobQueriesFields())
-		ret = p
-	case ast.AdminShowSlow:
-		p := &ShowSlow{ShowSlow: as.ShowSlow}
-		p.setSchemaAndNames(buildShowSlowSchema())
 		ret = p
 	case ast.AdminReloadExprPushdownBlacklist:
 		return &ReloadExprPushdownBlacklist{}, nil
@@ -1384,29 +1376,6 @@ func buildSplitRegionsSchema() (*expression.Schema, types.NameSlice) {
 func buildShowDDLJobQueriesFields() (*expression.Schema, types.NameSlice) {
 	schema := newColumnsWithNames(1)
 	schema.Append(buildColumnWithName("", "QUERY", mysql.TypeVarchar, 256))
-	return schema.col2Schema(), schema.names
-}
-
-func buildShowSlowSchema() (*expression.Schema, types.NameSlice) {
-	longlongSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeLonglong)
-	tinySize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeTiny)
-	timestampSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeTimestamp)
-	durationSize, _ := mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeDuration)
-
-	schema := newColumnsWithNames(11)
-	schema.Append(buildColumnWithName("", "SQL", mysql.TypeVarchar, 4096))
-	schema.Append(buildColumnWithName("", "START", mysql.TypeTimestamp, timestampSize))
-	schema.Append(buildColumnWithName("", "DURATION", mysql.TypeDuration, durationSize))
-	schema.Append(buildColumnWithName("", "DETAILS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "SUCC", mysql.TypeTiny, tinySize))
-	schema.Append(buildColumnWithName("", "CONN_ID", mysql.TypeLonglong, longlongSize))
-	schema.Append(buildColumnWithName("", "TRANSACTION_TS", mysql.TypeLonglong, longlongSize))
-	schema.Append(buildColumnWithName("", "USER", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName("", "DB", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "TABLE_IDS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "INDEX_IDS", mysql.TypeVarchar, 256))
-	schema.Append(buildColumnWithName("", "INTERNAL", mysql.TypeTiny, tinySize))
-	schema.Append(buildColumnWithName("", "DIGEST", mysql.TypeVarchar, 64))
 	return schema.col2Schema(), schema.names
 }
 
@@ -2127,17 +2096,6 @@ func (b *PlanBuilder) buildLoadStats(ld *ast.LoadStatsStmt) Plan {
 	return p
 }
 
-func (b *PlanBuilder) buildIndexAdvise(node *ast.IndexAdviseStmt) Plan {
-	p := &IndexAdvise{
-		IsLocal:     node.IsLocal,
-		Path:        node.Path,
-		MaxMinutes:  node.MaxMinutes,
-		MaxIndexNum: node.MaxIndexNum,
-		LinesInfo:   node.LinesInfo,
-	}
-	return p
-}
-
 func (b *PlanBuilder) buildSplitRegion(node *ast.SplitRegionStmt) (Plan, error) {
 	if len(node.IndexName.L) != 0 {
 		return b.buildSplitIndexRegion(node)
@@ -2513,52 +2471,10 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 	return p, nil
 }
 
-const (
-	// TraceFormatRow indicates row tracing format.
-	TraceFormatRow = "row"
-	// TraceFormatJSON indicates json tracing format.
-	TraceFormatJSON = "json"
-	// TraceFormatLog indicates log tracing format.
-	TraceFormatLog = "log"
-)
-
-// buildTrace builds a trace plan. Inside this method, it first optimize the
-// underlying query and then constructs a schema, which will be used to constructs
-// rows result.
-func (b *PlanBuilder) buildTrace(trace *ast.TraceStmt) (Plan, error) {
-	p := &Trace{StmtNode: trace.Stmt, Format: trace.Format}
-	switch trace.Format {
-	case TraceFormatRow:
-		schema := newColumnsWithNames(3)
-		schema.Append(buildColumnWithName("", "operation", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "startTS", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "duration", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	case TraceFormatJSON:
-		schema := newColumnsWithNames(1)
-		schema.Append(buildColumnWithName("", "operation", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	case TraceFormatLog:
-		schema := newColumnsWithNames(4)
-		schema.Append(buildColumnWithName("", "time", mysql.TypeTimestamp, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "event", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "tags", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "spanName", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	default:
-		return nil, errors.New("trace format should be one of 'row', 'log' or 'json'")
-	}
-	return p, nil
-}
-
-func (b *PlanBuilder) buildExplainPlan(targetPlan Plan, format string, analyze bool, execStmt ast.StmtNode) (Plan, error) {
+func (b *PlanBuilder) buildExplainPlan(targetPlan Plan, format string, execStmt ast.StmtNode) (Plan, error) {
 	p := &Explain{
 		TargetPlan: targetPlan,
 		Format:     format,
-		Analyze:    analyze,
 		ExecStmt:   execStmt,
 	}
 	p.ctx = b.ctx
@@ -2585,7 +2501,7 @@ func (b *PlanBuilder) buildExplainFor(explainFor *ast.ExplainForStmt) (Plan, err
 		return &Explain{Format: explainFor.Format}, nil
 	}
 
-	return b.buildExplainPlan(targetPlan, explainFor.Format, false, nil)
+	return b.buildExplainPlan(targetPlan, explainFor.Format, nil)
 }
 
 func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt) (Plan, error) {
@@ -2597,7 +2513,7 @@ func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt
 		return nil, err
 	}
 
-	return b.buildExplainPlan(targetPlan, explain.Format, explain.Analyze, explain.Stmt)
+	return b.buildExplainPlan(targetPlan, explain.Format, explain.Stmt)
 }
 
 func buildShowProcedureSchema() (*expression.Schema, []*types.FieldName) {

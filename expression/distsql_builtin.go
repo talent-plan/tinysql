@@ -538,26 +538,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinCaseWhenDurationSig{base}
 	case tipb.ScalarFuncSig_CaseWhenJson:
 		f = &builtinCaseWhenJSONSig{base}
-	//case tipb.ScalarFuncSig_AesDecrypt:
-	//	f = &builtinAesDecryptSig{base}
-	//case tipb.ScalarFuncSig_AesEncrypt:
-	//	f = &builtinAesEncryptSig{base}
-	case tipb.ScalarFuncSig_Compress:
-		f = &builtinCompressSig{base}
-	case tipb.ScalarFuncSig_MD5:
-		f = &builtinMD5Sig{base}
-	case tipb.ScalarFuncSig_Password:
-		f = &builtinPasswordSig{base}
-	case tipb.ScalarFuncSig_RandomBytes:
-		f = &builtinRandomBytesSig{base}
-	case tipb.ScalarFuncSig_SHA1:
-		f = &builtinSHA1Sig{base}
-	case tipb.ScalarFuncSig_SHA2:
-		f = &builtinSHA2Sig{base}
-	case tipb.ScalarFuncSig_Uncompress:
-		f = &builtinUncompressSig{base}
-	case tipb.ScalarFuncSig_UncompressedLength:
-		f = &builtinUncompressedLengthSig{base}
 	case tipb.ScalarFuncSig_Database:
 		f = &builtinDatabaseSig{base}
 	case tipb.ScalarFuncSig_FoundRows:

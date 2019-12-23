@@ -25,7 +25,6 @@ import (
 	"github.com/ngaut/sync2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -65,7 +64,6 @@ type Domain struct {
 	exit            chan struct{}
 	etcdClient      *clientv3.Client
 	gvc             GlobalVariableCache
-	slowQuery       *topNSlowQueries
 	wg              sync.WaitGroup
 	statsUpdating   sync2.AtomicInt32
 }
@@ -369,60 +367,6 @@ func (do *Domain) Reload() error {
 	return nil
 }
 
-// LogSlowQuery keeps topN recent slow queries in domain.
-func (do *Domain) LogSlowQuery(query *SlowQueryInfo) {
-	do.slowQuery.mu.RLock()
-	defer do.slowQuery.mu.RUnlock()
-	if do.slowQuery.mu.closed {
-		return
-	}
-
-	select {
-	case do.slowQuery.ch <- query:
-	default:
-	}
-}
-
-// ShowSlowQuery returns the slow queries.
-func (do *Domain) ShowSlowQuery(showSlow *ast.ShowSlow) []*SlowQueryInfo {
-	msg := &showSlowMessage{
-		request: showSlow,
-	}
-	msg.Add(1)
-	do.slowQuery.msgCh <- msg
-	msg.Wait()
-	return msg.result
-}
-
-func (do *Domain) topNSlowQueryLoop() {
-	defer recoverInDomain("topNSlowQueryLoop", false)
-	defer do.wg.Done()
-	ticker := time.NewTicker(time.Minute * 10)
-	defer ticker.Stop()
-	for {
-		select {
-		case now := <-ticker.C:
-			do.slowQuery.RemoveExpired(now)
-		case info, ok := <-do.slowQuery.ch:
-			if !ok {
-				return
-			}
-			do.slowQuery.Append(info)
-		case msg := <-do.slowQuery.msgCh:
-			req := msg.request
-			switch req.Tp {
-			case ast.ShowSlowTop:
-				msg.result = do.slowQuery.QueryTop(int(req.Count), req.Kind)
-			case ast.ShowSlowRecent:
-				msg.result = do.slowQuery.QueryRecent(int(req.Count))
-			default:
-				msg.result = do.slowQuery.QueryAll()
-			}
-			msg.Done()
-		}
-	}
-}
-
 func (do *Domain) infoSyncerKeeper() {
 	defer do.wg.Done()
 	defer recoverInDomain("infoSyncerKeeper", false)
@@ -564,7 +508,6 @@ func (do *Domain) Close() {
 		terror.Log(errors.Trace(do.etcdClient.Close()))
 	}
 	do.sysSessionPool.Close()
-	do.slowQuery.Close()
 	do.wg.Wait()
 	logutil.BgLogger().Info("domain closed", zap.Duration("take time", time.Since(startTime)))
 }
@@ -600,7 +543,6 @@ func NewDomain(store kv.Storage, ddlLease time.Duration, statsLease time.Duratio
 		sysSessionPool:  newSessionPool(capacity, factory),
 		statsLease:      statsLease,
 		infoHandle:      infoschema.NewHandle(store),
-		slowQuery:       newTopNSlowQueries(30, time.Hour*24*7, 500),
 	}
 }
 
@@ -681,9 +623,6 @@ func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.R
 		// Local store needs to get the change information for every DDL state in each session.
 		go do.loadSchemaInLoop(ddlLease)
 	}
-	do.wg.Add(1)
-	go do.topNSlowQueryLoop()
-
 	do.wg.Add(1)
 	go do.infoSyncerKeeper()
 	return nil

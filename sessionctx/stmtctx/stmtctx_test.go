@@ -14,13 +14,9 @@
 package stmtctx_test
 
 import (
-	"fmt"
-	"testing"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/util/execdetails"
+	"testing"
 )
 
 func TestT(t *testing.T) {
@@ -30,45 +26,6 @@ func TestT(t *testing.T) {
 type stmtctxSuit struct{}
 
 var _ = Suite(&stmtctxSuit{})
-
-func (s *stmtctxSuit) TestCopTasksDetails(c *C) {
-	ctx := new(stmtctx.StatementContext)
-	backoffs := []string{"tikvRPC", "pdRPC", "regionMiss"}
-	for i := 0; i < 100; i++ {
-		d := &execdetails.ExecDetails{
-			CalleeAddress: fmt.Sprintf("%v", i+1),
-			ProcessTime:   time.Second * time.Duration(i+1),
-			WaitTime:      time.Millisecond * time.Duration(i+1),
-			BackoffSleep:  make(map[string]time.Duration),
-			BackoffTimes:  make(map[string]int),
-		}
-		for _, backoff := range backoffs {
-			d.BackoffSleep[backoff] = time.Millisecond * 100 * time.Duration(i+1)
-			d.BackoffTimes[backoff] = i + 1
-		}
-		ctx.MergeExecDetails(d, nil)
-	}
-	d := ctx.CopTasksDetails()
-	c.Assert(d.NumCopTasks, Equals, 100)
-	c.Assert(d.AvgProcessTime, Equals, time.Second*101/2)
-	c.Assert(d.P90ProcessTime, Equals, time.Second*91)
-	c.Assert(d.MaxProcessTime, Equals, time.Second*100)
-	c.Assert(d.MaxProcessAddress, Equals, "100")
-	c.Assert(d.AvgWaitTime, Equals, time.Millisecond*101/2)
-	c.Assert(d.P90WaitTime, Equals, time.Millisecond*91)
-	c.Assert(d.MaxWaitTime, Equals, time.Millisecond*100)
-	c.Assert(d.MaxWaitAddress, Equals, "100")
-	fields := d.ToZapFields()
-	c.Assert(len(fields), Equals, 9)
-	for _, backoff := range backoffs {
-		c.Assert(d.MaxBackoffAddress[backoff], Equals, "100")
-		c.Assert(d.MaxBackoffTime[backoff], Equals, 100*time.Millisecond*100)
-		c.Assert(d.P90BackoffTime[backoff], Equals, time.Millisecond*100*91)
-		c.Assert(d.AvgBackoffTime[backoff], Equals, time.Millisecond*100*101/2)
-		c.Assert(d.TotBackoffTimes[backoff], Equals, 101*50)
-		c.Assert(d.TotBackoffTime[backoff], Equals, 101*50*100*time.Millisecond)
-	}
-}
 
 func (s *stmtctxSuit) TestStatementContextPushDownFLags(c *C) {
 	testCases := []struct {

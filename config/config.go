@@ -173,11 +173,8 @@ type Log struct {
 	// File log config.
 	File logutil.FileLogConfig `toml:"file" json:"file"`
 
-	SlowQueryFile       string `toml:"slow-query-file" json:"slow-query-file"`
-	SlowThreshold       uint64 `toml:"slow-threshold" json:"slow-threshold"`
-	ExpensiveThreshold  uint   `toml:"expensive-threshold" json:"expensive-threshold"`
-	QueryLogMaxLen      uint64 `toml:"query-log-max-len" json:"query-log-max-len"`
-	RecordPlanInSlowLog uint32 `toml:"record-plan-in-slow-log" json:"record-plan-in-slow-log"`
+	ExpensiveThreshold uint   `toml:"expensive-threshold" json:"expensive-threshold"`
+	QueryLogMaxLen     uint64 `toml:"query-log-max-len" json:"query-log-max-len"`
 }
 
 func (l *Log) getDisableTimestamp() bool {
@@ -403,18 +400,15 @@ var defaultConf = Config{
 	LowerCaseTableNames: 2,
 	ServerVersion:       "",
 	Log: Log{
-		Level:               "info",
-		Format:              "text",
-		File:                logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
-		SlowQueryFile:       "tidb-slow.log",
-		SlowThreshold:       logutil.DefaultSlowThreshold,
-		ExpensiveThreshold:  10000,
-		DisableErrorStack:   nbUnset,
-		EnableErrorStack:    nbUnset, // If both options are nbUnset, getDisableErrorStack() returns true
-		EnableTimestamp:     nbUnset,
-		DisableTimestamp:    nbUnset, // If both options are nbUnset, getDisableTimestamp() returns false
-		QueryLogMaxLen:      logutil.DefaultQueryLogMaxLen,
-		RecordPlanInSlowLog: logutil.DefaultRecordPlanInSlowLog,
+		Level:              "info",
+		Format:             "text",
+		File:               logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
+		ExpensiveThreshold: 10000,
+		DisableErrorStack:  nbUnset,
+		EnableErrorStack:   nbUnset, // If both options are nbUnset, getDisableErrorStack() returns true
+		EnableTimestamp:    nbUnset,
+		DisableTimestamp:   nbUnset, // If both options are nbUnset, getDisableTimestamp() returns false
+		QueryLogMaxLen:     logutil.DefaultQueryLogMaxLen,
 	},
 	Status: Status{
 		ReportStatus:    true,
@@ -661,7 +655,7 @@ func hasRootPrivilege() bool {
 
 // ToLogConfig converts *Log to *logutil.LogConfig.
 func (l *Log) ToLogConfig() *logutil.LogConfig {
-	return logutil.NewLogConfig(l.Level, l.Format, l.SlowQueryFile, l.File, l.getDisableTimestamp(), func(config *zaplog.Config) { config.DisableErrorVerbose = l.getDisableErrorStack() })
+	return logutil.NewLogConfig(l.Level, l.Format, l.File, l.getDisableTimestamp(), func(config *zaplog.Config) { config.DisableErrorVerbose = l.getDisableErrorStack() })
 }
 
 // ToTracingConfig converts *OpenTracing to *tracing.Configuration.

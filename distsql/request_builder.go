@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -39,12 +38,6 @@ type RequestBuilder struct {
 // Build builds a "kv.Request".
 func (builder *RequestBuilder) Build() (*kv.Request, error) {
 	return &builder.Request, builder.err
-}
-
-// SetMemTracker sets a memTracker for this request.
-func (builder *RequestBuilder) SetMemTracker(tracker *memory.Tracker) *RequestBuilder {
-	builder.Request.MemTracker = tracker
-	return builder
 }
 
 // SetTableRanges sets "KeyRanges" for "kv.Request" by converting "tableRanges"

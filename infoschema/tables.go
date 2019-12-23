@@ -83,7 +83,6 @@ const (
 	tableCollationCharacterSetApplicability = "COLLATION_CHARACTER_SET_APPLICABILITY"
 	tableProcesslist                        = "PROCESSLIST"
 	tableTiDBIndexes                        = "TIDB_INDEXES"
-	tableSlowLog                            = "SLOW_QUERY"
 	tableTiDBHotRegions                     = "TIDB_HOT_REGIONS"
 	tableTiKVStoreStatus                    = "TIKV_STORE_STATUS"
 	tableAnalyzeStatus                      = "ANALYZE_STATUS"
@@ -128,14 +127,13 @@ var tableIDMap = map[string]int64{
 	tableCollationCharacterSetApplicability: autoid.InformationSchemaDBID + 32,
 	tableProcesslist:                        autoid.InformationSchemaDBID + 33,
 	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
-	tableSlowLog:                            autoid.InformationSchemaDBID + 35,
-	tableTiDBHotRegions:                     autoid.InformationSchemaDBID + 36,
-	tableTiKVStoreStatus:                    autoid.InformationSchemaDBID + 37,
-	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 38,
-	tableTiKVRegionStatus:                   autoid.InformationSchemaDBID + 39,
-	tableTiKVRegionPeers:                    autoid.InformationSchemaDBID + 40,
-	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 41,
-	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 42,
+	tableTiDBHotRegions:                     autoid.InformationSchemaDBID + 35,
+	tableTiKVStoreStatus:                    autoid.InformationSchemaDBID + 36,
+	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 37,
+	tableTiKVRegionStatus:                   autoid.InformationSchemaDBID + 38,
+	tableTiKVRegionPeers:                    autoid.InformationSchemaDBID + 39,
+	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 40,
+	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 41,
 }
 
 type columnInfo struct {

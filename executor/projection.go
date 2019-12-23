@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"go.uber.org/zap"
 )
 
@@ -66,8 +65,7 @@ type ProjectionExec struct {
 	workers     []*projectionWorker
 	childResult *chunk.Chunk
 
-	wg         sync.WaitGroup
-	memTracker *memory.Tracker
+	wg sync.WaitGroup
 
 	// parentReqRows indicates how many rows the parent executor is
 	// requiring. It is set when parallelExecute() is called and used by the
@@ -89,9 +87,6 @@ func (e *ProjectionExec) open(ctx context.Context) error {
 	e.prepared = false
 	e.parentReqRows = int64(e.maxChunkSize)
 
-	e.memTracker = memory.NewTracker(e.id, -1)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
-
 	// For now a Projection can not be executed vectorially only because it
 	// contains "SetVar" or "GetVar" functions, in this scenario this
 	// Projection can not be executed parallelly.
@@ -101,7 +96,6 @@ func (e *ProjectionExec) open(ctx context.Context) error {
 
 	if e.isUnparallelExec() {
 		e.childResult = newFirstChunk(e.children[0])
-		e.memTracker.Consume(e.childResult.MemoryUsage())
 	}
 
 	return nil
@@ -180,9 +174,7 @@ func (e *ProjectionExec) isUnparallelExec() bool {
 func (e *ProjectionExec) unParallelExecute(ctx context.Context, chk *chunk.Chunk) error {
 	// transmit the requiredRows
 	e.childResult.SetRequiredRows(chk.RequiredRows(), e.maxChunkSize)
-	mSize := e.childResult.MemoryUsage()
 	err := Next(ctx, e.children[0], e.childResult)
-	e.memTracker.Consume(e.childResult.MemoryUsage() - mSize)
 	if err != nil {
 		return err
 	}
@@ -210,9 +202,7 @@ func (e *ProjectionExec) parallelExecute(ctx context.Context, chk *chunk.Chunk) 
 		return err
 	}
 
-	mSize := output.chk.MemoryUsage()
 	chk.SwapColumns(output.chk)
-	e.memTracker.Consume(output.chk.MemoryUsage() - mSize)
 	e.fetcher.outputCh <- output
 	return nil
 }
@@ -245,14 +235,12 @@ func (e *ProjectionExec) prepare(ctx context.Context) {
 		})
 
 		inputChk := newFirstChunk(e.children[0])
-		e.memTracker.Consume(inputChk.MemoryUsage())
 		e.fetcher.inputCh <- &projectionInput{
 			chk:          inputChk,
 			targetWorker: e.workers[i],
 		}
 
 		outputChk := newFirstChunk(e)
-		e.memTracker.Consume(outputChk.MemoryUsage())
 		e.fetcher.outputCh <- &projectionOutput{
 			chk:  outputChk,
 			done: make(chan error, 1),
@@ -270,26 +258,19 @@ func (e *ProjectionExec) prepare(ctx context.Context) {
 
 func (e *ProjectionExec) drainInputCh(ch chan *projectionInput) {
 	close(ch)
-	for item := range ch {
-		if item.chk != nil {
-			e.memTracker.Consume(-item.chk.MemoryUsage())
-		}
+	for range ch {
 	}
 }
 
 func (e *ProjectionExec) drainOutputCh(ch chan *projectionOutput) {
 	close(ch)
-	for item := range ch {
-		if item.chk != nil {
-			e.memTracker.Consume(-item.chk.MemoryUsage())
-		}
+	for range ch {
 	}
 }
 
 // Close implements the Executor Close interface.
 func (e *ProjectionExec) Close() error {
 	if e.isUnparallelExec() {
-		e.memTracker.Consume(-e.childResult.MemoryUsage())
 		e.childResult = nil
 	}
 	if e.prepared {
@@ -304,13 +285,6 @@ func (e *ProjectionExec) Close() error {
 		for _, w := range e.workers {
 			e.drainInputCh(w.inputCh)
 			e.drainOutputCh(w.outputCh)
-		}
-	}
-	if e.runtimeStats != nil {
-		if e.isUnparallelExec() {
-			e.runtimeStats.SetConcurrencyInfo("Concurrency", 0)
-		} else {
-			e.runtimeStats.SetConcurrencyInfo("Concurrency", int(e.numWorkers))
 		}
 	}
 	return e.baseExecutor.Close()
@@ -355,7 +329,6 @@ func (f *projectionInputFetcher) run(ctx context.Context) {
 
 		output = readProjectionOutput(f.outputCh, f.globalFinishCh)
 		if output == nil {
-			f.proj.memTracker.Consume(-input.chk.MemoryUsage())
 			return
 		}
 
@@ -363,12 +336,9 @@ func (f *projectionInputFetcher) run(ctx context.Context) {
 
 		requiredRows := atomic.LoadInt64(&f.proj.parentReqRows)
 		input.chk.SetRequiredRows(int(requiredRows), f.proj.maxChunkSize)
-		mSize := input.chk.MemoryUsage()
 		err := Next(ctx, f.child, input.chk)
-		f.proj.memTracker.Consume(input.chk.MemoryUsage() - mSize)
 		if err != nil || input.chk.NumRows() == 0 {
 			output.done <- err
-			f.proj.memTracker.Consume(-input.chk.MemoryUsage())
 			return
 		}
 
@@ -420,10 +390,8 @@ func (w *projectionWorker) run(ctx context.Context) {
 			return
 		}
 
-		mSize := output.chk.MemoryUsage()
 		// TODO: trace memory used by the evaluatorSuit including all temporal buffers it uses
 		err := w.evaluatorSuit.Run(w.sctx, input.chk, output.chk)
-		w.proj.memTracker.Consume(output.chk.MemoryUsage() - mSize)
 		output.done <- err
 
 		if err != nil {

@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sort"
 	"sync"
@@ -33,10 +32,8 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mvmap"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 )
 
@@ -75,8 +72,6 @@ type IndexLookUpJoin struct {
 
 	// lastColHelper store the information for last col if there's complicated filter like col > x_col and col < x_col + 100.
 	lastColHelper *plannercore.ColWithCmpFuncManager
-
-	memTracker *memory.Tracker // track memory usage.
 }
 
 type outerCtx struct {
@@ -106,8 +101,6 @@ type lookUpJoinTask struct {
 	cursor   chunk.RowPtr
 	hasMatch bool
 	hasNull  bool
-
-	memTracker *memory.Tracker // track memory usage.
 }
 
 type outerWorker struct {
@@ -123,8 +116,6 @@ type outerWorker struct {
 
 	resultCh chan<- *lookUpJoinTask
 	innerCh  chan<- *lookUpJoinTask
-
-	parentMemTracker *memory.Tracker
 }
 
 type innerWorker struct {
@@ -168,8 +159,6 @@ func (e *IndexLookUpJoin) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaIndexLookupJoin)
-	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 	e.innerPtrBytes = make([][]byte, 0, 8)
 	e.startWorkers(ctx)
 	return nil
@@ -192,15 +181,14 @@ func (e *IndexLookUpJoin) startWorkers(ctx context.Context) {
 
 func (e *IndexLookUpJoin) newOuterWorker(resultCh, innerCh chan *lookUpJoinTask) *outerWorker {
 	ow := &outerWorker{
-		outerCtx:         e.outerCtx,
-		ctx:              e.ctx,
-		executor:         e.children[0],
-		resultCh:         resultCh,
-		innerCh:          innerCh,
-		batchSize:        32,
-		maxBatchSize:     e.ctx.GetSessionVars().IndexJoinBatchSize,
-		parentMemTracker: e.memTracker,
-		lookup:           e,
+		outerCtx:     e.outerCtx,
+		ctx:          e.ctx,
+		executor:     e.children[0],
+		resultCh:     resultCh,
+		innerCh:      innerCh,
+		batchSize:    32,
+		maxBatchSize: e.ctx.GetSessionVars().IndexJoinBatchSize,
+		lookup:       e,
 	}
 	return ow
 }
@@ -376,9 +364,6 @@ func (ow *outerWorker) buildTask(ctx context.Context) (*lookUpJoinTask, error) {
 		outerResult: newList(ow.executor),
 		lookupMap:   mvmap.NewMVMap(),
 	}
-	task.memTracker = memory.NewTracker(stringutil.MemoizeStr(func() string { return fmt.Sprintf("lookup join task %p", task) }), -1)
-	task.outerResult.GetMemTracker().AttachTo(task.memTracker)
-	task.memTracker.AttachTo(ow.parentMemTracker)
 
 	ow.increaseBatchSize()
 	requiredRows := ow.batchSize
@@ -415,7 +400,6 @@ func (ow *outerWorker) buildTask(ctx context.Context) (*lookUpJoinTask, error) {
 		for i := 0; i < numChks; i++ {
 			chk := task.outerResult.GetChunk(i)
 			outerMatch := make([]bool, 0, chk.NumRows())
-			task.memTracker.Consume(int64(cap(outerMatch)))
 			task.outerMatch[i], err = expression.VectorizedFilter(ow.ctx, ow.filter, chunk.NewIterator4Chunk(chk), outerMatch)
 			if err != nil {
 				return task, err
@@ -526,9 +510,6 @@ func (iw *innerWorker) constructLookupContent(task *lookUpJoinTask) ([]*indexJoi
 		}
 	}
 
-	for i := range task.encodedLookUpKeys {
-		task.memTracker.Consume(task.encodedLookUpKeys[i].MemoryUsage())
-	}
 	return lookUpContents, nil
 }
 
@@ -613,8 +594,6 @@ func (iw *innerWorker) fetchInnerResults(ctx context.Context, task *lookUpJoinTa
 	}
 	defer terror.Call(innerExec.Close)
 	innerResult := chunk.NewList(retTypes(innerExec), iw.ctx.GetSessionVars().MaxChunkSize, iw.ctx.GetSessionVars().MaxChunkSize)
-	innerResult.GetMemTracker().SetLabel(innerResultLabel)
-	innerResult.GetMemTracker().AttachTo(task.memTracker)
 	for {
 		select {
 		case <-ctx.Done():
@@ -678,10 +657,5 @@ func (e *IndexLookUpJoin) Close() error {
 		e.cancelFunc()
 	}
 	e.workerWg.Wait()
-	e.memTracker = nil
-	if e.runtimeStats != nil {
-		concurrency := cap(e.resultCh)
-		e.runtimeStats.SetConcurrencyInfo("Concurrency", concurrency)
-	}
 	return e.baseExecutor.Close()
 }

@@ -14,10 +14,8 @@
 package variable
 
 import (
-	"bytes"
 	"crypto/tls"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/timeutil"
 )
@@ -185,7 +182,6 @@ func (ib *WriteStmtBufs) clean() {
 // SessionVars is to handle user-defined or global variables in the current session.
 type SessionVars struct {
 	Concurrency
-	MemQuota
 	BatchSize
 	RetryLimit          int64
 	DisableTxnAutoRetry bool
@@ -510,7 +506,6 @@ func NewSessionVars() *SessionVars {
 		L2CacheSize:                 cpuid.CPU.Cache.L2,
 		CommandValue:                uint32(mysql.ComSleep),
 		TiDBOptJoinReorderThreshold: DefTiDBOptJoinReorderThreshold,
-		SlowQueryFile:               config.GetGlobalConfig().Log.SlowQueryFile,
 		WaitSplitRegionFinish:       DefTiDBWaitSplitRegionFinish,
 		WaitSplitRegionTimeout:      DefWaitSplitRegionTimeout,
 		enableIndexMerge:            false,
@@ -528,17 +523,6 @@ func NewSessionVars() *SessionVars {
 		DistSQLScanConcurrency:     DefDistSQLScanConcurrency,
 		HashAggPartialConcurrency:  DefTiDBHashAggPartialConcurrency,
 		HashAggFinalConcurrency:    DefTiDBHashAggFinalConcurrency,
-	}
-	vars.MemQuota = MemQuota{
-		MemQuotaQuery:             config.GetGlobalConfig().MemQuotaQuery,
-		MemQuotaHashJoin:          DefTiDBMemQuotaHashJoin,
-		MemQuotaMergeJoin:         DefTiDBMemQuotaMergeJoin,
-		MemQuotaSort:              DefTiDBMemQuotaSort,
-		MemQuotaTopn:              DefTiDBMemQuotaTopn,
-		MemQuotaIndexLookupReader: DefTiDBMemQuotaIndexLookupReader,
-		MemQuotaIndexLookupJoin:   DefTiDBMemQuotaIndexLookupJoin,
-		MemQuotaNestedLoopApply:   DefTiDBMemQuotaNestedLoopApply,
-		MemQuotaDistSQL:           DefTiDBMemQuotaDistSQL,
 	}
 	vars.BatchSize = BatchSize{
 		IndexJoinBatchSize: DefIndexJoinBatchSize,
@@ -878,30 +862,8 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.MaxChunkSize = tidbOptPositiveInt32(val, DefMaxChunkSize)
 	case TiDBInitChunkSize:
 		s.InitChunkSize = tidbOptPositiveInt32(val, DefInitChunkSize)
-	case TIDBMemQuotaQuery:
-		s.MemQuotaQuery = tidbOptInt64(val, config.GetGlobalConfig().MemQuotaQuery)
-	case TIDBMemQuotaHashJoin:
-		s.MemQuotaHashJoin = tidbOptInt64(val, DefTiDBMemQuotaHashJoin)
-	case TIDBMemQuotaMergeJoin:
-		s.MemQuotaMergeJoin = tidbOptInt64(val, DefTiDBMemQuotaMergeJoin)
-	case TIDBMemQuotaSort:
-		s.MemQuotaSort = tidbOptInt64(val, DefTiDBMemQuotaSort)
-	case TIDBMemQuotaTopn:
-		s.MemQuotaTopn = tidbOptInt64(val, DefTiDBMemQuotaTopn)
-	case TIDBMemQuotaIndexLookupReader:
-		s.MemQuotaIndexLookupReader = tidbOptInt64(val, DefTiDBMemQuotaIndexLookupReader)
-	case TIDBMemQuotaIndexLookupJoin:
-		s.MemQuotaIndexLookupJoin = tidbOptInt64(val, DefTiDBMemQuotaIndexLookupJoin)
-	case TIDBMemQuotaNestedLoopApply:
-		s.MemQuotaNestedLoopApply = tidbOptInt64(val, DefTiDBMemQuotaNestedLoopApply)
 	case TiDBGeneralLog:
 		atomic.StoreUint32(&ProcessGeneralLog, uint32(tidbOptPositiveInt32(val, DefTiDBGeneralLog)))
-	case TiDBSlowLogThreshold:
-		atomic.StoreUint64(&config.GetGlobalConfig().Log.SlowThreshold, uint64(tidbOptInt64(val, logutil.DefaultSlowThreshold)))
-	case TiDBRecordPlanInSlowLog:
-		atomic.StoreUint32(&config.GetGlobalConfig().Log.RecordPlanInSlowLog, uint32(tidbOptInt64(val, logutil.DefaultRecordPlanInSlowLog)))
-	case TiDBDDLSlowOprThreshold:
-		atomic.StoreUint32(&DDLSlowOprThreshold, uint32(tidbOptPositiveInt32(val, DefTiDBDDLSlowOprThreshold)))
 	case TiDBQueryLogMaxLen:
 		atomic.StoreUint64(&config.GetGlobalConfig().Log.QueryLogMaxLen, uint64(tidbOptInt64(val, logutil.DefaultQueryLogMaxLen)))
 	case TiDBRetryLimit:
@@ -1049,28 +1011,6 @@ type Concurrency struct {
 	IndexSerialScanConcurrency int
 }
 
-// MemQuota defines memory quota values.
-type MemQuota struct {
-	// MemQuotaQuery defines the memory quota for a query.
-	MemQuotaQuery int64
-	// MemQuotaHashJoin defines the memory quota for a hash join executor.
-	MemQuotaHashJoin int64
-	// MemQuotaMergeJoin defines the memory quota for a merge join executor.
-	MemQuotaMergeJoin int64
-	// MemQuotaSort defines the memory quota for a sort executor.
-	MemQuotaSort int64
-	// MemQuotaTopn defines the memory quota for a top n executor.
-	MemQuotaTopn int64
-	// MemQuotaIndexLookupReader defines the memory quota for a index lookup reader executor.
-	MemQuotaIndexLookupReader int64
-	// MemQuotaIndexLookupJoin defines the memory quota for a index lookup join executor.
-	MemQuotaIndexLookupJoin int64
-	// MemQuotaNestedLoopApply defines the memory quota for a nested loop apply executor.
-	MemQuotaNestedLoopApply int64
-	// MemQuotaDistSQL defines the memory quota for all operators in DistSQL layer like co-processor and selectResult.
-	MemQuotaDistSQL int64
-}
-
 // BatchSize defines batch size values.
 type BatchSize struct {
 	// DMLBatchSize indicates the size of batches for DML.
@@ -1088,235 +1028,4 @@ type BatchSize struct {
 
 	// MaxChunkSize defines max row count of a Chunk during query execution.
 	MaxChunkSize int
-}
-
-const (
-	// SlowLogRowPrefixStr is slow log row prefix.
-	SlowLogRowPrefixStr = "# "
-	// SlowLogSpaceMarkStr is slow log space mark.
-	SlowLogSpaceMarkStr = ": "
-	// SlowLogSQLSuffixStr is slow log suffix.
-	SlowLogSQLSuffixStr = ";"
-	// SlowLogTimeStr is slow log field name.
-	SlowLogTimeStr = "Time"
-	// SlowLogStartPrefixStr is slow log start row prefix.
-	SlowLogStartPrefixStr = SlowLogRowPrefixStr + SlowLogTimeStr + SlowLogSpaceMarkStr
-	// SlowLogTxnStartTSStr is slow log field name.
-	SlowLogTxnStartTSStr = "Txn_start_ts"
-	// SlowLogUserStr is slow log field name.
-	SlowLogUserStr = "User"
-	// SlowLogHostStr only for slow_query table usage.
-	SlowLogHostStr = "Host"
-	// SlowLogConnIDStr is slow log field name.
-	SlowLogConnIDStr = "Conn_ID"
-	// SlowLogQueryTimeStr is slow log field name.
-	SlowLogQueryTimeStr = "Query_time"
-	// SlowLogParseTimeStr is the parse sql time.
-	SlowLogParseTimeStr = "Parse_time"
-	// SlowLogCompileTimeStr is the compile plan time.
-	SlowLogCompileTimeStr = "Compile_time"
-	// SlowLogDBStr is slow log field name.
-	SlowLogDBStr = "DB"
-	// SlowLogIsInternalStr is slow log field name.
-	SlowLogIsInternalStr = "Is_internal"
-	// SlowLogIndexNamesStr is slow log field name.
-	SlowLogIndexNamesStr = "Index_names"
-	// SlowLogDigestStr is slow log field name.
-	SlowLogDigestStr = "Digest"
-	// SlowLogQuerySQLStr is slow log field name.
-	SlowLogQuerySQLStr = "Query" // use for slow log table, slow log will not print this field name but print sql directly.
-	// SlowLogStatsInfoStr is plan stats info.
-	SlowLogStatsInfoStr = "Stats"
-	// SlowLogNumCopTasksStr is the number of cop-tasks.
-	SlowLogNumCopTasksStr = "Num_cop_tasks"
-	// SlowLogCopProcAvg is the average process time of all cop-tasks.
-	SlowLogCopProcAvg = "Cop_proc_avg"
-	// SlowLogCopProcP90 is the p90 process time of all cop-tasks.
-	SlowLogCopProcP90 = "Cop_proc_p90"
-	// SlowLogCopProcMax is the max process time of all cop-tasks.
-	SlowLogCopProcMax = "Cop_proc_max"
-	// SlowLogCopProcAddr is the address of TiKV where the cop-task which cost max process time run.
-	SlowLogCopProcAddr = "Cop_proc_addr"
-	// SlowLogCopWaitAvg is the average wait time of all cop-tasks.
-	SlowLogCopWaitAvg = "Cop_wait_avg"
-	// SlowLogCopWaitP90 is the p90 wait time of all cop-tasks.
-	SlowLogCopWaitP90 = "Cop_wait_p90"
-	// SlowLogCopWaitMax is the max wait time of all cop-tasks.
-	SlowLogCopWaitMax = "Cop_wait_max"
-	// SlowLogCopWaitAddr is the address of TiKV where the cop-task which cost wait process time run.
-	SlowLogCopWaitAddr = "Cop_wait_addr"
-	// SlowLogCopBackoffPrefix contains backoff information.
-	SlowLogCopBackoffPrefix = "Cop_backoff_"
-	// SlowLogMemMax is the max number bytes of memory used in this statement.
-	SlowLogMemMax = "Mem_max"
-	// SlowLogPrepared is used to indicate whether this sql execute in prepare.
-	SlowLogPrepared = "Prepared"
-	// SlowLogHasMoreResults is used to indicate whether this sql has more following results.
-	SlowLogHasMoreResults = "Has_more_results"
-	// SlowLogSucc is used to indicate whether this sql execute successfully.
-	SlowLogSucc = "Succ"
-	// SlowLogPrevStmt is used to show the previous executed statement.
-	SlowLogPrevStmt = "Prev_stmt"
-)
-
-// SlowQueryLogItems is a collection of items that should be included in the
-// slow query log.
-type SlowQueryLogItems struct {
-	TxnTS          uint64
-	SQL            string
-	Digest         string
-	TimeTotal      time.Duration
-	TimeParse      time.Duration
-	TimeCompile    time.Duration
-	IndexNames     string
-	StatsInfos     map[string]uint64
-	CopTasks       *stmtctx.CopTasksDetails
-	ExecDetail     execdetails.ExecDetails
-	MemMax         int64
-	Succ           bool
-	Prepared       bool
-	HasMoreResults bool
-	PrevStmt       string
-}
-
-// SlowLogFormat uses for formatting slow log.
-// The slow log output is like below:
-// # Time: 2019-04-28T15:24:04.309074+08:00
-// # Txn_start_ts: 406315658548871171
-// # User: root@127.0.0.1
-// # Conn_ID: 6
-// # Query_time: 4.895492
-// # Process_time: 0.161 Request_count: 1 Total_keys: 100001 Processed_keys: 100000
-// # DB: test
-// # Index_names: [t1.idx1,t2.idx2]
-// # Is_internal: false
-// # Digest: 42a1c8aae6f133e934d4bf0147491709a8812ea05ff8819ec522780fe657b772
-// # Stats: t1:1,t2:2
-// # Num_cop_tasks: 10
-// # Cop_process: Avg_time: 1s P90_time: 2s Max_time: 3s Max_addr: 10.6.131.78
-// # Cop_wait: Avg_time: 10ms P90_time: 20ms Max_time: 30ms Max_Addr: 10.6.131.79
-// # Memory_max: 4096
-// # Succ: true
-// # Prev_stmt: begin;
-// select * from t_slim;
-func (s *SessionVars) SlowLogFormat(logItems *SlowQueryLogItems) string {
-	var buf bytes.Buffer
-
-	writeSlowLogItem(&buf, SlowLogTxnStartTSStr, strconv.FormatUint(logItems.TxnTS, 10))
-	if s.User != nil {
-		writeSlowLogItem(&buf, SlowLogUserStr, s.User.String())
-	}
-	if s.ConnectionID != 0 {
-		writeSlowLogItem(&buf, SlowLogConnIDStr, strconv.FormatUint(s.ConnectionID, 10))
-	}
-	writeSlowLogItem(&buf, SlowLogQueryTimeStr, strconv.FormatFloat(logItems.TimeTotal.Seconds(), 'f', -1, 64))
-	writeSlowLogItem(&buf, SlowLogParseTimeStr, strconv.FormatFloat(logItems.TimeParse.Seconds(), 'f', -1, 64))
-	writeSlowLogItem(&buf, SlowLogCompileTimeStr, strconv.FormatFloat(logItems.TimeCompile.Seconds(), 'f', -1, 64))
-
-	if execDetailStr := logItems.ExecDetail.String(); len(execDetailStr) > 0 {
-		buf.WriteString(SlowLogRowPrefixStr + execDetailStr + "\n")
-	}
-
-	if len(s.CurrentDB) > 0 {
-		writeSlowLogItem(&buf, SlowLogDBStr, s.CurrentDB)
-	}
-	if len(logItems.IndexNames) > 0 {
-		writeSlowLogItem(&buf, SlowLogIndexNamesStr, logItems.IndexNames)
-	}
-
-	writeSlowLogItem(&buf, SlowLogIsInternalStr, strconv.FormatBool(s.InRestrictedSQL))
-	if len(logItems.Digest) > 0 {
-		writeSlowLogItem(&buf, SlowLogDigestStr, logItems.Digest)
-	}
-	if len(logItems.StatsInfos) > 0 {
-		buf.WriteString(SlowLogRowPrefixStr + SlowLogStatsInfoStr + SlowLogSpaceMarkStr)
-		firstComma := false
-		vStr := ""
-		for k, v := range logItems.StatsInfos {
-			if v == 0 {
-				vStr = "pseudo"
-			} else {
-				vStr = strconv.FormatUint(v, 10)
-
-			}
-			if firstComma {
-				buf.WriteString("," + k + ":" + vStr)
-			} else {
-				buf.WriteString(k + ":" + vStr)
-				firstComma = true
-			}
-		}
-		buf.WriteString("\n")
-	}
-	if logItems.CopTasks != nil {
-		writeSlowLogItem(&buf, SlowLogNumCopTasksStr, strconv.FormatInt(int64(logItems.CopTasks.NumCopTasks), 10))
-		if logItems.CopTasks.NumCopTasks > 0 {
-			// make the result stable
-			backoffs := make([]string, 0, 3)
-			for backoff := range logItems.CopTasks.TotBackoffTimes {
-				backoffs = append(backoffs, backoff)
-			}
-			sort.Strings(backoffs)
-
-			if logItems.CopTasks.NumCopTasks == 1 {
-				buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v",
-					SlowLogCopProcAvg, SlowLogSpaceMarkStr, logItems.CopTasks.AvgProcessTime.Seconds(),
-					SlowLogCopProcAddr, SlowLogSpaceMarkStr, logItems.CopTasks.MaxProcessAddress) + "\n")
-				buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v",
-					SlowLogCopWaitAvg, SlowLogSpaceMarkStr, logItems.CopTasks.AvgWaitTime.Seconds(),
-					SlowLogCopWaitAddr, SlowLogSpaceMarkStr, logItems.CopTasks.MaxWaitAddress) + "\n")
-				for _, backoff := range backoffs {
-					backoffPrefix := SlowLogCopBackoffPrefix + backoff + "_"
-					buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v\n",
-						backoffPrefix+"total_times", SlowLogSpaceMarkStr, logItems.CopTasks.TotBackoffTimes[backoff],
-						backoffPrefix+"total_time", SlowLogSpaceMarkStr, logItems.CopTasks.TotBackoffTime[backoff].Seconds(),
-					))
-				}
-			} else {
-				buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v %v%v%v %v%v%v",
-					SlowLogCopProcAvg, SlowLogSpaceMarkStr, logItems.CopTasks.AvgProcessTime.Seconds(),
-					SlowLogCopProcP90, SlowLogSpaceMarkStr, logItems.CopTasks.P90ProcessTime.Seconds(),
-					SlowLogCopProcMax, SlowLogSpaceMarkStr, logItems.CopTasks.MaxProcessTime.Seconds(),
-					SlowLogCopProcAddr, SlowLogSpaceMarkStr, logItems.CopTasks.MaxProcessAddress) + "\n")
-				buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v %v%v%v %v%v%v",
-					SlowLogCopWaitAvg, SlowLogSpaceMarkStr, logItems.CopTasks.AvgWaitTime.Seconds(),
-					SlowLogCopWaitP90, SlowLogSpaceMarkStr, logItems.CopTasks.P90WaitTime.Seconds(),
-					SlowLogCopWaitMax, SlowLogSpaceMarkStr, logItems.CopTasks.MaxWaitTime.Seconds(),
-					SlowLogCopWaitAddr, SlowLogSpaceMarkStr, logItems.CopTasks.MaxWaitAddress) + "\n")
-				for _, backoff := range backoffs {
-					backoffPrefix := SlowLogCopBackoffPrefix + backoff + "_"
-					buf.WriteString(SlowLogRowPrefixStr + fmt.Sprintf("%v%v%v %v%v%v %v%v%v %v%v%v %v%v%v %v%v%v\n",
-						backoffPrefix+"total_times", SlowLogSpaceMarkStr, logItems.CopTasks.TotBackoffTimes[backoff],
-						backoffPrefix+"total_time", SlowLogSpaceMarkStr, logItems.CopTasks.TotBackoffTime[backoff].Seconds(),
-						backoffPrefix+"max_time", SlowLogSpaceMarkStr, logItems.CopTasks.MaxBackoffTime[backoff].Seconds(),
-						backoffPrefix+"max_addr", SlowLogSpaceMarkStr, logItems.CopTasks.MaxBackoffAddress[backoff],
-						backoffPrefix+"avg_time", SlowLogSpaceMarkStr, logItems.CopTasks.AvgBackoffTime[backoff].Seconds(),
-						backoffPrefix+"p90_time", SlowLogSpaceMarkStr, logItems.CopTasks.P90BackoffTime[backoff].Seconds(),
-					))
-				}
-			}
-		}
-	}
-	if logItems.MemMax > 0 {
-		writeSlowLogItem(&buf, SlowLogMemMax, strconv.FormatInt(logItems.MemMax, 10))
-	}
-
-	writeSlowLogItem(&buf, SlowLogPrepared, strconv.FormatBool(logItems.Prepared))
-	writeSlowLogItem(&buf, SlowLogHasMoreResults, strconv.FormatBool(logItems.HasMoreResults))
-	writeSlowLogItem(&buf, SlowLogSucc, strconv.FormatBool(logItems.Succ))
-
-	if logItems.PrevStmt != "" {
-		writeSlowLogItem(&buf, SlowLogPrevStmt, logItems.PrevStmt)
-	}
-
-	buf.WriteString(logItems.SQL)
-	if len(logItems.SQL) == 0 || logItems.SQL[len(logItems.SQL)-1] != ';' {
-		buf.WriteString(";")
-	}
-	return buf.String()
-}
-
-// writeSlowLogItem writes a slow log item in the form of: "# ${key}:${value}"
-func writeSlowLogItem(buf *bytes.Buffer, key, value string) {
-	buf.WriteString(SlowLogRowPrefixStr + key + SlowLogSpaceMarkStr + value + "\n")
 }

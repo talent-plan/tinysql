@@ -23,17 +23,14 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
@@ -41,11 +38,9 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // processinfoSetter is the interface use to set current running process info.
@@ -143,16 +138,10 @@ func (a *recordSet) NewChunk() *chunk.Chunk {
 
 func (a *recordSet) Close() error {
 	err := a.executor.Close()
-	a.stmt.LogSlowQuery(a.txnStartTS, a.lastErr == nil, false)
 	sessVars := a.stmt.Ctx.GetSessionVars()
 	pps := types.CloneRow(sessVars.PreparedParams)
 	sessVars.PrevStmt = FormatSQL(a.stmt.OriginText(), pps)
 	return err
-}
-
-// OnFetchReturned implements commandLifeCycle#OnFetchReturned
-func (a *recordSet) OnFetchReturned() {
-	a.stmt.LogSlowQuery(a.txnStartTS, a.lastErr == nil, true)
 }
 
 // ExecStmt implements the sqlexec.Statement interface, it builds a planner.Plan to an sqlexec.Statement.
@@ -178,54 +167,6 @@ type ExecStmt struct {
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
 	PsStmt      *plannercore.CachedPrepareStmt
-}
-
-// PointGet short path for point exec directly from plan, keep only necessary steps
-func (a *ExecStmt) PointGet(ctx context.Context, is infoschema.InfoSchema) (*recordSet, error) {
-	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("ExecStmt.PointGet", opentracing.ChildOf(span.Context()))
-		span1.LogKV("sql", a.OriginText())
-		defer span1.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-	startTs := uint64(math.MaxUint64)
-	err := a.Ctx.InitTxnWithStartTS(startTs)
-	if err != nil {
-		return nil, err
-	}
-	a.Ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityHigh
-
-	// try to reuse point get executor
-	if a.PsStmt.Executor != nil {
-		exec, ok := a.PsStmt.Executor.(*PointGetExecutor)
-		if !ok {
-			logutil.Logger(ctx).Error("invalid executor type, not PointGetExecutor for point get path")
-			a.PsStmt.Executor = nil
-		} else {
-			// CachedPlan type is already checked in last step
-			pointGetPlan := a.PsStmt.PreparedAst.CachedPlan.(*plannercore.PointGetPlan)
-			exec.Init(pointGetPlan, startTs)
-			a.PsStmt.Executor = exec
-		}
-	}
-	if a.PsStmt.Executor == nil {
-		b := newExecutorBuilder(a.Ctx, is)
-		newExecutor := b.build(a.Plan)
-		if b.err != nil {
-			return nil, b.err
-		}
-		a.PsStmt.Executor = newExecutor
-	}
-	pointExecutor := a.PsStmt.Executor.(*PointGetExecutor)
-	if err = pointExecutor.Open(ctx); err != nil {
-		terror.Call(pointExecutor.Close)
-		return nil, err
-	}
-	return &recordSet{
-		executor:   pointExecutor,
-		stmt:       a,
-		txnStartTS: startTs,
-	}, nil
 }
 
 // OriginText returns original statement as a string.
@@ -279,7 +220,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		if r == nil {
 			return
 		}
-		if str, ok := r.(string); !ok || !strings.HasPrefix(str, memory.PanicMemoryExceed) {
+		if _, ok := r.(string); !ok {
 			panic(r)
 		}
 		err = errors.Errorf("%v", r)
@@ -496,77 +437,5 @@ func FormatSQL(sql string, pps variable.PreparedParams) stringutil.StringerFunc 
 			sql = fmt.Sprintf("%.*q(len:%d)", maxQueryLen, sql, length)
 		}
 		return QueryReplacer.Replace(sql) + pps.String()
-	}
-}
-
-// LogSlowQuery is used to print the slow query in the log files.
-func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
-	sessVars := a.Ctx.GetSessionVars()
-	level := log.GetLevel()
-	cfg := config.GetGlobalConfig()
-	costTime := time.Since(sessVars.StartTime) + sessVars.DurationParse
-	threshold := time.Duration(atomic.LoadUint64(&cfg.Log.SlowThreshold)) * time.Millisecond
-	if costTime < threshold && level > zapcore.DebugLevel {
-		return
-	}
-	sql := FormatSQL(a.Text, sessVars.PreparedParams)
-
-	var tableIDs, indexNames string
-	if len(sessVars.StmtCtx.TableIDs) > 0 {
-		tableIDs = strings.Replace(fmt.Sprintf("%v", sessVars.StmtCtx.TableIDs), " ", ",", -1)
-	}
-	if len(sessVars.StmtCtx.IndexNames) > 0 {
-		indexNames = strings.Replace(fmt.Sprintf("%v", sessVars.StmtCtx.IndexNames), " ", ",", -1)
-	}
-	execDetail := sessVars.StmtCtx.GetExecDetails()
-	copTaskInfo := sessVars.StmtCtx.CopTasksDetails()
-	statsInfos := plannercore.GetStatsInfo(a.Plan)
-	memMax := sessVars.StmtCtx.MemTracker.MaxConsumed()
-	_, digest := sessVars.StmtCtx.SQLDigest()
-	slowItems := &variable.SlowQueryLogItems{
-		TxnTS:          txnTS,
-		SQL:            sql.String(),
-		Digest:         digest,
-		TimeTotal:      costTime,
-		TimeParse:      sessVars.DurationParse,
-		TimeCompile:    sessVars.DurationCompile,
-		IndexNames:     indexNames,
-		StatsInfos:     statsInfos,
-		CopTasks:       copTaskInfo,
-		ExecDetail:     execDetail,
-		MemMax:         memMax,
-		Succ:           succ,
-		Prepared:       a.isPreparedStmt,
-		HasMoreResults: hasMoreResults,
-	}
-	if _, ok := a.StmtNode.(*ast.CommitStmt); ok {
-		slowItems.PrevStmt = sessVars.PrevStmt.String()
-	}
-	if costTime < threshold {
-		logutil.SlowQueryLogger.Debug(sessVars.SlowLogFormat(slowItems))
-	} else {
-		logutil.SlowQueryLogger.Warn(sessVars.SlowLogFormat(slowItems))
-		metrics.TotalQueryProcHistogram.Observe(costTime.Seconds())
-		metrics.TotalCopProcHistogram.Observe(execDetail.ProcessTime.Seconds())
-		metrics.TotalCopWaitHistogram.Observe(execDetail.WaitTime.Seconds())
-		var userString string
-		if sessVars.User != nil {
-			userString = sessVars.User.String()
-		}
-		domain.GetDomain(a.Ctx).LogSlowQuery(&domain.SlowQueryInfo{
-			SQL:        sql.String(),
-			Digest:     digest,
-			Start:      sessVars.StartTime,
-			Duration:   costTime,
-			Detail:     sessVars.StmtCtx.GetExecDetails(),
-			Succ:       succ,
-			ConnID:     sessVars.ConnectionID,
-			TxnTS:      txnTS,
-			User:       userString,
-			DB:         sessVars.CurrentDB,
-			TableIDs:   tableIDs,
-			IndexNames: indexNames,
-			Internal:   sessVars.InRestrictedSQL,
-		})
 	}
 }

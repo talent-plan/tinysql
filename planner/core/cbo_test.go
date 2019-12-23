@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -72,33 +71,6 @@ func (s *testAnalyzeSuite) loadTableStats(fileName string, dom *domain.Domain) e
 		return err
 	}
 	return nil
-}
-
-func (s *testAnalyzeSuite) TestExplainAnalyze(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	tk := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	tk.MustExec("use test")
-	tk.MustExec("set sql_mode='STRICT_TRANS_TABLES'") // disable only full group by
-	tk.MustExec("create table t1(a int, b int, c int, key idx(a, b))")
-	tk.MustExec("create table t2(a int, b int)")
-	tk.MustExec("insert into t1 values (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 5)")
-	tk.MustExec("insert into t2 values (2, 22), (3, 33), (5, 55), (233, 2), (333, 3), (3434, 5)")
-	tk.MustExec("analyze table t1, t2")
-	rs := tk.MustQuery("explain analyze select t1.a, t1.b, sum(t1.c) from t1 join t2 on t1.a = t2.b where t1.a > 1")
-	c.Assert(len(rs.Rows()), Equals, 10)
-	for _, row := range rs.Rows() {
-		c.Assert(len(row), Equals, 7)
-		execInfo := row[4].(string)
-		c.Assert(strings.Contains(execInfo, "time"), Equals, true)
-		c.Assert(strings.Contains(execInfo, "loops"), Equals, true)
-		c.Assert(strings.Contains(execInfo, "rows"), Equals, true)
-	}
 }
 
 // TestCBOWithoutAnalyze tests the plan with stats that only have count info.
@@ -716,40 +688,6 @@ func (s *testAnalyzeSuite) TestIssue9562(c *C) {
 			}
 		}
 	}
-}
-
-func (s *testAnalyzeSuite) TestIssue9805(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	tk := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec(`
-		create table t1 (
-			id bigint primary key,
-			a bigint not null,
-			b varchar(100) not null,
-			c varchar(10) not null,
-			d bigint as (a % 30) not null,
-			key (d, b, c)
-		)
-	`)
-	tk.MustExec(`
-		create table t2 (
-			id varchar(50) primary key,
-			a varchar(100) unique,
-			b datetime,
-			c varchar(45),
-			d int not null unique auto_increment
-		)
-	`)
-	// Test when both tables are empty, EXPLAIN ANALYZE for IndexLookUp would not panic.
-	tk.MustExec("explain analyze select /*+ TIDB_INLJ(t2) */ t1.id, t2.a from t1 join t2 on t1.a = t2.d where t1.b = 't2' and t1.d = 4")
 }
 
 func (s *testAnalyzeSuite) TestLimitCrossEstimation(c *C) {

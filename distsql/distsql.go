@@ -83,7 +83,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 		ctx:        sctx,
 		feedback:   fb,
 		sqlType:    label,
-		memTracker: kvReq.MemTracker,
 		encodeType: encodetype,
 	}, nil
 }

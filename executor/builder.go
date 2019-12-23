@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tidb/util/timeutil"
@@ -106,10 +105,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildCheckIndexRange(v)
 	case *plannercore.ChecksumTable:
 		return b.buildChecksumTable(v)
-	case *plannercore.ReloadExprPushdownBlacklist:
-		return b.buildReloadExprPushdownBlacklist(v)
-	case *plannercore.ReloadOptRuleBlacklist:
-		return b.buildReloadOptRuleBlacklist(v)
 	case *plannercore.DDL:
 		return b.buildDDL(v)
 	case *plannercore.Deallocate:
@@ -118,22 +113,14 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildDelete(v)
 	case *plannercore.Execute:
 		return b.buildExecute(v)
-	case *plannercore.Trace:
-		return b.buildTrace(v)
 	case *plannercore.Explain:
 		return b.buildExplain(v)
-	case *plannercore.PointGetPlan:
-		return b.buildPointGet(v)
-	case *plannercore.BatchPointGetPlan:
-		return b.buildBatchPointGet(v)
 	case *plannercore.Insert:
 		return b.buildInsert(v)
 	case *plannercore.LoadData:
 		return b.buildLoadData(v)
 	case *plannercore.LoadStats:
 		return b.buildLoadStats(v)
-	case *plannercore.IndexAdvise:
-		return b.buildIndexAdvise(v)
 	case *plannercore.PhysicalLimit:
 		return b.buildLimit(v)
 	case *plannercore.Prepare:
@@ -150,8 +137,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildShowDDLJobs(v)
 	case *plannercore.ShowDDLJobQueries:
 		return b.buildShowDDLJobQueries(v)
-	case *plannercore.ShowSlow:
-		return b.buildShowSlow(v)
 	case *plannercore.PhysicalShow:
 		return b.buildShow(v)
 	case *plannercore.Simple:
@@ -295,14 +280,6 @@ func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQuerie
 	e := &ShowDDLJobQueriesExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		jobIDs:       v.JobIDs,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildShowSlow(v *plannercore.ShowSlow) Executor {
-	e := &ShowSlowExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		ShowSlow:     v.ShowSlow,
 	}
 	return e
 }
@@ -517,14 +494,6 @@ func (b *executorBuilder) buildChecksumTable(v *plannercore.ChecksumTable) Execu
 		e.tables[t.TableInfo.ID] = newChecksumContext(t.DBInfo, t.TableInfo, startTs)
 	}
 	return e
-}
-
-func (b *executorBuilder) buildReloadExprPushdownBlacklist(v *plannercore.ReloadExprPushdownBlacklist) Executor {
-	return &ReloadExprPushdownBlacklistExec{baseExecutor{ctx: b.ctx}}
-}
-
-func (b *executorBuilder) buildReloadOptRuleBlacklist(v *plannercore.ReloadOptRuleBlacklist) Executor {
-	return &ReloadOptRuleBlacklistExec{baseExecutor{ctx: b.ctx}}
 }
 
 func (b *executorBuilder) buildDeallocate(v *plannercore.Deallocate) Executor {
@@ -750,21 +719,6 @@ func (b *executorBuilder) buildLoadStats(v *plannercore.LoadStats) Executor {
 	return e
 }
 
-func (b *executorBuilder) buildIndexAdvise(v *plannercore.IndexAdvise) Executor {
-	e := &IndexAdviseExec{
-		baseExecutor: newBaseExecutor(b.ctx, nil, v.ExplainID()),
-		IsLocal:      v.IsLocal,
-		indexAdviseInfo: &IndexAdviseInfo{
-			Path:        v.Path,
-			MaxMinutes:  v.MaxMinutes,
-			MaxIndexNum: v.MaxIndexNum,
-			LinesInfo:   v.LinesInfo,
-			Ctx:         b.ctx,
-		},
-	}
-	return e
-}
-
 func (b *executorBuilder) buildReplace(vals *InsertValues) Executor {
 	replaceExec := &ReplaceExec{
 		InsertValues: vals,
@@ -812,39 +766,11 @@ func (b *executorBuilder) buildDDL(v *plannercore.DDL) Executor {
 	return e
 }
 
-// buildTrace builds a TraceExec for future executing. This method will be called
-// at build().
-func (b *executorBuilder) buildTrace(v *plannercore.Trace) Executor {
-	t := &TraceExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		stmtNode:     v.StmtNode,
-		builder:      b,
-		format:       v.Format,
-	}
-	if t.format == plannercore.TraceFormatLog {
-		return &SortExec{
-			baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), t),
-			ByItems: []*plannercore.ByItems{
-				{Expr: &expression.Column{
-					Index:   0,
-					RetType: types.NewFieldType(mysql.TypeTimestamp),
-				}},
-			},
-			schema: v.Schema(),
-		}
-	}
-	return t
-}
-
 // buildExplain builds a explain executor. `e.rows` collects final result to `ExplainExec`.
 func (b *executorBuilder) buildExplain(v *plannercore.Explain) Executor {
 	explainExec := &ExplainExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		explain:      v,
-	}
-	if v.Analyze {
-		b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl = execdetails.NewRuntimeStatsColl()
-		explainExec.analyzeExec = b.build(v.TargetPlan)
 	}
 	return explainExec
 }
@@ -1920,7 +1846,7 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 	} else {
 		e.feedback = statistics.NewQueryFeedback(getPhysicalTableID(tbl), ts.Hist, int64(ts.StatsCount()), ts.Desc)
 	}
-	collect := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(ts.Ranges))
+	collect := e.feedback.CollectFeedback(len(ts.Ranges))
 	if !collect {
 		e.feedback.Invalidate()
 	}
@@ -1990,7 +1916,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	} else {
 		e.feedback = statistics.NewQueryFeedback(e.physicalTableID, is.Hist, int64(is.StatsCount()), is.Desc)
 	}
-	collect := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(is.Ranges))
+	collect := e.feedback.CollectFeedback(len(is.Ranges))
 	if !collect {
 		e.feedback.Invalidate()
 	}
@@ -2074,7 +2000,7 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 	// do not collect the feedback for table request.
 	collectTable := false
 	e.tableRequest.CollectRangeCounts = &collectTable
-	collectIndex := (b.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl != nil) || e.feedback.CollectFeedback(len(is.Ranges))
+	collectIndex := e.feedback.CollectFeedback(len(is.Ranges))
 	if !collectIndex {
 		e.feedback.Invalidate()
 	}
@@ -2171,7 +2097,7 @@ func (builder *dataReaderBuilder) buildTableReaderForIndexJoin(ctx context.Conte
 }
 
 func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Context, e *TableReaderExecutor, handles []int64) (Executor, error) {
-	if e.runtimeStats != nil && e.dagPB.CollectExecutionSummaries == nil {
+	if e.dagPB.CollectExecutionSummaries == nil {
 		colExec := true
 		e.dagPB.CollectExecutionSummaries = &colExec
 	}
@@ -2368,41 +2294,6 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 		groupChecker:   newVecGroupChecker(b.ctx, groupByItems),
 		numWindowFuncs: len(v.WindowFuncDescs),
 	}
-}
-
-func (b *executorBuilder) buildBatchPointGet(plan *plannercore.BatchPointGetPlan) Executor {
-	startTS, err := b.getStartTS()
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	e := &BatchPointGetExec{
-		baseExecutor: newBaseExecutor(b.ctx, plan.Schema(), plan.ExplainID()),
-		tblInfo:      plan.TblInfo,
-		idxInfo:      plan.IndexInfo,
-		startTS:      startTS,
-	}
-	var capacity int
-	if plan.IndexInfo != nil {
-		e.idxVals = plan.IndexValues
-		capacity = len(e.idxVals)
-	} else {
-		// `SELECT a FROM t WHERE a IN (1, 1, 2, 1, 2)` should not return duplicated rows
-		handles := make([]int64, 0, len(plan.Handles))
-		dedup := make(map[int64]struct{}, len(plan.Handles))
-		for _, handle := range plan.Handles {
-			if _, found := dedup[handle]; found {
-				continue
-			}
-			dedup[handle] = struct{}{}
-			handles = append(handles, handle)
-		}
-		e.handles = handles
-		capacity = len(e.handles)
-	}
-	e.base().initCap = capacity
-	e.base().maxChunkSize = capacity
-	return e
 }
 
 func getPhysicalTableID(t table.Table) int64 {

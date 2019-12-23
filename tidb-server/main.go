@@ -71,7 +71,6 @@ const (
 	nmRunDDL           = "run-ddl"
 	nmLogLevel         = "L"
 	nmLogFile          = "log-file"
-	nmLogSlowQuery     = "log-slow-query"
 	nmReportStatus     = "report-status"
 	nmStatusHost       = "status-host"
 	nmStatusPort       = "status"
@@ -103,9 +102,8 @@ var (
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
 
 	// Log
-	logLevel     = flag.String(nmLogLevel, "info", "log level: info, debug, warn, error, fatal")
-	logFile      = flag.String(nmLogFile, "", "log file path")
-	logSlowQuery = flag.String(nmLogSlowQuery, "", "slow query file path")
+	logLevel = flag.String(nmLogLevel, "info", "log level: info, debug, warn, error, fatal")
+	logFile  = flag.String(nmLogFile, "", "log file path")
 
 	// Status
 	reportStatus    = flagBoolean(nmReportStatus, true, "If enable status report HTTP service.")
@@ -412,9 +410,6 @@ func overrideConfig() {
 	if actualFlags[nmLogFile] {
 		cfg.Log.File.Filename = *logFile
 	}
-	if actualFlags[nmLogSlowQuery] {
-		cfg.Log.SlowQueryFile = *logSlowQuery
-	}
 
 	// Status
 	if actualFlags[nmReportStatus] {
@@ -466,14 +461,12 @@ func setGlobalVars() {
 	variable.ForcePriority = int32(priority)
 	variable.SysVars[variable.TiDBForcePriority].Value = mysql.Priority2Str[priority]
 
-	variable.SysVars[variable.TIDBMemQuotaQuery].Value = strconv.FormatInt(cfg.MemQuotaQuery, 10)
 	variable.SysVars["lower_case_table_names"].Value = strconv.Itoa(cfg.LowerCaseTableNames)
 	variable.SysVars[variable.LogBin].Value = variable.BoolToIntStr(config.GetGlobalConfig().Binlog.Enable)
 
 	variable.SysVars[variable.Port].Value = fmt.Sprintf("%d", cfg.Port)
 	variable.SysVars[variable.Socket].Value = cfg.Socket
 	variable.SysVars[variable.DataDir].Value = cfg.Path
-	variable.SysVars[variable.TiDBSlowQueryFile].Value = cfg.Log.SlowQueryFile
 
 	tikv.CommitMaxBackoff = int(parseDuration(cfg.TiKVClient.CommitTimeout).Seconds() * 1000)
 	tikv.RegionCacheTTLSec = int64(cfg.TiKVClient.RegionCacheTTL)

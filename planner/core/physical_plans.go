@@ -52,7 +52,6 @@ var (
 	_ PhysicalPlan = &PhysicalMergeJoin{}
 	_ PhysicalPlan = &PhysicalUnionScan{}
 	_ PhysicalPlan = &PhysicalWindow{}
-	_ PhysicalPlan = &BatchPointGetPlan{}
 )
 
 // PhysicalTableReader is the table reader in tidb.

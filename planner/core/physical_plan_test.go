@@ -821,64 +821,6 @@ func (s *testPlanSuite) TestAggregationHints(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestAggToCopHint(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "insert into mysql.opt_rule_blacklist values(\"aggregation_eliminate\")")
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "admin reload opt_rule_blacklist")
-	c.Assert(err, IsNil)
-
-	var (
-		input  []string
-		output []struct {
-			Best    string
-			Warning string
-		}
-	)
-	s.testData.GetTestCases(c, &input, &output)
-
-	ctx := context.Background()
-	for i, test := range input {
-		comment := Commentf("case:%v sql:%s", i, test)
-		se.GetSessionVars().StmtCtx.SetWarnings(nil)
-
-		stmt, err := s.ParseOneStmt(test, "", "")
-		c.Assert(err, IsNil, comment)
-
-		p, _, err := planner.Optimize(ctx, se, stmt, s.is)
-		c.Assert(err, IsNil)
-		planString := core.ToString(p)
-		s.testData.OnRecord(func() {
-			output[i].Best = planString
-		})
-		c.Assert(planString, Equals, output[i].Best, comment)
-
-		warnings := se.GetSessionVars().StmtCtx.GetWarnings()
-		s.testData.OnRecord(func() {
-			if len(warnings) > 0 {
-				output[i].Warning = warnings[0].Err.Error()
-			}
-		})
-		if output[i].Warning == "" {
-			c.Assert(len(warnings), Equals, 0, comment)
-		} else {
-			c.Assert(len(warnings), Equals, 1, comment)
-			c.Assert(warnings[0].Level, Equals, stmtctx.WarnLevelWarning, comment)
-			c.Assert(warnings[0].Err.Error(), Equals, output[i].Warning, comment)
-		}
-	}
-}
-
 func (s *testPlanSuite) TestHintAlias(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()

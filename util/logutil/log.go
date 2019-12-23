@@ -17,13 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
-	"strings"
-	"time"
-
 	"github.com/opentracing/opentracing-go"
 	tlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pingcap/errors"
@@ -32,6 +25,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 )
 
 const (
@@ -41,12 +39,8 @@ const (
 	// DefaultLogFormat is the default format of the log.
 	DefaultLogFormat = "text"
 	defaultLogLevel  = log.InfoLevel
-	// DefaultSlowThreshold is the default slow log threshold in millisecond.
-	DefaultSlowThreshold = 300
 	// DefaultQueryLogMaxLen is the default max length of the query in the log.
 	DefaultQueryLogMaxLen = 4096
-	// DefaultRecordPlanInSlowLog is the default value for whether enable log query plan in the slow log.
-	DefaultRecordPlanInSlowLog = 1
 )
 
 // EmptyFileLogConfig is an empty FileLogConfig.
@@ -74,7 +68,7 @@ type LogConfig struct {
 }
 
 // NewLogConfig creates a LogConfig.
-func NewLogConfig(level, format, slowQueryFile string, fileCfg FileLogConfig, disableTimestamp bool, opts ...func(*zaplog.Config)) *LogConfig {
+func NewLogConfig(level, format string, fileCfg FileLogConfig, disableTimestamp bool, opts ...func(*zaplog.Config)) *LogConfig {
 	c := &LogConfig{
 		Config: zaplog.Config{
 			Level:            level,
@@ -82,7 +76,6 @@ func NewLogConfig(level, format, slowQueryFile string, fileCfg FileLogConfig, di
 			DisableTimestamp: disableTimestamp,
 			File:             fileCfg.FileLogConfig,
 		},
-		SlowQueryFile: slowQueryFile,
 	}
 	for _, opt := range opts {
 		opt(&c.Config)
@@ -186,28 +179,6 @@ func (f *textFormatter) Format(entry *log.Entry) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-const (
-	// SlowLogTimeFormat is the time format for slow log.
-	SlowLogTimeFormat = time.RFC3339Nano
-	// OldSlowLogTimeFormat is the first version of the the time format for slow log, This is use for compatibility.
-	OldSlowLogTimeFormat = "2006-01-02-15:04:05.999999999 -0700"
-)
-
-type slowLogFormatter struct{}
-
-func (f *slowLogFormatter) Format(entry *log.Entry) ([]byte, error) {
-	var b *bytes.Buffer
-	if entry.Buffer != nil {
-		b = entry.Buffer
-	} else {
-		b = &bytes.Buffer{}
-	}
-
-	fmt.Fprintf(b, "# Time: %s\n", entry.Time.Format(SlowLogTimeFormat))
-	fmt.Fprintf(b, "%s\n", entry.Message)
-	return b.Bytes(), nil
-}
-
 func stringToLogFormatter(format string, disableTimestamp bool) log.Formatter {
 	switch strings.ToLower(format) {
 	case "text":
@@ -247,12 +218,6 @@ func initFileLog(cfg *zaplog.FileLogConfig, logger *log.Logger) error {
 	return nil
 }
 
-// SlowQueryLogger is used to log slow query, InitLogger will modify it according to config file.
-var SlowQueryLogger = log.StandardLogger()
-
-// SlowQueryZapLogger is used to log slow query, InitZapLogger will modify it according to config file.
-var SlowQueryZapLogger = zaplog.L()
-
 // InitLogger initializes PD's logger.
 func InitLogger(cfg *LogConfig) error {
 	log.SetLevel(stringToLogLevel(cfg.Level))
@@ -270,16 +235,6 @@ func InitLogger(cfg *LogConfig) error {
 		}
 	}
 
-	if len(cfg.SlowQueryFile) != 0 {
-		SlowQueryLogger = log.New()
-		tmp := cfg.File
-		tmp.Filename = cfg.SlowQueryFile
-		if err := initFileLog(&tmp, SlowQueryLogger); err != nil {
-			return errors.Trace(err)
-		}
-		SlowQueryLogger.Formatter = &slowLogFormatter{}
-	}
-
 	return nil
 }
 
@@ -290,26 +245,6 @@ func InitZapLogger(cfg *LogConfig) error {
 		return errors.Trace(err)
 	}
 	zaplog.ReplaceGlobals(gl, props)
-
-	if len(cfg.SlowQueryFile) != 0 {
-		sqfCfg := zaplog.FileLogConfig{
-			MaxSize:  cfg.File.MaxSize,
-			Filename: cfg.SlowQueryFile,
-		}
-		sqCfg := &zaplog.Config{
-			Level:            cfg.Level,
-			Format:           cfg.Format,
-			DisableTimestamp: cfg.DisableTimestamp,
-			File:             sqfCfg,
-		}
-		sqLogger, _, err := zaplog.InitLogger(sqCfg)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		SlowQueryZapLogger = sqLogger
-	} else {
-		SlowQueryZapLogger = gl
-	}
 
 	return nil
 }
