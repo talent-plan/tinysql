@@ -117,8 +117,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildDelete(v)
 	case *plannercore.Execute:
 		return b.buildExecute(v)
-	case *plannercore.Trace:
-		return b.buildTrace(v)
 	case *plannercore.Explain:
 		return b.buildExplain(v)
 	case *plannercore.Insert:
@@ -795,30 +793,6 @@ func (b *executorBuilder) buildDDL(v *plannercore.DDL) Executor {
 		is:           b.is,
 	}
 	return e
-}
-
-// buildTrace builds a TraceExec for future executing. This method will be called
-// at build().
-func (b *executorBuilder) buildTrace(v *plannercore.Trace) Executor {
-	t := &TraceExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		stmtNode:     v.StmtNode,
-		builder:      b,
-		format:       v.Format,
-	}
-	if t.format == plannercore.TraceFormatLog {
-		return &SortExec{
-			baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), t),
-			ByItems: []*plannercore.ByItems{
-				{Expr: &expression.Column{
-					Index:   0,
-					RetType: types.NewFieldType(mysql.TypeTimestamp),
-				}},
-			},
-			schema: v.Schema(),
-		}
-	}
-	return t
 }
 
 // buildExplain builds a explain executor. `e.rows` collects final result to `ExplainExec`.

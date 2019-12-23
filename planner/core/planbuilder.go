@@ -380,8 +380,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildExplain(ctx, x)
 	case *ast.ExplainForStmt:
 		return b.buildExplainFor(x)
-	case *ast.TraceStmt:
-		return b.buildTrace(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
 	case *ast.LoadDataStmt:
@@ -2483,47 +2481,6 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", nil)
 	}
 	p := &DDL{Statement: node}
-	return p, nil
-}
-
-const (
-	// TraceFormatRow indicates row tracing format.
-	TraceFormatRow = "row"
-	// TraceFormatJSON indicates json tracing format.
-	TraceFormatJSON = "json"
-	// TraceFormatLog indicates log tracing format.
-	TraceFormatLog = "log"
-)
-
-// buildTrace builds a trace plan. Inside this method, it first optimize the
-// underlying query and then constructs a schema, which will be used to constructs
-// rows result.
-func (b *PlanBuilder) buildTrace(trace *ast.TraceStmt) (Plan, error) {
-	p := &Trace{StmtNode: trace.Stmt, Format: trace.Format}
-	switch trace.Format {
-	case TraceFormatRow:
-		schema := newColumnsWithNames(3)
-		schema.Append(buildColumnWithName("", "operation", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "startTS", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "duration", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	case TraceFormatJSON:
-		schema := newColumnsWithNames(1)
-		schema.Append(buildColumnWithName("", "operation", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	case TraceFormatLog:
-		schema := newColumnsWithNames(4)
-		schema.Append(buildColumnWithName("", "time", mysql.TypeTimestamp, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "event", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "tags", mysql.TypeString, mysql.MaxBlobWidth))
-		schema.Append(buildColumnWithName("", "spanName", mysql.TypeString, mysql.MaxBlobWidth))
-		p.SetSchema(schema.col2Schema())
-		p.names = schema.names
-	default:
-		return nil, errors.New("trace format should be one of 'row', 'log' or 'json'")
-	}
 	return p, nil
 }
 
