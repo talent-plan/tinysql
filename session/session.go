@@ -1396,16 +1396,6 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 		}
 	}
 
-	err = executor.LoadExprPushdownBlacklist(se)
-	if err != nil {
-		return nil, err
-	}
-
-	err = executor.LoadOptRuleBlacklist(se)
-	if err != nil {
-		return nil, err
-	}
-
 	se1, err := createSession(store)
 	if err != nil {
 		return nil, err
