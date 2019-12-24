@@ -19,11 +19,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/planner/property"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/atomic"
@@ -81,19 +79,6 @@ func BuildLogicalPlan(ctx context.Context, sctx sessionctx.Context, node ast.Nod
 		return nil, nil, err
 	}
 	return p, p.OutputNames(), err
-}
-
-// CheckPrivilege checks the privilege for a user.
-func CheckPrivilege(activeRoles []*auth.RoleIdentity, pm privilege.Manager, vs []visitInfo) error {
-	for _, v := range vs {
-		if !pm.RequestVerification(activeRoles, v.db, v.table, v.column, v.privilege) {
-			if v.err == nil {
-				return ErrPrivilegeCheckFail
-			}
-			return v.err
-		}
-	}
-	return nil
 }
 
 // DoOptimize optimizes a logical plan to a physical plan.

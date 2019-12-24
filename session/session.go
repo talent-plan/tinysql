@@ -22,7 +22,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,8 +48,6 @@ import (
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/privilege"
-	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -1261,51 +1258,7 @@ func (s *session) GetSessionVars() *variable.SessionVars {
 }
 
 func (s *session) Auth(user *auth.UserIdentity, authentication []byte, salt []byte) bool {
-	pm := privilege.GetPrivilegeManager(s)
-
-	// Check IP or localhost.
-	var success bool
-	user.AuthUsername, user.AuthHostname, success = pm.ConnectionVerification(user.Username, user.Hostname, authentication, salt)
-	if success {
-		s.sessionVars.User = user
-		s.sessionVars.ActiveRoles = pm.GetDefaultRoles(user.AuthUsername, user.AuthHostname)
-		return true
-	} else if user.Hostname == variable.DefHostname {
-		logutil.BgLogger().Error("user connection verification failed",
-			zap.Stringer("user", user))
-		return false
-	}
-
-	// Check Hostname.
-	for _, addr := range getHostByIP(user.Hostname) {
-		u, h, success := pm.ConnectionVerification(user.Username, addr, authentication, salt)
-		if success {
-			s.sessionVars.User = &auth.UserIdentity{
-				Username:     user.Username,
-				Hostname:     addr,
-				AuthUsername: u,
-				AuthHostname: h,
-			}
-			s.sessionVars.ActiveRoles = pm.GetDefaultRoles(u, h)
-			return true
-		}
-	}
-
-	logutil.BgLogger().Error("user connection verification failed",
-		zap.Stringer("user", user))
-	return false
-}
-
-func getHostByIP(ip string) []string {
-	if ip == "127.0.0.1" {
-		return []string{variable.DefHostname}
-	}
-	addrs, err := net.LookupAddr(ip)
-	if err != nil {
-		// The error is ignorable.
-		// The empty line here makes the golint tool (which complains err is not checked) happy.
-	}
-	return addrs
+	return true
 }
 
 // CreateSession4Test creates a new session environment for test.
@@ -1331,10 +1284,6 @@ func CreateSession(store kv.Storage) (Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	pm := &privileges.UserPrivileges{
-		Handle: do.PrivilegeHandle(),
-	}
-	privilege.BindPrivilegeManager(s, pm)
 
 	// Add stats collector, and it will be freed by background stats worker
 	// which periodically updates stats using the collected data.

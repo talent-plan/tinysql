@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv"
@@ -195,8 +194,6 @@ func createSession(store kv.Storage) session.Session {
 			logutil.BgLogger().Warn("[gc worker] create session", zap.Error(err))
 			continue
 		}
-		// Disable privilege check for gc worker session.
-		privilege.BindPrivilegeManager(se, nil)
 		se.GetSessionVars().InRestrictedSQL = true
 		return se
 	}
@@ -1321,7 +1318,6 @@ func NewMockGCWorker(store tikv.Storage) (*MockGCWorker, error) {
 		logutil.BgLogger().Error("initialize MockGCWorker session fail", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
-	privilege.BindPrivilegeManager(worker.session, nil)
 	worker.session.GetSessionVars().InRestrictedSQL = true
 	return &MockGCWorker{worker: worker}, nil
 }

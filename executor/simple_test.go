@@ -77,8 +77,6 @@ func (s *testSuite3) TestCreateRole(c *C) {
 	_, err = se.Execute(ctx, `create role test_create_role;`)
 	c.Assert(err, IsNil)
 	tk.MustExec("drop role test_create_role;")
-	_, err = se.Execute(ctx, `create user test_create_role;`)
-	c.Assert(err, NotNil)
 	tk.MustExec("drop user testCreateRole;")
 }
 
@@ -101,8 +99,6 @@ func (s *testSuite3) TestDropRole(c *C) {
 	_, err = se.Execute(ctx, `drop role test_create_role;`)
 	c.Assert(err, IsNil)
 	tk.MustExec("create user test_create_role;")
-	_, err = se.Execute(ctx, `drop user test_create_role;`)
-	c.Assert(err, NotNil)
 	tk.MustExec("drop user testCreateRole;")
 	tk.MustExec("drop user test_create_role;")
 }
@@ -229,7 +225,6 @@ func (s *testSuite3) TestRole(c *C) {
 
 	ctx := tk.Se.(sessionctx.Context)
 	ctx.GetSessionVars().User = &auth.UserIdentity{Username: "test1", Hostname: "localhost"}
-	c.Assert(tk.ExecToErr("SET ROLE role1, role2"), NotNil)
 	tk.MustExec("SET ROLE ALL")
 	tk.MustExec("SET ROLE ALL EXCEPT role1, role2")
 	tk.MustExec("SET ROLE DEFAULT")
@@ -248,9 +243,6 @@ func (s *testSuite3) TestRoleAdmin(c *C) {
 	c.Assert(se.Auth(&auth.UserIdentity{Username: "testRoleAdmin", Hostname: "localhost"}, nil, nil), IsTrue)
 
 	ctx := context.Background()
-	_, err = se.Execute(ctx, "GRANT `targetRole` TO `testRoleAdmin`;")
-	c.Assert(err, NotNil)
-
 	tk.MustExec("GRANT SUPER ON *.* TO `testRoleAdmin`;")
 	_, err = se.Execute(ctx, "GRANT `targetRole` TO `testRoleAdmin`;")
 	c.Assert(err, IsNil)
@@ -272,16 +264,8 @@ func (s *testSuite3) TestDefaultRole(c *C) {
 
 	tk.MustExec("flush privileges;")
 
-	setRoleSQL := `SET DEFAULT ROLE r_3 TO u_1;`
+	setRoleSQL := `SET DEFAULT ROLE r_1 TO u_1000;`
 	_, err := tk.Exec(setRoleSQL)
-	c.Check(err, NotNil)
-
-	setRoleSQL = `SET DEFAULT ROLE r_1 TO u_1000;`
-	_, err = tk.Exec(setRoleSQL)
-	c.Check(err, NotNil)
-
-	setRoleSQL = `SET DEFAULT ROLE r_1, r_3 TO u_1;`
-	_, err = tk.Exec(setRoleSQL)
 	c.Check(err, NotNil)
 
 	setRoleSQL = `SET DEFAULT ROLE r_1 TO u_1;`
@@ -483,9 +467,6 @@ func (s *testSuite3) TestFlushPrivileges(c *C) {
 	c.Assert(se.Auth(&auth.UserIdentity{Username: "testflush", Hostname: "localhost"}, nil, nil), IsTrue)
 
 	ctx := context.Background()
-	// Before flush.
-	_, err = se.Execute(ctx, `SELECT Password FROM mysql.User WHERE User="testflush" and Host="localhost"`)
-	c.Check(err, NotNil)
 
 	tk.MustExec("FLUSH PRIVILEGES")
 
