@@ -125,16 +125,9 @@ func (ts *TidbTestSuite) TestErrorCode(c *C) {
 	runTestErrorCode(c)
 }
 
-func (ts *TidbTestSuite) TestAuth(c *C) {
-	c.Parallel()
-	runTestAuth(c)
-	runTestIssue3682(c)
-}
-
 func (ts *TidbTestSuite) TestIssues(c *C) {
 	c.Parallel()
 	runTestIssue3662(c)
-	runTestIssue3680(c)
 }
 
 func (ts *TidbTestSuite) TestDBNameEscape(c *C) {

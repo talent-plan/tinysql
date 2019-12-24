@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -456,7 +455,6 @@ func setGlobalVars() {
 		atomic.StoreUint32(&ddl.EnableSplitTableRegion, 1)
 	}
 	plannercore.AllowCartesianProduct.Store(cfg.Performance.CrossJoin)
-	privileges.SkipWithGrant = cfg.Security.SkipGrantTable
 	kv.TxnTotalSizeLimit = cfg.Performance.TxnTotalSizeLimit
 
 	priority := mysql.Str2Priority(cfg.Performance.ForcePriority)

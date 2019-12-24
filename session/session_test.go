@@ -24,7 +24,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -34,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -750,29 +748,6 @@ func (s *testSessionSuite) TestSession(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("ROLLBACK;")
 	tk.Se.Close()
-}
-
-func (s *testSessionSuite) TestSessionAuth(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "Any not exist username with zero password!", Hostname: "anyhost"}, []byte(""), []byte("")), IsFalse)
-}
-
-func (s *testSessionSerialSuite) TestSkipWithGrant(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	save2 := privileges.SkipWithGrant
-
-	privileges.SkipWithGrant = false
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "user_not_exist"}, []byte("yyy"), []byte("zzz")), IsFalse)
-
-	privileges.SkipWithGrant = true
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "xxx", Hostname: `%`}, []byte("yyy"), []byte("zzz")), IsTrue)
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: `%`}, []byte(""), []byte("")), IsTrue)
-	tk.MustExec("create table t (id int)")
-	tk.MustExec("create role r_1")
-	tk.MustExec("grant r_1 to root")
-	tk.MustExec("set role all")
-	tk.MustExec("show grants for root")
-	privileges.SkipWithGrant = save2
 }
 
 func (s *testSessionSuite) TestLastInsertID(c *C) {
@@ -2657,83 +2632,6 @@ func (s *testSessionSuite2) TestSetGroupConcatMaxLen(c *C) {
 	c.Assert(terror.ErrorEqual(err, variable.ErrWrongTypeForVar), IsTrue, Commentf("err %v", err))
 }
 
-func (s *testSessionSuite2) TestUpdatePrivilege(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t1, t2;")
-	tk.MustExec("create table t1 (id int);")
-	tk.MustExec("create table t2 (id int);")
-	tk.MustExec("insert into t1 values (1);")
-	tk.MustExec("insert into t2 values (2);")
-	tk.MustExec("create user xxx;")
-	tk.MustExec("grant all on test.t1 to xxx;")
-	tk.MustExec("grant select on test.t2 to xxx;")
-	tk.MustExec("flush privileges;")
-
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	c.Assert(tk1.Se.Auth(&auth.UserIdentity{Username: "xxx", Hostname: "localhost"},
-		[]byte(""),
-		[]byte("")), IsTrue)
-
-	_, err := tk1.Exec("update t2 set id = 666 where id = 1;")
-	c.Assert(err, NotNil)
-	c.Assert(strings.Contains(err.Error(), "privilege check fail"), IsTrue)
-
-	// Cover a bug that t1 and t2 both require update privilege.
-	// In fact, the privlege check for t1 should be update, and for t2 should be select.
-	_, err = tk1.Exec("update t1,t2 set t1.id = t2.id;")
-	c.Assert(err, IsNil)
-
-	// Fix issue 8911
-	tk.MustExec("create database weperk")
-	tk.MustExec("use weperk")
-	tk.MustExec("create table tb_wehub_server (id int, active_count int, used_count int)")
-	tk.MustExec("create user 'weperk'")
-	tk.MustExec("grant all privileges on weperk.* to 'weperk'@'%'")
-	c.Assert(tk1.Se.Auth(&auth.UserIdentity{Username: "weperk", Hostname: "%"},
-		[]byte(""), []byte("")), IsTrue)
-	tk1.MustExec("use weperk")
-	tk1.MustExec("update tb_wehub_server a set a.active_count=a.active_count+1,a.used_count=a.used_count+1 where id=1")
-
-	tk.MustExec("create database service")
-	tk.MustExec("create database report")
-	tk.MustExec(`CREATE TABLE service.t1 (
-  id int(11) DEFAULT NULL,
-  a bigint(20) NOT NULL,
-  b text DEFAULT NULL,
-  PRIMARY KEY (a)
-)`)
-	tk.MustExec(`CREATE TABLE report.t2 (
-  a bigint(20) DEFAULT NULL,
-  c bigint(20) NOT NULL
-)`)
-	tk.MustExec("grant all privileges on service.* to weperk")
-	tk.MustExec("grant all privileges on report.* to weperk")
-	tk1.Se.GetSessionVars().CurrentDB = ""
-	tk1.MustExec(`update service.t1 s,
-report.t2 t
-set s.a = t.a
-WHERE
-s.a = t.a
-and t.c >=  1 and t.c <= 10000
-and s.b !='xx';`)
-
-	// Fix issue 10028
-	tk.MustExec("create database ap")
-	tk.MustExec("create database tp")
-	tk.MustExec("grant all privileges on ap.* to xxx")
-	tk.MustExec("grant select on tp.* to xxx")
-	tk.MustExec("flush privileges")
-	tk.MustExec("create table tp.record( id int,name varchar(128),age int)")
-	tk.MustExec("insert into tp.record (id,name,age) values (1,'john',18),(2,'lary',19),(3,'lily',18)")
-	tk.MustExec("create table ap.record( id int,name varchar(128),age int)")
-	tk.MustExec("insert into ap.record(id) values(1)")
-	c.Assert(tk1.Se.Auth(&auth.UserIdentity{Username: "xxx", Hostname: "localhost"},
-		[]byte(""),
-		[]byte("")), IsTrue)
-	_, err2 := tk1.Exec("update ap.record t inner join tp.record tt on t.id=tt.id  set t.name=tt.name")
-	c.Assert(err2, IsNil)
-}
-
 func (s *testSessionSuite2) TestTxnGoString(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("drop table if exists gostr;")
@@ -2778,42 +2676,6 @@ func (s *testSessionSuite2) TestMaxExeucteTime(c *C) {
 	tk.MustExec("set @@MAX_EXECUTION_TIME = 0;")
 	tk.MustExec("commit")
 	tk.MustExec("drop table if exists MaxExecTime;")
-}
-
-func (s *testSessionSuite2) TestGrantViewRelated(c *C) {
-	tkRoot := testkit.NewTestKitWithInit(c, s.store)
-	tkUser := testkit.NewTestKitWithInit(c, s.store)
-
-	tkRoot.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: "localhost", CurrentUser: true, AuthUsername: "root", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-
-	tkRoot.MustExec("create table if not exists t (a int)")
-	tkRoot.MustExec("create view v_version29 as select * from t")
-	tkRoot.MustExec("create user 'u_version29'@'%'")
-	tkRoot.MustExec("grant select on t to u_version29@'%'")
-
-	tkUser.Se.Auth(&auth.UserIdentity{Username: "u_version29", Hostname: "localhost", CurrentUser: true, AuthUsername: "u_version29", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-
-	tkUser.MustQuery("select current_user();").Check(testkit.Rows("u_version29@%"))
-	err := tkUser.ExecToErr("select * from test.v_version29;")
-	c.Assert(err, NotNil)
-	tkUser.MustQuery("select current_user();").Check(testkit.Rows("u_version29@%"))
-	err = tkUser.ExecToErr("create view v_version29_c as select * from t;")
-	c.Assert(err, NotNil)
-
-	tkRoot.MustExec(`grant show view on v_version29 to 'u_version29'@'%'`)
-	tkRoot.MustQuery("select table_priv from mysql.tables_priv where host='%' and db='test' and user='u_version29' and table_name='v_version29'").Check(testkit.Rows("Show View"))
-
-	tkUser.MustQuery("select current_user();").Check(testkit.Rows("u_version29@%"))
-	tkUser.MustQuery("show create view v_version29;")
-	err = tkUser.ExecToErr("create view v_version29_c as select * from v_version29;")
-	c.Assert(err, NotNil)
-
-	tkRoot.MustExec(`grant create view on v_version29_c to 'u_version29'@'%'`)
-	tkRoot.MustQuery("select table_priv from mysql.tables_priv where host='%' and db='test' and user='u_version29' and table_name='v_version29_c'").Check(testkit.Rows("Create View"))
-
-	tkRoot.MustExec(`grant select on v_version29 to 'u_version29'@'%'`)
-	tkUser.MustQuery("select current_user();").Check(testkit.Rows("u_version29@%"))
-	tkUser.MustExec("create view v_version29_c as select * from v_version29;")
 }
 
 func (s *testSessionSuite2) TestLoadClientInteractive(c *C) {
