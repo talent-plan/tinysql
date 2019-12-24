@@ -27,7 +27,7 @@ import (
 	pumpcli "github.com/pingcap/tidb-tools/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tipb/go-binlog"
@@ -237,7 +237,7 @@ func (wr *WriteResult) GetError() error {
 func (info *BinlogInfo) WriteBinlog(clusterID uint64) *WriteResult {
 	skip := atomic.LoadUint32(&skipBinlog)
 	if skip > 0 {
-		metrics.CriticalErrorCounter.Add(1)
+
 		return &WriteResult{true, nil}
 	}
 
@@ -255,7 +255,7 @@ func (info *BinlogInfo) WriteBinlog(clusterID uint64) *WriteResult {
 			zap.Error(err))
 		if atomic.LoadUint32(&ignoreError) == 1 {
 			logutil.BgLogger().Error("write binlog fail but error ignored")
-			metrics.CriticalErrorCounter.Add(1)
+
 			// If error happens once, we'll stop writing binlog.
 			swapped := atomic.CompareAndSwapUint32(&skipBinlog, skip, skip+1)
 			if swapped && skip == 0 {

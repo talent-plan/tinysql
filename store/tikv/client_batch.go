@@ -26,10 +26,8 @@ import (
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -49,8 +47,6 @@ type batchConn struct {
 	// Notify rpcClient to check the idle flag
 	idleNotify *uint32
 	idleDetect *time.Timer
-
-	pendingRequests prometheus.Gauge
 
 	index uint32
 }
@@ -124,7 +120,6 @@ func fetchMorePendingRequests(
 	entries *[]*batchCommandsEntry,
 	requests *[]*tikvpb.BatchCommandsRequest_Request,
 ) {
-	waitStart := time.Now()
 
 	// Try to collect `batchWaitSize` requests, or wait `maxWaitTime`.
 	after := time.NewTimer(maxWaitTime)
@@ -136,8 +131,7 @@ func fetchMorePendingRequests(
 			}
 			*entries = append(*entries, entry)
 			*requests = append(*requests, entry.req)
-		case waitEnd := <-after.C:
-			metrics.TiKVBatchWaitDuration.Observe(float64(waitEnd.Sub(waitStart)))
+		case <-after.C:
 			return
 		}
 	}
@@ -155,7 +149,7 @@ func fetchMorePendingRequests(
 			*entries = append(*entries, entry)
 			*requests = append(*requests, entry.req)
 		default:
-			metrics.TiKVBatchWaitDuration.Observe(float64(time.Since(waitStart)))
+
 			return
 		}
 	}
@@ -306,7 +300,6 @@ func (c *batchCommandsClient) reCreateStreamingClientOnce(perr error) error {
 func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransportLayerLoad *uint64) {
 	defer func() {
 		if r := recover(); r != nil {
-			metrics.PanicCounter.WithLabelValues(metrics.LabelBatchRecvLoop).Inc()
 			logutil.BgLogger().Error("batchRecvLoop",
 				zap.Reflect("r", r),
 				zap.Stack("stack"))
@@ -327,11 +320,9 @@ func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransport
 				zap.Error(err),
 			)
 
-			now := time.Now()
 			if stopped := c.reCreateStreamingClient(err); stopped {
 				return
 			}
-			metrics.TiKVBatchClientUnavailable.Observe(time.Since(now).Seconds())
 			continue
 		}
 
@@ -419,7 +410,7 @@ func resetRequests(requests []*tikvpb.BatchCommandsRequest_Request) []*tikvpb.Ba
 func (a *batchConn) batchSendLoop(cfg config.TiKVClient) {
 	defer func() {
 		if r := recover(); r != nil {
-			metrics.PanicCounter.WithLabelValues(metrics.LabelBatchSendLoop).Inc()
+
 			logutil.BgLogger().Error("batchSendLoop",
 				zap.Reflect("r", r),
 				zap.Stack("stack"))
@@ -442,7 +433,6 @@ func (a *batchConn) batchSendLoop(cfg config.TiKVClient) {
 		requests = resetRequests(requests)
 		requestIDs = requestIDs[:0]
 
-		a.pendingRequests.Set(float64(len(a.batchCommandsCh)))
 		a.fetchAllPendingRequests(int(cfg.MaxBatchSize), &entries, &requests)
 
 		if len(entries) < int(cfg.MaxBatchSize) && cfg.MaxBatchWaitTime > 0 {

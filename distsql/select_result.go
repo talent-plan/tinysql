@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
@@ -62,7 +62,6 @@ type selectResult struct {
 
 	feedback     *statistics.QueryFeedback
 	partialCount int64 // number of partial results.
-	sqlType      string
 	encodeType   tipb.EncodeType
 
 	// copPlanIDs contains all copTasks' planIDs,
@@ -93,7 +92,7 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 				// final round of fetch
 				// TODO: Add a label to distinguish between success or failure.
 				// https://github.com/pingcap/tidb/issues/11397
-				metrics.DistSQLQueryHistgram.WithLabelValues(r.label, r.sqlType).Observe(r.fetchDuration.Seconds())
+
 				r.durationReported = true
 			}
 			return nil
@@ -225,9 +224,5 @@ func (r *selectResult) readRowsData(chk *chunk.Chunk) (err error) {
 
 // Close closes selectResult.
 func (r *selectResult) Close() error {
-	if r.feedback.Actual() >= 0 {
-		metrics.DistSQLScanKeysHistogram.Observe(float64(r.feedback.Actual()))
-	}
-	metrics.DistSQLPartialCountHistogram.Observe(float64(r.partialCount))
 	return r.resp.Close()
 }

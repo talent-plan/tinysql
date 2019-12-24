@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -82,9 +82,8 @@ type tsFuture struct {
 
 // Wait implements the oracle.Future interface.
 func (f *tsFuture) Wait() (uint64, error) {
-	now := time.Now()
 	physical, logical, err := f.TSFuture.Wait()
-	metrics.TSFutureWaitDuration.Observe(time.Since(now).Seconds())
+
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

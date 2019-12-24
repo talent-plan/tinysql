@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -101,7 +101,6 @@ type TransactionContext struct {
 	Shard         *int64
 	TableDeltaMap map[int64]TableDelta
 
-	// CreateTime For metrics.
 	CreateTime     time.Time
 	StatementCount int
 	ForUpdate      bool
@@ -711,7 +710,7 @@ func (s *SessionVars) AddPreparedStmt(stmtID uint32, stmt interface{}) error {
 			atomic.AddInt64(&preparedStmtCount, -1)
 			return ErrMaxPreparedStmtCountReached.GenWithStackByArgs(maxPreparedStmtCount)
 		}
-		metrics.PreparedStmtGauge.Set(float64(newPreparedStmtCount))
+
 	}
 	s.PreparedStmts[stmtID] = stmt
 	return nil
@@ -724,8 +723,7 @@ func (s *SessionVars) RemovePreparedStmt(stmtID uint32) {
 		return
 	}
 	delete(s.PreparedStmts, stmtID)
-	afterMinus := atomic.AddInt64(&preparedStmtCount, -1)
-	metrics.PreparedStmtGauge.Set(float64(afterMinus))
+	atomic.AddInt64(&preparedStmtCount, -1)
 }
 
 // WithdrawAllPreparedStmt remove all preparedStmt in current session and decrease count in global.
@@ -734,8 +732,7 @@ func (s *SessionVars) WithdrawAllPreparedStmt() {
 	if psCount == 0 {
 		return
 	}
-	afterMinus := atomic.AddInt64(&preparedStmtCount, -int64(psCount))
-	metrics.PreparedStmtGauge.Set(float64(afterMinus))
+	atomic.AddInt64(&preparedStmtCount, -int64(psCount))
 }
 
 // SetSystemVar sets the value of a system variable.

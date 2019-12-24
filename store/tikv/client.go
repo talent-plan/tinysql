@@ -18,7 +18,6 @@ import (
 	"context"
 	"io"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,7 +31,7 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"google.golang.org/grpc"
@@ -121,7 +120,7 @@ func (a *connArray) Init(addr string, security config.Security, idleNotify *uint
 	allowBatch := cfg.TiKVClient.MaxBatchSize > 0
 	if allowBatch {
 		a.batchConn = newBatchConn(uint(len(a.v)), cfg.TiKVClient.MaxBatchSize, idleNotify)
-		a.pendingRequests = metrics.TiKVPendingBatchRequests.WithLabelValues(a.target)
+
 	}
 	keepAlive := cfg.TiKVClient.GrpcKeepAliveTime
 	keepAliveTimeout := cfg.TiKVClient.GrpcKeepAliveTimeout
@@ -283,13 +282,6 @@ func (c *rpcClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 		ctx = opentracing.ContextWithSpan(ctx, span1)
 	}
 
-	start := time.Now()
-	reqType := req.Type.String()
-	storeID := strconv.FormatUint(req.Context.GetPeer().GetStoreId(), 10)
-	defer func() {
-		metrics.TiKVSendReqHistogram.WithLabelValues(reqType, storeID).Observe(time.Since(start).Seconds())
-	}()
-
 	if atomic.CompareAndSwapUint32(&c.idleNotify, 1, 0) {
 		c.recycleIdleConnArray()
 	}
@@ -309,7 +301,7 @@ func (c *rpcClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 
 	clientConn := connArray.Get()
 	if state := clientConn.GetState(); state == connectivity.TransientFailure {
-		metrics.GRPCConnTransientFailureCounter.WithLabelValues(addr, storeID).Inc()
+
 	}
 
 	if req.IsDebugReq() {

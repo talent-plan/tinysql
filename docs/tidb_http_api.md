@@ -17,7 +17,7 @@
     }
     ```
 
-1. Get all metrics of TiDB
+
 
     ```shell
     curl http://{TiDBIP}:10080/metrics

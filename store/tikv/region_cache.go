@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -41,20 +41,6 @@ const (
 
 // RegionCacheTTLSec is the max idle time for regions in the region cache.
 var RegionCacheTTLSec int64 = 600
-
-var (
-	tikvRegionCacheCounterWithInvalidateRegionFromCacheOK = metrics.TiKVRegionCacheCounter.WithLabelValues("invalidate_region_from_cache", "ok")
-	tikvRegionCacheCounterWithSendFail                    = metrics.TiKVRegionCacheCounter.WithLabelValues("send_fail", "ok")
-	tikvRegionCacheCounterWithGetRegionByIDOK             = metrics.TiKVRegionCacheCounter.WithLabelValues("get_region_by_id", "ok")
-	tikvRegionCacheCounterWithGetRegionByIDError          = metrics.TiKVRegionCacheCounter.WithLabelValues("get_region_by_id", "err")
-	tikvRegionCacheCounterWithGetRegionOK                 = metrics.TiKVRegionCacheCounter.WithLabelValues("get_region", "ok")
-	tikvRegionCacheCounterWithGetRegionError              = metrics.TiKVRegionCacheCounter.WithLabelValues("get_region", "err")
-	tikvRegionCacheCounterWithScanRegionsOK               = metrics.TiKVRegionCacheCounter.WithLabelValues("scan_regions", "ok")
-	tikvRegionCacheCounterWithScanRegionsError            = metrics.TiKVRegionCacheCounter.WithLabelValues("scan_regions", "err")
-	tikvRegionCacheCounterWithGetStoreOK                  = metrics.TiKVRegionCacheCounter.WithLabelValues("get_store", "ok")
-	tikvRegionCacheCounterWithGetStoreError               = metrics.TiKVRegionCacheCounter.WithLabelValues("get_store", "err")
-	tikvRegionCacheCounterWithInvalidateStoreRegionsOK    = metrics.TiKVRegionCacheCounter.WithLabelValues("invalidate_store_regions", "ok")
-)
 
 const (
 	updated  int32 = iota // region is updated and no need to reload.
@@ -162,7 +148,6 @@ func (r *Region) checkRegionCacheTTL(ts int64) bool {
 
 // invalidate invalidates a region, next time it will got null result.
 func (r *Region) invalidate() {
-	tikvRegionCacheCounterWithInvalidateRegionFromCacheOK.Inc()
 	atomic.StoreInt64(&r.lastAccess, invalidatedLastAccessTime)
 }
 
@@ -474,7 +459,6 @@ func (c *RegionCache) findRegionByKey(bo *Backoffer, key []byte, isEndKey bool) 
 
 // OnSendFail handles send request fail logic.
 func (c *RegionCache) OnSendFail(bo *Backoffer, ctx *RPCContext, scheduleReload bool, err error) {
-	tikvRegionCacheCounterWithSendFail.Inc()
 	r := c.getCachedRegionWithRLock(ctx.Region)
 	if r != nil {
 		if ctx.Store.storeType == kv.TiKV {
@@ -732,11 +716,6 @@ func (c *RegionCache) loadRegion(bo *Backoffer, key []byte, isEndKey bool) (*Reg
 			meta, leader, err = c.pdClient.GetRegion(bo.ctx, key)
 		}
 		if err != nil {
-			tikvRegionCacheCounterWithGetRegionError.Inc()
-		} else {
-			tikvRegionCacheCounterWithGetRegionOK.Inc()
-		}
-		if err != nil {
 			backoffErr = errors.Errorf("loadRegion from PD failed, key: %q, err: %v", key, err)
 			continue
 		}
@@ -771,11 +750,6 @@ func (c *RegionCache) loadRegionByID(bo *Backoffer, regionID uint64) (*Region, e
 			}
 		}
 		meta, leader, err := c.pdClient.GetRegionByID(bo.ctx, regionID)
-		if err != nil {
-			tikvRegionCacheCounterWithGetRegionByIDError.Inc()
-		} else {
-			tikvRegionCacheCounterWithGetRegionByIDOK.Inc()
-		}
 		if err != nil {
 			backoffErr = errors.Errorf("loadRegion from PD failed, regionID: %v, err: %v", regionID, err)
 			continue
@@ -813,7 +787,6 @@ func (c *RegionCache) scanRegions(bo *Backoffer, startKey []byte, limit int) ([]
 		}
 		metas, leaders, err := c.pdClient.ScanRegions(bo.ctx, startKey, nil, limit)
 		if err != nil {
-			tikvRegionCacheCounterWithScanRegionsError.Inc()
 			backoffErr = errors.Errorf(
 				"scanRegion from PD failed, startKey: %q, limit: %q, err: %v",
 				startKey,
@@ -821,8 +794,6 @@ func (c *RegionCache) scanRegions(bo *Backoffer, startKey []byte, limit int) ([]
 				err)
 			continue
 		}
-
-		tikvRegionCacheCounterWithScanRegionsOK.Inc()
 
 		if len(metas) == 0 {
 			return nil, errors.New("PD returned no region")
@@ -1073,7 +1044,6 @@ func (c *RegionCache) switchNextFlashPeer(r *Region, currentPeerIdx int, err err
 		epoch := rs.storeFails[currentPeerIdx]
 		if atomic.CompareAndSwapUint32(&s.fail, epoch, epoch+1) {
 			logutil.BgLogger().Info("mark store's regions need be refill", zap.String("store", s.addr))
-			tikvRegionCacheCounterWithInvalidateStoreRegionsOK.Inc()
 		}
 		s.markNeedCheck(c.notifyCheckCh)
 	}
@@ -1092,7 +1062,6 @@ func (c *RegionCache) switchNextPeer(r *Region, currentPeerIdx int, err error) {
 		epoch := rs.storeFails[currentPeerIdx]
 		if atomic.CompareAndSwapUint32(&s.fail, epoch, epoch+1) {
 			logutil.BgLogger().Info("mark store's regions need be refill", zap.String("store", s.addr))
-			tikvRegionCacheCounterWithInvalidateStoreRegionsOK.Inc()
 		}
 		s.markNeedCheck(c.notifyCheckCh)
 	}
@@ -1185,11 +1154,6 @@ func (s *Store) initResolve(bo *Backoffer, c *RegionCache) (addr string, err err
 	for {
 		store, err = c.pdClient.GetStore(bo.ctx, s.storeID)
 		if err != nil {
-			tikvRegionCacheCounterWithGetStoreError.Inc()
-		} else {
-			tikvRegionCacheCounterWithGetStoreOK.Inc()
-		}
-		if err != nil {
 			// TODO: more refine PD error status handle.
 			if errors.Cause(err) == context.Canceled {
 				return
@@ -1232,11 +1196,6 @@ func (s *Store) reResolve(c *RegionCache) {
 	var addr string
 	store, err := c.pdClient.GetStore(context.Background(), s.storeID)
 	if err != nil {
-		tikvRegionCacheCounterWithGetStoreError.Inc()
-	} else {
-		tikvRegionCacheCounterWithGetStoreOK.Inc()
-	}
-	if err != nil {
 		logutil.BgLogger().Error("loadStore from PD failed", zap.Uint64("id", s.storeID), zap.Error(err))
 		// we cannot do backoff in reResolve loop but try check other store and wait tick.
 		return
@@ -1246,7 +1205,6 @@ func (s *Store) reResolve(c *RegionCache) {
 		logutil.BgLogger().Info("invalidate regions in removed store",
 			zap.Uint64("store", s.storeID), zap.String("add", s.addr))
 		atomic.AddUint32(&s.fail, 1)
-		tikvRegionCacheCounterWithInvalidateStoreRegionsOK.Inc()
 		return
 	}
 

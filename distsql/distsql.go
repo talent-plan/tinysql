@@ -21,7 +21,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
@@ -51,11 +51,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 		return nil, err
 	}
 
-	label := metrics.LblGeneral
-	if sctx.GetSessionVars().InRestrictedSQL {
-		label = metrics.LblInternal
-	}
-
 	// kvReq.MemTracker is used to trace and control memory usage in DistSQL layer;
 	// for streamResult, since it is a pipeline which has no buffer, it's not necessary to trace it;
 	// for selectResult, we just use the kvReq.MemTracker prepared for co-processor
@@ -63,7 +58,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 	if kvReq.Streaming {
 		return &streamResult{
 			label:      "dag-stream",
-			sqlType:    label,
 			resp:       resp,
 			rowLen:     len(fieldTypes),
 			fieldTypes: fieldTypes,
@@ -82,7 +76,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 		fieldTypes: fieldTypes,
 		ctx:        sctx,
 		feedback:   fb,
-		sqlType:    label,
 		encodeType: encodetype,
 	}, nil
 }
@@ -109,15 +102,14 @@ func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.
 	if resp == nil {
 		return nil, errors.New("client returns nil response")
 	}
-	label := metrics.LblGeneral
+
 	if isRestrict {
-		label = metrics.LblInternal
+
 	}
 	result := &selectResult{
 		label:      "analyze",
 		resp:       resp,
 		feedback:   statistics.NewQueryFeedback(0, nil, 0, false),
-		sqlType:    label,
 		encodeType: tipb.EncodeType_TypeDefault,
 	}
 	return result, nil
@@ -133,7 +125,6 @@ func Checksum(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv
 		label:      "checksum",
 		resp:       resp,
 		feedback:   statistics.NewQueryFeedback(0, nil, 0, false),
-		sqlType:    metrics.LblGeneral,
 		encodeType: tipb.EncodeType_TypeDefault,
 	}
 	return result, nil

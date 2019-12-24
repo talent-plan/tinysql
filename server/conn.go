@@ -56,15 +56,12 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/arena"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -73,53 +70,6 @@ const (
 	connStatusReading
 	connStatusShutdown     // Closed by server.
 	connStatusWaitShutdown // Notified by server to close.
-)
-
-var (
-	queryTotalCountOk = [...]prometheus.Counter{
-		mysql.ComSleep:            metrics.QueryTotalCounter.WithLabelValues("Sleep", "OK"),
-		mysql.ComQuit:             metrics.QueryTotalCounter.WithLabelValues("Quit", "OK"),
-		mysql.ComInitDB:           metrics.QueryTotalCounter.WithLabelValues("InitDB", "OK"),
-		mysql.ComQuery:            metrics.QueryTotalCounter.WithLabelValues("Query", "OK"),
-		mysql.ComPing:             metrics.QueryTotalCounter.WithLabelValues("Ping", "OK"),
-		mysql.ComFieldList:        metrics.QueryTotalCounter.WithLabelValues("FieldList", "OK"),
-		mysql.ComStmtPrepare:      metrics.QueryTotalCounter.WithLabelValues("StmtPrepare", "OK"),
-		mysql.ComStmtExecute:      metrics.QueryTotalCounter.WithLabelValues("StmtExecute", "OK"),
-		mysql.ComStmtFetch:        metrics.QueryTotalCounter.WithLabelValues("StmtFetch", "OK"),
-		mysql.ComStmtClose:        metrics.QueryTotalCounter.WithLabelValues("StmtClose", "OK"),
-		mysql.ComStmtSendLongData: metrics.QueryTotalCounter.WithLabelValues("StmtSendLongData", "OK"),
-		mysql.ComStmtReset:        metrics.QueryTotalCounter.WithLabelValues("StmtReset", "OK"),
-		mysql.ComSetOption:        metrics.QueryTotalCounter.WithLabelValues("SetOption", "OK"),
-	}
-	queryTotalCountErr = [...]prometheus.Counter{
-		mysql.ComSleep:            metrics.QueryTotalCounter.WithLabelValues("Sleep", "Error"),
-		mysql.ComQuit:             metrics.QueryTotalCounter.WithLabelValues("Quit", "Error"),
-		mysql.ComInitDB:           metrics.QueryTotalCounter.WithLabelValues("InitDB", "Error"),
-		mysql.ComQuery:            metrics.QueryTotalCounter.WithLabelValues("Query", "Error"),
-		mysql.ComPing:             metrics.QueryTotalCounter.WithLabelValues("Ping", "Error"),
-		mysql.ComFieldList:        metrics.QueryTotalCounter.WithLabelValues("FieldList", "Error"),
-		mysql.ComStmtPrepare:      metrics.QueryTotalCounter.WithLabelValues("StmtPrepare", "Error"),
-		mysql.ComStmtExecute:      metrics.QueryTotalCounter.WithLabelValues("StmtExecute", "Error"),
-		mysql.ComStmtFetch:        metrics.QueryTotalCounter.WithLabelValues("StmtFetch", "Error"),
-		mysql.ComStmtClose:        metrics.QueryTotalCounter.WithLabelValues("StmtClose", "Error"),
-		mysql.ComStmtSendLongData: metrics.QueryTotalCounter.WithLabelValues("StmtSendLongData", "Error"),
-		mysql.ComStmtReset:        metrics.QueryTotalCounter.WithLabelValues("StmtReset", "Error"),
-		mysql.ComSetOption:        metrics.QueryTotalCounter.WithLabelValues("SetOption", "Error"),
-	}
-
-	queryDurationHistogramUse      = metrics.QueryDurationHistogram.WithLabelValues("Use")
-	queryDurationHistogramShow     = metrics.QueryDurationHistogram.WithLabelValues("Show")
-	queryDurationHistogramBegin    = metrics.QueryDurationHistogram.WithLabelValues("Begin")
-	queryDurationHistogramCommit   = metrics.QueryDurationHistogram.WithLabelValues("Commit")
-	queryDurationHistogramRollback = metrics.QueryDurationHistogram.WithLabelValues("Rollback")
-	queryDurationHistogramInsert   = metrics.QueryDurationHistogram.WithLabelValues("Insert")
-	queryDurationHistogramReplace  = metrics.QueryDurationHistogram.WithLabelValues("Replace")
-	queryDurationHistogramDelete   = metrics.QueryDurationHistogram.WithLabelValues("Delete")
-	queryDurationHistogramUpdate   = metrics.QueryDurationHistogram.WithLabelValues("Update")
-	queryDurationHistogramSelect   = metrics.QueryDurationHistogram.WithLabelValues("Select")
-	queryDurationHistogramExecute  = metrics.QueryDurationHistogram.WithLabelValues("Execute")
-	queryDurationHistogramSet      = metrics.QueryDurationHistogram.WithLabelValues("Set")
-	queryDurationHistogramGeneral  = metrics.QueryDurationHistogram.WithLabelValues(metrics.LblGeneral)
 )
 
 // newClientConn creates a *clientConn object.
@@ -203,7 +153,7 @@ func (cc *clientConn) Close() error {
 }
 
 func closeConn(cc *clientConn, connections int) error {
-	metrics.ConnGauge.Set(float64(connections))
+
 	err := cc.bufReadConn.Close()
 	terror.Log(err)
 	if cc.ctx != nil {
@@ -619,7 +569,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 				zap.String("err", fmt.Sprintf("%v", r)),
 				zap.String("stack", string(buf)),
 			)
-			metrics.PanicCounter.WithLabelValues(metrics.LabelSession).Inc()
+
 		}
 		if atomic.LoadInt32(&cc.status) != connStatusShutdown {
 			err := cc.Close()
@@ -666,17 +616,16 @@ func (cc *clientConn) Run(ctx context.Context) {
 			return
 		}
 
-		startTime := time.Now()
 		if err = cc.dispatch(ctx, data); err != nil {
 			if terror.ErrorEqual(err, io.EOF) {
-				cc.addMetrics(data[0], startTime, nil)
+
 				return
 			} else if terror.ErrResultUndetermined.Equal(err) {
 				logutil.Logger(ctx).Error("result undetermined, close this connection", zap.Error(err))
 				return
 			} else if terror.ErrCritical.Equal(err) {
 				logutil.Logger(ctx).Error("critical error, stop the server listener", zap.Error(err))
-				metrics.CriticalErrorCounter.Add(1)
+
 				select {
 				case cc.server.stopListenerCh <- struct{}{}:
 				default:
@@ -693,7 +642,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 			err1 := cc.writeError(err)
 			terror.Log(err1)
 		}
-		cc.addMetrics(data[0], startTime, err)
+
 		cc.pkt.sequence = 0
 	}
 }
@@ -728,68 +677,6 @@ func errStrForLog(err error) string {
 		return err.Error()
 	}
 	return errors.ErrorStack(err)
-}
-
-func (cc *clientConn) addMetrics(cmd byte, startTime time.Time, err error) {
-	if cmd == mysql.ComQuery && cc.ctx.Value(sessionctx.LastExecuteDDL) != nil {
-		// Don't take DDL execute time into account.
-		// It's already recorded by other metrics in ddl package.
-		return
-	}
-
-	var counter prometheus.Counter
-	if err != nil && int(cmd) < len(queryTotalCountErr) {
-		counter = queryTotalCountErr[cmd]
-	} else if err == nil && int(cmd) < len(queryTotalCountOk) {
-		counter = queryTotalCountOk[cmd]
-	}
-	if counter != nil {
-		counter.Inc()
-	} else {
-		label := strconv.Itoa(int(cmd))
-		if err != nil {
-			metrics.QueryTotalCounter.WithLabelValues(label, "ERROR").Inc()
-		} else {
-			metrics.QueryTotalCounter.WithLabelValues(label, "OK").Inc()
-		}
-	}
-
-	stmtType := cc.ctx.GetSessionVars().StmtCtx.StmtType
-	sqlType := metrics.LblGeneral
-	if stmtType != "" {
-		sqlType = stmtType
-	}
-
-	switch sqlType {
-	case "Use":
-		queryDurationHistogramUse.Observe(time.Since(startTime).Seconds())
-	case "Show":
-		queryDurationHistogramShow.Observe(time.Since(startTime).Seconds())
-	case "Begin":
-		queryDurationHistogramBegin.Observe(time.Since(startTime).Seconds())
-	case "Commit":
-		queryDurationHistogramCommit.Observe(time.Since(startTime).Seconds())
-	case "Rollback":
-		queryDurationHistogramRollback.Observe(time.Since(startTime).Seconds())
-	case "Insert":
-		queryDurationHistogramInsert.Observe(time.Since(startTime).Seconds())
-	case "Replace":
-		queryDurationHistogramReplace.Observe(time.Since(startTime).Seconds())
-	case "Delete":
-		queryDurationHistogramDelete.Observe(time.Since(startTime).Seconds())
-	case "Update":
-		queryDurationHistogramUpdate.Observe(time.Since(startTime).Seconds())
-	case "Select":
-		queryDurationHistogramSelect.Observe(time.Since(startTime).Seconds())
-	case "Execute":
-		queryDurationHistogramExecute.Observe(time.Since(startTime).Seconds())
-	case "Set":
-		queryDurationHistogramSet.Observe(time.Since(startTime).Seconds())
-	case metrics.LblGeneral:
-		queryDurationHistogramGeneral.Observe(time.Since(startTime).Seconds())
-	default:
-		metrics.QueryDurationHistogram.WithLabelValues(sqlType).Observe(time.Since(startTime).Seconds())
-	}
 }
 
 // dispatch handles client request based on command which is the first byte of the data.
@@ -1152,13 +1039,13 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 }
 
 // handleQuery executes the sql query string and writes result set or result ok to the client.
-// As the execution time of this function represents the performance of TiDB, we do time log and metrics here.
+
 // There is a special query `load data` that does not return result, which is handled differently.
 // Query `load stats` does not return result either.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
-		metrics.ExecuteErrorCounter.WithLabelValues(metrics.ExecuteErrorToLabel(err)).Inc()
+
 		return err
 	}
 	status := atomic.LoadInt32(&cc.status)
@@ -1242,7 +1129,7 @@ func (cc *clientConn) writeResultset(ctx context.Context, rs ResultSet, binary b
 		if _, ok := r.(string); !ok {
 			panic(r)
 		}
-		// TODO(jianzhang.zj: add metrics here)
+
 		runErr = errors.Errorf("%v", r)
 		buf := make([]byte, 4096)
 		stackSize := runtime.Stack(buf, false)

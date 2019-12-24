@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -343,12 +342,11 @@ func (do *Domain) Reload() error {
 		changedTableIDs []int64
 	)
 	neededSchemaVersion, changedTableIDs, fullLoad, err = do.loadInfoSchema(do.infoHandle, schemaVersion, ver.Ver)
-	metrics.LoadSchemaDuration.Observe(time.Since(startTime).Seconds())
+
 	if err != nil {
-		metrics.LoadSchemaCounter.WithLabelValues("failed").Inc()
+
 		return err
 	}
-	metrics.LoadSchemaCounter.WithLabelValues("succ").Inc()
 
 	if fullLoad {
 		logutil.BgLogger().Info("full load and reset schema validator")
@@ -948,9 +946,8 @@ func recoverInDomain(funcName string, quit bool) {
 	buf := util.GetStack()
 	logutil.BgLogger().Error("recover in domain failed", zap.String("funcName", funcName),
 		zap.Any("error", r), zap.String("buffer", string(buf)))
-	metrics.PanicCounter.WithLabelValues(metrics.LabelDomain).Inc()
+
 	if quit {
-		// Wait for metrics to be pushed.
 		time.Sleep(time.Second * 15)
 		os.Exit(1)
 	}

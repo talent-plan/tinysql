@@ -41,6 +41,5 @@ ignore:
   - "ddl/failtest/.*"
   - "ddl/testutil/.*"
   - "executor/seqtest/.*"
-  - "metrics/.*"
   - "expression/generator/.*"
 

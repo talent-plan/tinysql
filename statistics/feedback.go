@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -206,7 +206,7 @@ func (q *QueryFeedback) Update(startKey kv.Key, counts []int64) {
 	for _, count := range counts {
 		sum += count
 	}
-	metrics.DistSQLScanKeysPartialHistogram.Observe(float64(sum))
+
 	q.actual += sum
 	if !q.Valid || q.Hist == nil {
 		return

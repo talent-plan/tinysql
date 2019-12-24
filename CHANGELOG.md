@@ -117,7 +117,7 @@ Our thanks go to the following contributors from the community for helping this 
 * Modify the default values of `tidb_ddl_reorg_worker_cnt` and `tidb_ddl_reorg_batch_size` [#11874](https://github.com/pingcap/tidb/pull/11874)
 
 ### Monitor
-* Add new backoff monitoring types to record duration for each backoff type; add more backoff metrics to cover previously uncounted types such as commit backoff [#11728](https://github.com/pingcap/tidb/pull/11728)
+
 
 
 ## [3.0.2] 2019-08-06
@@ -205,7 +205,7 @@ Our thanks go to the following contributors from the community for helping this 
 
 ### Monitor
 * Fix the issue that data is not collected and reported because the `TiKVTxnCmdCounter` monitoring metric is not registered [#11316](https://github.com/pingcap/tidb/pull/11316)
-* Add the `BindUsageCounter`, `BindTotalGauge` and `BindMemoryUsage` monitoring metrics for the Bind Info [#11467](https://github.com/pingcap/tidb/pull/11467)<Paste>
+
 
 
 ## [3.0.1] 2019-07-16
@@ -770,7 +770,7 @@ Enable hash partition by default; and enable range columns partition when there 
 ### Server
 * Return a warning instead of an error when the non-TiDB hint exists in the comment [#8766](https://github.com/pingcap/tidb/pull/8766)
 * Verify the validity of the configured TIMEZONE value [#8879](https://github.com/pingcap/tidb/pull/8879)
-* Optimize the `QueryDurationHistogram` metrics item to display more statement types [#8875](https://github.com/pingcap/tidb/pull/8875) 
+
 * Fix the lower bound overflow issue of bigint in some cases [#8544](https://github.com/pingcap/tidb/pull/8544)
 * Support the `ALLOW_INVALID_DATES` SQL mode [#9110](https://github.com/pingcap/tidb/pull/9110) 
 ### DDL
@@ -1081,7 +1081,7 @@ Enable hash partition by default; and enable range columns partition when there 
 * Remove the goroutine pool [#7564](https://github.com/pingcap/tidb/pull/7564)
 * Support viewing the goroutine information using the `USER1` signal [#7587](https://github.com/pingcap/tidb/pull/7587)
 * Set the internal SQL to high priority while TiDB is started [#7616](https://github.com/pingcap/tidb/pull/7616)
-* Use different labels to filter internal SQL and user SQL in monitoring metrics [#7631](https://github.com/pingcap/tidb/pull/7631)
+
 * Store the top 30 slow queries in the last week to the TiDB server [#7646](https://github.com/pingcap/tidb/pull/7646)
 * Put forward a proposal of setting the global system time zone for the TiDB cluster [#7656](https://github.com/pingcap/tidb/pull/7656)
 * Enrich the error message of "GC life time is shorter than transaction duration" [#7658](https://github.com/pingcap/tidb/pull/7658)
@@ -1201,7 +1201,7 @@ Only TiKV has this release
 
 ## [1.1.0-beta] - 2018-02-24
 ### New Features
-* Add more monitoring metrics and refine the log
+
 * Add the `tidb_config` session variable to output the current TiDB configuration
 * Support displaying the table creating time in `information_schema`
 ### Improvements

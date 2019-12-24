@@ -21,23 +21,10 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-)
-
-var (
-	stmtNodeCounterUse      = metrics.StmtNodeCounter.WithLabelValues("Use")
-	stmtNodeCounterShow     = metrics.StmtNodeCounter.WithLabelValues("Show")
-	stmtNodeCounterBegin    = metrics.StmtNodeCounter.WithLabelValues("Begin")
-	stmtNodeCounterCommit   = metrics.StmtNodeCounter.WithLabelValues("Commit")
-	stmtNodeCounterRollback = metrics.StmtNodeCounter.WithLabelValues("Rollback")
-	stmtNodeCounterInsert   = metrics.StmtNodeCounter.WithLabelValues("Insert")
-	stmtNodeCounterReplace  = metrics.StmtNodeCounter.WithLabelValues("Replace")
-	stmtNodeCounterDelete   = metrics.StmtNodeCounter.WithLabelValues("Delete")
-	stmtNodeCounterUpdate   = metrics.StmtNodeCounter.WithLabelValues("Update")
-	stmtNodeCounterSelect   = metrics.StmtNodeCounter.WithLabelValues("Select")
 )
 
 // Compiler compiles an ast.StmtNode to a physical plan.
@@ -62,8 +49,6 @@ func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (*ExecStm
 	if err != nil {
 		return nil, err
 	}
-
-	CountStmtNode(stmtNode, c.Ctx.GetSessionVars().InRestrictedSQL)
 	var lowerPriority bool
 	if c.Ctx.GetSessionVars().StmtCtx.Priority == mysql.NoPriority {
 		lowerPriority = needLowerPriority(finalPlan)
@@ -119,160 +104,6 @@ func isPhysicalPlanNeedLowerPriority(p plannercore.PhysicalPlan) bool {
 	}
 
 	return false
-}
-
-// CountStmtNode records the number of statements with the same type.
-func CountStmtNode(stmtNode ast.StmtNode, inRestrictedSQL bool) {
-	if inRestrictedSQL {
-		return
-	}
-
-	typeLabel := GetStmtLabel(stmtNode)
-	switch typeLabel {
-	case "Use":
-		stmtNodeCounterUse.Inc()
-	case "Show":
-		stmtNodeCounterShow.Inc()
-	case "Begin":
-		stmtNodeCounterBegin.Inc()
-	case "Commit":
-		stmtNodeCounterCommit.Inc()
-	case "Rollback":
-		stmtNodeCounterRollback.Inc()
-	case "Insert":
-		stmtNodeCounterInsert.Inc()
-	case "Replace":
-		stmtNodeCounterReplace.Inc()
-	case "Delete":
-		stmtNodeCounterDelete.Inc()
-	case "Update":
-		stmtNodeCounterUpdate.Inc()
-	case "Select":
-		stmtNodeCounterSelect.Inc()
-	default:
-		metrics.StmtNodeCounter.WithLabelValues(typeLabel).Inc()
-	}
-
-	if !config.GetGlobalConfig().Status.RecordQPSbyDB {
-		return
-	}
-
-	dbLabels := getStmtDbLabel(stmtNode)
-	for dbLabel := range dbLabels {
-		metrics.DbStmtNodeCounter.WithLabelValues(dbLabel, typeLabel).Inc()
-	}
-}
-
-func getStmtDbLabel(stmtNode ast.StmtNode) map[string]struct{} {
-	dbLabelSet := make(map[string]struct{})
-
-	switch x := stmtNode.(type) {
-	case *ast.AlterTableStmt:
-		dbLabel := x.Table.Schema.O
-		dbLabelSet[dbLabel] = struct{}{}
-	case *ast.CreateIndexStmt:
-		dbLabel := x.Table.Schema.O
-		dbLabelSet[dbLabel] = struct{}{}
-	case *ast.CreateTableStmt:
-		dbLabel := x.Table.Schema.O
-		dbLabelSet[dbLabel] = struct{}{}
-	case *ast.InsertStmt:
-		dbLabels := getDbFromResultNode(x.Table.TableRefs)
-		for _, db := range dbLabels {
-			dbLabelSet[db] = struct{}{}
-		}
-		dbLabels = getDbFromResultNode(x.Select)
-		for _, db := range dbLabels {
-			dbLabelSet[db] = struct{}{}
-		}
-	case *ast.DropIndexStmt:
-		dbLabel := x.Table.Schema.O
-		dbLabelSet[dbLabel] = struct{}{}
-	case *ast.DropTableStmt:
-		tables := x.Tables
-		for _, table := range tables {
-			dbLabel := table.Schema.O
-			if _, ok := dbLabelSet[dbLabel]; !ok {
-				dbLabelSet[dbLabel] = struct{}{}
-			}
-		}
-	case *ast.SelectStmt:
-		dbLabels := getDbFromResultNode(x)
-		for _, db := range dbLabels {
-			dbLabelSet[db] = struct{}{}
-		}
-	case *ast.UpdateStmt:
-		if x.TableRefs != nil {
-			dbLabels := getDbFromResultNode(x.TableRefs.TableRefs)
-			for _, db := range dbLabels {
-				dbLabelSet[db] = struct{}{}
-			}
-		}
-	case *ast.DeleteStmt:
-		if x.TableRefs != nil {
-			dbLabels := getDbFromResultNode(x.TableRefs.TableRefs)
-			for _, db := range dbLabels {
-				dbLabelSet[db] = struct{}{}
-			}
-		}
-	case *ast.CreateBindingStmt:
-		if x.OriginSel != nil {
-			originSelect := x.OriginSel.(*ast.SelectStmt)
-			dbLabels := getDbFromResultNode(originSelect.From.TableRefs)
-			for _, db := range dbLabels {
-				dbLabelSet[db] = struct{}{}
-			}
-		}
-
-		if len(dbLabelSet) == 0 && x.HintedSel != nil {
-			hintedSelect := x.HintedSel.(*ast.SelectStmt)
-			dbLabels := getDbFromResultNode(hintedSelect.From.TableRefs)
-			for _, db := range dbLabels {
-				dbLabelSet[db] = struct{}{}
-			}
-		}
-	}
-
-	return dbLabelSet
-}
-
-func getDbFromResultNode(resultNode ast.ResultSetNode) []string { //may have duplicate db name
-	var dbLabels []string
-
-	if resultNode == nil {
-		return dbLabels
-	}
-
-	switch x := resultNode.(type) {
-	case *ast.TableSource:
-		return getDbFromResultNode(x.Source)
-	case *ast.SelectStmt:
-		if x.From != nil {
-			return getDbFromResultNode(x.From.TableRefs)
-		}
-	case *ast.TableName:
-		dbLabels = append(dbLabels, x.DBInfo.Name.O)
-	case *ast.Join:
-		if x.Left != nil {
-			dbs := getDbFromResultNode(x.Left)
-			if dbs != nil {
-				for _, db := range dbs {
-					dbLabels = append(dbLabels, db)
-				}
-			}
-		}
-
-		if x.Right != nil {
-			dbs := getDbFromResultNode(x.Right)
-			if dbs != nil {
-				for _, db := range dbs {
-					dbLabels = append(dbLabels, db)
-				}
-			}
-		}
-	}
-
-	return dbLabels
 }
 
 // GetStmtLabel generates a label for a statement.

@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -300,7 +300,7 @@ func (dc *ddlCtx) isOwner() bool {
 	isOwner := dc.ownerManager.IsOwner()
 	logutil.BgLogger().Debug("[ddl] check whether is the DDL owner", zap.Bool("isOwner", isOwner), zap.String("selfID", dc.uuid))
 	if isOwner {
-		metrics.DDLCounter.WithLabelValues(metrics.DDLOwner + "_" + mysql.TiDBReleaseVersion).Inc()
+
 	}
 	return isOwner
 }
@@ -380,7 +380,6 @@ func newDDL(ctx context.Context, options ...Option) *ddl {
 	d.start(ctx, opt.ResourcePool)
 	variable.RegisterStatistics(d)
 
-	metrics.DDLCounter.WithLabelValues(metrics.CreateDDLInstance).Inc()
 	return d
 }
 
@@ -432,10 +431,9 @@ func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
 				func(r interface{}) {
 					if r != nil {
 						logutil.Logger(w.logCtx).Error("[ddl] DDL worker meet panic", zap.String("ID", d.uuid))
-						metrics.PanicCounter.WithLabelValues(metrics.LabelDDL).Inc()
+
 					}
 				})
-			metrics.DDLCounter.WithLabelValues(fmt.Sprintf("%s_%s", metrics.CreateDDL, worker.String())).Inc()
 
 			// When the start function is called, we will send a fake job to let worker
 			// checks owner firstly and try to find whether a job exists and run.
@@ -448,10 +446,10 @@ func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
 				if r != nil {
 					logutil.BgLogger().Error("[ddl] DDL syncer clean worker meet panic",
 						zap.String("ID", d.uuid), zap.Reflect("r", r), zap.Stack("stack trace"))
-					metrics.PanicCounter.WithLabelValues(metrics.LabelDDLSyncer).Inc()
+
 				}
 			})
-		metrics.DDLCounter.WithLabelValues(metrics.StartCleanWork).Inc()
+
 	}
 }
 
@@ -579,12 +577,9 @@ func (d *ddl) doDDLJob(ctx sessionctx.Context, job *model.Job) error {
 	// For every state changes, we will wait as lease 2 * lease time, so here the ticker check is 10 * lease.
 	// But we use etcd to speed up, normally it takes less than 0.5s now, so we use 0.5s or 1s or 3s as the max value.
 	ticker := time.NewTicker(chooseLeaseTime(10*d.lease, checkJobMaxInterval(job)))
-	startTime := time.Now()
-	metrics.JobsGauge.WithLabelValues(job.Type.String()).Inc()
+
 	defer func() {
 		ticker.Stop()
-		metrics.JobsGauge.WithLabelValues(job.Type.String()).Dec()
-		metrics.HandleJobHistogram.WithLabelValues(job.Type.String(), metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
 	}()
 	for {
 		select {

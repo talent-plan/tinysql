@@ -258,12 +258,12 @@ func (s *Security) ToTLSConfig() (*tls.Config, error) {
 
 // Status is the status section of the config.
 type Status struct {
-	StatusHost      string `toml:"status-host" json:"status-host"`
-	MetricsAddr     string `toml:"metrics-addr" json:"metrics-addr"`
-	StatusPort      uint   `toml:"status-port" json:"status-port"`
-	MetricsInterval uint   `toml:"metrics-interval" json:"metrics-interval"`
-	ReportStatus    bool   `toml:"report-status" json:"report-status"`
-	RecordQPSbyDB   bool   `toml:"record-db-qps" json:"record-db-qps"`
+	StatusHost string `toml:"status-host" json:"status-host"`
+
+	StatusPort uint `toml:"status-port" json:"status-port"`
+
+	ReportStatus  bool `toml:"report-status" json:"report-status"`
+	RecordQPSbyDB bool `toml:"record-db-qps" json:"record-db-qps"`
 }
 
 // Performance is the performance section of the config.
@@ -297,10 +297,10 @@ type TxnLocalLatches struct {
 
 // OpenTracing is the opentracing section of the config.
 type OpenTracing struct {
-	Enable     bool                `toml:"enable" json:"enable"`
-	RPCMetrics bool                `toml:"rpc-metrics" json:"rpc-metrics"`
-	Sampler    OpenTracingSampler  `toml:"sampler" json:"sampler"`
-	Reporter   OpenTracingReporter `toml:"reporter" json:"reporter"`
+	Enable bool `toml:"enable" json:"enable"`
+
+	Sampler  OpenTracingSampler  `toml:"sampler" json:"sampler"`
+	Reporter OpenTracingReporter `toml:"reporter" json:"reporter"`
 }
 
 // OpenTracingSampler is the config for opentracing sampler.
@@ -411,11 +411,11 @@ var defaultConf = Config{
 		QueryLogMaxLen:     logutil.DefaultQueryLogMaxLen,
 	},
 	Status: Status{
-		ReportStatus:    true,
-		StatusHost:      "0.0.0.0",
-		StatusPort:      10080,
-		MetricsInterval: 15,
-		RecordQPSbyDB:   false,
+		ReportStatus: true,
+		StatusHost:   "0.0.0.0",
+		StatusPort:   10080,
+
+		RecordQPSbyDB: false,
 	},
 	Performance: Performance{
 		MaxMemory:           0,
@@ -661,10 +661,10 @@ func (l *Log) ToLogConfig() *logutil.LogConfig {
 // ToTracingConfig converts *OpenTracing to *tracing.Configuration.
 func (t *OpenTracing) ToTracingConfig() *tracing.Configuration {
 	ret := &tracing.Configuration{
-		Disabled:   !t.Enable,
-		RPCMetrics: t.RPCMetrics,
-		Reporter:   &tracing.ReporterConfig{},
-		Sampler:    &tracing.SamplerConfig{},
+		Disabled: !t.Enable,
+
+		Reporter: &tracing.ReporterConfig{},
+		Sampler:  &tracing.SamplerConfig{},
 	}
 	ret.Reporter.QueueSize = t.Reporter.QueueSize
 	ret.Reporter.BufferFlushInterval = t.Reporter.BufferFlushInterval

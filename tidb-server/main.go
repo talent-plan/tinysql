@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
@@ -34,7 +33,7 @@ import (
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
@@ -48,15 +47,12 @@ import (
 	"github.com/pingcap/tidb/store/tikv/gcworker"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/signal"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
 
 // Flag Names
 const (
-	nmVersion          = "V"
 	nmConfig           = "config"
 	nmConfigCheck      = "config-check"
 	nmConfigStrict     = "config-strict"
@@ -74,10 +70,9 @@ const (
 	nmReportStatus     = "report-status"
 	nmStatusHost       = "status-host"
 	nmStatusPort       = "status"
-	nmMetricsAddr      = "metrics-addr"
-	nmMetricsInterval  = "metrics-interval"
-	nmDdlLease         = "lease"
-	nmTokenLimit       = "token-limit"
+
+	nmDdlLease   = "lease"
+	nmTokenLimit = "token-limit"
 
 	nmProxyProtocolNetworks      = "proxy-protocol-networks"
 	nmProxyProtocolHeaderTimeout = "proxy-protocol-header-timeout"
@@ -106,11 +101,9 @@ var (
 	logFile  = flag.String(nmLogFile, "", "log file path")
 
 	// Status
-	reportStatus    = flagBoolean(nmReportStatus, true, "If enable status report HTTP service.")
-	statusHost      = flag.String(nmStatusHost, "0.0.0.0", "tidb server status host")
-	statusPort      = flag.String(nmStatusPort, "10080", "tidb server status port")
-	metricsAddr     = flag.String(nmMetricsAddr, "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
-	metricsInterval = flag.Uint(nmMetricsInterval, 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
+	reportStatus = flagBoolean(nmReportStatus, true, "If enable status report HTTP service.")
+	statusHost   = flag.String(nmStatusHost, "0.0.0.0", "tidb server status host")
+	statusPort   = flag.String(nmStatusPort, "10080", "tidb server status port")
 
 	// PROXY Protocol
 	proxyProtocolNetworks      = flag.String(nmProxyProtocolNetworks, "", "proxy protocol networks allowed IP or *, empty mean disable proxy protocol support")
@@ -128,7 +121,7 @@ var (
 func main() {
 	flag.Parse()
 	registerStores()
-	registerMetrics()
+
 	configWarning := loadConfig()
 	overrideConfig()
 	if err := cfg.Valid(); err != nil {
@@ -147,9 +140,7 @@ func main() {
 	if configWarning != "" {
 		log.Warn(configWarning)
 	}
-	setupTracing() // Should before createServer and after setup config.
 	setupBinlogClient()
-	setupMetrics()
 	createStoreAndDomain()
 	createServer()
 	signal.SetupSignalHandler(serverShutdown)
@@ -171,10 +162,6 @@ func registerStores() {
 	tikv.NewGCHandlerFunc = gcworker.NewGCWorker
 	err = kvstore.Register("mocktikv", mockstore.MockDriver{})
 	terror.MustNil(err)
-}
-
-func registerMetrics() {
-	metrics.RegisterMetrics()
 }
 
 func createStoreAndDomain() {
@@ -220,43 +207,6 @@ func setupBinlogClient() {
 
 	binloginfo.SetPumpsClient(client)
 	log.Info("tidb-server", zap.Bool("create pumps client success, ignore binlog error", cfg.Binlog.IgnoreError))
-}
-
-// Prometheus push.
-const zeroDuration = time.Duration(0)
-
-// pushMetric pushes metrics in background.
-func pushMetric(addr string, interval time.Duration) {
-	if interval == zeroDuration || len(addr) == 0 {
-		log.Info("disable Prometheus push client")
-		return
-	}
-	log.Info("start prometheus push client", zap.String("server addr", addr), zap.String("interval", interval.String()))
-	go prometheusPushClient(addr, interval)
-}
-
-// prometheusPushClient pushes metrics to Prometheus Pushgateway.
-func prometheusPushClient(addr string, interval time.Duration) {
-	// TODO: TiDB do not have uniq name, so we use host+port to compose a name.
-	job := "tidb"
-	pusher := push.New(addr, job)
-	pusher = pusher.Gatherer(prometheus.DefaultGatherer)
-	pusher = pusher.Grouping("instance", instanceName())
-	for {
-		err := pusher.Push()
-		if err != nil {
-			log.Error("could not push metrics to prometheus pushgateway", zap.String("err", err.Error()))
-		}
-		time.Sleep(interval)
-	}
-}
-
-func instanceName() string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return "unknown"
-	}
-	return fmt.Sprintf("%s_%d", hostname, cfg.Port)
 }
 
 // parseDuration parses lease argument string.
@@ -424,12 +374,6 @@ func overrideConfig() {
 		terror.MustNil(err)
 		cfg.Status.StatusPort = uint(p)
 	}
-	if actualFlags[nmMetricsAddr] {
-		cfg.Status.MetricsAddr = *metricsAddr
-	}
-	if actualFlags[nmMetricsInterval] {
-		cfg.Status.MetricsInterval = *metricsInterval
-	}
 
 	// PROXY Protocol
 	if actualFlags[nmProxyProtocolNetworks] {
@@ -499,22 +443,6 @@ func serverShutdown(isgraceful bool) {
 		graceful = true
 	}
 	svr.Close()
-}
-
-func setupMetrics() {
-	// Enable the mutex profile, 1/10 of mutex blocking event sampling.
-	runtime.SetMutexProfileFraction(10)
-	pushMetric(cfg.Status.MetricsAddr, time.Duration(cfg.Status.MetricsInterval)*time.Second)
-}
-
-func setupTracing() {
-	tracingCfg := cfg.OpenTracing.ToTracingConfig()
-	tracingCfg.ServiceName = "TiDB"
-	tracer, _, err := tracingCfg.NewTracer()
-	if err != nil {
-		log.Fatal("setup jaeger tracer failed", zap.String("error message", err.Error()))
-	}
-	opentracing.SetGlobalTracer(tracer)
 }
 
 func runServer() {

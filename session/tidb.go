@@ -176,22 +176,12 @@ func Compile(ctx context.Context, sctx sessionctx.Context, stmtNode ast.StmtNode
 	return stmt, err
 }
 
-func recordAbortTxnDuration(sessVars *variable.SessionVars) {
-	duration := time.Since(sessVars.TxnCtx.CreateTime).Seconds()
-	if sessVars.InRestrictedSQL {
-		transactionDurationInternalAbort.Observe(duration)
-	} else {
-		transactionDurationGeneralAbort.Observe(duration)
-	}
-}
-
 func finishStmt(ctx context.Context, sctx sessionctx.Context, se *session, sessVars *variable.SessionVars,
 	meetsErr error, sql sqlexec.Statement) error {
 	if meetsErr != nil {
 		if !sessVars.InTxn() {
 			logutil.BgLogger().Info("rollbackTxn for ddl/autocommit failed")
 			se.RollbackTxn(ctx)
-			recordAbortTxnDuration(sessVars)
 		}
 		return meetsErr
 	}

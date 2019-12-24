@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
@@ -35,8 +35,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
 )
-
-var planCacheCounter = metrics.PlanCacheCounter.WithLabelValues("prepare")
 
 // ShowDDL is for showing DDL information.
 type ShowDDL struct {
@@ -234,11 +232,6 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 		err := e.rebuildRange(plan)
 		if err != nil {
 			return err
-		}
-		if metrics.ResettablePlanCacheCounterFortTest {
-			metrics.PlanCacheCounter.WithLabelValues("prepare").Inc()
-		} else {
-			planCacheCounter.Inc()
 		}
 		e.names = names
 		e.Plan = plan

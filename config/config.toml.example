@@ -137,10 +137,10 @@ status-host = "0.0.0.0"
 status-port = 10080
 
 # Prometheus pushgateway address, leaves it empty will disable push to pushgateway.
-metrics-addr = ""
+
 
 # Prometheus client push interval in second, set \"0\" to disable push to pushgateway.
-metrics-interval = 15
+
 
 # Record statements qps by database name if it is enabled.
 record-db-qps = false
@@ -199,8 +199,8 @@ header-timeout = 5
 # Enable opentracing.
 enable = false
 
-# Whether to enable the rpc metrics.
-rpc-metrics = false
+
+
 
 [opentracing.sampler]
 # Type specifies the type of the sampler: const, probabilistic, rateLimiting, or remote

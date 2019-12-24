@@ -26,9 +26,8 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -43,45 +42,6 @@ const (
 	// DecorrJitter increases the maximum jitter based on the last random value.
 	DecorrJitter
 )
-
-var (
-	tikvBackoffCounterRPC            = metrics.TiKVBackoffCounter.WithLabelValues("tikvRPC")
-	tikvBackoffCounterLock           = metrics.TiKVBackoffCounter.WithLabelValues("txnLock")
-	tikvBackoffCounterLockFast       = metrics.TiKVBackoffCounter.WithLabelValues("tikvLockFast")
-	tikvBackoffCounterPD             = metrics.TiKVBackoffCounter.WithLabelValues("pdRPC")
-	tikvBackoffCounterRegionMiss     = metrics.TiKVBackoffCounter.WithLabelValues("regionMiss")
-	tikvBackoffCounterUpdateLeader   = metrics.TiKVBackoffCounter.WithLabelValues("updateLeader")
-	tikvBackoffCounterServerBusy     = metrics.TiKVBackoffCounter.WithLabelValues("serverBusy")
-	tikvBackoffCounterEmpty          = metrics.TiKVBackoffCounter.WithLabelValues("")
-	tikvBackoffHistogramRPC          = metrics.TiKVBackoffHistogram.WithLabelValues("tikvRPC")
-	tikvBackoffHistogramLock         = metrics.TiKVBackoffHistogram.WithLabelValues("txnLock")
-	tikvBackoffHistogramLockFast     = metrics.TiKVBackoffHistogram.WithLabelValues("tikvLockFast")
-	tikvBackoffHistogramPD           = metrics.TiKVBackoffHistogram.WithLabelValues("pdRPC")
-	tikvBackoffHistogramRegionMiss   = metrics.TiKVBackoffHistogram.WithLabelValues("regionMiss")
-	tikvBackoffHistogramUpdateLeader = metrics.TiKVBackoffHistogram.WithLabelValues("updateLeader")
-	tikvBackoffHistogramServerBusy   = metrics.TiKVBackoffHistogram.WithLabelValues("serverBusy")
-	tikvBackoffHistogramEmpty        = metrics.TiKVBackoffHistogram.WithLabelValues("")
-)
-
-func (t backoffType) metric() (prometheus.Counter, prometheus.Observer) {
-	switch t {
-	case boTiKVRPC:
-		return tikvBackoffCounterRPC, tikvBackoffHistogramRPC
-	case BoTxnLock:
-		return tikvBackoffCounterLock, tikvBackoffHistogramLock
-	case boTxnLockFast:
-		return tikvBackoffCounterLockFast, tikvBackoffHistogramLockFast
-	case BoPDRPC:
-		return tikvBackoffCounterPD, tikvBackoffHistogramPD
-	case BoRegionMiss:
-		return tikvBackoffCounterRegionMiss, tikvBackoffHistogramRegionMiss
-	case BoUpdateLeader:
-		return tikvBackoffCounterUpdateLeader, tikvBackoffHistogramUpdateLeader
-	case boServerBusy:
-		return tikvBackoffCounterServerBusy, tikvBackoffHistogramServerBusy
-	}
-	return tikvBackoffCounterEmpty, tikvBackoffHistogramEmpty
-}
 
 // NewBackoffFn creates a backoff func which implements exponential backoff with
 // optional jitters.
@@ -318,8 +278,6 @@ func (b *Backoffer) BackoffWithMaxSleep(typ backoffType, maxSleepMs int, err err
 		return b.types[0].(backoffType).TError()
 	}
 
-	backoffCounter, backoffDuration := typ.metric()
-	backoffCounter.Inc()
 	// Lazy initialize.
 	if b.fn == nil {
 		b.fn = make(map[backoffType]func(context.Context, int) int)
@@ -331,7 +289,6 @@ func (b *Backoffer) BackoffWithMaxSleep(typ backoffType, maxSleepMs int, err err
 	}
 
 	realSleep := f(b.ctx, maxSleepMs)
-	backoffDuration.Observe(float64(realSleep) / 1000)
 	b.totalSleep += realSleep
 	if b.backoffSleepMS == nil {
 		b.backoffSleepMS = make(map[backoffType]int)

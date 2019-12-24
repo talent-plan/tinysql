@@ -16,10 +16,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
-	"time"
-
 	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -30,18 +26,15 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/metrics"
+	"os"
+	"strings"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/zap"
-)
-
-var (
-	transactionDurationInternalRollback = metrics.TransactionDuration.WithLabelValues(metrics.LblInternal, metrics.LblRollback)
-	transactionDurationGeneralRollback  = metrics.TransactionDuration.WithLabelValues(metrics.LblGeneral, metrics.LblRollback)
 )
 
 // SimpleExec represents simple statement executor.
@@ -501,12 +494,6 @@ func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
 		return err
 	}
 	if txn.Valid() {
-		duration := time.Since(sessVars.TxnCtx.CreateTime).Seconds()
-		if sessVars.InRestrictedSQL {
-			transactionDurationInternalRollback.Observe(duration)
-		} else {
-			transactionDurationGeneralRollback.Observe(duration)
-		}
 		sessVars.TxnCtx.ClearDelta()
 		return txn.Rollback()
 	}

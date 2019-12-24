@@ -15,12 +15,10 @@ package distsql
 
 import (
 	"context"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
@@ -31,8 +29,7 @@ import (
 
 // streamResult implements the SelectResult interface.
 type streamResult struct {
-	label   string
-	sqlType string
+	label string
 
 	resp       kv.Response
 	rowLen     int
@@ -68,11 +65,10 @@ func (r *streamResult) Next(ctx context.Context, chk *chunk.Chunk) error {
 
 // readDataFromResponse read the data to result. Returns true means the resp is finished.
 func (r *streamResult) readDataFromResponse(ctx context.Context, resp kv.Response, result *tipb.Chunk) (bool, error) {
-	startTime := time.Now()
 	resultSubset, err := resp.Next(ctx)
 	// TODO: Add a label to distinguish between success or failure.
 	// https://github.com/pingcap/tidb/issues/11397
-	metrics.DistSQLQueryHistgram.WithLabelValues(r.label, r.sqlType).Observe(time.Since(startTime).Seconds())
+
 	if err != nil {
 		return false, err
 	}
@@ -150,8 +146,8 @@ func (r *streamResult) NextRaw(ctx context.Context) ([]byte, error) {
 
 func (r *streamResult) Close() error {
 	if r.feedback.Actual() > 0 {
-		metrics.DistSQLScanKeysHistogram.Observe(float64(r.feedback.Actual()))
+
 	}
-	metrics.DistSQLPartialCountHistogram.Observe(float64(r.partialCount))
+
 	return nil
 }

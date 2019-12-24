@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/logutil"
@@ -94,7 +93,7 @@ func (s *schemaValidator) LatestSchemaVersion() int64 {
 
 func (s *schemaValidator) Stop() {
 	logutil.BgLogger().Info("the schema validator stops")
-	metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorStop).Inc()
+
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.isStarted = false
@@ -103,7 +102,7 @@ func (s *schemaValidator) Stop() {
 }
 
 func (s *schemaValidator) Restart() {
-	metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorRestart).Inc()
+
 	logutil.BgLogger().Info("the schema validator restarts")
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -111,7 +110,7 @@ func (s *schemaValidator) Restart() {
 }
 
 func (s *schemaValidator) Reset() {
-	metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorReset).Inc()
+
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.isStarted = true
@@ -158,13 +157,13 @@ func hasRelatedTableID(relatedTableIDs, updateTableIDs []int64) bool {
 // NOTE, this function should be called under lock!
 func (s *schemaValidator) isRelatedTablesChanged(currVer int64, tableIDs []int64) bool {
 	if len(s.deltaSchemaInfos) == 0 {
-		metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorCacheEmpty).Inc()
+
 		logutil.BgLogger().Info("schema change history is empty", zap.Int64("currVer", currVer))
 		return true
 	}
 	newerDeltas := s.findNewerDeltas(currVer)
 	if len(newerDeltas) == len(s.deltaSchemaInfos) {
-		metrics.LoadSchemaCounter.WithLabelValues(metrics.SchemaValidatorCacheMiss).Inc()
+
 		logutil.BgLogger().Info("the schema version is much older than the latest version", zap.Int64("currVer", currVer),
 			zap.Int64("latestSchemaVer", s.latestSchemaVer), zap.Reflect("deltas", newerDeltas))
 		return true

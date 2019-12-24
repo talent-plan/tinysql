@@ -17,19 +17,17 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"math"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/pingcap/tidb/structure"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -523,10 +521,8 @@ func (m *Meta) GetDDLJobByIdx(index int64, jobListKeys ...JobListKeyType) (*mode
 	if len(jobListKeys) != 0 {
 		listKey = jobListKeys[0]
 	}
-
-	startTime := time.Now()
 	job, err := m.getDDLJob(listKey, index)
-	metrics.MetaHistogram.WithLabelValues(metrics.GetDDLJobByIdx, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+
 	return job, errors.Trace(err)
 }
 
@@ -550,10 +546,8 @@ func (m *Meta) UpdateDDLJob(index int64, job *model.Job, updateRawArgs bool, job
 	if len(jobListKeys) != 0 {
 		listKey = jobListKeys[0]
 	}
-
-	startTime := time.Now()
 	err := m.updateDDLJob(index, job, listKey, updateRawArgs)
-	metrics.MetaHistogram.WithLabelValues(metrics.UpdateDDLJob, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+
 	return errors.Trace(err)
 }
 
@@ -648,9 +642,8 @@ func (m *Meta) getHistoryDDLJob(key []byte, id int64) (*model.Job, error) {
 
 // GetHistoryDDLJob gets a history DDL job.
 func (m *Meta) GetHistoryDDLJob(id int64) (*model.Job, error) {
-	startTime := time.Now()
 	job, err := m.getHistoryDDLJob(mDDLJobHistoryKey, id)
-	metrics.MetaHistogram.WithLabelValues(metrics.GetHistoryDDLJob, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+
 	return job, errors.Trace(err)
 }
 
@@ -793,9 +786,8 @@ func (m *Meta) schemaDiffKey(schemaVersion int64) []byte {
 // GetSchemaDiff gets the modification information on a given schema version.
 func (m *Meta) GetSchemaDiff(schemaVersion int64) (*model.SchemaDiff, error) {
 	diffKey := m.schemaDiffKey(schemaVersion)
-	startTime := time.Now()
 	data, err := m.txn.Get(diffKey)
-	metrics.MetaHistogram.WithLabelValues(metrics.GetSchemaDiff, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+
 	if err != nil || len(data) == 0 {
 		return nil, errors.Trace(err)
 	}
@@ -811,9 +803,8 @@ func (m *Meta) SetSchemaDiff(diff *model.SchemaDiff) error {
 		return errors.Trace(err)
 	}
 	diffKey := m.schemaDiffKey(diff.Version)
-	startTime := time.Now()
 	err = m.txn.Set(diffKey, data)
-	metrics.MetaHistogram.WithLabelValues(metrics.SetSchemaDiff, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+
 	return errors.Trace(err)
 }
 

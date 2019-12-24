@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -30,9 +30,6 @@ import (
 const (
 	rangeTaskDefaultStatLogInterval = time.Minute * 10
 	defaultRegionsPerTask           = 128
-
-	lblCompletedRegions = "completed-regions"
-	lblFailedRegions    = "failed-regions"
 )
 
 // RangeTaskRunner splits a range into many ranges to process concurrently, and convenient to send requests to all
@@ -100,7 +97,6 @@ func (s *RangeTaskRunner) SetStatLogInterval(interval time.Duration) {
 // Empty startKey or endKey means unbounded.
 func (s *RangeTaskRunner) RunOnRange(ctx context.Context, startKey, endKey kv.Key) error {
 	s.completedRegions = 0
-	metrics.TiKVRangeTaskStats.WithLabelValues(s.name, lblCompletedRegions).Set(0)
 
 	if len(endKey) != 0 && bytes.Compare(startKey, endKey) >= 0 {
 		logutil.Logger(ctx).Info("empty range task executed. ignored",
@@ -143,7 +139,7 @@ func (s *RangeTaskRunner) RunOnRange(ctx context.Context, startKey, endKey kv.Ke
 		}
 		statLogTicker.Stop()
 		cancel()
-		metrics.TiKVRangeTaskStats.WithLabelValues(s.name, lblCompletedRegions).Set(0)
+
 	}()
 
 	// Iterate all regions and send each region's range as a task to the workers.
@@ -184,16 +180,11 @@ Loop:
 		if isLast {
 			task.EndKey = endKey
 		}
-
-		pushTaskStartTime := time.Now()
-
 		select {
 		case taskCh <- task:
 		case <-ctx.Done():
 			break Loop
 		}
-		metrics.TiKVRangeTaskPushDuration.WithLabelValues(s.name).Observe(time.Since(pushTaskStartTime).Seconds())
-
 		if isLast {
 			break
 		}
@@ -279,8 +270,6 @@ func (w *rangeTaskWorker) run(ctx context.Context, cancel context.CancelFunc) {
 
 		atomic.AddInt32(w.completedRegions, int32(stat.CompletedRegions))
 		atomic.AddInt32(w.failedRegions, int32(stat.FailedRegions))
-		metrics.TiKVRangeTaskStats.WithLabelValues(w.name, lblCompletedRegions).Add(float64(stat.CompletedRegions))
-		metrics.TiKVRangeTaskStats.WithLabelValues(w.name, lblFailedRegions).Add(float64(stat.FailedRegions))
 
 		if err != nil {
 			logutil.Logger(ctx).Info("canceling range task because of error",

@@ -76,7 +76,6 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 	result, ok := response.(*selectResult)
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "dag")
-	c.Assert(result.sqlType, Equals, "general")
 	c.Assert(result.rowLen, Equals, len(colTypes))
 
 	resp, ok := result.resp.(*mockResponse)
@@ -274,7 +273,6 @@ func (s *testSuite) TestAnalyze(c *C) {
 	result, ok := response.(*selectResult)
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "analyze")
-	c.Assert(result.sqlType, Equals, "internal")
 
 	response.Fetch(context.TODO())
 
@@ -299,7 +297,6 @@ func (s *testSuite) TestChecksum(c *C) {
 	result, ok := response.(*selectResult)
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "checksum")
-	c.Assert(result.sqlType, Equals, "general")
 
 	response.Fetch(context.TODO())
 

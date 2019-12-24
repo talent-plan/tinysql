@@ -55,7 +55,7 @@ func (s *Server) startHTTPServer() {
 		pathTemplate   string
 		err            error
 	)
-	httpRouterPage.WriteString("<html><head><title>TiDB Status and Metrics Report</title></head><body><h1>TiDB Status and Metrics Report</h1><table>")
+
 	err = router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 		pathTemplate, err = route.GetPathTemplate()
 		if err != nil {
@@ -80,7 +80,6 @@ func (s *Server) startHTTPServer() {
 		}
 	})
 
-	logutil.BgLogger().Info("for status and metrics report", zap.String("listening on addr", addr))
 	s.setupStatusServer(addr, serverMux)
 }
 

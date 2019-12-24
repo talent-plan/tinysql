@@ -18,18 +18,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ShuttingDown is a flag to indicate tidb-server is exiting (Ctrl+C signal
@@ -227,27 +225,7 @@ func (s *RegionRequestSender) needReloadRegion(ctx *RPCContext) (need bool) {
 	return
 }
 
-func regionErrorToLabel(e *errorpb.Error) string {
-	if e.GetNotLeader() != nil {
-		return "not_leader"
-	} else if e.GetRegionNotFound() != nil {
-		return "region_not_found"
-	} else if e.GetKeyNotInRegion() != nil {
-		return "key_not_in_region"
-	} else if e.GetEpochNotMatch() != nil {
-		return "epoch_not_match"
-	} else if e.GetServerIsBusy() != nil {
-		return "server_is_busy"
-	} else if e.GetStaleCommand() != nil {
-		return "stale_command"
-	} else if e.GetStoreNotMatch() != nil {
-		return "store_not_match"
-	}
-	return "unknown"
-}
-
 func (s *RegionRequestSender) onRegionError(bo *Backoffer, ctx *RPCContext, seed *uint32, regionErr *errorpb.Error) (retry bool, err error) {
-	metrics.TiKVRegionErrorCounter.WithLabelValues(regionErrorToLabel(regionErr)).Inc()
 	if notLeader := regionErr.GetNotLeader(); notLeader != nil {
 		// Retry if error is `NotLeader`.
 		logutil.BgLogger().Debug("tikv reports `NotLeader` retry later",

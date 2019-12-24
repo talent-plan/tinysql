@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics"
@@ -169,7 +169,7 @@ func (e *AnalyzeExec) analyzeWorker(taskCh <-chan *analyzeTask, resultCh chan<- 
 			stackSize := runtime.Stack(buf, false)
 			buf = buf[:stackSize]
 			logutil.BgLogger().Error("analyze worker panicked", zap.String("stack", string(buf)))
-			metrics.PanicCounter.WithLabelValues(metrics.LabelAnalyze).Inc()
+
 			resultCh <- analyzeResult{
 				Err: errAnalyzeWorkerPanic,
 				job: task.job,
@@ -525,14 +525,6 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 	return hists, cms, nil
 }
 
-var (
-	fastAnalyzeHistogramSample        = metrics.FastAnalyzeHistogram.WithLabelValues(metrics.LblGeneral, "sample")
-	fastAnalyzeHistogramAccessRegions = metrics.FastAnalyzeHistogram.WithLabelValues(metrics.LblGeneral, "access_regions")
-	fastAnalyzeHistogramRegionError   = metrics.FastAnalyzeHistogram.WithLabelValues(metrics.LblGeneral, "region_error")
-	fastAnalyzeHistogramSeekKeys      = metrics.FastAnalyzeHistogram.WithLabelValues(metrics.LblGeneral, "seek_keys")
-	fastAnalyzeHistogramScanKeys      = metrics.FastAnalyzeHistogram.WithLabelValues(metrics.LblGeneral, "scan_keys")
-)
-
 func analyzeFastExec(exec *AnalyzeFastExec) []analyzeResult {
 	hists, cms, err := exec.buildStats()
 	if err != nil {
@@ -776,8 +768,6 @@ func (e *AnalyzeFastExec) buildSampTask() (needRebuild bool, err error) {
 			break
 		}
 	}
-	fastAnalyzeHistogramAccessRegions.Observe(float64(accessRegionsCounter))
-
 	return false, nil
 }
 
@@ -989,9 +979,6 @@ func (e *AnalyzeFastExec) handleSampTasks(bo *tikv.Backoffer, workID int, err *e
 				kvMap[string(iter.Key())] = iter.Value()
 			}
 		}
-		fastAnalyzeHistogramSeekKeys.Observe(float64(len(keys)))
-		fastAnalyzeHistogramSample.Observe(float64(len(kvMap)))
-
 		*err = e.handleBatchSeekResponse(kvMap)
 		if *err != nil {
 			return
@@ -1082,8 +1069,7 @@ func (e *AnalyzeFastExec) runTasks() ([]*statistics.Histogram, []*statistics.CMS
 		}
 	}
 
-	scanKeysSize, err := e.handleScanTasks(bo)
-	fastAnalyzeHistogramScanKeys.Observe(float64(scanKeysSize))
+	_, err := e.handleScanTasks(bo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1140,7 +1126,6 @@ func (e *AnalyzeFastExec) buildStats() (hists []*statistics.Histogram, cms []*st
 			return nil, nil, err
 		}
 	}
-	fastAnalyzeHistogramRegionError.Observe(float64(regionErrorCounter))
 	if needRebuild {
 		errMsg := "build fast analyze task failed, exceed maxBuildTimes: %v"
 		return nil, nil, errors.Errorf(errMsg, maxBuildTimes)

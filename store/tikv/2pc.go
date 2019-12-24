@@ -26,7 +26,7 @@ import (
 	pb "github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/metrics"
+
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
@@ -50,11 +50,6 @@ var (
 	_ twoPhaseCommitAction = actionCleanup{}
 )
 
-var (
-	tikvSecondaryLockCleanupFailureCounterCommit   = metrics.TiKVSecondaryLockCleanupFailureCounter.WithLabelValues("commit")
-	tikvSecondaryLockCleanupFailureCounterRollback = metrics.TiKVSecondaryLockCleanupFailureCounter.WithLabelValues("rollback")
-)
-
 // Global variable set by config file.
 var (
 	ManagedLockTTL uint64 = 20000 // 20s
@@ -70,11 +65,6 @@ func (actionCommit) String() string {
 
 func (actionCleanup) String() string {
 	return "cleanup"
-}
-
-// metricsTag returns detail tag for metrics.
-func metricsTag(ca twoPhaseCommitAction) string {
-	return "2pc_" + ca.String()
 }
 
 // twoPhaseCommitter executes a two-phase commit protocol.
@@ -312,8 +302,6 @@ func (c *twoPhaseCommitter) doActionOnKeys(bo *Backoffer, action twoPhaseCommitA
 		return errors.Trace(err)
 	}
 
-	metrics.TiKVTxnRegionsNumHistogram.WithLabelValues(metricsTag(action)).Observe(float64(len(groups)))
-
 	var batches []batchKeys
 	var sizeFunc = c.keySize
 	if _, ok := action.(actionPrewrite); ok {
@@ -356,7 +344,6 @@ func (c *twoPhaseCommitter) doActionOnKeys(bo *Backoffer, action twoPhaseCommitA
 					zap.Uint64("conn", c.connID),
 					zap.Stringer("action type", action),
 					zap.Error(e))
-				tikvSecondaryLockCleanupFailureCounterCommit.Inc()
 			}
 		}()
 	} else {
@@ -708,7 +695,6 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 				cleanupKeysCtx := context.WithValue(context.Background(), txnStartKey, ctx.Value(txnStartKey))
 				err := c.cleanupKeys(NewBackoffer(cleanupKeysCtx, cleanupMaxBackoff).WithVars(c.txn.vars), c.keys)
 				if err != nil {
-					tikvSecondaryLockCleanupFailureCounterRollback.Inc()
 					logutil.Logger(ctx).Info("2PC cleanup failed",
 						zap.Error(err),
 						zap.Uint64("txnStartTS", c.startTS))
@@ -984,6 +970,6 @@ func (batchExe *batchExecutor) process(batches []batchKeys) error {
 		}
 	}
 	close(exitCh)
-	metrics.TiKVTokenWaitDuration.Observe(float64(batchExe.tokenWaitDuration))
+
 	return err
 }
