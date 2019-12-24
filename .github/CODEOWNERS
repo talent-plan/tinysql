@@ -1,5 +1,0 @@
-/expression @pingcap/co-expression
-/planner @pingcap/co-planner
-/statistics @pingcap/co-planner
-/util/ranger  @pingcap/co-planner
-/bindinfo @pingcap/co-planner
