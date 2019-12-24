@@ -47,13 +47,13 @@
         ],
         "Plan": [
           "Limit_17 1.00 root offset:0, count:1",
-          "└─IndexMergeJoin_70 1.00 root left outer semi join, inner:IndexReader_68, outer key:test.t.a, inner key:test.t.b",
-          "  ├─TopN_29 1.00 root test.t.a:asc, offset:0, count:1",
-          "  │ └─IndexReader_37 1.00 root index:TopN_36",
-          "  │   └─TopN_36 1.00 cop[tikv] test.t.a:asc, offset:0, count:1",
-          "  │     └─IndexScan_35 6.00 cop[tikv] table:t1, index:b, c, range:[-inf,6], keep order:false",
-          "  └─IndexReader_68 1.04 root index:IndexScan_67",
-          "    └─IndexScan_67 1.04 cop[tikv] table:t2, index:b, c, range: decided by [eq(test.t.b, test.t.a)], keep order:true"
+          "└─IndexJoin_60 1.00 root left outer semi join, inner:IndexReader_59, outer key:test.t.a, inner key:test.t.b",
+          "  ├─TopN_23 1.00 root test.t.a:asc, offset:0, count:1",
+          "  │ └─IndexReader_31 1.00 root index:TopN_30",
+          "  │   └─TopN_30 1.00 cop[tikv] test.t.a:asc, offset:0, count:1",
+          "  │     └─IndexScan_29 6.00 cop[tikv] table:t1, index:b, c, range:[-inf,6], keep order:false",
+          "  └─IndexReader_59 1.04 root index:IndexScan_58",
+          "    └─IndexScan_58 1.04 cop[tikv] table:t2, index:b, c, range: decided by [eq(test.t.b, test.t.a)], keep order:false"
         ]
       },
       {
@@ -143,9 +143,9 @@
         ],
         "Plan": [
           "IndexJoin_9 12475.01 root inner join, inner:IndexReader_8, outer key:test.t1.a, inner key:test.t2.a, other cond:eq(test.t1.c, test.t2.c), gt(test.t2.b, minus(test.t1.b, 1)), lt(test.t2.b, plus(test.t1.b, 1))",
-          "├─TableReader_19 9980.01 root data:Selection_18",
-          "│ └─Selection_18 9980.01 cop[tikv] not(isnull(test.t1.a)), not(isnull(test.t1.c))",
-          "│   └─TableScan_17 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "├─TableReader_12 9980.01 root data:Selection_11",
+          "│ └─Selection_11 9980.01 cop[tikv] not(isnull(test.t1.a)), not(isnull(test.t1.c))",
+          "│   └─TableScan_10 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
           "└─IndexReader_8 1.25 root index:Selection_7",
           "  └─Selection_7 1.25 cop[tikv] not(isnull(test.t2.a)), not(isnull(test.t2.c))",
           "    └─IndexScan_6 1.25 cop[tikv] table:t2, index:a, b, c, range: decided by [eq(test.t2.a, test.t1.a) gt(test.t2.b, minus(test.t1.b, 1)) lt(test.t2.b, plus(test.t1.b, 1))], keep order:false, stats:pseudo"

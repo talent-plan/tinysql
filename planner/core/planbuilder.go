@@ -119,14 +119,6 @@ func (info *tableHintInfo) ifPreferINLJ(tableNames ...*hintTableInfo) bool {
 	return info.matchTableName(tableNames, info.indexNestedLoopJoinTables.inljTables)
 }
 
-func (info *tableHintInfo) ifPreferINLHJ(tableNames ...*hintTableInfo) bool {
-	return info.matchTableName(tableNames, info.indexNestedLoopJoinTables.inlhjTables)
-}
-
-func (info *tableHintInfo) ifPreferINLMJ(tableNames ...*hintTableInfo) bool {
-	return info.matchTableName(tableNames, info.indexNestedLoopJoinTables.inlmjTables)
-}
-
 func (info *tableHintInfo) ifPreferTiFlash(tableNames ...*hintTableInfo) bool {
 	return info.matchTableName(tableNames, info.tiflashTables)
 }

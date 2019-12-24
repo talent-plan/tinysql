@@ -485,24 +485,6 @@ func (p PhysicalIndexJoin) Init(ctx sessionctx.Context, stats *property.StatsInf
 	return &p
 }
 
-// Init initializes PhysicalIndexMergeJoin.
-func (p PhysicalIndexMergeJoin) Init(ctx sessionctx.Context) *PhysicalIndexMergeJoin {
-	ctx.GetSessionVars().PlanID++
-	p.tp = TypeIndexMergeJoin
-	p.id = ctx.GetSessionVars().PlanID
-	p.ctx = ctx
-	return &p
-}
-
-// Init initializes PhysicalIndexHashJoin.
-func (p PhysicalIndexHashJoin) Init(ctx sessionctx.Context) *PhysicalIndexHashJoin {
-	ctx.GetSessionVars().PlanID++
-	p.tp = TypeIndexHashJoin
-	p.id = ctx.GetSessionVars().PlanID
-	p.ctx = ctx
-	return &p
-}
-
 // flattenPushDownPlan converts a plan tree to a list, whose head is the leaf node like table scan.
 func flattenPushDownPlan(p PhysicalPlan) []PhysicalPlan {
 	plans := make([]PhysicalPlan, 0, 5)

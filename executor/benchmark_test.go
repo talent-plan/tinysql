@@ -820,82 +820,10 @@ func prepare4IndexInnerHashJoin(tc *indexJoinTestCase, outerDS *mockDataSource, 
 	return e
 }
 
-func prepare4IndexOuterHashJoin(tc *indexJoinTestCase, outerDS *mockDataSource, innerDS *mockDataSource) Executor {
-	e := prepare4IndexInnerHashJoin(tc, outerDS, innerDS).(*IndexLookUpJoin)
-	idxHash := &IndexNestedLoopHashJoin{IndexLookUpJoin: *e}
-	concurrency := tc.concurrency
-	idxHash.joiners = make([]joiner, concurrency)
-	for i := 0; i < concurrency; i++ {
-		idxHash.joiners[i] = e.joiner.Clone()
-	}
-	return idxHash
-}
-
-func prepare4IndexMergeJoin(tc *indexJoinTestCase, outerDS *mockDataSource, innerDS *mockDataSource) Executor {
-	outerCols, innerCols := tc.columns(), tc.columns()
-	joinSchema := expression.NewSchema(outerCols...)
-	joinSchema.Append(innerCols...)
-	outerJoinKeys := make([]*expression.Column, 0, len(tc.outerJoinKeyIdx))
-	innerJoinKeys := make([]*expression.Column, 0, len(tc.innerJoinKeyIdx))
-	for _, keyIdx := range tc.outerJoinKeyIdx {
-		outerJoinKeys = append(outerJoinKeys, outerCols[keyIdx])
-	}
-	for _, keyIdx := range tc.innerJoinKeyIdx {
-		innerJoinKeys = append(innerJoinKeys, innerCols[keyIdx])
-	}
-	leftTypes, rightTypes := retTypes(outerDS), retTypes(innerDS)
-	defaultValues := make([]types.Datum, len(innerCols))
-	colLens := make([]int, len(innerCols))
-	for i := range colLens {
-		colLens[i] = types.UnspecifiedLength
-	}
-	keyOff2IdxOff := make([]int, len(outerJoinKeys))
-	for i := range keyOff2IdxOff {
-		keyOff2IdxOff[i] = i
-	}
-
-	compareFuncs := make([]expression.CompareFunc, 0, len(outerJoinKeys))
-	outerCompareFuncs := make([]expression.CompareFunc, 0, len(outerJoinKeys))
-	for i := range outerJoinKeys {
-		compareFuncs = append(compareFuncs, expression.GetCmpFunction(outerJoinKeys[i], innerJoinKeys[i]))
-		outerCompareFuncs = append(outerCompareFuncs, expression.GetCmpFunction(outerJoinKeys[i], outerJoinKeys[i]))
-	}
-	e := &IndexLookUpMergeJoin{
-		baseExecutor: newBaseExecutor(tc.ctx, joinSchema, stringutil.StringerStr("IndexMergeJoin"), outerDS),
-		outerMergeCtx: outerMergeCtx{
-			rowTypes:      leftTypes,
-			keyCols:       tc.outerJoinKeyIdx,
-			joinKeys:      outerJoinKeys,
-			needOuterSort: tc.needOuterSort,
-			compareFuncs:  outerCompareFuncs,
-		},
-		innerMergeCtx: innerMergeCtx{
-			readerBuilder: &dataReaderBuilder{Plan: &mockPhysicalIndexReader{e: innerDS}, executorBuilder: newExecutorBuilder(tc.ctx, nil)},
-			rowTypes:      rightTypes,
-			joinKeys:      innerJoinKeys,
-			colLens:       colLens,
-			keyCols:       tc.innerJoinKeyIdx,
-			compareFuncs:  compareFuncs,
-		},
-		workerWg:      new(sync.WaitGroup),
-		isOuterJoin:   false,
-		keyOff2IdxOff: keyOff2IdxOff,
-		lastColHelper: nil,
-	}
-	joiners := make([]joiner, e.ctx.GetSessionVars().IndexLookupJoinConcurrency)
-	for i := 0; i < e.ctx.GetSessionVars().IndexLookupJoinConcurrency; i++ {
-		joiners[i] = newJoiner(tc.ctx, 0, false, defaultValues, nil, leftTypes, rightTypes)
-	}
-	e.joiners = joiners
-	return e
-}
-
 type indexJoinType int8
 
 const (
 	indexInnerHashJoin indexJoinType = iota
-	indexOuterHashJoin
-	indexMergeJoin
 )
 
 func benchmarkIndexJoinExecWithCase(
@@ -912,10 +840,6 @@ func benchmarkIndexJoinExecWithCase(
 		switch execType {
 		case indexInnerHashJoin:
 			exec = prepare4IndexInnerHashJoin(tc, outerDS, innerDS)
-		case indexOuterHashJoin:
-			exec = prepare4IndexOuterHashJoin(tc, outerDS, innerDS)
-		case indexMergeJoin:
-			exec = prepare4IndexMergeJoin(tc, outerDS, innerDS)
 		}
 
 		tmpCtx := context.Background()
@@ -955,21 +879,8 @@ func BenchmarkIndexJoinExec(b *testing.B) {
 	outerDS := buildMockDataSourceWithIndex(outerOpt, tc.innerIdx)
 	innerDS := buildMockDataSourceWithIndex(innerOpt, tc.innerIdx)
 
-	tc.needOuterSort = true
-	b.Run(fmt.Sprintf("index merge join need outer sort %v", tc), func(b *testing.B) {
-		benchmarkIndexJoinExecWithCase(b, tc, outerDS, innerDS, indexMergeJoin)
-	})
-
 	tc.needOuterSort = false
-	b.Run(fmt.Sprintf("index merge join %v", tc), func(b *testing.B) {
-		benchmarkIndexJoinExecWithCase(b, tc, outerDS, innerDS, indexMergeJoin)
-	})
-
 	b.Run(fmt.Sprintf("index inner hash join %v", tc), func(b *testing.B) {
 		benchmarkIndexJoinExecWithCase(b, tc, outerDS, innerDS, indexInnerHashJoin)
-	})
-
-	b.Run(fmt.Sprintf("index outer hash join %v", tc), func(b *testing.B) {
-		benchmarkIndexJoinExecWithCase(b, tc, outerDS, innerDS, indexOuterHashJoin)
 	})
 }

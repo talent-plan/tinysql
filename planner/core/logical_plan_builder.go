@@ -400,18 +400,6 @@ func (p *LogicalJoin) setPreferredJoinType(hintInfo *tableHintInfo) {
 	if hintInfo.ifPreferINLJ(rhsAlias) {
 		p.preferJoinType |= preferRightAsINLJInner
 	}
-	if hintInfo.ifPreferINLHJ(lhsAlias) {
-		p.preferJoinType |= preferLeftAsINLHJInner
-	}
-	if hintInfo.ifPreferINLHJ(rhsAlias) {
-		p.preferJoinType |= preferRightAsINLHJInner
-	}
-	if hintInfo.ifPreferINLMJ(lhsAlias) {
-		p.preferJoinType |= preferLeftAsINLMJInner
-	}
-	if hintInfo.ifPreferINLMJ(rhsAlias) {
-		p.preferJoinType |= preferRightAsINLMJInner
-	}
 
 	// set hintInfo for further usage if this hint info can be used.
 	if p.preferJoinType != 0 {
@@ -2878,12 +2866,6 @@ func (b *PlanBuilder) buildSemiJoin(outerPlan, innerPlan LogicalPlan, onConditio
 		if b.TableHints().ifPreferINLJ(innerAlias) {
 			joinPlan.preferJoinType = preferRightAsINLJInner
 		}
-		if b.TableHints().ifPreferINLHJ(innerAlias) {
-			joinPlan.preferJoinType = preferRightAsINLHJInner
-		}
-		if b.TableHints().ifPreferINLMJ(innerAlias) {
-			joinPlan.preferJoinType = preferRightAsINLMJInner
-		}
 		// If there're multiple join hints, they're conflict.
 		if bits.OnesCount(joinPlan.preferJoinType) > 1 {
 			return nil, errors.New("Join hints are conflict, you can only specify one type of join")
@@ -4090,10 +4072,8 @@ func getInnerFromParenthesesAndUnaryPlus(expr ast.ExprNode) ast.ExprNode {
 // join types.
 func containDifferentJoinTypes(preferJoinType uint) bool {
 	inlMask := preferRightAsINLJInner ^ preferLeftAsINLJInner
-	inlhjMask := preferRightAsINLHJInner ^ preferLeftAsINLHJInner
-	inlmjMask := preferRightAsINLMJInner ^ preferLeftAsINLMJInner
 
-	mask := inlMask ^ inlhjMask ^ inlmjMask
+	mask := inlMask
 	onesCount := bits.OnesCount(preferJoinType & ^mask)
 	if onesCount > 1 || onesCount == 1 && preferJoinType&mask > 0 {
 		return true
@@ -4101,12 +4081,6 @@ func containDifferentJoinTypes(preferJoinType uint) bool {
 
 	cnt := 0
 	if preferJoinType&inlMask > 0 {
-		cnt++
-	}
-	if preferJoinType&inlhjMask > 0 {
-		cnt++
-	}
-	if preferJoinType&inlmjMask > 0 {
 		cnt++
 	}
 	return cnt > 1

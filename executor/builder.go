@@ -159,10 +159,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildMergeJoin(v)
 	case *plannercore.PhysicalIndexJoin:
 		return b.buildIndexLookUpJoin(v)
-	case *plannercore.PhysicalIndexMergeJoin:
-		return b.buildIndexLookUpMergeJoin(v)
-	case *plannercore.PhysicalIndexHashJoin:
-		return b.buildIndexNestedLoopHashJoin(v)
 	case *plannercore.PhysicalSelection:
 		return b.buildSelection(v)
 	case *plannercore.PhysicalHashAgg:
@@ -1705,98 +1701,6 @@ func (b *executorBuilder) buildIndexLookUpJoin(v *plannercore.PhysicalIndexJoin)
 	e.joinResult = newFirstChunk(e)
 	executorCounterIndexLookUpJoin.Inc()
 	return e
-}
-
-func (b *executorBuilder) buildIndexLookUpMergeJoin(v *plannercore.PhysicalIndexMergeJoin) Executor {
-	outerExec := b.build(v.Children()[1-v.InnerChildIdx])
-	if b.err != nil {
-		return nil
-	}
-	outerTypes := retTypes(outerExec)
-	innerPlan := v.Children()[v.InnerChildIdx]
-	innerTypes := make([]*types.FieldType, innerPlan.Schema().Len())
-	for i, col := range innerPlan.Schema().Columns {
-		innerTypes[i] = col.RetType
-	}
-	var (
-		outerFilter           []expression.Expression
-		leftTypes, rightTypes []*types.FieldType
-	)
-	if v.InnerChildIdx == 0 {
-		leftTypes, rightTypes = innerTypes, outerTypes
-		outerFilter = v.RightConditions
-		if len(v.LeftConditions) > 0 {
-			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
-			return nil
-		}
-	} else {
-		leftTypes, rightTypes = outerTypes, innerTypes
-		outerFilter = v.LeftConditions
-		if len(v.RightConditions) > 0 {
-			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
-			return nil
-		}
-	}
-	defaultValues := v.DefaultValues
-	if defaultValues == nil {
-		defaultValues = make([]types.Datum, len(innerTypes))
-	}
-	outerKeyCols := make([]int, len(v.OuterJoinKeys))
-	for i := 0; i < len(v.OuterJoinKeys); i++ {
-		outerKeyCols[i] = v.OuterJoinKeys[i].Index
-	}
-	innerKeyCols := make([]int, len(v.InnerJoinKeys))
-	for i := 0; i < len(v.InnerJoinKeys); i++ {
-		innerKeyCols[i] = v.InnerJoinKeys[i].Index
-	}
-	executorCounterIndexLookUpJoin.Inc()
-
-	e := &IndexLookUpMergeJoin{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), outerExec),
-		outerMergeCtx: outerMergeCtx{
-			rowTypes:      outerTypes,
-			filter:        outerFilter,
-			joinKeys:      v.OuterJoinKeys,
-			keyCols:       outerKeyCols,
-			needOuterSort: v.NeedOuterSort,
-			compareFuncs:  v.OuterCompareFuncs,
-		},
-		innerMergeCtx: innerMergeCtx{
-			readerBuilder:           &dataReaderBuilder{Plan: innerPlan, executorBuilder: b},
-			rowTypes:                innerTypes,
-			joinKeys:                v.InnerJoinKeys,
-			keyCols:                 innerKeyCols,
-			compareFuncs:            v.CompareFuncs,
-			colLens:                 v.IdxColLens,
-			desc:                    v.Desc,
-			keyOff2KeyOffOrderByIdx: v.KeyOff2KeyOffOrderByIdx,
-		},
-		workerWg:      new(sync.WaitGroup),
-		isOuterJoin:   v.JoinType.IsOuterJoin(),
-		indexRanges:   v.Ranges,
-		keyOff2IdxOff: v.KeyOff2IdxOff,
-		lastColHelper: v.CompareFilters,
-	}
-	joiners := make([]joiner, e.ctx.GetSessionVars().IndexLookupJoinConcurrency)
-	for i := 0; i < e.ctx.GetSessionVars().IndexLookupJoinConcurrency; i++ {
-		joiners[i] = newJoiner(b.ctx, v.JoinType, v.InnerChildIdx == 0, defaultValues, v.OtherConditions, leftTypes, rightTypes)
-	}
-	e.joiners = joiners
-	return e
-}
-
-func (b *executorBuilder) buildIndexNestedLoopHashJoin(v *plannercore.PhysicalIndexHashJoin) Executor {
-	e := b.buildIndexLookUpJoin(&(v.PhysicalIndexJoin)).(*IndexLookUpJoin)
-	idxHash := &IndexNestedLoopHashJoin{
-		IndexLookUpJoin: *e,
-		keepOuterOrder:  v.KeepOuterOrder,
-	}
-	concurrency := e.ctx.GetSessionVars().IndexLookupJoinConcurrency
-	idxHash.joiners = make([]joiner, concurrency)
-	for i := 0; i < concurrency; i++ {
-		idxHash.joiners[i] = e.joiner.Clone()
-	}
-	return idxHash
 }
 
 // containsLimit tests if the execs contains Limit because we do not know whether `Limit` has consumed all of its' source,
