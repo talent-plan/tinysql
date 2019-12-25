@@ -144,8 +144,6 @@ func GetStmtLabel(stmtNode ast.StmtNode) string {
 			return "Replace"
 		}
 		return "Insert"
-	case *ast.LoadDataStmt:
-		return "LoadData"
 	case *ast.RollbackStmt:
 		return "RollBack"
 	case *ast.SelectStmt:

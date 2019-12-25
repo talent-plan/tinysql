@@ -89,8 +89,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildExplain(v)
 	case *plannercore.Insert:
 		return b.buildInsert(v)
-	case *plannercore.LoadData:
-		return b.buildLoadData(v)
 	case *plannercore.LoadStats:
 		return b.buildLoadStats(v)
 	case *plannercore.PhysicalLimit:
@@ -426,45 +424,6 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 		OnDuplicate:  append(v.OnDuplicate, v.GenCols.OnDuplicates...),
 	}
 	return insert
-}
-
-func (b *executorBuilder) buildLoadData(v *plannercore.LoadData) Executor {
-	tbl, ok := b.is.TableByID(v.Table.TableInfo.ID)
-	if !ok {
-		b.err = errors.Errorf("Can not get table %d", v.Table.TableInfo.ID)
-		return nil
-	}
-	insertVal := &InsertValues{
-		baseExecutor: newBaseExecutor(b.ctx, nil, v.ExplainID()),
-		Table:        tbl,
-		Columns:      v.Columns,
-		GenExprs:     v.GenCols.Exprs,
-	}
-	err := insertVal.initInsertColumns()
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	loadDataExec := &LoadDataExec{
-		baseExecutor: newBaseExecutor(b.ctx, nil, v.ExplainID()),
-		IsLocal:      v.IsLocal,
-		OnDuplicate:  v.OnDuplicate,
-		loadDataInfo: &LoadDataInfo{
-			row:          make([]types.Datum, len(insertVal.insertColumns)),
-			InsertValues: insertVal,
-			Path:         v.Path,
-			Table:        tbl,
-			FieldsInfo:   v.FieldsInfo,
-			LinesInfo:    v.LinesInfo,
-			IgnoreLines:  v.IgnoreLines,
-			Ctx:          b.ctx,
-		},
-	}
-	var defaultLoadDataBatchCnt uint64 = 20000 // TODO this will be changed to variable in another pr
-	loadDataExec.loadDataInfo.InitQueues()
-	loadDataExec.loadDataInfo.SetMaxRowsInBatch(defaultLoadDataBatchCnt)
-
-	return loadDataExec
 }
 
 func (b *executorBuilder) buildLoadStats(v *plannercore.LoadStats) Executor {

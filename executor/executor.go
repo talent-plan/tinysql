@@ -1235,11 +1235,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 		sc.Priority = stmt.Priority
 	case *ast.CreateTableStmt, *ast.AlterTableStmt:
 		// Make sure the sql_mode is strict when checking column default value.
-	case *ast.LoadDataStmt:
-		sc.DupKeyAsWarning = true
-		sc.BadNullAsWarning = true
-		sc.TruncateAsWarning = !vars.StrictSQLMode
-		sc.InLoadDataStmt = true
 	case *ast.SelectStmt:
 		sc.InSelectStmt = true
 

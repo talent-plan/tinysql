@@ -36,8 +36,6 @@ type InsertValues struct {
 	baseExecutor
 
 	rowCount       uint64
-	curBatchCnt    uint64
-	maxRowsInBatch uint64
 	lastInsertID   uint64
 	hasRefCols     bool
 	hasExtraHandle bool
@@ -455,20 +453,6 @@ func (e *InsertValues) getRow(ctx context.Context, vals []types.Datum) ([]types.
 	}
 
 	return e.fillRow(ctx, row, hasValue)
-}
-
-func (e *InsertValues) getRowInPlace(ctx context.Context, vals []types.Datum, rowBuf []types.Datum) ([]types.Datum, error) {
-	hasValue := make([]bool, len(e.Table.Cols()))
-	for i, v := range vals {
-		casted, err := table.CastValue(e.ctx, v, e.insertColumns[i].ToInfo())
-		if e.handleErr(nil, &v, 0, err) != nil {
-			return nil, err
-		}
-		offset := e.insertColumns[i].Offset
-		rowBuf[offset] = casted
-		hasValue[offset] = true
-	}
-	return e.fillRow(ctx, rowBuf, hasValue)
 }
 
 // getColDefaultValue gets the column default value.

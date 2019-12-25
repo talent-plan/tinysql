@@ -886,118 +886,6 @@ func (cc *clientConn) writeReq(filePath string) error {
 	return cc.flush()
 }
 
-func insertDataWithCommit(ctx context.Context, prevData,
-	curData []byte, loadDataInfo *executor.LoadDataInfo) ([]byte, error) {
-	var err error
-	var reachLimit bool
-	for {
-		prevData, reachLimit, err = loadDataInfo.InsertData(ctx, prevData, curData)
-		if err != nil {
-			return nil, err
-		}
-		if !reachLimit {
-			break
-		}
-		// push into commit task queue
-		err = loadDataInfo.EnqOneTask(ctx)
-		if err != nil {
-			return prevData, err
-		}
-		curData = prevData
-		prevData = nil
-	}
-	return prevData, nil
-}
-
-// processStream process input stream from network
-func processStream(ctx context.Context, cc *clientConn, loadDataInfo *executor.LoadDataInfo) {
-	var err error
-	var shouldBreak bool
-	var prevData, curData []byte
-	defer func() {
-		r := recover()
-		if r != nil {
-			logutil.Logger(ctx).Error("process routine panicked",
-				zap.Reflect("r", r),
-				zap.Stack("stack"))
-		}
-		if err != nil || r != nil {
-			loadDataInfo.ForceQuit()
-		} else {
-			loadDataInfo.CloseTaskQueue()
-		}
-	}()
-	for {
-		curData, err = cc.readPacket()
-		if err != nil {
-			if terror.ErrorNotEqual(err, io.EOF) {
-				logutil.Logger(ctx).Error("read packet failed", zap.Error(err))
-				break
-			}
-		}
-		if len(curData) == 0 {
-			shouldBreak = true
-			if len(prevData) == 0 {
-				break
-			}
-		}
-		select {
-		case <-loadDataInfo.QuitCh:
-			err = errors.New("processStream forced to quit")
-		default:
-		}
-		if err != nil {
-			break
-		}
-		// prepare batch and enqueue task
-		prevData, err = insertDataWithCommit(ctx, prevData, curData, loadDataInfo)
-		if err != nil {
-			break
-		}
-		if shouldBreak {
-			break
-		}
-	}
-	if err != nil {
-		logutil.Logger(ctx).Error("load data process stream error", zap.Error(err))
-	} else {
-		err = loadDataInfo.EnqOneTask(ctx)
-		if err != nil {
-			logutil.Logger(ctx).Error("load data process stream error", zap.Error(err))
-		}
-	}
-}
-
-// handleLoadData does the additional work after processing the 'load data' query.
-// It sends client a file path, then reads the file content from client, inserts data into database.
-func (cc *clientConn) handleLoadData(ctx context.Context, loadDataInfo *executor.LoadDataInfo) error {
-	// If the server handles the load data request, the client has to set the ClientLocalFiles capability.
-	if cc.capability&mysql.ClientLocalFiles == 0 {
-		return errNotAllowedCommand
-	}
-	if loadDataInfo == nil {
-		return errors.New("load data info is empty")
-	}
-
-	err := cc.writeReq(loadDataInfo.Path)
-	if err != nil {
-		return err
-	}
-
-	loadDataInfo.InitQueues()
-	loadDataInfo.SetMaxRowsInBatch(uint64(loadDataInfo.Ctx.GetSessionVars().DMLBatchSize))
-	loadDataInfo.StartStopWatcher()
-	err = loadDataInfo.Ctx.NewTxn(ctx)
-	if err != nil {
-		return err
-	}
-	// processStream process input data, enqueue commit task
-	go processStream(ctx, cc, loadDataInfo)
-	err = loadDataInfo.CommitWork(ctx)
-	loadDataInfo.SetMessage()
-	return err
-}
-
 // getDataFromPath gets file contents from file path.
 func (cc *clientConn) getDataFromPath(path string) ([]byte, error) {
 	err := cc.writeReq(path)
@@ -1040,8 +928,7 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 
 // handleQuery executes the sql query string and writes result set or result ok to the client.
 
-// There is a special query `load data` that does not return result, which is handled differently.
-// Query `load stats` does not return result either.
+// There is a special query `load stats` that does not return result, which is handled differently.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
@@ -1062,14 +949,6 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 			err = cc.writeMultiResultset(ctx, rss, false)
 		}
 	} else {
-		loadDataInfo := cc.ctx.Value(executor.LoadDataVarKey)
-		if loadDataInfo != nil {
-			defer cc.ctx.SetValue(executor.LoadDataVarKey, nil)
-			if err = cc.handleLoadData(ctx, loadDataInfo.(*executor.LoadDataInfo)); err != nil {
-				return err
-			}
-		}
-
 		loadStats := cc.ctx.Value(executor.LoadStatsVarKey)
 		if loadStats != nil {
 			defer cc.ctx.SetValue(executor.LoadStatsVarKey, nil)

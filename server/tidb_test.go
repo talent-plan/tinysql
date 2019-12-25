@@ -110,11 +110,6 @@ func (ts *TidbTestSuite) TestPreparedTimestamp(c *C) {
 	runTestPreparedTimestamp(c)
 }
 
-func (ts *TidbTestSuite) TestLoadData(c *C) {
-	c.Parallel()
-	runTestLoadData(c, suite.server)
-}
-
 func (ts *TidbTestSuite) TestConcurrentUpdate(c *C) {
 	c.Parallel()
 	runTestConcurrentUpdate(c)

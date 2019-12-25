@@ -34,7 +34,6 @@ var (
 	_ Executor = &DeleteExec{}
 	_ Executor = &InsertExec{}
 	_ Executor = &ReplaceExec{}
-	_ Executor = &LoadDataExec{}
 )
 
 // updateRecord updates the row specified by the handle `h`, from `oldData` to `newData`.

@@ -42,10 +42,8 @@ func (s *stmtctxSuit) TestStatementContextPushDownFLags(c *C) {
 		{&stmtctx.StatementContext{IgnoreZeroInDate: true}, 128},
 		{&stmtctx.StatementContext{DividedByZeroAsWarning: true}, 256},
 		{&stmtctx.StatementContext{PadCharToFullLength: true}, 4},
-		{&stmtctx.StatementContext{InLoadDataStmt: true}, 1024},
 		{&stmtctx.StatementContext{InSelectStmt: true, TruncateAsWarning: true}, 34},
 		{&stmtctx.StatementContext{DividedByZeroAsWarning: true, IgnoreTruncate: true}, 257},
-		{&stmtctx.StatementContext{InUpdateStmt: true, IgnoreZeroInDate: true, InLoadDataStmt: true}, 1168},
 	}
 	for _, tt := range testCases {
 		got := tt.in.PushDownFlags()

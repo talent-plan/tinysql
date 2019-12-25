@@ -333,8 +333,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildExplainFor(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
-	case *ast.LoadDataStmt:
-		return b.buildLoadData(ctx, x)
 	case *ast.LoadStatsStmt:
 		return b.buildLoadStats(x), nil
 	case *ast.PrepareStmt:
@@ -1561,36 +1559,6 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 	insertPlan.Schema4OnDuplicate = expression.MergeSchema(insertPlan.tableSchema, schema4NewRow)
 	insertPlan.names4OnDuplicate = append(insertPlan.tableColNames.Shallow(), names4NewRow...)
 	return nil
-}
-
-func (b *PlanBuilder) buildLoadData(ctx context.Context, ld *ast.LoadDataStmt) (Plan, error) {
-	p := &LoadData{
-		IsLocal:     ld.IsLocal,
-		OnDuplicate: ld.OnDuplicate,
-		Path:        ld.Path,
-		Table:       ld.Table,
-		Columns:     ld.Columns,
-		FieldsInfo:  ld.FieldsInfo,
-		LinesInfo:   ld.LinesInfo,
-		IgnoreLines: ld.IgnoreLines,
-	}
-	tableInfo := p.Table.TableInfo
-	tableInPlan, ok := b.is.TableByID(tableInfo.ID)
-	if !ok {
-		db := b.ctx.GetSessionVars().CurrentDB
-		return nil, infoschema.ErrTableNotExists.GenWithStackByArgs(db, tableInfo.Name.O)
-	}
-	schema, names := expression.TableInfo2SchemaAndNames(b.ctx, model.NewCIStr(""), tableInfo)
-	mockTablePlan := LogicalTableDual{}.Init(b.ctx, b.getSelectOffset())
-	mockTablePlan.SetSchema(schema)
-	mockTablePlan.names = names
-
-	var err error
-	p.GenCols, err = b.resolveGeneratedColumns(ctx, tableInPlan.Cols(), nil, mockTablePlan)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
 }
 
 func (b *PlanBuilder) buildLoadStats(ld *ast.LoadStatsStmt) Plan {

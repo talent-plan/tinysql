@@ -52,7 +52,6 @@ type StatementContext struct {
 	InUpdateStmt           bool
 	InDeleteStmt           bool
 	InSelectStmt           bool
-	InLoadDataStmt         bool
 	InExplainStmt          bool
 	IgnoreTruncate         bool
 	IgnoreZeroInDate       bool
@@ -390,13 +389,13 @@ func (sc *StatementContext) ResetForRetry() {
 func (sc *StatementContext) ShouldClipToZero() bool {
 	// TODO: Currently altering column of integer to unsigned integer is not supported.
 	// If it is supported one day, that case should be added here.
-	return sc.InInsertStmt || sc.InLoadDataStmt
+	return sc.InInsertStmt
 }
 
 // ShouldIgnoreOverflowError indicates whether we should ignore the error when type conversion overflows,
 // so we can leave it for further processing like clipping values less than 0 to 0 for unsigned integer types.
 func (sc *StatementContext) ShouldIgnoreOverflowError() bool {
-	if (sc.InInsertStmt && sc.TruncateAsWarning) || sc.InLoadDataStmt {
+	if sc.InInsertStmt && sc.TruncateAsWarning {
 		return true
 	}
 	return false
@@ -428,9 +427,6 @@ func (sc *StatementContext) PushDownFlags() uint64 {
 	}
 	if sc.PadCharToFullLength {
 		flags |= model.FlagPadCharToFullLength
-	}
-	if sc.InLoadDataStmt {
-		flags |= model.FlagInLoadDataStmt
 	}
 	return flags
 }

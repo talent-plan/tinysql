@@ -281,51 +281,6 @@ func (s *baseTestSuite) fillData(tk *testkit.TestKit, table string) {
 	tk.CheckExecResult(1, 0)
 }
 
-type testCase struct {
-	data1       []byte
-	data2       []byte
-	expected    []string
-	restData    []byte
-	expectedMsg string
-}
-
-func checkCases(tests []testCase, ld *executor.LoadDataInfo,
-	c *C, tk *testkit.TestKit, ctx sessionctx.Context, selectSQL, deleteSQL string) {
-	origin := ld.IgnoreLines
-	for _, tt := range tests {
-		ld.IgnoreLines = origin
-		c.Assert(ctx.NewTxn(context.Background()), IsNil)
-		ctx.GetSessionVars().StmtCtx.DupKeyAsWarning = true
-		ctx.GetSessionVars().StmtCtx.BadNullAsWarning = true
-		ctx.GetSessionVars().StmtCtx.InLoadDataStmt = true
-		ctx.GetSessionVars().StmtCtx.InDeleteStmt = false
-		data, reachLimit, err1 := ld.InsertData(context.Background(), tt.data1, tt.data2)
-		c.Assert(err1, IsNil)
-		c.Assert(reachLimit, IsFalse)
-		err1 = ld.CheckAndInsertOneBatch(context.Background(), ld.GetRows(), ld.GetCurBatchCnt())
-		c.Assert(err1, IsNil)
-		ld.SetMaxRowsInBatch(20000)
-		if tt.restData == nil {
-			c.Assert(data, HasLen, 0,
-				Commentf("data1:%v, data2:%v, data:%v", string(tt.data1), string(tt.data2), string(data)))
-		} else {
-			c.Assert(data, DeepEquals, tt.restData,
-				Commentf("data1:%v, data2:%v, data:%v", string(tt.data1), string(tt.data2), string(data)))
-		}
-		ld.SetMessage()
-		tk.CheckLastMessage(tt.expectedMsg)
-		err := ctx.StmtCommit()
-		c.Assert(err, IsNil)
-		txn, err := ctx.Txn(true)
-		c.Assert(err, IsNil)
-		err = txn.Commit(context.Background())
-		c.Assert(err, IsNil)
-		r := tk.MustQuery(selectSQL)
-		r.Check(testutil.RowsWithSep("|", tt.expected...))
-		tk.MustExec(deleteSQL)
-	}
-}
-
 func (s *testSuiteP1) TestSelectWithoutFrom(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

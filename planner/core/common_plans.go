@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	driver "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/ranger"
 )
 
 // ShowDDL is for showing DDL information.
@@ -164,73 +163,6 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, 
 	return err
 }
 
-func (e *Execute) rebuildRange(p Plan) error {
-	sctx := p.SCtx()
-	sc := p.SCtx().GetSessionVars().StmtCtx
-	var err error
-	switch x := p.(type) {
-	case *PhysicalTableReader:
-		ts := x.TablePlans[0].(*PhysicalTableScan)
-		var pkCol *expression.Column
-		if ts.Table.PKIsHandle {
-			if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-				pkCol = expression.ColInfo2Col(ts.schema.Columns, pkColInfo)
-			}
-		}
-		if pkCol != nil {
-			ts.Ranges, err = ranger.BuildTableRange(ts.AccessCondition, sc, pkCol.RetType)
-			if err != nil {
-				return err
-			}
-		} else {
-			ts.Ranges = ranger.FullIntRange(false)
-		}
-	case *PhysicalIndexReader:
-		is := x.IndexPlans[0].(*PhysicalIndexScan)
-		is.Ranges, err = e.buildRangeForIndexScan(sctx, is)
-		if err != nil {
-			return err
-		}
-	case *PhysicalIndexLookUpReader:
-		is := x.IndexPlans[0].(*PhysicalIndexScan)
-		is.Ranges, err = e.buildRangeForIndexScan(sctx, is)
-		if err != nil {
-			return err
-		}
-	case PhysicalPlan:
-		for _, child := range x.Children() {
-			err = e.rebuildRange(child)
-			if err != nil {
-				return err
-			}
-		}
-	case *Insert:
-		if x.SelectPlan != nil {
-			return e.rebuildRange(x.SelectPlan)
-		}
-	case *Update:
-		if x.SelectPlan != nil {
-			return e.rebuildRange(x.SelectPlan)
-		}
-	case *Delete:
-		if x.SelectPlan != nil {
-			return e.rebuildRange(x.SelectPlan)
-		}
-	}
-	return nil
-}
-
-func (e *Execute) buildRangeForIndexScan(sctx sessionctx.Context, is *PhysicalIndexScan) ([]*ranger.Range, error) {
-	if len(is.IdxCols) == 0 {
-		return ranger.FullRange(), nil
-	}
-	res, err := ranger.DetachCondAndBuildRangeForIndex(sctx, is.AccessCondition, is.IdxCols, is.IdxColLens)
-	if err != nil {
-		return nil, err
-	}
-	return res.Ranges, nil
-}
-
 // Deallocate represents deallocate plan.
 type Deallocate struct {
 	baseSchemaProducer
@@ -343,22 +275,6 @@ type Analyze struct {
 	ColTasks []AnalyzeColumnsTask
 	IdxTasks []AnalyzeIndexTask
 	Opts     map[ast.AnalyzeOptionType]uint64
-}
-
-// LoadData represents a loaddata plan.
-type LoadData struct {
-	baseSchemaProducer
-
-	IsLocal     bool
-	OnDuplicate ast.OnDuplicateKeyHandlingType
-	Path        string
-	Table       *ast.TableName
-	Columns     []*ast.ColumnName
-	FieldsInfo  *ast.FieldsClause
-	LinesInfo   *ast.LinesClause
-	IgnoreLines uint64
-
-	GenCols InsertGeneratedColumns
 }
 
 // LoadStats represents a load stats plan.
