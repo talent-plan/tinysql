@@ -109,40 +109,6 @@ func (s *testSuite1) TestAnalyzeRestrict(c *C) {
 	tk.MustExec("analyze table t")
 }
 
-func (s *testSuite1) TestAnalyzeParameters(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int)")
-	for i := 0; i < 20; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t values (%d)", i))
-	}
-	tk.MustExec("insert into t values (19), (19), (19)")
-
-	tk.MustExec("set @@tidb_enable_fast_analyze = 1")
-	tk.MustExec("analyze table t with 30 samples")
-	is := infoschema.GetInfoSchema(tk.Se.(sessionctx.Context))
-	table, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tableInfo := table.Meta()
-	tbl := s.dom.StatsHandle().GetTableStats(tableInfo)
-	col := tbl.Columns[1]
-	c.Assert(col.Len(), Equals, 20)
-	c.Assert(len(col.CMSketch.TopN()), Equals, 1)
-	width, depth := col.CMSketch.GetWidthAndDepth()
-	c.Assert(depth, Equals, int32(5))
-	c.Assert(width, Equals, int32(2048))
-
-	tk.MustExec("analyze table t with 4 buckets, 0 topn, 4 cmsketch width, 4 cmsketch depth")
-	tbl = s.dom.StatsHandle().GetTableStats(tableInfo)
-	col = tbl.Columns[1]
-	c.Assert(col.Len(), Equals, 4)
-	c.Assert(len(col.CMSketch.TopN()), Equals, 0)
-	width, depth = col.CMSketch.GetWidthAndDepth()
-	c.Assert(depth, Equals, int32(4))
-	c.Assert(width, Equals, int32(4))
-}
-
 func (s *testSuite1) TestAnalyzeTooLongColumns(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -159,31 +125,4 @@ func (s *testSuite1) TestAnalyzeTooLongColumns(c *C) {
 	tbl := s.dom.StatsHandle().GetTableStats(tableInfo)
 	c.Assert(tbl.Columns[1].Len(), Equals, 0)
 	c.Assert(tbl.Columns[1].TotColSize, Equals, int64(65559))
-}
-
-func (s *testSuite1) TestExtractTopN(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int primary key, b int, index index_b(b))")
-	for i := 0; i < 10; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
-	}
-	for i := 0; i < 10; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t values (%d, 0)", i+10))
-	}
-	tk.MustExec("analyze table t")
-	is := s.dom.InfoSchema()
-	table, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tblInfo := table.Meta()
-	tblStats := s.dom.StatsHandle().GetTableStats(tblInfo)
-	colStats := tblStats.Columns[tblInfo.Columns[1].ID]
-	c.Assert(len(colStats.CMSketch.TopN()), Equals, 1)
-	item := colStats.CMSketch.TopN()[0]
-	c.Assert(item.Count, Equals, uint64(11))
-	idxStats := tblStats.Indices[tblInfo.Indices[0].ID]
-	c.Assert(len(idxStats.CMSketch.TopN()), Equals, 1)
-	item = idxStats.CMSketch.TopN()[0]
-	c.Assert(item.Count, Equals, uint64(11))
 }

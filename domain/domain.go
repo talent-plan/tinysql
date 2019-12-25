@@ -781,7 +781,7 @@ func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 	owner := do.newOwnerManager(handle.StatsPrompt, handle.StatsOwnerKey)
 	do.wg.Add(1)
 	do.SetStatsUpdating(true)
-	go do.updateStatsWorker(owner)
+	go do.updateStatsWorker()
 	if RunAutoAnalyze {
 		do.wg.Add(1)
 		go do.autoAnalyzeWorker(owner)
@@ -840,13 +840,11 @@ func (do *Domain) loadStatsWorker() {
 	}
 }
 
-func (do *Domain) updateStatsWorker(owner owner.Manager) {
+func (do *Domain) updateStatsWorker() {
 	defer recoverInDomain("updateStatsWorker", false)
 	lease := do.statsLease
 	deltaUpdateTicker := time.NewTicker(20 * lease)
 	defer deltaUpdateTicker.Stop()
-	gcStatsTicker := time.NewTicker(100 * lease)
-	defer gcStatsTicker.Stop()
 	statsHandle := do.StatsHandle()
 	defer func() {
 		do.SetStatsUpdating(false)
@@ -867,14 +865,6 @@ func (do *Domain) updateStatsWorker(owner owner.Manager) {
 			err := statsHandle.DumpStatsDeltaToKV(handle.DumpDelta)
 			if err != nil {
 				logutil.BgLogger().Debug("dump stats delta failed", zap.Error(err))
-			}
-		case <-gcStatsTicker.C:
-			if !owner.IsOwner() {
-				continue
-			}
-			err := statsHandle.GCStats(do.InfoSchema(), do.DDL().GetLease())
-			if err != nil {
-				logutil.BgLogger().Debug("GC stats failed", zap.Error(err))
 			}
 		}
 	}

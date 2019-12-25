@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
@@ -245,9 +244,6 @@ func isDeprecatedConfigItem(items []string) bool {
 func loadConfig() string {
 	cfg = config.GetGlobalConfig()
 	if *configPath != "" {
-		// Not all config items are supported now.
-		config.SetConfReloader(*configPath, reloadConfig, hotReloadConfigItems...)
-
 		err := cfg.Load(*configPath)
 		if err == nil {
 			return ""
@@ -276,24 +272,6 @@ func loadConfig() string {
 		}
 	}
 	return ""
-}
-
-// hotReloadConfigItems lists all config items which support hot-reload.
-var hotReloadConfigItems = []string{"Performance.MaxProcs", "Performance.MaxMemory", "Performance.CrossJoin", "Performance.PseudoEstimateRatio",
-	"OOMAction", "MemQuotaQuery"}
-
-func reloadConfig(nc, c *config.Config) {
-	// Just a part of config items need to be reload explicitly.
-	// Some of them like OOMAction are always used by getting from global config directly
-	// like config.GetGlobalConfig().OOMAction.
-	// These config items will become available naturally after the global config pointer
-	// is updated in function ReloadGlobalConfig.
-	if nc.Performance.CrossJoin != c.Performance.CrossJoin {
-		plannercore.AllowCartesianProduct.Store(nc.Performance.CrossJoin)
-	}
-	if nc.Performance.PseudoEstimateRatio != c.Performance.PseudoEstimateRatio {
-		statistics.RatioOfPseudoEstimate.Store(nc.Performance.PseudoEstimateRatio)
-	}
 }
 
 func overrideConfig() {

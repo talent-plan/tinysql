@@ -104,13 +104,13 @@ func (h *Handle) initStatsHistograms4Chunk(is infoschema.InfoSchema, cache *stat
 			if idxInfo == nil {
 				continue
 			}
-			cms, err := statistics.LoadCMSketchWithTopN(h.restrictedExec, row.GetInt64(0), row.GetInt64(1), row.GetInt64(2), row.GetBytes(6))
+			cms, err := statistics.DecodeCMSketch(row.GetBytes(6))
 			if err != nil {
 				cms = nil
 				terror.Log(errors.Trace(err))
 			}
 			hist := statistics.NewHistogram(id, ndv, nullCount, version, types.NewFieldType(mysql.TypeBlob), chunk.InitialCapacity, 0)
-			table.Indices[hist.ID] = &statistics.Index{Histogram: *hist, CMSketch: cms, Info: idxInfo, StatsVer: row.GetInt64(8)}
+			table.Indices[hist.ID] = &statistics.Index{Histogram: *hist, CMSketch: cms, Info: idxInfo}
 		} else {
 			var colInfo *model.ColumnInfo
 			for _, col := range tbl.Meta().Columns {
@@ -125,11 +125,11 @@ func (h *Handle) initStatsHistograms4Chunk(is infoschema.InfoSchema, cache *stat
 			hist := statistics.NewHistogram(id, ndv, nullCount, version, &colInfo.FieldType, 0, totColSize)
 			hist.Correlation = row.GetFloat64(9)
 			table.Columns[hist.ID] = &statistics.Column{
-				Histogram:      *hist,
-				PhysicalID:     table.PhysicalID,
-				Info:           colInfo,
-				Count:          nullCount,
-				IsHandle:       tbl.Meta().PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
+				Histogram:  *hist,
+				PhysicalID: table.PhysicalID,
+				Info:       colInfo,
+				Count:      nullCount,
+				IsHandle:   tbl.Meta().PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
 			}
 		}
 	}

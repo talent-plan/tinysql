@@ -15,6 +15,11 @@ package executor
 
 import (
 	"context"
+	"math"
+	"runtime"
+	"strconv"
+	"sync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/ast"
@@ -32,10 +37,6 @@ import (
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tipb/go-tipb"
 	"go.uber.org/zap"
-	"math"
-	"runtime"
-	"strconv"
-	"sync"
 )
 
 var _ Executor = &AnalyzeExec{}
@@ -278,13 +279,12 @@ func (e *AnalyzeIndexExec) buildStatsFromResult(result distsql.SelectResult, nee
 		if needCMS {
 			if resp.Cms == nil {
 				logutil.Logger(context.TODO()).Warn("nil CMS in response", zap.String("table", e.idxInfo.Table.O), zap.String("index", e.idxInfo.Name.O))
-			} else if err := cms.MergeCMSketch(statistics.CMSketchFromProto(resp.Cms), 0); err != nil {
+			} else if err := cms.MergeCMSketch(statistics.CMSketchFromProto(resp.Cms)); err != nil {
 				return nil, nil, err
 			}
 		}
 	}
-	err := hist.ExtractTopN(cms, len(e.idxInfo.Columns), uint32(e.opts[ast.AnalyzeOptNumTopN]))
-	return hist, cms, err
+	return hist, cms, nil
 }
 
 func (e *AnalyzeIndexExec) buildStats(ranges []*ranger.Range, considerNull bool) (hist *statistics.Histogram, cms *statistics.CMSketch, err error) {
@@ -451,7 +451,6 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		cms = append(cms, nil)
 	}
 	for i, col := range e.colsInfo {
-		collectors[i].ExtractTopN(uint32(e.opts[ast.AnalyzeOptNumTopN]))
 		for j, s := range collectors[i].Samples {
 			collectors[i].Samples[j].Ordinal = j
 			collectors[i].Samples[j].Value, err = tablecodec.DecodeColumnValue(s.Value.GetBytes(), &col.FieldType, timeZone)

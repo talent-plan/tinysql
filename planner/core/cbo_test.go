@@ -483,37 +483,6 @@ func (s *testAnalyzeSuite) TestCorrelatedEstimation(c *C) {
 	}
 }
 
-func (s *testAnalyzeSuite) TestInconsistentEstimation(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	tk := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	tk.MustExec("use test")
-	tk.MustExec("create table t(a int, b int, c int, index ab(a,b), index ac(a,c))")
-	tk.MustExec("insert into t values (1,1,1), (1000,1000,1000)")
-	for i := 0; i < 10; i++ {
-		tk.MustExec("insert into t values (5,5,5), (10,10,10)")
-	}
-	tk.MustExec("analyze table t with 2 buckets")
-	// Force using the histogram to estimate.
-	tk.MustExec("update mysql.stats_histograms set stats_ver = 0")
-	dom.StatsHandle().Clear()
-	dom.StatsHandle().Update(dom.InfoSchema())
-	// Using the histogram (a, b) to estimate `a = 5` will get 1.22, while using the CM Sketch to estimate
-	// the `a = 5 and c = 5` will get 10, it is not consistent.
-	tk.MustQuery("explain select * from t use index(ab) where a = 5 and c = 5").
-		Check(testkit.Rows(
-			"IndexLookUp_8 10.00 root ",
-			"├─IndexScan_5 12.50 cop[tikv] table:t, index:a, b, range:[5,5], keep order:false",
-			"└─Selection_7 10.00 cop[tikv] eq(test.t.c, 5)",
-			"  └─TableScan_6 12.50 cop[tikv] table:t, keep order:false",
-		))
-}
-
 func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 	store, err := mockstore.NewMockTikvStore()
 	if err != nil {

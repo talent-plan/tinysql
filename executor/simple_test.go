@@ -19,11 +19,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/auth"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
@@ -503,38 +501,6 @@ func (s *testFlushSuite) TestFlushPrivilegesPanic(c *C) {
 	tk.MustExec("FLUSH PRIVILEGES")
 
 	config.StoreGlobalConfig(saveConf)
-}
-
-func (s *testSuite3) TestDropStats(c *C) {
-	testKit := testkit.NewTestKit(c, s.store)
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t (c1 int, c2 int)")
-	do := domain.GetDomain(testKit.Se)
-	is := do.InfoSchema()
-	tbl, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tableInfo := tbl.Meta()
-	h := do.StatsHandle()
-	h.Clear()
-	testKit.MustExec("analyze table t")
-	statsTbl := h.GetTableStats(tableInfo)
-	c.Assert(statsTbl.Pseudo, IsFalse)
-
-	testKit.MustExec("drop stats t")
-	c.Assert(h.Update(is), IsNil)
-	statsTbl = h.GetTableStats(tableInfo)
-	c.Assert(statsTbl.Pseudo, IsTrue)
-
-	testKit.MustExec("analyze table t")
-	statsTbl = h.GetTableStats(tableInfo)
-	c.Assert(statsTbl.Pseudo, IsFalse)
-
-	h.SetLease(1)
-	testKit.MustExec("drop stats t")
-	c.Assert(h.Update(is), IsNil)
-	statsTbl = h.GetTableStats(tableInfo)
-	c.Assert(statsTbl.Pseudo, IsTrue)
-	h.SetLease(0)
 }
 
 func (s *testSuite3) TestFlushTables(c *C) {

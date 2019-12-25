@@ -332,7 +332,7 @@ func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, history
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	return statistics.LoadCMSketchWithTopN(h.restrictedExec, tblID, isIndex, histID, rows[0].GetBytes(0))
+	return statistics.DecodeCMSketch(rows[0].GetBytes(0))
 }
 
 func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, tableInfo *model.TableInfo, historyStatsExec sqlexec.RestrictedSQLExecutor) error {
@@ -354,7 +354,7 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, t
 			if err != nil {
 				return errors.Trace(err)
 			}
-			idx = &statistics.Index{Histogram: *hg, CMSketch: cms, Info: idxInfo, StatsVer: row.GetInt64(7)}
+			idx = &statistics.Index{Histogram: *hg, CMSketch: cms, Info: idxInfo}
 		}
 		break
 	}
@@ -394,11 +394,11 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 				return errors.Trace(err)
 			}
 			col = &statistics.Column{
-				PhysicalID:     table.PhysicalID,
-				Histogram:      *statistics.NewHistogram(histID, distinct, nullCount, histVer, &colInfo.FieldType, 0, totColSize),
-				Info:           colInfo,
-				Count:          count + nullCount,
-				IsHandle:       tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
+				PhysicalID: table.PhysicalID,
+				Histogram:  *statistics.NewHistogram(histID, distinct, nullCount, histVer, &colInfo.FieldType, 0, totColSize),
+				Info:       colInfo,
+				Count:      count + nullCount,
+				IsHandle:   tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
 			}
 			col.Histogram.Correlation = correlation
 			break
@@ -413,12 +413,12 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 				return errors.Trace(err)
 			}
 			col = &statistics.Column{
-				PhysicalID:     table.PhysicalID,
-				Histogram:      *hg,
-				Info:           colInfo,
-				CMSketch:       cms,
-				Count:          int64(hg.TotalRowCount()),
-				IsHandle:       tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
+				PhysicalID: table.PhysicalID,
+				Histogram:  *hg,
+				Info:       colInfo,
+				CMSketch:   cms,
+				Count:      int64(hg.TotalRowCount()),
+				IsHandle:   tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
 			}
 			break
 		}
@@ -510,17 +510,12 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	} else {
 		sqls = append(sqls, fmt.Sprintf("update mysql.stats_meta set version = %d where table_id = %d", version, tableID))
 	}
-	data, err := statistics.EncodeCMSketchWithoutTopN(cms)
+	data, err := statistics.EncodeCMSketch(cms)
 	if err != nil {
 		return
 	}
-	// Delete outdated data
-	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_top_n where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
-	for _, meta := range cms.TopN() {
-		sqls = append(sqls, fmt.Sprintf("insert into mysql.stats_top_n (table_id, is_index, hist_id, value, count) values (%d, %d, %d, X'%X', %d)", tableID, isIndex, hg.ID, meta.Data, meta.Count))
-	}
 	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_histograms (table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver, flag, correlation) values (%d, %d, %d, %d, %d, %d, X'%X', %d, %d, %d, %f)",
-		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, statistics.CurStatsVersion, 0, hg.Correlation))
+		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, 0, 0, hg.Correlation))
 	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
 	sc := h.mu.ctx.GetSessionVars().StmtCtx
 	for i := range hg.Buckets {

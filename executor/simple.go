@@ -108,8 +108,6 @@ func (e *SimpleExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	case *ast.BinlogStmt:
 		// We just ignore it.
 		return nil
-	case *ast.DropStatsStmt:
-		err = e.executeDropStats(x)
 	case *ast.SetRoleStmt:
 		err = e.executeSetRole(x)
 	case *ast.RevokeRoleStmt:
@@ -855,15 +853,6 @@ func (e *SimpleExec) executeFlush(s *ast.FlushStmt) error {
 		return err
 	}
 	return nil
-}
-
-func (e *SimpleExec) executeDropStats(s *ast.DropStatsStmt) error {
-	h := domain.GetDomain(e.ctx).StatsHandle()
-	err := h.DeleteTableStatsFromKV(s.Table.TableInfo.ID)
-	if err != nil {
-		return err
-	}
-	return h.Update(infoschema.GetInfoSchema(e.ctx))
 }
 
 func (e *SimpleExec) autoNewTxn() bool {

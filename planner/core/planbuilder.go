@@ -1227,7 +1227,6 @@ var cmSketchSizeLimit = kv.TxnEntrySizeLimit / binary.MaxVarintLen32
 
 var analyzeOptionLimit = map[ast.AnalyzeOptionType]uint64{
 	ast.AnalyzeOptNumBuckets:    1024,
-	ast.AnalyzeOptNumTopN:       1024,
 	ast.AnalyzeOptCMSketchWidth: uint64(cmSketchSizeLimit),
 	ast.AnalyzeOptCMSketchDepth: uint64(cmSketchSizeLimit),
 	ast.AnalyzeOptNumSamples:    100000,
@@ -1235,7 +1234,6 @@ var analyzeOptionLimit = map[ast.AnalyzeOptionType]uint64{
 
 var analyzeOptionDefault = map[ast.AnalyzeOptionType]uint64{
 	ast.AnalyzeOptNumBuckets:    256,
-	ast.AnalyzeOptNumTopN:       20,
 	ast.AnalyzeOptCMSketchWidth: 2048,
 	ast.AnalyzeOptCMSketchDepth: 5,
 	ast.AnalyzeOptNumSamples:    10000,
@@ -1247,14 +1245,8 @@ func handleAnalyzeOptions(opts []ast.AnalyzeOpt) (map[ast.AnalyzeOptionType]uint
 		optMap[key] = val
 	}
 	for _, opt := range opts {
-		if opt.Type == ast.AnalyzeOptNumTopN {
-			if opt.Value > analyzeOptionLimit[opt.Type] {
-				return nil, errors.Errorf("value of analyze option %s should not larger than %d", ast.AnalyzeOptionString[opt.Type], analyzeOptionLimit[opt.Type])
-			}
-		} else {
-			if opt.Value == 0 || opt.Value > analyzeOptionLimit[opt.Type] {
-				return nil, errors.Errorf("value of analyze option %s should be positive and not larger than %d", ast.AnalyzeOptionString[opt.Type], analyzeOptionLimit[opt.Type])
-			}
+		if opt.Value == 0 || opt.Value > analyzeOptionLimit[opt.Type] {
+			return nil, errors.Errorf("value of analyze option %s should be positive and not larger than %d", ast.AnalyzeOptionString[opt.Type], analyzeOptionLimit[opt.Type])
 		}
 		optMap[opt.Type] = opt.Value
 	}

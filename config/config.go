@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -458,29 +457,13 @@ var defaultConf = Config{
 }
 
 var (
-	globalConf              = atomic.Value{}
-	reloadConfPath          = ""
-	confReloader            func(nc, c *Config)
-	confReloadLock          sync.Mutex
-	supportedReloadConfigs  = make(map[string]struct{}, 32)
-	supportedReloadConfList = make([]string, 0, 32)
+	globalConf = atomic.Value{}
 )
 
 // NewConfig creates a new config instance with default value.
 func NewConfig() *Config {
 	conf := defaultConf
 	return &conf
-}
-
-// SetConfReloader sets reload config path and a reloader.
-// It should be called only once at start time.
-func SetConfReloader(cpath string, reloader func(nc, c *Config), confItems ...string) {
-	reloadConfPath = cpath
-	confReloader = reloader
-	for _, item := range confItems {
-		supportedReloadConfigs[item] = struct{}{}
-		supportedReloadConfList = append(supportedReloadConfList, item)
-	}
 }
 
 // GetGlobalConfig returns the global configuration for this server.
