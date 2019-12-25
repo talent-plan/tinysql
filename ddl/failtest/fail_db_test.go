@@ -199,7 +199,7 @@ func (s *testFailDBSuite) TestUpdateHandleFailed(c *C) {
 	tk.MustExec("alter table t add index idx_b(b)")
 	result := tk.MustQuery("select count(*) from t use index(idx_b)")
 	result.Check(testkit.Rows("1"))
-	tk.MustExec("admin check index t idx_b")
+
 }
 
 func (s *testFailDBSuite) TestAddIndexFailed(c *C) {
@@ -228,8 +228,7 @@ func (s *testFailDBSuite) TestAddIndexFailed(c *C) {
 	s.cluster.SplitTable(s.mvccStore, tblID, 100)
 
 	tk.MustExec("alter table t add index idx_b(b)")
-	tk.MustExec("admin check index t idx_b")
-	tk.MustExec("admin check table t")
+
 }
 
 // TestFailSchemaSyncer test when the schema syncer is done,
@@ -318,11 +317,10 @@ func (s *testFailDBSuite) TestGenGlobalIDFail(c *C) {
 			c.Assert(failpoint.Enable("github.com/pingcap/tidb/ddl/mockGenGlobalIDFail", `return(false)`), IsNil)
 			tk.MustExec(test.sql)
 			tk.MustExec(fmt.Sprintf("insert into %s values (%d, 42)", test.table, rand.Intn(65536)))
-			tk.MustExec(fmt.Sprintf("admin check table %s", test.table))
+
 		}
 	}
-	tk.MustExec("admin check table t1")
-	tk.MustExec("admin check table t2")
+
 }
 
 func batchInsert(tk *testkit.TestKit, tbl string, start, end int) {
@@ -392,7 +390,7 @@ LOOP:
 		}
 	}
 	c.Assert(checkNum, Greater, 5)
-	tk.MustExec("admin check table test_add_index")
+
 	tk.MustExec("drop table test_add_index")
 }
 

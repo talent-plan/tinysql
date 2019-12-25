@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,7 +27,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor/aggfuncs"
@@ -36,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
-
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
@@ -80,18 +77,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return nil
 	case *plannercore.Change:
 		return b.buildChange(v)
-	case *plannercore.CheckTable:
-		return b.buildCheckTable(v)
-	case *plannercore.CheckIndex:
-		return b.buildCheckIndex(v)
-	case *plannercore.RecoverIndex:
-		return b.buildRecoverIndex(v)
-	case *plannercore.CleanupIndex:
-		return b.buildCleanupIndex(v)
-	case *plannercore.CheckIndexRange:
-		return b.buildCheckIndexRange(v)
-	case *plannercore.ChecksumTable:
-		return b.buildChecksumTable(v)
 	case *plannercore.DDL:
 		return b.buildDDL(v)
 	case *plannercore.Deallocate:
@@ -263,218 +248,6 @@ func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQuerie
 	e := &ShowDDLJobQueriesExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		jobIDs:       v.JobIDs,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildCheckIndex(v *plannercore.CheckIndex) Executor {
-	readerExec, err := buildNoRangeIndexLookUpReader(b, v.IndexLookUpReader)
-	if err != nil {
-		b.err = err
-		return nil
-	}
-
-	buildIndexLookUpChecker(b, v.IndexLookUpReader, readerExec)
-
-	e := &CheckIndexExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		dbName:       v.DBName,
-		tableName:    readerExec.table.Meta().Name.L,
-		idxName:      v.IdxName,
-		is:           b.is,
-		src:          readerExec,
-	}
-	return e
-}
-
-// buildIndexLookUpChecker builds check information to IndexLookUpReader.
-func buildIndexLookUpChecker(b *executorBuilder, readerPlan *plannercore.PhysicalIndexLookUpReader,
-	readerExec *IndexLookUpExecutor) {
-	is := readerPlan.IndexPlans[0].(*plannercore.PhysicalIndexScan)
-	readerExec.dagPB.OutputOffsets = make([]uint32, 0, len(is.Index.Columns))
-	for i := 0; i <= len(is.Index.Columns); i++ {
-		readerExec.dagPB.OutputOffsets = append(readerExec.dagPB.OutputOffsets, uint32(i))
-	}
-	readerExec.ranges = ranger.FullRange()
-	ts := readerPlan.TablePlans[0].(*plannercore.PhysicalTableScan)
-	readerExec.handleIdx = ts.HandleIdx
-
-	tps := make([]*types.FieldType, 0, len(is.Columns)+1)
-	for _, col := range is.Columns {
-		tps = append(tps, &col.FieldType)
-	}
-	tps = append(tps, types.NewFieldType(mysql.TypeLonglong))
-	readerExec.checkIndexValue = &checkIndexValue{genExprs: is.GenExprs, idxColTps: tps}
-
-	colNames := make([]string, 0, len(is.Columns))
-	for _, col := range is.Columns {
-		colNames = append(colNames, col.Name.O)
-	}
-	var err error
-	readerExec.idxTblCols, err = table.FindCols(readerExec.table.Cols(), colNames, true)
-	if err != nil {
-		b.err = errors.Trace(err)
-		return
-	}
-}
-
-func (b *executorBuilder) buildCheckTable(v *plannercore.CheckTable) Executor {
-	readerExecs := make([]*IndexLookUpExecutor, 0, len(v.IndexLookUpReaders))
-	for _, readerPlan := range v.IndexLookUpReaders {
-		readerExec, err := buildNoRangeIndexLookUpReader(b, readerPlan)
-		if err != nil {
-			b.err = errors.Trace(err)
-			return nil
-		}
-		buildIndexLookUpChecker(b, readerPlan, readerExec)
-
-		readerExecs = append(readerExecs, readerExec)
-	}
-
-	e := &CheckTableExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		dbName:       v.DBName,
-		table:        v.Table,
-		indexInfos:   v.IndexInfos,
-		is:           b.is,
-		srcs:         readerExecs,
-		exitCh:       make(chan struct{}),
-		retCh:        make(chan error, len(readerExecs)),
-	}
-	return e
-}
-
-func buildRecoverIndexCols(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) []*model.ColumnInfo {
-	columns := make([]*model.ColumnInfo, 0, len(indexInfo.Columns))
-	for _, idxCol := range indexInfo.Columns {
-		columns = append(columns, tblInfo.Columns[idxCol.Offset])
-	}
-
-	handleOffset := len(columns)
-	handleColsInfo := &model.ColumnInfo{
-		ID:     model.ExtraHandleID,
-		Name:   model.ExtraHandleName,
-		Offset: handleOffset,
-	}
-	handleColsInfo.FieldType = *types.NewFieldType(mysql.TypeLonglong)
-	columns = append(columns, handleColsInfo)
-	return columns
-}
-
-func (b *executorBuilder) buildRecoverIndex(v *plannercore.RecoverIndex) Executor {
-	tblInfo := v.Table.TableInfo
-	t, err := b.is.TableByName(v.Table.Schema, tblInfo.Name)
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	idxName := strings.ToLower(v.IndexName)
-	indices := t.WritableIndices()
-	var index table.Index
-	for _, idx := range indices {
-		if idxName == idx.Meta().Name.L {
-			index = idx
-			break
-		}
-	}
-
-	if index == nil {
-		b.err = errors.Errorf("index `%v` is not found in table `%v`.", v.IndexName, v.Table.Name.O)
-		return nil
-	}
-	e := &RecoverIndexExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		columns:      buildRecoverIndexCols(tblInfo, index.Meta()),
-		index:        index,
-		table:        t,
-	}
-	return e
-}
-
-func buildCleanupIndexCols(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) []*model.ColumnInfo {
-	columns := make([]*model.ColumnInfo, 0, len(indexInfo.Columns)+1)
-	for _, idxCol := range indexInfo.Columns {
-		columns = append(columns, tblInfo.Columns[idxCol.Offset])
-	}
-	handleColsInfo := &model.ColumnInfo{
-		ID:     model.ExtraHandleID,
-		Name:   model.ExtraHandleName,
-		Offset: len(tblInfo.Columns),
-	}
-	handleColsInfo.FieldType = *types.NewFieldType(mysql.TypeLonglong)
-	columns = append(columns, handleColsInfo)
-	return columns
-}
-
-func (b *executorBuilder) buildCleanupIndex(v *plannercore.CleanupIndex) Executor {
-	tblInfo := v.Table.TableInfo
-	t, err := b.is.TableByName(v.Table.Schema, tblInfo.Name)
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	idxName := strings.ToLower(v.IndexName)
-	var index table.Index
-	for _, idx := range t.Indices() {
-		if idx.Meta().State != model.StatePublic {
-			continue
-		}
-		if idxName == idx.Meta().Name.L {
-			index = idx
-			break
-		}
-	}
-
-	if index == nil {
-		b.err = errors.Errorf("index `%v` is not found in table `%v`.", v.IndexName, v.Table.Name.O)
-		return nil
-	}
-	e := &CleanupIndexExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		idxCols:      buildCleanupIndexCols(tblInfo, index.Meta()),
-		index:        index,
-		table:        t,
-		batchSize:    20000,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildCheckIndexRange(v *plannercore.CheckIndexRange) Executor {
-	tb, err := b.is.TableByName(v.Table.Schema, v.Table.Name)
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	e := &CheckIndexRangeExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		handleRanges: v.HandleRanges,
-		table:        tb.Meta(),
-		is:           b.is,
-	}
-	idxName := strings.ToLower(v.IndexName)
-	for _, idx := range tb.Indices() {
-		if idx.Meta().Name.L == idxName {
-			e.index = idx.Meta()
-			e.startKey = make([]types.Datum, len(e.index.Columns))
-			break
-		}
-	}
-	return e
-}
-
-func (b *executorBuilder) buildChecksumTable(v *plannercore.ChecksumTable) Executor {
-	e := &ChecksumTableExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		tables:       make(map[int64]*checksumContext),
-		done:         false,
-	}
-	startTs, err := b.getStartTS()
-	if err != nil {
-		b.err = err
-		return nil
-	}
-	for _, t := range v.Tables {
-		e.tables[t.TableInfo.ID] = newChecksumContext(t.DBInfo, t.TableInfo, startTs)
 	}
 	return e
 }

@@ -136,7 +136,7 @@ Our thanks go to the following contributors from the community for helping this 
 
 ### SQL Execution Engine
 * Fix the issue that the returned value is not `NULL` when the `INSERT` function contains `NULL` in parameters [#11248](https://github.com/pingcap/tidb/pull/11248)
-* Fix the issue that the computing result might be wrong when the  partitioned table is checked by the `ADMIN CHECKSUM` operation [#11266](https://github.com/pingcap/tidb/pull/11266)
+
 * Fix the issue that the result might be wrong when INDEX JOIN uses the prefix index [#11246](https://github.com/pingcap/tidb/pull/11246)
 * Fix the issue that result might be wrong caused by incorrectly aligning fractions when the `DATE_ADD` function does subtraction on date numbers involving microseconds [#11288](https://github.com/pingcap/tidb/pull/11288)
 * Fix the wrong result caused by the `DATE_ADD` function incorrectly processing the negative numbers in `INTERVAL` [#11325](https://github.com/pingcap/tidb/pull/11325)
@@ -197,7 +197,7 @@ Our thanks go to the following contributors from the community for helping this 
   * The error is not correctly reported when there is a conflict between the character set and the collation that are specified by `ALTER TABLE … MODIFY COLUMN`
   * Incompatibility with MySQL when using `ALTER TABLE … MODIFY COLUMN` to specify character sets and collations multiple times 
 * Add the trace details of the subquery to the result of the `TRACE` query [#11458](https://github.com/pingcap/tidb/pull/11458)
-* Optimize the performance of executing `ADMIN CHECK TABLE` and greatly reduce its execution time [#11547](https://github.com/pingcap/tidb/pull/11547)
+
 * Add the result returned by `SPLIT TABLE … REGIONS/INDEX` and make `TOTAL_SPLIT_REGION` and `SCATTER_FINISH_RATIO` display the number of Regions that have been split successfully before timeout in the result [#11484](https://github.com/pingcap/tidb/pull/11484)
 * Fix the issue that the precision displayed by statements like `SHOW CREATE TABLE` is incomplete when `ON UPDATE CURRENT_TIMESTAMP` is the column attribute and the float precision is specified [#11591](https://github.com/pingcap/tidb/pull/11591)
 * Fix the issue that the index result of the column cannot be correctly calculated when the expression of a virtual generated column contains another virtual generated column [#11475](https://github.com/pingcap/tidb/pull/11475)
@@ -730,7 +730,7 @@ Enable hash partition by default; and enable range columns partition when there 
 ### DDL
 * Fix some issues when canceling the `DROP COLUMN` operation [#9352](https://github.com/pingcap/tidb/pull/9352)
 * Fix some issues when canceling the `DROP` or `ADD` partitioned table operation [#9376](https://github.com/pingcap/tidb/pull/9376)
-* Fix the issue that `ADMIN CHECK TABLE` mistakenly reports the data index inconsistency in some cases [#9399](https://github.com/pingcap/tidb/pull/9399)
+
 * Fix the time zone issue of the `TIMESTAMP` default value [#9108](https://github.com/pingcap/tidb/pull/9108)
 
 ## [2.1.4] 2019-02-15
@@ -1044,7 +1044,7 @@ Enable hash partition by default; and enable range columns partition when there 
 * Fix the issue that `SUBSTRING_INDEX` panics in some cases [#7897](https://github.com/pingcap/tidb/pull/7897)
 ### DDL
 * Fix the stack overflow issue caused by throwing the `invalid ddl job type` error [#7958](https://github.com/pingcap/tidb/pull/7958)
-* Fix the issue that the result of `ADMIN CHECK TABLE` is incorrect in some cases [#7975](https://github.com/pingcap/tidb/pull/7975)
+
 
 
 ## [2.1.0-rc.2] - 2018-09-14
@@ -1153,7 +1153,7 @@ Enable hash partition by default; and enable range columns partition when there 
 ### Bug Fixes
 * Fix the issue that the `Expression` in `UnionScan` is not cloned
 * Fix the potential goroutine leak issue in `copIterator`
-* Fix the issue that admin check table misjudges the unique index including null
+
 * Fix the type inference issue during binary literal computing
 * Fix the issue in parsing the `CREATE VIEW` statement
 * Fix the panic issue when one statement contains both `ORDER BY` and `LIMIT 0`

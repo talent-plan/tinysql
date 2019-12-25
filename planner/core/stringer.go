@@ -47,8 +47,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 
 	var str string
 	switch x := in.(type) {
-	case *CheckTable:
-		str = "CheckTable"
 	case *PhysicalIndexScan:
 		str = fmt.Sprintf("Index(%s.%s)%v", x.Table.Name.L, x.Index.Name.L, x.Ranges)
 	case *PhysicalTableScan:

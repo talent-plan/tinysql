@@ -63,7 +63,6 @@ func (s *testAdminSuite) TestAdminCheckTable(c *C) {
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a bigint unsigned primary key, b int, c int, index idx(a, b));")
 	tk.MustExec("insert into t values(1, 1, 1)")
-	tk.MustExec("admin check table t")
 
 	// test for add index on the later added columns.
 	tk.MustExec("drop table if exists t1;")
@@ -73,7 +72,6 @@ func (s *testAdminSuite) TestAdminCheckTable(c *C) {
 	tk.MustExec("ALTER TABLE t1 ADD COLUMN cc2 VARCHAR(36) NULL DEFAULT ''")
 	tk.MustExec("ALTER TABLE t1 ADD INDEX idx1 (cc1);")
 	tk.MustExec("ALTER TABLE t1 ADD INDEX idx2 (cc2);")
-	tk.MustExec("admin check table t1;")
 
 	// For add index on virtual column
 	tk.MustExec("drop table if exists t1;")
@@ -100,5 +98,5 @@ func (s *testAdminSuite) TestAdminCheckTable(c *C) {
 	tk.MustExec("alter table t1 add index idx_j(j);")
 	tk.MustExec("alter table t1 add index idx_i(i);")
 	tk.MustExec("alter table t1 add index idx_m(a,c,d,e,f,g,h,i,j);")
-	tk.MustExec("admin check table t1;")
+
 }

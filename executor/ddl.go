@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta"
@@ -34,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/gcutil"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/zap"
 )
 
@@ -264,18 +262,6 @@ func (e *DDLExec) executeDropTableOrView(s *ast.DropTableStmt) error {
 		// I can hardly find a case that a user really need to do this.
 		if isSystemTable(tn.Schema.L, tn.Name.L) {
 			return errors.Errorf("Drop tidb system table '%s.%s' is forbidden", tn.Schema.L, tn.Name.L)
-		}
-
-		if config.CheckTableBeforeDrop {
-			logutil.BgLogger().Warn("admin check table before drop",
-				zap.String("database", fullti.Schema.O),
-				zap.String("table", fullti.Name.O),
-			)
-			sql := fmt.Sprintf("admin check table `%s`.`%s`", fullti.Schema.O, fullti.Name.O)
-			_, _, err = e.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
-			if err != nil {
-				return err
-			}
 		}
 
 		if s.IsView {

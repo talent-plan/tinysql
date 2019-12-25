@@ -152,29 +152,6 @@ func (s *testDBSuite4) TestAddIndexWithPK(c *C) {
 	s.tk.MustQuery("select * from test_add_index_with_pk2").Check(testkit.Rows("1 1 1 1", "2 2 2 2"))
 }
 
-func (s *testDBSuite1) TestRenameIndex(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use " + s.schemaName)
-	s.tk.MustExec("create table t (pk int primary key, c int default 1, c1 int default 1, unique key k1(c), key k2(c1))")
-
-	// Test rename success
-	s.tk.MustExec("alter table t rename index k1 to k3")
-	s.tk.MustExec("admin check index t k3")
-
-	// Test rename to the same name
-	s.tk.MustExec("alter table t rename index k3 to k3")
-	s.tk.MustExec("admin check index t k3")
-
-	// Test rename on non-exists keys
-	s.tk.MustGetErrCode("alter table t rename index x to x", mysql.ErrKeyDoesNotExist)
-
-	// Test rename on already-exists keys
-	s.tk.MustGetErrCode("alter table t rename index k3 to k2", mysql.ErrDupKeyName)
-
-	s.tk.MustExec("alter table t rename index k2 to K2")
-	s.tk.MustGetErrCode("alter table t rename key k3 to K2", mysql.ErrDupKeyName)
-}
-
 func testGetTableByName(c *C, ctx sessionctx.Context, db, table string) table.Table {
 	dom := domain.GetDomain(ctx)
 	// Make sure the table schema is the new schema.
@@ -860,7 +837,7 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 	s.tk.MustExec("insert into tidb.test (a) values (5);")
 	s.tk.MustExec("insert tidb.test values (6, 6);")
 	s.tk.MustExec("alter table tidb.test add index idx1 (a, b);")
-	s.tk.MustExec("admin check table test")
+
 }
 func (s *testDBSuite1) TestAddPrimaryKey1(c *C) {
 	testAddIndex(c, s.store, s.lease, false,
@@ -1021,7 +998,6 @@ LOOP:
 	rows := tk.MustQuery(fmt.Sprintf("select c1 from test_add_index where c3 >= %d order by c1", start)).Rows()
 	matchRows(c, rows, expectedRows)
 
-	tk.MustExec("admin check table test_add_index")
 	if testPartition {
 		return
 	}
@@ -3166,13 +3142,13 @@ func (s *testDBSuite5) TestAddIndexForGeneratedColumn(c *C) {
 	s.tk.MustExec("ALTER TABLE gcai_table ADD INDEX idx(d1);")
 	s.tk.MustQuery("select * from gcai_table").Check(testkit.Rows("1 9999-12-31 9999-11-30"))
 	s.tk.MustQuery("select d1 from gcai_table use index(idx)").Check(testkit.Rows("9999-11-30"))
-	s.tk.MustExec("admin check table gcai_table")
+
 	// The column is PKIsHandle in generated column expression.
 	s.tk.MustExec("ALTER TABLE gcai_table ADD COLUMN id1 int as (id+5);")
 	s.tk.MustExec("ALTER TABLE gcai_table ADD INDEX idx1(id1);")
 	s.tk.MustQuery("select * from gcai_table").Check(testkit.Rows("1 9999-12-31 9999-11-30 6"))
 	s.tk.MustQuery("select id1 from gcai_table use index(idx1)").Check(testkit.Rows("6"))
-	s.tk.MustExec("admin check table gcai_table")
+
 }
 
 func (s *testDBSuite5) TestModifyGeneratedColumn(c *C) {

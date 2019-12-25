@@ -79,10 +79,10 @@ func (s *testSuite1) TestNotAllowWriteRowID(c *C) {
 	_, err = tk.Exec("update tt set id = 2, _tidb_rowid = 1 where _tidb_rowid = 1")
 	c.Assert(err.Error(), Equals, "insert, update and replace statements for _tidb_rowid are not supported.")
 	tk.MustExec("update tt set id = 2 where _tidb_rowid = 1")
-	tk.MustExec("admin check table tt;")
+
 	tk.MustExec("drop table tt")
 	// There is currently no real support for inserting, updating, and replacing _tidb_rowid statements.
 	// After we support it, the following operations must be passed.
 	//	tk.MustExec("insert into tt (id, c, _tidb_rowid) values(30000,10,1);")
-	//	tk.MustExec("admin check table tt;")
+
 }

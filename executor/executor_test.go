@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -47,7 +46,6 @@ import (
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
@@ -55,11 +53,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/admin"
-	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
@@ -239,170 +233,6 @@ func (s *testSuiteP1) TestShow(c *C) {
 	c.Assert(len(tk.MustQuery("show table status").Rows()), Equals, 1)
 }
 
-func (s *testSuiteP1) TestAdmin(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists admin_test")
-	tk.MustExec("create table admin_test (c1 int, c2 int, c3 int default 1, index (c1))")
-	tk.MustExec("insert admin_test (c1) values (1),(2),(NULL)")
-
-	ctx := context.Background()
-	// cancel DDL jobs test
-	r, err := tk.Exec("admin cancel ddl jobs 1")
-	c.Assert(err, IsNil, Commentf("err %v", err))
-	req := r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	row := req.GetRow(0)
-	c.Assert(row.Len(), Equals, 2)
-	c.Assert(row.GetString(0), Equals, "1")
-	c.Assert(row.GetString(1), Matches, "*DDL Job:1 not found")
-
-	// show ddl test;
-	r, err = tk.Exec("admin show ddl")
-	c.Assert(err, IsNil)
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	row = req.GetRow(0)
-	c.Assert(row.Len(), Equals, 6)
-	txn, err := s.store.Begin()
-	c.Assert(err, IsNil)
-	ddlInfo, err := admin.GetDDLInfo(txn)
-	c.Assert(err, IsNil)
-	c.Assert(row.GetInt64(0), Equals, ddlInfo.SchemaVer)
-	// TODO: Pass this test.
-	// rowOwnerInfos := strings.Split(row.Data[1].GetString(), ",")
-	// ownerInfos := strings.Split(ddlInfo.Owner.String(), ",")
-	// c.Assert(rowOwnerInfos[0], Equals, ownerInfos[0])
-	serverInfo, err := infosync.GetServerInfoByID(ctx, row.GetString(1))
-	c.Assert(err, IsNil)
-	c.Assert(row.GetString(2), Equals, serverInfo.IP+":"+
-		strconv.FormatUint(uint64(serverInfo.Port), 10))
-	c.Assert(row.GetString(3), Equals, "")
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	c.Assert(req.NumRows() == 0, IsTrue)
-	err = txn.Rollback()
-	c.Assert(err, IsNil)
-
-	// show DDL jobs test
-	r, err = tk.Exec("admin show ddl jobs")
-	c.Assert(err, IsNil)
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	row = req.GetRow(0)
-	c.Assert(row.Len(), Equals, 11)
-	txn, err = s.store.Begin()
-	c.Assert(err, IsNil)
-	historyJobs, err := admin.GetHistoryDDLJobs(txn, admin.DefNumHistoryJobs)
-	c.Assert(len(historyJobs), Greater, 1)
-	c.Assert(len(row.GetString(1)), Greater, 0)
-	c.Assert(err, IsNil)
-	c.Assert(row.GetInt64(0), Equals, historyJobs[0].ID)
-	c.Assert(err, IsNil)
-
-	r, err = tk.Exec("admin show ddl jobs 20")
-	c.Assert(err, IsNil)
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	row = req.GetRow(0)
-	c.Assert(row.Len(), Equals, 11)
-	c.Assert(row.GetInt64(0), Equals, historyJobs[0].ID)
-	c.Assert(err, IsNil)
-
-	// show DDL job queries test
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists admin_test2")
-	tk.MustExec("create table admin_test2 (c1 int, c2 int, c3 int default 1, index (c1))")
-	result := tk.MustQuery(`admin show ddl job queries 1, 1, 1`)
-	result.Check(testkit.Rows())
-	result = tk.MustQuery(`admin show ddl job queries 1, 2, 3, 4`)
-	result.Check(testkit.Rows())
-	historyJobs, err = admin.GetHistoryDDLJobs(txn, admin.DefNumHistoryJobs)
-	result = tk.MustQuery(fmt.Sprintf("admin show ddl job queries %d", historyJobs[0].ID))
-	result.Check(testkit.Rows(historyJobs[0].Query))
-	c.Assert(err, IsNil)
-
-	// check table test
-	tk.MustExec("create table admin_test1 (c1 int, c2 int default 1, index (c1))")
-	tk.MustExec("insert admin_test1 (c1) values (21),(22)")
-	r, err = tk.Exec("admin check table admin_test, admin_test1")
-	c.Assert(err, IsNil)
-	c.Assert(r, IsNil)
-	// error table name
-	err = tk.ExecToErr("admin check table admin_test_error")
-	c.Assert(err, NotNil)
-	// different index values
-	sctx := tk.Se.(sessionctx.Context)
-	dom := domain.GetDomain(sctx)
-	is := dom.InfoSchema()
-	c.Assert(is, NotNil)
-	tb, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("admin_test"))
-	c.Assert(err, IsNil)
-	c.Assert(tb.Indices(), HasLen, 1)
-	_, err = tb.Indices()[0].Create(mock.NewContext(), txn, types.MakeDatums(int64(10)), 1)
-	c.Assert(err, IsNil)
-	err = txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-	errAdmin := tk.ExecToErr("admin check table admin_test")
-	c.Assert(errAdmin, NotNil)
-
-	if config.CheckTableBeforeDrop {
-		err = tk.ExecToErr("drop table admin_test")
-		c.Assert(err.Error(), Equals, errAdmin.Error())
-
-		// Drop inconsistency index.
-		tk.MustExec("alter table admin_test drop index c1")
-		tk.MustExec("admin check table admin_test")
-	}
-	// checksum table test
-	tk.MustExec("create table checksum_with_index (id int, count int, PRIMARY KEY(id), KEY(count))")
-	tk.MustExec("create table checksum_without_index (id int, count int, PRIMARY KEY(id))")
-	r, err = tk.Exec("admin checksum table checksum_with_index, checksum_without_index")
-	c.Assert(err, IsNil)
-	res := tk.ResultSetToResult(r, Commentf("admin checksum table"))
-	// Mocktikv returns 1 for every table/index scan, then we will xor the checksums of a table.
-	// For "checksum_with_index", we have two checksums, so the result will be 1^1 = 0.
-	// For "checksum_without_index", we only have one checksum, so the result will be 1.
-	res.Sort().Check(testkit.Rows("test checksum_with_index 0 2 2", "test checksum_without_index 1 1 1"))
-
-	tk.MustExec("drop table if exists t1;")
-	tk.MustExec("CREATE TABLE t1 (c2 BOOL, PRIMARY KEY (c2));")
-	tk.MustExec("INSERT INTO t1 SET c2 = '0';")
-	tk.MustExec("ALTER TABLE t1 ADD COLUMN c3 DATETIME NULL DEFAULT '2668-02-03 17:19:31';")
-	tk.MustExec("ALTER TABLE t1 ADD INDEX idx2 (c3);")
-	tk.MustExec("ALTER TABLE t1 ADD COLUMN c4 bit(10) default 127;")
-	tk.MustExec("ALTER TABLE t1 ADD INDEX idx3 (c4);")
-	tk.MustExec("admin check table t1;")
-
-	// Test admin show ddl jobs table name after table has been droped.
-	tk.MustExec("drop table if exists t1;")
-	re := tk.MustQuery("admin show ddl jobs 1")
-	rows := re.Rows()
-	c.Assert(len(rows), Equals, 1)
-	c.Assert(rows[0][2], Equals, "t1")
-
-	// Test for reverse scan get history ddl jobs when ddl history jobs queue has multiple regions.
-	txn, err = s.store.Begin()
-	c.Assert(err, IsNil)
-	historyJobs, err = admin.GetHistoryDDLJobs(txn, 20)
-	c.Assert(err, IsNil)
-
-	// Split region for history ddl job queues.
-	m := meta.NewMeta(txn)
-	startKey := meta.DDLJobHistoryKey(m, 0)
-	endKey := meta.DDLJobHistoryKey(m, historyJobs[0].ID)
-	s.cluster.SplitKeys(s.mvccStore, startKey, endKey, int(historyJobs[0].ID/5))
-
-	historyJobs2, err := admin.GetHistoryDDLJobs(txn, 20)
-	c.Assert(err, IsNil)
-	c.Assert(historyJobs, DeepEquals, historyJobs2)
-}
-
 func (s *testSuiteP2) TestAdminShowDDLJobs(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test_admin_show_ddl_jobs")
@@ -438,17 +268,6 @@ func (s *testSuiteP2) TestAdminShowDDLJobs(c *C) {
 	re = tk.MustQuery("admin show ddl jobs 1 where job_type='create table'")
 	row = re.Rows()[0]
 	c.Assert(row[1], Equals, "test_admin_show_ddl_jobs")
-}
-
-func (s *testSuiteP2) TestAdminChecksumOfPartitionedTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("USE test;")
-	tk.MustExec("DROP TABLE IF EXISTS admin_checksum_partition_test;")
-	tk.MustExec("CREATE TABLE admin_checksum_partition_test (a INT) PARTITION BY HASH(a) PARTITIONS 4;")
-	tk.MustExec("INSERT INTO admin_checksum_partition_test VALUES (1), (2);")
-
-	r := tk.MustQuery("ADMIN CHECKSUM TABLE admin_checksum_partition_test;")
-	r.Check(testkit.Rows("test admin_checksum_partition_test 1 5 5"))
 }
 
 func (s *baseTestSuite) fillData(tk *testkit.TestKit, table string) {
@@ -2477,9 +2296,9 @@ func (s *testSuite) TestTimestampDefaultValueTimeZone(c *C) {
 
 	// test add index.
 	tk.MustExec(`alter table t add index(b);`)
-	tk.MustExec("admin check table t")
+
 	tk.MustExec(`set time_zone = '+05:00'`)
-	tk.MustExec("admin check table t")
+
 }
 
 func (s *testSuite) TestTiDBCurrentTS(c *C) {
@@ -3081,127 +2900,6 @@ func (s *testSuite) TestContainDotColumn(c *C) {
 	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWrongTableName))
 }
 
-func (s *testSuite) TestCheckIndex(c *C) {
-	s.ctx = mock.NewContext()
-	s.ctx.Store = s.store
-	se, err := session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	defer se.Close()
-
-	_, err = se.Execute(context.Background(), "create database test_admin")
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test_admin")
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "create table t (pk int primary key, c int default 1, c1 int default 1, unique key c(c))")
-	c.Assert(err, IsNil)
-	is := s.domain.InfoSchema()
-	db := model.NewCIStr("test_admin")
-	dbInfo, ok := is.SchemaByName(db)
-	c.Assert(ok, IsTrue)
-	tblName := model.NewCIStr("t")
-	tbl, err := is.TableByName(db, tblName)
-	c.Assert(err, IsNil)
-	tbInfo := tbl.Meta()
-
-	alloc := autoid.NewAllocator(s.store, dbInfo.ID, false)
-	tb, err := tables.TableFromMeta(alloc, tbInfo)
-	c.Assert(err, IsNil)
-
-	_, err = se.Execute(context.Background(), "admin check index t c")
-	c.Assert(err, IsNil)
-
-	_, err = se.Execute(context.Background(), "admin check index t C")
-	c.Assert(err, IsNil)
-
-	// set data to:
-	// index     data (handle, data): (1, 10), (2, 20)
-	// table     data (handle, data): (1, 10), (2, 20)
-	recordVal1 := types.MakeDatums(int64(1), int64(10), int64(11))
-	recordVal2 := types.MakeDatums(int64(2), int64(20), int64(21))
-	c.Assert(s.ctx.NewTxn(context.Background()), IsNil)
-	_, err = tb.AddRecord(s.ctx, recordVal1)
-	c.Assert(err, IsNil)
-	_, err = tb.AddRecord(s.ctx, recordVal2)
-	c.Assert(err, IsNil)
-	txn, err := s.ctx.Txn(true)
-	c.Assert(err, IsNil)
-	c.Assert(txn.Commit(context.Background()), IsNil)
-
-	mockCtx := mock.NewContext()
-	idx := tb.Indices()[0]
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-
-	_, err = se.Execute(context.Background(), "admin check index t idx_inexistent")
-	c.Assert(strings.Contains(err.Error(), "not exist"), IsTrue)
-
-	// set data to:
-	// index     data (handle, data): (1, 10), (2, 20), (3, 30)
-	// table     data (handle, data): (1, 10), (2, 20), (4, 40)
-	txn, err = s.store.Begin()
-	c.Assert(err, IsNil)
-	_, err = idx.Create(mockCtx, txn, types.MakeDatums(int64(30)), 3)
-	c.Assert(err, IsNil)
-	key := tablecodec.EncodeRowKey(tb.Meta().ID, codec.EncodeInt(nil, 4))
-	setColValue(c, txn, key, types.NewDatum(int64(40)))
-	err = txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "admin check index t c")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "handle 3, index:types.Datum{k:0x1, collation:0x0, decimal:0x0, length:0x0, i:30, b:[]uint8(nil), x:interface {}(nil)} != record:<nil>")
-
-	// set data to:
-	// index     data (handle, data): (1, 10), (2, 20), (3, 30), (4, 40)
-	// table     data (handle, data): (1, 10), (2, 20), (4, 40)
-	txn, err = s.store.Begin()
-	c.Assert(err, IsNil)
-	_, err = idx.Create(mockCtx, txn, types.MakeDatums(int64(40)), 4)
-	c.Assert(err, IsNil)
-	err = txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "admin check index t c")
-	c.Assert(strings.Contains(err.Error(), "table count 3 != index(c) count 4"), IsTrue)
-
-	// set data to:
-	// index     data (handle, data): (1, 10), (4, 40)
-	// table     data (handle, data): (1, 10), (2, 20), (4, 40)
-	txn, err = s.store.Begin()
-	c.Assert(err, IsNil)
-	err = idx.Delete(sc, txn, types.MakeDatums(int64(30)), 3)
-	c.Assert(err, IsNil)
-	err = idx.Delete(sc, txn, types.MakeDatums(int64(20)), 2)
-	c.Assert(err, IsNil)
-	err = txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "admin check index t c")
-	c.Assert(strings.Contains(err.Error(), "table count 3 != index(c) count 2"), IsTrue)
-
-	// TODO: pass the case below：
-	// set data to:
-	// index     data (handle, data): (1, 10), (4, 40), (2, 30)
-	// table     data (handle, data): (1, 10), (2, 20), (4, 40)
-}
-
-func setColValue(c *C, txn kv.Transaction, key kv.Key, v types.Datum) {
-	row := []types.Datum{v, {}}
-	colIDs := []int64{2, 3}
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
-	c.Assert(err, IsNil)
-	err = txn.Set(key, value)
-	c.Assert(err, IsNil)
-}
-
-func (s *testSuite) TestCheckTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	// Test 'admin check table' when the table has a unique index with null values.
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists admin_test;")
-	tk.MustExec("create table admin_test (c1 int, c2 int, c3 int default 1, index (c1), unique key(c2));")
-	tk.MustExec("insert admin_test (c1, c2) values (1, 1), (2, 2), (NULL, NULL);")
-	tk.MustExec("admin check table admin_test;")
-}
-
 func (s *testSuite) TestCoprocessorStreamingFlag(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 
@@ -3321,7 +3019,7 @@ func (s *testSuite3) TestYearTypeDeleteIndex(c *C) {
 	tk.MustExec("create table t(a YEAR, PRIMARY KEY(a));")
 	tk.MustExec("insert into t set a = '2151';")
 	tk.MustExec("delete from t;")
-	tk.MustExec("admin check table t")
+
 }
 
 func (s *testSuite3) TestForSelectScopeInUnion(c *C) {

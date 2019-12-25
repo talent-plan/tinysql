@@ -54,73 +54,11 @@ type ShowNextRowID struct {
 	TableName *ast.TableName
 }
 
-// CheckTable is used for checking table data, built from the 'admin check table' statement.
-type CheckTable struct {
-	baseSchemaProducer
-
-	DBName             string
-	Table              table.Table
-	IndexInfos         []*model.IndexInfo
-	IndexLookUpReaders []*PhysicalIndexLookUpReader
-}
-
-// RecoverIndex is used for backfilling corrupted index data.
-type RecoverIndex struct {
-	baseSchemaProducer
-
-	Table     *ast.TableName
-	IndexName string
-}
-
-// CleanupIndex is used to delete dangling index data.
-type CleanupIndex struct {
-	baseSchemaProducer
-
-	Table     *ast.TableName
-	IndexName string
-}
-
-// CheckIndex is used for checking index data, built from the 'admin check index' statement.
-type CheckIndex struct {
-	baseSchemaProducer
-
-	IndexLookUpReader *PhysicalIndexLookUpReader
-	DBName            string
-	IdxName           string
-}
-
-// CheckIndexRange is used for checking index data, output the index values that handle within begin and end.
-type CheckIndexRange struct {
-	baseSchemaProducer
-
-	Table     *ast.TableName
-	IndexName string
-
-	HandleRanges []ast.HandleRange
-}
-
-// ChecksumTable is used for calculating table checksum, built from the `admin checksum table` statement.
-type ChecksumTable struct {
-	baseSchemaProducer
-
-	Tables []*ast.TableName
-}
-
 // CancelDDLJobs represents a cancel DDL jobs plan.
 type CancelDDLJobs struct {
 	baseSchemaProducer
 
 	JobIDs []int64
-}
-
-// ReloadExprPushdownBlacklist reloads the data from expr_pushdown_blacklist table.
-type ReloadExprPushdownBlacklist struct {
-	baseSchemaProducer
-}
-
-// ReloadOptRuleBlacklist reloads the data from opt_rule_blacklist table.
-type ReloadOptRuleBlacklist struct {
-	baseSchemaProducer
 }
 
 // Change represents a change plan.

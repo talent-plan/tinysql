@@ -142,7 +142,6 @@ func (s *testSessionSuite) TestForCoverage(c *C) {
 	tk.MustExec("insert t values ()")
 
 	// Normal request will not cover txn.Seek.
-	tk.MustExec("admin check table t")
 
 	// Cover dirty table operations in StateTxn.
 	tk.Se.GetSessionVars().BinlogClient = binloginfo.MockPumpsClient(&mockBinlogPump{})

@@ -56,7 +56,7 @@ func (s *testSuite) TestBatchInsertWithOnDuplicate(c *C) {
 		},
 		// check after all done.
 		func(ctx context.Context, tk *testkit.CTestKit) {
-			tk.MustExec(ctx, "admin check table duplicate_test")
+
 			tk.MustQuery(ctx, "select d1.id, d1.k1 from duplicate_test d1 ignore index(uk), duplicate_test d2 use index (uk) where d1.id = d2.id and d1.k1 <> d2.k1").
 				Check(testkit.Rows())
 		})

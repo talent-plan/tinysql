@@ -213,8 +213,6 @@ func (s *testIntegrationSuite1) TestUniqueKeyNullValue(c *C) {
 	tk.MustExec("alter table t add unique index b(b);")
 	res := tk.MustQuery("select count(*) from t use index(b);")
 	res.Check(testkit.Rows("2"))
-	tk.MustExec("admin check table t")
-	tk.MustExec("admin check index t b")
 }
 
 func (s *testIntegrationSuite3) TestEndIncluded(c *C) {
@@ -226,8 +224,6 @@ func (s *testIntegrationSuite3) TestEndIncluded(c *C) {
 		tk.MustExec("insert into t values(1, 1)")
 	}
 	tk.MustExec("alter table t add index b(b);")
-	tk.MustExec("admin check index t b")
-	tk.MustExec("admin check table t")
 }
 
 // TestModifyColumnAfterAddIndex Issue 5134
@@ -793,7 +789,6 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where c > 1").Check(testkit.Rows("1 2 3"))
 	res := tk.MustQuery("select * from t use index(idx) where c > 1")
 	tk.MustQuery("select * from t ignore index(idx) where c > 1").Check(res.Rows())
-	tk.MustExec("admin check table t")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int as (a + 1), c int as (b + 1), d int as (c + 1))")
@@ -802,7 +797,6 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 3 4"))
 	res = tk.MustQuery("select * from t use index(idx) where d > 2")
 	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-	tk.MustExec("admin check table t")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a bigint, b decimal as (a+1), c varchar(20) as (b*2), d float as (a*23+b-1+length(c)))")
@@ -811,7 +805,6 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 4 25"))
 	res = tk.MustQuery("select * from t use index(idx) where d > 2")
 	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-	tk.MustExec("admin check table t")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a varchar(10), b float as (length(a)+123), c varchar(20) as (right(a, 2)), d float as (b+b-7+1-3+3*ASCII(c)))")
@@ -820,7 +813,6 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("adorable 131 le 577")) // 131+131-7+1-3+3*108
 	res = tk.MustQuery("select * from t use index(idx) where d > 2")
 	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-	tk.MustExec("admin check table t")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a bigint, b decimal as (a), c int(10) as (a+b), d float as (a+b+c), e decimal as (a+b+c+d))")
@@ -829,7 +821,6 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 1 2 4 8"))
 	res = tk.MustQuery("select * from t use index(idx) where d > 2")
 	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-	tk.MustExec("admin check table t")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a bigint, b bigint as (a+1) virtual, c bigint as (b+1) virtual)")
@@ -841,7 +832,7 @@ func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
 	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 3 4"))
 	res = tk.MustQuery("select * from t use index(idx_d) where d > 2")
 	tk.MustQuery("select * from t ignore index(idx_d) where d > 2").Check(res.Rows())
-	tk.MustExec("admin check table t")
+
 }
 
 func (s *testIntegrationSuite2) TestCaseInsensitiveCharsetAndCollate(c *C) {
@@ -1058,7 +1049,7 @@ func (s *testIntegrationSuite5) TestBackwardCompatibility(c *C) {
 	}
 
 	// finished add index
-	tk.MustExec("admin check index t idx_b")
+
 }
 
 func (s *testIntegrationSuite3) TestMultiRegionGetTableEndHandle(c *C) {

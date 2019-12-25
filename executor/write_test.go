@@ -309,7 +309,7 @@ func (s *testSuiteP2) TestMultiBatch(c *C) {
 	tk.MustExec("create table t (i int unique key)")
 	tk.MustExec("set @@tidb_dml_batch_size = 1")
 	tk.MustExec("insert ignore into t select * from t0")
-	tk.MustExec("admin check table t")
+
 }
 
 func (s *testSuite4) TestInsertAutoInc(c *C) {
@@ -1852,7 +1852,6 @@ func (s *testSuite4) TestPartitionedTableDelete(c *C) {
 	tk.MustExec("delete from t ignore index(id) where id >= 13 and id <= 17")
 	tk.CheckExecResult(5, 0)
 
-	tk.MustExec("admin check table t")
 	tk.MustExec(`delete from t;`)
 	tk.CheckExecResult(14, 0)
 
@@ -2489,7 +2488,7 @@ func (s *testSuite7) TestUpdateSelect(c *C) {
 	tk.MustExec("insert detail values ('abc', '123', 2)")
 	tk.MustExec("UPDATE msg SET msg.status = (SELECT detail.status FROM detail WHERE msg.id = detail.id)")
 	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	tk.MustExec("admin check table msg")
+
 }
 
 func (s *testSuite7) TestUpdateDelete(c *C) {
@@ -2508,7 +2507,7 @@ func (s *testSuite7) TestUpdateDelete(c *C) {
 	tk.MustExec("delete from ttt where id = 0 limit 1;")
 	tk.MustQuery("select * from ttt use index (i_host) order by host;").Check(testkit.Rows())
 	tk.MustExec("commit")
-	tk.MustExec("admin check table ttt;")
+
 	tk.MustExec("drop table ttt")
 }
 
@@ -2559,8 +2558,6 @@ func (s *testSuite7) TestReplaceLog(c *C) {
 	c.Assert(err, NotNil)
 	expErr := errors.New(`can not be duplicated row, due to old row not found. handle 1 not found`)
 	c.Assert(expErr.Error() == err.Error(), IsTrue, Commentf("obtained error: (%s)\nexpected error: (%s)", err.Error(), expErr.Error()))
-
-	tk.MustQuery(`admin cleanup index testLog b;`).Check(testkit.Rows("1"))
 }
 
 // TestRebaseIfNeeded is for issue 7422.
