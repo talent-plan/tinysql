@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -103,7 +102,7 @@ func mockDistsqlSelectCtxGet(ctx context.Context) (totalRows int, expectedRowsRe
 }
 
 func mockSelectResult(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
-	fieldTypes []*types.FieldType, fb *statistics.QueryFeedback, copPlanIDs []fmt.Stringer) (distsql.SelectResult, error) {
+	fieldTypes []*types.FieldType, copPlanIDs []fmt.Stringer) (distsql.SelectResult, error) {
 	totalRows, expectedRowsRet := mockDistsqlSelectCtxGet(ctx)
 	return &requiredRowsSelectResult{
 		retTypes:        fieldTypes,

@@ -65,9 +65,6 @@ type Context interface {
 	// GetStore returns the store of session.
 	GetStore() kv.Storage
 
-	// StoreQueryFeedback stores the query feedback.
-	StoreQueryFeedback(feedback interface{})
-
 	// StmtCommit flush all changes by the statement to the underlying transaction.
 	StmtCommit() error
 	// StmtRollback provides statement level rollback.

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/util/testkit"
 )
 
@@ -176,35 +175,6 @@ func (s *testShowStatsSuite) TestShowPartitionStats(c *C) {
 
 	result = tk.MustQuery("show stats_healthy")
 	result.Check(testkit.Rows("test t p0 100"))
-}
-
-func (s *testShowStatsSuite) TestShowAnalyzeStatus(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	statistics.ClearHistoryJobs()
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int, primary key(a), index idx(b))")
-	tk.MustExec(`insert into t values (1, 1), (2, 2)`)
-	tk.MustExec("analyze table t")
-
-	result := tk.MustQuery("show analyze status").Sort()
-	c.Assert(len(result.Rows()), Equals, 2)
-	c.Assert(result.Rows()[0][0], Equals, "test")
-	c.Assert(result.Rows()[0][1], Equals, "t")
-	c.Assert(result.Rows()[0][2], Equals, "")
-	c.Assert(result.Rows()[0][3], Equals, "analyze columns")
-	c.Assert(result.Rows()[0][4], Equals, "2")
-	c.Assert(result.Rows()[0][5], NotNil)
-	c.Assert(result.Rows()[0][6], Equals, "finished")
-
-	c.Assert(len(result.Rows()), Equals, 2)
-	c.Assert(result.Rows()[1][0], Equals, "test")
-	c.Assert(result.Rows()[1][1], Equals, "t")
-	c.Assert(result.Rows()[1][2], Equals, "")
-	c.Assert(result.Rows()[1][3], Equals, "analyze index idx")
-	c.Assert(result.Rows()[1][4], Equals, "2")
-	c.Assert(result.Rows()[1][5], NotNil)
-	c.Assert(result.Rows()[1][6], Equals, "finished")
 }
 
 func (s *testShowStatsSuite) TestShowStatusSnapshot(c *C) {

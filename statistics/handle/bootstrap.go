@@ -92,7 +92,6 @@ func (h *Handle) initStatsHistograms4Chunk(is infoschema.InfoSchema, cache *stat
 			continue
 		}
 		id, ndv, nullCount, version, totColSize := row.GetInt64(2), row.GetInt64(3), row.GetInt64(5), row.GetUint64(4), row.GetInt64(7)
-		lastAnalyzePos := row.GetDatum(11, types.NewFieldType(mysql.TypeBlob))
 		tbl, _ := h.getTableByPhysicalID(is, table.PhysicalID)
 		if row.GetInt64(1) > 0 {
 			var idxInfo *model.IndexInfo
@@ -111,7 +110,7 @@ func (h *Handle) initStatsHistograms4Chunk(is infoschema.InfoSchema, cache *stat
 				terror.Log(errors.Trace(err))
 			}
 			hist := statistics.NewHistogram(id, ndv, nullCount, version, types.NewFieldType(mysql.TypeBlob), chunk.InitialCapacity, 0)
-			table.Indices[hist.ID] = &statistics.Index{Histogram: *hist, CMSketch: cms, Info: idxInfo, StatsVer: row.GetInt64(8), Flag: row.GetInt64(10), LastAnalyzePos: *lastAnalyzePos.Copy()}
+			table.Indices[hist.ID] = &statistics.Index{Histogram: *hist, CMSketch: cms, Info: idxInfo, StatsVer: row.GetInt64(8)}
 		} else {
 			var colInfo *model.ColumnInfo
 			for _, col := range tbl.Meta().Columns {
@@ -131,8 +130,6 @@ func (h *Handle) initStatsHistograms4Chunk(is infoschema.InfoSchema, cache *stat
 				Info:           colInfo,
 				Count:          nullCount,
 				IsHandle:       tbl.Meta().PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
-				Flag:           row.GetInt64(10),
-				LastAnalyzePos: *lastAnalyzePos.Copy(),
 			}
 		}
 	}

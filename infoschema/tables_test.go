@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util"
@@ -490,36 +489,6 @@ func (s *testTableSuite) TestTableRowIDShardingInfo(c *C) {
 	tk.MustExec("DROP DATABASE `sharding_info_test_db`")
 }
 
-func (s *testTableSuite) TestForAnalyzeStatus(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	statistics.ClearHistoryJobs()
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int, index idx(a))")
-	tk.MustExec("insert into t values (1,2),(3,4)")
-	tk.MustExec("analyze table t")
-
-	result := tk.MustQuery("select * from information_schema.analyze_status").Sort()
-
-	c.Assert(len(result.Rows()), Equals, 2)
-	c.Assert(result.Rows()[0][0], Equals, "test")
-	c.Assert(result.Rows()[0][1], Equals, "t")
-	c.Assert(result.Rows()[0][2], Equals, "")
-	c.Assert(result.Rows()[0][3], Equals, "analyze columns")
-	c.Assert(result.Rows()[0][4], Equals, "2")
-	c.Assert(result.Rows()[0][5], NotNil)
-	c.Assert(result.Rows()[0][6], Equals, "finished")
-
-	c.Assert(len(result.Rows()), Equals, 2)
-	c.Assert(result.Rows()[1][0], Equals, "test")
-	c.Assert(result.Rows()[1][1], Equals, "t")
-	c.Assert(result.Rows()[1][2], Equals, "")
-	c.Assert(result.Rows()[1][3], Equals, "analyze index idx")
-	c.Assert(result.Rows()[1][4], Equals, "2")
-	c.Assert(result.Rows()[1][5], NotNil)
-	c.Assert(result.Rows()[1][6], Equals, "finished")
-}
-
 func (s *testTableSuite) TestForServersInfo(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	result := tk.MustQuery("select * from information_schema.TIDB_SERVERS_INFO")
@@ -565,7 +534,6 @@ func (s *testTableSuite) TestReloadDropDatabase(c *C) {
 
 func (s *testTableSuite) TestForTableTiFlashReplica(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
-	statistics.ClearHistoryJobs()
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int, index idx(a))")

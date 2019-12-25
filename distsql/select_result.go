@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
@@ -60,7 +59,6 @@ type selectResult struct {
 	respChkIdx       int
 	respChunkDecoder *chunk.Decoder
 
-	feedback     *statistics.QueryFeedback
 	partialCount int64 // number of partial results.
 	encodeType   tipb.EncodeType
 
@@ -110,7 +108,6 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 		for _, warning := range r.selectResp.Warnings {
 			sc.AppendWarning(terror.ClassTiKV.New(terror.ErrCode(warning.Code), warning.Msg))
 		}
-		r.feedback.Update(resultSubset.GetStartKey(), r.selectResp.OutputCounts)
 		r.partialCount++
 		if len(r.selectResp.Chunks) != 0 {
 			break
@@ -144,7 +141,6 @@ func (r *selectResult) Next(ctx context.Context, chk *chunk.Chunk) error {
 func (r *selectResult) NextRaw(ctx context.Context) (data []byte, err error) {
 	resultSubset, err := r.resp.Next(ctx)
 	r.partialCount++
-	r.feedback.Invalidate()
 	if resultSubset != nil && err == nil {
 		data = resultSubset.GetData()
 	}

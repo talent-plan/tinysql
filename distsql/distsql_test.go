@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
@@ -62,14 +61,14 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 	// Test Next.
 	var response SelectResult
 	if planIDs == nil {
-		response, err = Select(context.TODO(), s.sctx, request, colTypes, statistics.NewQueryFeedback(0, nil, 0, false))
+		response, err = Select(context.TODO(), s.sctx, request, colTypes)
 	} else {
 		var planIDFuncs []fmt.Stringer
 		for i := range planIDs {
 			idx := i
 			planIDFuncs = append(planIDFuncs, stringutil.StringerStr(planIDs[idx]))
 		}
-		response, err = SelectWithRuntimeStats(context.TODO(), s.sctx, request, colTypes, statistics.NewQueryFeedback(0, nil, 0, false), planIDFuncs, stringutil.StringerStr("root_0"))
+		response, err = SelectWithRuntimeStats(context.TODO(), s.sctx, request, colTypes, planIDFuncs, stringutil.StringerStr("root_0"))
 	}
 
 	c.Assert(err, IsNil)
@@ -163,7 +162,7 @@ func (s *testSuite) createSelectStreaming(batch, totalRows int, c *C) (*streamRe
 
 	s.sctx.GetSessionVars().EnableStreaming = true
 
-	response, err := Select(context.TODO(), s.sctx, request, colTypes, statistics.NewQueryFeedback(0, nil, 0, false))
+	response, err := Select(context.TODO(), s.sctx, request, colTypes)
 	c.Assert(err, IsNil)
 	result, ok := response.(*streamResult)
 	c.Assert(ok, IsTrue)
@@ -430,7 +429,7 @@ func createSelectNormal(batch, totalRows int, ctx sessionctx.Context) (*selectRe
 
 	// Test Next.
 	var response SelectResult
-	response, _ = Select(context.TODO(), ctx, request, colTypes, statistics.NewQueryFeedback(0, nil, 0, false))
+	response, _ = Select(context.TODO(), ctx, request, colTypes)
 
 	result, _ := response.(*selectResult)
 	resp, _ := result.resp.(*mockResponse)

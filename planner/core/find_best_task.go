@@ -576,13 +576,6 @@ func (ds *DataSource) buildIndexMergeTableScan(prop *property.PhysicalProperty, 
 		physicalTableID: ds.physicalTableID,
 	}.Init(ds.ctx, ds.blockOffset)
 	ts.SetSchema(ds.schema.Clone())
-	if ts.Table.PKIsHandle {
-		if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-			if ds.statisticTable.Columns[pkColInfo.ID] != nil {
-				ts.Hist = &ds.statisticTable.Columns[pkColInfo.ID].Histogram
-			}
-		}
-	}
 	rowSize := ds.TblColHists.GetTableAvgRowSize(ds.TblCols, ts.StoreType, true)
 	partialCost += totalRowCount * rowSize * sessVars.ScanFactor
 	ts.stats = ds.tableStats.ScaleByExpectCnt(totalRowCount)
@@ -856,13 +849,13 @@ func getColumnRangeCounts(sc *stmtctx.StatementContext, colID int64, ranges []*r
 	for i, ran := range ranges {
 		if idxID >= 0 {
 			idxHist := histColl.Indices[idxID]
-			if idxHist == nil || idxHist.IsInvalid(false) {
+			if idxHist == nil || idxHist.IsInvalid(histColl.Pseudo) {
 				return nil, false
 			}
 			count, err = histColl.GetRowCountByIndexRanges(sc, idxID, []*ranger.Range{ran})
 		} else {
 			colHist, ok := histColl.Columns[colID]
-			if !ok || colHist.IsInvalid(sc, false) {
+			if !ok || colHist.IsInvalid(sc, histColl.Pseudo) {
 				return nil, false
 			}
 			count, err = histColl.GetRowCountByColumnRanges(sc, colID, []*ranger.Range{ran})
@@ -981,13 +974,6 @@ func (s *LogicalTableScan) GetPhysicalScan(schema *expression.Schema, stats *pro
 	}.Init(s.ctx, s.blockOffset)
 	ts.stats = stats
 	ts.SetSchema(schema.Clone())
-	if ts.Table.PKIsHandle {
-		if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-			if ds.statisticTable.Columns[pkColInfo.ID] != nil {
-				ts.Hist = &ds.statisticTable.Columns[pkColInfo.ID].Histogram
-			}
-		}
-	}
 	return ts
 }
 
@@ -1075,13 +1061,6 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 		ts.AccessCondition = nil
 	}
 	ts.SetSchema(ds.schema.Clone())
-	if ts.Table.PKIsHandle {
-		if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-			if ds.statisticTable.Columns[pkColInfo.ID] != nil {
-				ts.Hist = &ds.statisticTable.Columns[pkColInfo.ID].Histogram
-			}
-		}
-	}
 	rowCount := path.CountAfterAccess
 	if prop.ExpectedCnt < ds.stats.RowCount {
 		count, ok, corr := ds.crossEstimateRowCount(path, prop.ExpectedCnt, isMatchProp && prop.Items[0].Desc)
@@ -1148,10 +1127,6 @@ func (ds *DataSource) getOriginalPhysicalIndexScan(prop *property.PhysicalProper
 		isPartition:      ds.isPartition,
 		physicalTableID:  ds.physicalTableID,
 	}.Init(ds.ctx, ds.blockOffset)
-	statsTbl := ds.statisticTable
-	if statsTbl.Indices[idx.ID] != nil {
-		is.Hist = &statsTbl.Indices[idx.ID].Histogram
-	}
 	rowCount := path.CountAfterAccess
 	is.initSchema(idx, path.FullIdxCols, !isSingleScan)
 	// Only use expectedCnt when it's smaller than the count we calculated.

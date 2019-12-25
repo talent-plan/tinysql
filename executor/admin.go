@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
@@ -123,7 +122,7 @@ func (e *CheckIndexRangeExec) Open(ctx context.Context) error {
 		return err
 	}
 
-	e.result, err = distsql.Select(ctx, e.ctx, kvReq, e.retFieldTypes, statistics.NewQueryFeedback(0, nil, 0, false))
+	e.result, err = distsql.Select(ctx, e.ctx, kvReq, e.retFieldTypes)
 	if err != nil {
 		return err
 	}
@@ -261,7 +260,7 @@ func (e *RecoverIndexExec) buildTableScan(ctx context.Context, txn kv.Transactio
 	tblInfo := e.table.Meta()
 	ranges := []*ranger.Range{{LowVal: []types.Datum{types.NewIntDatum(startHandle)}, HighVal: []types.Datum{types.NewIntDatum(math.MaxInt64)}}}
 	var builder distsql.RequestBuilder
-	kvReq, err := builder.SetTableRanges(tblInfo.ID, ranges, nil).
+	kvReq, err := builder.SetTableRanges(tblInfo.ID, ranges).
 		SetDAGRequest(dagPB).
 		SetStartTS(txn.StartTS()).
 		SetKeepOrder(true).
@@ -274,7 +273,7 @@ func (e *RecoverIndexExec) buildTableScan(ctx context.Context, txn kv.Transactio
 	// Actually, with limitCnt, the match datas maybe only in one region, so let the concurrency to be 1,
 	// avoid unnecessary region scan.
 	kvReq.Concurrency = 1
-	result, err := distsql.Select(ctx, e.ctx, kvReq, e.columnsTypes(), statistics.NewQueryFeedback(0, nil, 0, false))
+	result, err := distsql.Select(ctx, e.ctx, kvReq, e.columnsTypes())
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +640,7 @@ func (e *CleanupIndexExec) buildIndexScan(ctx context.Context, txn kv.Transactio
 
 	kvReq.KeyRanges[0].StartKey = kv.Key(e.lastIdxKey).PrefixNext()
 	kvReq.Concurrency = 1
-	result, err := distsql.Select(ctx, e.ctx, kvReq, e.getIdxColTypes(), statistics.NewQueryFeedback(0, nil, 0, false))
+	result, err := distsql.Select(ctx, e.ctx, kvReq, e.getIdxColTypes())
 	if err != nil {
 		return nil, err
 	}

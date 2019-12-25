@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/ranger"
 )
@@ -178,10 +177,6 @@ type PhysicalIndexScan struct {
 	// will be different. The schema of index scan will decode all columns of index but the TiDB only need some of them.
 	dataSourceSchema *expression.Schema
 
-	// Hist is the histogram when the query was issued.
-	// It is used for query feedback.
-	Hist *statistics.Histogram
-
 	rangeInfo string
 
 	// The index scan may be on a partition.
@@ -221,10 +216,6 @@ type PhysicalTableScan struct {
 	pkCol   *expression.Column
 
 	TableAsName *model.CIStr
-
-	// Hist is the histogram when the query was issued.
-	// It is used for query feedback.
-	Hist *statistics.Histogram
 
 	physicalTableID int64
 

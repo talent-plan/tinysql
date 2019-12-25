@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/table"
@@ -1823,30 +1822,6 @@ func dataForHotRegionByMetrics(metrics []helper.HotTableIndex, tp string) [][]ty
 	return rows
 }
 
-// DataForAnalyzeStatus gets all the analyze jobs.
-func DataForAnalyzeStatus() (rows [][]types.Datum) {
-	for _, job := range statistics.GetAllAnalyzeJobs() {
-		job.Lock()
-		var startTime interface{}
-		if job.StartTime.IsZero() {
-			startTime = nil
-		} else {
-			startTime = types.Time{Time: types.FromGoTime(job.StartTime), Type: mysql.TypeDatetime}
-		}
-		rows = append(rows, types.MakeDatums(
-			job.DBName,        // TABLE_SCHEMA
-			job.TableName,     // TABLE_NAME
-			job.PartitionName, // PARTITION_NAME
-			job.JobInfo,       // JOB_INFO
-			job.RowCount,      // ROW_COUNT
-			startTime,         // START_TIME
-			job.State,         // STATE
-		))
-		job.Unlock()
-	}
-	return
-}
-
 func dataForServersInfo() ([][]types.Datum, error) {
 	serversInfo, err := infosync.GetAllServerInfo(context.Background())
 	if err != nil {
@@ -2175,8 +2150,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows, err = dataForTiDBHotRegions(ctx)
 	case tableTiKVStoreStatus:
 		fullRows, err = dataForTiKVStoreStatus(ctx)
-	case tableAnalyzeStatus:
-		fullRows = DataForAnalyzeStatus()
 	case tableTiKVRegionStatus:
 		fullRows, err = dataForTiKVRegionStatus(ctx)
 	case tableTiKVRegionPeers:

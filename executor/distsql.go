@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
@@ -204,7 +203,6 @@ type IndexReaderExecutor struct {
 	// outputColumns are only required by union scan.
 	outputColumns []*expression.Column
 	streaming     bool
-	feedback      *statistics.QueryFeedback
 
 	corColInFilter bool
 	corColInAccess bool
@@ -219,16 +217,12 @@ type IndexReaderExecutor struct {
 func (e *IndexReaderExecutor) Close() error {
 	err := e.result.Close()
 	e.result = nil
-	e.ctx.StoreQueryFeedback(e.feedback)
 	return err
 }
 
 // Next implements the Executor Next interface.
 func (e *IndexReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	err := e.result.Next(ctx, req)
-	if err != nil {
-		e.feedback.Invalidate()
-	}
 	return err
 }
 
@@ -241,9 +235,8 @@ func (e *IndexReaderExecutor) Open(ctx context.Context) error {
 			return err
 		}
 	}
-	kvRanges, err := distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, e.physicalTableID, e.index.ID, e.ranges, e.feedback)
+	kvRanges, err := distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, e.physicalTableID, e.index.ID, e.ranges)
 	if err != nil {
-		e.feedback.Invalidate()
 		return err
 	}
 	return e.open(ctx, kvRanges)
@@ -270,12 +263,10 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
-		e.feedback.Invalidate()
 		return err
 	}
-	e.result, err = e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), e.feedback, getPhysicalPlanIDs(e.plans), e.id)
+	e.result, err = e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
 	if err != nil {
-		e.feedback.Invalidate()
 		return err
 	}
 	e.result.Fetch(ctx)
@@ -312,7 +303,6 @@ type IndexLookUpExecutor struct {
 
 	resultCh   chan *lookupTableTask
 	resultCurr *lookupTableTask
-	feedback   *statistics.QueryFeedback
 
 	// checkIndexValue is used to check the consistency of the index data.
 	*checkIndexValue
@@ -343,15 +333,11 @@ func (e *IndexLookUpExecutor) Open(ctx context.Context) error {
 			return err
 		}
 	}
-	e.kvRanges, err = distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, getPhysicalTableID(e.table), e.index.ID, e.ranges, e.feedback)
+	e.kvRanges, err = distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, getPhysicalTableID(e.table), e.index.ID, e.ranges)
 	if err != nil {
-		e.feedback.Invalidate()
 		return err
 	}
 	err = e.open(ctx)
-	if err != nil {
-		e.feedback.Invalidate()
-	}
 	return err
 }
 
@@ -407,7 +393,7 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		tps = e.idxColTps
 	}
 	// Since the first read only need handle information. So its returned col is only 1.
-	result, err := distsql.SelectWithRuntimeStats(ctx, e.ctx, kvReq, tps, e.feedback, getPhysicalPlanIDs(e.idxPlans), e.id)
+	result, err := distsql.SelectWithRuntimeStats(ctx, e.ctx, kvReq, tps, getPhysicalPlanIDs(e.idxPlans), e.id)
 	if err != nil {
 		return err
 	}
@@ -430,15 +416,14 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 	e.idxWorkerWg.Add(1)
 	go func() {
 		ctx1, cancel := context.WithCancel(ctx)
-		_, err := worker.fetchHandles(ctx1, result)
+		_, err = worker.fetchHandles(ctx1, result)
 		if err != nil {
-			e.feedback.Invalidate()
+			logutil.Logger(ctx).Error("Fetch handles failed", zap.Error(err))
 		}
 		cancel()
 		if err := result.Close(); err != nil {
 			logutil.Logger(ctx).Error("close Select result failed", zap.Error(err))
 		}
-		e.ctx.StoreQueryFeedback(e.feedback)
 		close(workCh)
 		close(e.resultCh)
 		e.idxWorkerWg.Done()
@@ -477,7 +462,6 @@ func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, handles []in
 		startTS:        e.startTS,
 		columns:        e.columns,
 		streaming:      e.tableStreaming,
-		feedback:       statistics.NewQueryFeedback(0, nil, 0, false),
 		corColInFilter: e.corColInTblSide,
 		plans:          e.tblPlans,
 	}

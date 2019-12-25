@@ -209,15 +209,6 @@ const (
 		UNIQUE KEY delete_range_done_index (job_id, element_id)
 	);`
 
-	// CreateStatsFeedbackTable stores the feedback info which is used to update stats.
-	CreateStatsFeedbackTable = `CREATE TABLE IF NOT EXISTS mysql.stats_feedback (
-		table_id bigint(64) NOT NULL,
-		is_index tinyint(2) NOT NULL,
-		hist_id bigint(64) NOT NULL,
-		feedback blob NOT NULL,
-		index hist(table_id, is_index, hist_id)
-	);`
-
 	// CreateRoleEdgesTable stores the role and user relationship information.
 	CreateRoleEdgesTable = `CREATE TABLE IF NOT EXISTS mysql.role_edges (
 		FROM_HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '',
@@ -773,7 +764,6 @@ func upgradeToVer19(s Session) {
 }
 
 func upgradeToVer20(s Session) {
-	doReentrantDDL(s, CreateStatsFeedbackTable)
 }
 
 func upgradeToVer21(s Session) {
@@ -918,8 +908,6 @@ func doDDLWorks(s Session) {
 	mustExecute(s, CreateGCDeleteRangeTable)
 	// Create gc_delete_range_done table.
 	mustExecute(s, CreateGCDeleteRangeDoneTable)
-	// Create stats_feedback table.
-	mustExecute(s, CreateStatsFeedbackTable)
 	// Create role_edges table.
 	mustExecute(s, CreateRoleEdgesTable)
 	// Create default_roles table.

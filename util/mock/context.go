@@ -185,9 +185,6 @@ func (c *Context) GoCtx() context.Context {
 	return c.ctx
 }
 
-// StoreQueryFeedback stores the query feedback.
-func (c *Context) StoreQueryFeedback(_ interface{}) {}
-
 // StmtCommit implements the sessionctx.Context interface.
 func (c *Context) StmtCommit() error {
 	return nil

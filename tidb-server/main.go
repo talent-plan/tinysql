@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics"
-	"github.com/pingcap/tidb/statistics/handle"
 	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv"
@@ -280,8 +279,7 @@ func loadConfig() string {
 }
 
 // hotReloadConfigItems lists all config items which support hot-reload.
-var hotReloadConfigItems = []string{"Performance.MaxProcs", "Performance.MaxMemory", "Performance.CrossJoin",
-	"Performance.FeedbackProbability", "Performance.QueryFeedbackLimit", "Performance.PseudoEstimateRatio",
+var hotReloadConfigItems = []string{"Performance.MaxProcs", "Performance.MaxMemory", "Performance.CrossJoin", "Performance.PseudoEstimateRatio",
 	"OOMAction", "MemQuotaQuery"}
 
 func reloadConfig(nc, c *config.Config) {
@@ -292,12 +290,6 @@ func reloadConfig(nc, c *config.Config) {
 	// is updated in function ReloadGlobalConfig.
 	if nc.Performance.CrossJoin != c.Performance.CrossJoin {
 		plannercore.AllowCartesianProduct.Store(nc.Performance.CrossJoin)
-	}
-	if nc.Performance.FeedbackProbability != c.Performance.FeedbackProbability {
-		statistics.FeedbackProbability.Store(nc.Performance.FeedbackProbability)
-	}
-	if nc.Performance.QueryFeedbackLimit != c.Performance.QueryFeedbackLimit {
-		handle.MaxQueryFeedbackCount.Store(int64(nc.Performance.QueryFeedbackLimit))
 	}
 	if nc.Performance.PseudoEstimateRatio != c.Performance.PseudoEstimateRatio {
 		statistics.RatioOfPseudoEstimate.Store(nc.Performance.PseudoEstimateRatio)
@@ -391,8 +383,6 @@ func setGlobalVars() {
 	statsLeaseDuration := parseDuration(cfg.Performance.StatsLease)
 	session.SetStatsLease(statsLeaseDuration)
 	domain.RunAutoAnalyze = cfg.Performance.RunAutoAnalyze
-	statistics.FeedbackProbability.Store(cfg.Performance.FeedbackProbability)
-	handle.MaxQueryFeedbackCount.Store(int64(cfg.Performance.QueryFeedbackLimit))
 	statistics.RatioOfPseudoEstimate.Store(cfg.Performance.PseudoEstimateRatio)
 	ddl.RunWorker = cfg.RunDDL
 	if cfg.SplitTable {

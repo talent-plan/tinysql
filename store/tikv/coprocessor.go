@@ -221,7 +221,7 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv
 	if req.StoreType == kv.TiFlash {
 		tableID := tablecodec.DecodeTableID(ranges.at(0).StartKey)
 		fullRange := ranger.FullIntRange(false)
-		keyRange := distsql.TableRangesToKVRanges(tableID, fullRange, nil)
+		keyRange := distsql.TableRangesToKVRanges(tableID, fullRange)
 		tableStart, tableEnd = keyRange[0].StartKey, keyRange[0].EndKey
 	}
 

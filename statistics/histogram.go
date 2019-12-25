@@ -227,19 +227,6 @@ const (
 	Version1        = 1
 )
 
-// AnalyzeFlag is set when the statistics comes from analyze and has not been modified by feedback.
-const AnalyzeFlag = 1
-
-// IsAnalyzed checks whether this flag contains AnalyzeFlag.
-func IsAnalyzed(flag int64) bool {
-	return (flag & AnalyzeFlag) > 0
-}
-
-// ResetAnalyzeFlag resets the AnalyzeFlag because it has been modified by feedback.
-func ResetAnalyzeFlag(flag int64) int64 {
-	return flag &^ AnalyzeFlag
-}
-
 // ValueToString converts a possible encoded value to a formatted string. If the value is encoded, then
 // idxCols equals to number of origin values, else idxCols is 0.
 func ValueToString(value *types.Datum, idxCols int) (string, error) {
@@ -663,38 +650,6 @@ func (hg *Histogram) TruncateHistogram(numBkt int) *Histogram {
 	return hist
 }
 
-// ErrorRate is the error rate of estimate row count by bucket and cm sketch.
-type ErrorRate struct {
-	ErrorTotal float64
-	QueryTotal int64
-}
-
-// MaxErrorRate is the max error rate of estimate row count of a not pseudo column.
-// If the table is pseudo, but the average error rate is less than MaxErrorRate,
-// then the column is not pseudo.
-const MaxErrorRate = 0.25
-
-// NotAccurate is true when the total of query is zero or the average error
-// rate is greater than MaxErrorRate.
-func (e *ErrorRate) NotAccurate() bool {
-	if e.QueryTotal == 0 {
-		return true
-	}
-	return e.ErrorTotal/float64(e.QueryTotal) > MaxErrorRate
-}
-
-// Update updates the ErrorRate.
-func (e *ErrorRate) Update(rate float64) {
-	e.QueryTotal++
-	e.ErrorTotal += rate
-}
-
-// Merge range merges two ErrorRate.
-func (e *ErrorRate) Merge(rate *ErrorRate) {
-	e.QueryTotal += rate.QueryTotal
-	e.ErrorTotal += rate.ErrorTotal
-}
-
 // Column represents a column histogram.
 type Column struct {
 	Histogram
@@ -703,9 +658,6 @@ type Column struct {
 	Count      int64
 	Info       *model.ColumnInfo
 	IsHandle   bool
-	ErrorRate
-	Flag           int64
-	LastAnalyzePos types.Datum
 }
 
 func (c *Column) String() string {
@@ -719,7 +671,7 @@ var HistogramNeededColumns = neededColumnMap{cols: map[tableColumnID]struct{}{}}
 // IsInvalid checks if this column is invalid. If this column has histogram but not loaded yet, then we mark it
 // as need histogram.
 func (c *Column) IsInvalid(sc *stmtctx.StatementContext, collPseudo bool) bool {
-	if collPseudo && c.NotAccurate() {
+	if collPseudo {
 		return true
 	}
 	if c.NDV > 0 && c.Len() == 0 && sc != nil {
@@ -823,11 +775,8 @@ func (c *Column) GetColumnRowCount(sc *stmtctx.StatementContext, ranges []*range
 type Index struct {
 	Histogram
 	*CMSketch
-	ErrorRate
 	StatsVer       int64 // StatsVer is the version of the current stats, used to maintain compatibility
 	Info           *model.IndexInfo
-	Flag           int64
-	LastAnalyzePos types.Datum
 }
 
 func (idx *Index) String() string {
@@ -836,7 +785,7 @@ func (idx *Index) String() string {
 
 // IsInvalid checks if this index is invalid.
 func (idx *Index) IsInvalid(collPseudo bool) bool {
-	return (collPseudo && idx.NotAccurate()) || idx.TotalRowCount() == 0
+	return collPseudo || idx.TotalRowCount() == 0
 }
 
 var nullKeyBytes, _ = codec.EncodeKey(nil, nil, types.NewDatum(nil))

@@ -234,24 +234,6 @@ func (s *session) GetSessionManager() util.SessionManager {
 	return s.sessionManager
 }
 
-func (s *session) StoreQueryFeedback(feedback interface{}) {
-	if s.statsCollector != nil {
-		do, err := GetDomain(s.store)
-		if err != nil {
-			logutil.BgLogger().Debug("domain not found", zap.Error(err))
-
-			return
-		}
-		err = s.statsCollector.StoreQueryFeedback(feedback, do.StatsHandle())
-		if err != nil {
-			logutil.BgLogger().Debug("store query feedback", zap.Error(err))
-
-			return
-		}
-
-	}
-}
-
 // FieldList returns fields list of a table.
 func (s *session) FieldList(tableName string) ([]*ast.ResultField, error) {
 	is := infoschema.GetInfoSchema(s)

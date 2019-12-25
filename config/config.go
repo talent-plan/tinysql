@@ -14,14 +14,12 @@
 package config
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -272,8 +270,6 @@ type Performance struct {
 	MaxMemory           uint64  `toml:"max-memory" json:"max-memory"`
 	StatsLease          string  `toml:"stats-lease" json:"stats-lease"`
 	StmtCountLimit      uint    `toml:"stmt-count-limit" json:"stmt-count-limit"`
-	FeedbackProbability float64 `toml:"feedback-probability" json:"feedback-probability"`
-	QueryFeedbackLimit  uint    `toml:"query-feedback-limit" json:"query-feedback-limit"`
 	PseudoEstimateRatio float64 `toml:"pseudo-estimate-ratio" json:"pseudo-estimate-ratio"`
 	ForcePriority       string  `toml:"force-priority" json:"force-priority"`
 	TxnTotalSizeLimit   uint64  `toml:"txn-total-size-limit" json:"txn-total-size-limit"`
@@ -424,8 +420,6 @@ var defaultConf = Config{
 		StatsLease:          "3s",
 		RunAutoAnalyze:      true,
 		StmtCountLimit:      5000,
-		FeedbackProbability: 0.05,
-		QueryFeedbackLimit:  1024,
 		PseudoEstimateRatio: 0.8,
 		ForcePriority:       "NO_PRIORITY",
 		TxnTotalSizeLimit:   DefTxnTotalSizeLimit,
@@ -499,73 +493,6 @@ func GetGlobalConfig() *Config {
 // StoreGlobalConfig stores a new config to the globalConf. It mostly uses in the test to avoid some data races.
 func StoreGlobalConfig(config *Config) {
 	globalConf.Store(config)
-}
-
-// ReloadGlobalConfig reloads global configuration for this server.
-func ReloadGlobalConfig() error {
-	confReloadLock.Lock()
-	defer confReloadLock.Unlock()
-
-	nc := NewConfig()
-	if err := nc.Load(reloadConfPath); err != nil {
-		return err
-	}
-	if err := nc.Valid(); err != nil {
-		return err
-	}
-	c := GetGlobalConfig()
-
-	diffs := collectsDiff(*nc, *c, "")
-	if len(diffs) == 0 {
-		return nil
-	}
-	var formattedDiff bytes.Buffer
-	for k, vs := range diffs {
-		formattedDiff.WriteString(fmt.Sprintf(", %v:%v->%v", k, vs[1], vs[0]))
-	}
-	unsupported := make([]string, 0, 2)
-	for k := range diffs {
-		if _, ok := supportedReloadConfigs[k]; !ok {
-			unsupported = append(unsupported, k)
-		}
-	}
-	if len(unsupported) > 0 {
-		return fmt.Errorf("reloading config %v is not supported, only %v are supported now, "+
-			"your changes%s", unsupported, supportedReloadConfList, formattedDiff.String())
-	}
-
-	confReloader(nc, c)
-	globalConf.Store(nc)
-	logutil.BgLogger().Info("reload config changes" + formattedDiff.String())
-	return nil
-}
-
-// collectsDiff collects different config items.
-// map[string][]string -> map[field path][]{new value, old value}
-func collectsDiff(i1, i2 interface{}, fieldPath string) map[string][]interface{} {
-	diff := make(map[string][]interface{})
-	t := reflect.TypeOf(i1)
-	if t.Kind() != reflect.Struct {
-		if reflect.DeepEqual(i1, i2) {
-			return diff
-		}
-		diff[fieldPath] = []interface{}{i1, i2}
-		return diff
-	}
-
-	v1 := reflect.ValueOf(i1)
-	v2 := reflect.ValueOf(i2)
-	for i := 0; i < v1.NumField(); i++ {
-		p := t.Field(i).Name
-		if fieldPath != "" {
-			p = fieldPath + "." + p
-		}
-		m := collectsDiff(v1.Field(i).Interface(), v2.Field(i).Interface(), p)
-		for k, v := range m {
-			diff[k] = v
-		}
-	}
-	return diff
 }
 
 // Load loads config options from a toml file.

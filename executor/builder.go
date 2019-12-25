@@ -39,7 +39,6 @@ import (
 
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
@@ -1309,7 +1308,7 @@ func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {
 	return deleteExec
 }
 
-func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64, autoAnalyze string) *analyzeTask {
+func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
 	_, offset := timeutil.Zone(b.ctx.GetSessionVars().Location())
 	sc := b.ctx.GetSessionVars().StmtCtx
 	e := &AnalyzeIndexExec{
@@ -1332,45 +1331,10 @@ func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeInde
 	width := int32(opts[ast.AnalyzeOptCMSketchWidth])
 	e.analyzePB.IdxReq.CmsketchDepth = &depth
 	e.analyzePB.IdxReq.CmsketchWidth = &width
-	job := &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: task.PartitionName, JobInfo: autoAnalyze + "analyze index " + task.IndexInfo.Name.O}
-	return &analyzeTask{taskType: idxTask, idxExec: e, job: job}
+	return &analyzeTask{taskType: idxTask, idxExec: e}
 }
 
-func (b *executorBuilder) buildAnalyzeIndexIncremental(task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
-	h := domain.GetDomain(b.ctx).StatsHandle()
-	statsTbl := h.GetPartitionStats(&model.TableInfo{}, task.PhysicalTableID)
-	analyzeTask := b.buildAnalyzeIndexPushdown(task, opts, "")
-	if statsTbl.Pseudo {
-		return analyzeTask
-	}
-	idx, ok := statsTbl.Indices[task.IndexInfo.ID]
-	if !ok || idx.Len() == 0 || idx.LastAnalyzePos.IsNull() {
-		return analyzeTask
-	}
-	var oldHist *statistics.Histogram
-	if statistics.IsAnalyzed(idx.Flag) {
-		exec := analyzeTask.idxExec
-		if idx.CMSketch != nil {
-			width, depth := idx.CMSketch.GetWidthAndDepth()
-			exec.analyzePB.IdxReq.CmsketchWidth = &width
-			exec.analyzePB.IdxReq.CmsketchDepth = &depth
-		}
-		oldHist = idx.Histogram.Copy()
-	} else {
-		_, bktID := idx.LessRowCountWithBktIdx(idx.LastAnalyzePos)
-		if bktID == 0 {
-			return analyzeTask
-		}
-		oldHist = idx.TruncateHistogram(bktID)
-	}
-	oldHist = oldHist.RemoveUpperBound()
-	analyzeTask.taskType = idxIncrementalTask
-	analyzeTask.idxIncrementalExec = &analyzeIndexIncrementalExec{AnalyzeIndexExec: *analyzeTask.idxExec, oldHist: oldHist, oldCMS: idx.CMSketch}
-	analyzeTask.job = &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: task.PartitionName, JobInfo: "analyze incremental index " + task.IndexInfo.Name.O}
-	return analyzeTask
-}
-
-func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeColumnsTask, opts map[ast.AnalyzeOptionType]uint64, autoAnalyze string) *analyzeTask {
+func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeColumnsTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
 	cols := task.ColsInfo
 	if task.PKInfo != nil {
 		cols = append([]*model.ColumnInfo{task.PKInfo}, cols...)
@@ -1402,105 +1366,7 @@ func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeCo
 		CmsketchWidth: &width,
 	}
 	b.err = plannercore.SetPBColumnsDefaultValue(b.ctx, e.analyzePB.ColReq.ColumnsInfo, cols)
-	job := &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: task.PartitionName, JobInfo: autoAnalyze + "analyze columns"}
-	return &analyzeTask{taskType: colTask, colExec: e, job: job}
-}
-
-func (b *executorBuilder) buildAnalyzePKIncremental(task plannercore.AnalyzeColumnsTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
-	h := domain.GetDomain(b.ctx).StatsHandle()
-	statsTbl := h.GetPartitionStats(&model.TableInfo{}, task.PhysicalTableID)
-	analyzeTask := b.buildAnalyzeColumnsPushdown(task, opts, "")
-	if statsTbl.Pseudo {
-		return analyzeTask
-	}
-	col, ok := statsTbl.Columns[task.PKInfo.ID]
-	if !ok || col.Len() == 0 || col.LastAnalyzePos.IsNull() {
-		return analyzeTask
-	}
-	var oldHist *statistics.Histogram
-	if statistics.IsAnalyzed(col.Flag) {
-		oldHist = col.Histogram.Copy()
-	} else {
-		d, err := col.LastAnalyzePos.ConvertTo(b.ctx.GetSessionVars().StmtCtx, col.Tp)
-		if err != nil {
-			b.err = err
-			return nil
-		}
-		_, bktID := col.LessRowCountWithBktIdx(d)
-		if bktID == 0 {
-			return analyzeTask
-		}
-		oldHist = col.TruncateHistogram(bktID)
-		oldHist.NDV = int64(oldHist.TotalRowCount())
-	}
-	exec := analyzeTask.colExec
-	analyzeTask.taskType = pkIncrementalTask
-	analyzeTask.colIncrementalExec = &analyzePKIncrementalExec{AnalyzeColumnsExec: *exec, oldHist: oldHist}
-	analyzeTask.job = &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: task.PartitionName, JobInfo: "analyze incremental primary key"}
-	return analyzeTask
-}
-
-func (b *executorBuilder) buildAnalyzeFastColumn(e *AnalyzeExec, task plannercore.AnalyzeColumnsTask, opts map[ast.AnalyzeOptionType]uint64) {
-	findTask := false
-	for _, eTask := range e.tasks {
-		if eTask.fastExec.physicalTableID == task.PhysicalTableID {
-			eTask.fastExec.colsInfo = append(eTask.fastExec.colsInfo, task.ColsInfo...)
-			findTask = true
-			break
-		}
-	}
-	if !findTask {
-		var concurrency int
-		concurrency, b.err = getBuildStatsConcurrency(e.ctx)
-		if b.err != nil {
-			return
-		}
-		e.tasks = append(e.tasks, &analyzeTask{
-			taskType: fastTask,
-			fastExec: &AnalyzeFastExec{
-				ctx:             b.ctx,
-				physicalTableID: task.PhysicalTableID,
-				colsInfo:        task.ColsInfo,
-				pkInfo:          task.PKInfo,
-				opts:            opts,
-				tblInfo:         task.TblInfo,
-				concurrency:     concurrency,
-				wg:              &sync.WaitGroup{},
-			},
-			job: &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: task.PartitionName, JobInfo: "fast analyze columns"},
-		})
-	}
-}
-
-func (b *executorBuilder) buildAnalyzeFastIndex(e *AnalyzeExec, task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64) {
-	findTask := false
-	for _, eTask := range e.tasks {
-		if eTask.fastExec.physicalTableID == task.PhysicalTableID {
-			eTask.fastExec.idxsInfo = append(eTask.fastExec.idxsInfo, task.IndexInfo)
-			findTask = true
-			break
-		}
-	}
-	if !findTask {
-		var concurrency int
-		concurrency, b.err = getBuildStatsConcurrency(e.ctx)
-		if b.err != nil {
-			return
-		}
-		e.tasks = append(e.tasks, &analyzeTask{
-			taskType: fastTask,
-			fastExec: &AnalyzeFastExec{
-				ctx:             b.ctx,
-				physicalTableID: task.PhysicalTableID,
-				idxsInfo:        []*model.IndexInfo{task.IndexInfo},
-				opts:            opts,
-				tblInfo:         task.TblInfo,
-				concurrency:     concurrency,
-				wg:              &sync.WaitGroup{},
-			},
-			job: &statistics.AnalyzeJob{DBName: task.DBName, TableName: task.TableName, PartitionName: "fast analyze index " + task.IndexInfo.Name.O},
-		})
-	}
+	return &analyzeTask{taskType: colTask, colExec: e}
 }
 
 func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
@@ -1509,35 +1375,14 @@ func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
 		tasks:        make([]*analyzeTask, 0, len(v.ColTasks)+len(v.IdxTasks)),
 		wg:           &sync.WaitGroup{},
 	}
-	enableFastAnalyze := b.ctx.GetSessionVars().EnableFastAnalyze
-	autoAnalyze := ""
-	if b.ctx.GetSessionVars().InRestrictedSQL {
-		autoAnalyze = "auto "
-	}
 	for _, task := range v.ColTasks {
-		if task.Incremental {
-			e.tasks = append(e.tasks, b.buildAnalyzePKIncremental(task, v.Opts))
-		} else {
-			if enableFastAnalyze {
-				b.buildAnalyzeFastColumn(e, task, v.Opts)
-			} else {
-				e.tasks = append(e.tasks, b.buildAnalyzeColumnsPushdown(task, v.Opts, autoAnalyze))
-			}
-		}
+		e.tasks = append(e.tasks, b.buildAnalyzeColumnsPushdown(task, v.Opts))
 		if b.err != nil {
 			return nil
 		}
 	}
 	for _, task := range v.IdxTasks {
-		if task.Incremental {
-			e.tasks = append(e.tasks, b.buildAnalyzeIndexIncremental(task, v.Opts))
-		} else {
-			if enableFastAnalyze {
-				b.buildAnalyzeFastIndex(e, task, v.Opts)
-			} else {
-				e.tasks = append(e.tasks, b.buildAnalyzeIndexPushdown(task, v.Opts, autoAnalyze))
-			}
-		}
+		e.tasks = append(e.tasks, b.buildAnalyzeIndexPushdown(task, v.Opts))
 		if b.err != nil {
 			return nil
 		}
@@ -1680,17 +1525,6 @@ func (b *executorBuilder) buildIndexLookUpJoin(v *plannercore.PhysicalIndexJoin)
 	return e
 }
 
-// containsLimit tests if the execs contains Limit because we do not know whether `Limit` has consumed all of its' source,
-// so the feedback may not be accurate.
-func containsLimit(execs []*tipb.Executor) bool {
-	for _, exec := range execs {
-		if exec.Limit != nil {
-			return true
-		}
-	}
-	return false
-}
-
 func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableReader) (*TableReaderExecutor, error) {
 	dagReq, streaming, err := b.constructDAGReq(v.TablePlans)
 	if err != nil {
@@ -1722,16 +1556,6 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		storeType:      v.StoreType,
 	}
 	e.buildVirtualColumnInfo()
-	if containsLimit(dagReq.Executors) {
-		e.feedback = statistics.NewQueryFeedback(0, nil, 0, ts.Desc)
-	} else {
-		e.feedback = statistics.NewQueryFeedback(getPhysicalTableID(tbl), ts.Hist, int64(ts.StatsCount()), ts.Desc)
-	}
-	collect := e.feedback.CollectFeedback(len(ts.Ranges))
-	if !collect {
-		e.feedback.Invalidate()
-	}
-	e.dagPB.CollectRangeCounts = &collect
 
 	for i := range v.Schema().Columns {
 		dagReq.OutputOffsets = append(dagReq.OutputOffsets, uint32(i))
@@ -1792,16 +1616,6 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		plans:           v.IndexPlans,
 		outputColumns:   v.OutputColumns,
 	}
-	if containsLimit(dagReq.Executors) {
-		e.feedback = statistics.NewQueryFeedback(0, nil, 0, is.Desc)
-	} else {
-		e.feedback = statistics.NewQueryFeedback(e.physicalTableID, is.Hist, int64(is.StatsCount()), is.Desc)
-	}
-	collect := e.feedback.CollectFeedback(len(is.Ranges))
-	if !collect {
-		e.feedback.Invalidate()
-	}
-	e.dagPB.CollectRangeCounts = &collect
 
 	for _, col := range v.OutputColumns {
 		dagReq.OutputOffsets = append(dagReq.OutputOffsets, uint32(col.Index))
@@ -1873,19 +1687,6 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 		PushedLimit:       v.PushedLimit,
 	}
 
-	if containsLimit(indexReq.Executors) {
-		e.feedback = statistics.NewQueryFeedback(0, nil, 0, is.Desc)
-	} else {
-		e.feedback = statistics.NewQueryFeedback(getPhysicalTableID(tbl), is.Hist, int64(is.StatsCount()), is.Desc)
-	}
-	// do not collect the feedback for table request.
-	collectTable := false
-	e.tableRequest.CollectRangeCounts = &collectTable
-	collectIndex := e.feedback.CollectFeedback(len(is.Ranges))
-	if !collectIndex {
-		e.feedback.Invalidate()
-	}
-	e.dagPB.CollectRangeCounts = &collectIndex
 	if v.ExtraHandleCol != nil {
 		e.handleIdx = v.ExtraHandleCol.Index
 	}
@@ -2001,7 +1802,7 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
 	e.resultHandler = &tableResultHandler{}
-	result, err := builder.SelectResult(ctx, builder.ctx, kvReq, retTypes(e), e.feedback, getPhysicalPlanIDs(e.plans), e.id)
+	result, err := builder.SelectResult(ctx, builder.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
 	if err != nil {
 		return nil, err
 	}
@@ -2092,7 +1893,7 @@ func buildKvRangesForIndexJoin(ctx sessionctx.Context, tableID, indexID int64, l
 					ran.LowExclude = nextColRan.LowExclude
 					ran.HighExclude = nextColRan.HighExclude
 				}
-				tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges, nil)
+				tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -2101,7 +1902,7 @@ func buildKvRangesForIndexJoin(ctx sessionctx.Context, tableID, indexID int64, l
 			continue
 		}
 
-		tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges, nil)
+		tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges)
 		if err != nil {
 			return nil, err
 		}

@@ -23,14 +23,13 @@ import (
 	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
 // Select sends a DAG request, returns SelectResult.
 // In kvReq, KeyRanges is required, Concurrency/KeepOrder/Desc/IsolationLevel/Priority are optional.
-func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fieldTypes []*types.FieldType, fb *statistics.QueryFeedback) (SelectResult, error) {
+func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fieldTypes []*types.FieldType) (SelectResult, error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("distsql.Select", opentracing.ChildOf(span.Context()))
 		defer span1.Finish()
@@ -62,7 +61,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 			rowLen:     len(fieldTypes),
 			fieldTypes: fieldTypes,
 			ctx:        sctx,
-			feedback:   fb,
 		}, nil
 	}
 	encodetype := tipb.EncodeType_TypeDefault
@@ -75,7 +73,6 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 		rowLen:     len(fieldTypes),
 		fieldTypes: fieldTypes,
 		ctx:        sctx,
-		feedback:   fb,
 		encodeType: encodetype,
 	}, nil
 }
@@ -84,8 +81,8 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 // The difference from Select is that SelectWithRuntimeStats will set copPlanIDs into selectResult,
 // which can help selectResult to collect runtime stats.
 func SelectWithRuntimeStats(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
-	fieldTypes []*types.FieldType, fb *statistics.QueryFeedback, copPlanIDs []fmt.Stringer, rootPlanID fmt.Stringer) (SelectResult, error) {
-	sr, err := Select(ctx, sctx, kvReq, fieldTypes, fb)
+	fieldTypes []*types.FieldType, copPlanIDs []fmt.Stringer, rootPlanID fmt.Stringer) (SelectResult, error) {
+	sr, err := Select(ctx, sctx, kvReq, fieldTypes)
 	if err == nil {
 		if selectResult, ok := sr.(*selectResult); ok {
 			selectResult.copPlanIDs = copPlanIDs
@@ -109,7 +106,6 @@ func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.
 	result := &selectResult{
 		label:      "analyze",
 		resp:       resp,
-		feedback:   statistics.NewQueryFeedback(0, nil, 0, false),
 		encodeType: tipb.EncodeType_TypeDefault,
 	}
 	return result, nil
@@ -124,7 +120,6 @@ func Checksum(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv
 	result := &selectResult{
 		label:      "checksum",
 		resp:       resp,
-		feedback:   statistics.NewQueryFeedback(0, nil, 0, false),
 		encodeType: tipb.EncodeType_TypeDefault,
 	}
 	return result, nil

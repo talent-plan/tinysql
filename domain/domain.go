@@ -781,7 +781,7 @@ func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 	owner := do.newOwnerManager(handle.StatsPrompt, handle.StatsOwnerKey)
 	do.wg.Add(1)
 	do.SetStatsUpdating(true)
-	go do.updateStatsWorker(ctx, owner)
+	go do.updateStatsWorker(owner)
 	if RunAutoAnalyze {
 		do.wg.Add(1)
 		go do.autoAnalyzeWorker(owner)
@@ -840,17 +840,13 @@ func (do *Domain) loadStatsWorker() {
 	}
 }
 
-func (do *Domain) updateStatsWorker(ctx sessionctx.Context, owner owner.Manager) {
+func (do *Domain) updateStatsWorker(owner owner.Manager) {
 	defer recoverInDomain("updateStatsWorker", false)
 	lease := do.statsLease
 	deltaUpdateTicker := time.NewTicker(20 * lease)
 	defer deltaUpdateTicker.Stop()
 	gcStatsTicker := time.NewTicker(100 * lease)
 	defer gcStatsTicker.Stop()
-	dumpFeedbackTicker := time.NewTicker(200 * lease)
-	defer dumpFeedbackTicker.Stop()
-	loadFeedbackTicker := time.NewTicker(5 * lease)
-	defer loadFeedbackTicker.Stop()
 	statsHandle := do.StatsHandle()
 	defer func() {
 		do.SetStatsUpdating(false)
@@ -871,21 +867,6 @@ func (do *Domain) updateStatsWorker(ctx sessionctx.Context, owner owner.Manager)
 			err := statsHandle.DumpStatsDeltaToKV(handle.DumpDelta)
 			if err != nil {
 				logutil.BgLogger().Debug("dump stats delta failed", zap.Error(err))
-			}
-			statsHandle.UpdateErrorRate(do.InfoSchema())
-		case <-loadFeedbackTicker.C:
-			statsHandle.UpdateStatsByLocalFeedback(do.InfoSchema())
-			if !owner.IsOwner() {
-				continue
-			}
-			err := statsHandle.HandleUpdateStats(do.InfoSchema())
-			if err != nil {
-				logutil.BgLogger().Debug("update stats using feedback failed", zap.Error(err))
-			}
-		case <-dumpFeedbackTicker.C:
-			err := statsHandle.DumpStatsFeedbackToKV()
-			if err != nil {
-				logutil.BgLogger().Debug("dump stats feedback failed", zap.Error(err))
 			}
 		case <-gcStatsTicker.C:
 			if !owner.IsOwner() {

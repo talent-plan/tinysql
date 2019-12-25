@@ -51,8 +51,6 @@ type Handle struct {
 	mu struct {
 		sync.Mutex
 		ctx sessionctx.Context
-		// rateMap contains the error rate delta from feedback.
-		rateMap errorRateDeltaMap
 		// pid2tid is the map from partition ID to table ID.
 		pid2tid map[int64]int64
 		// schemaVersion is the version of information schema when `pid2tid` is built.
@@ -75,8 +73,6 @@ type Handle struct {
 	listHead *SessionStatsCollector
 	// globalMap contains all the delta map from collectors when we dump them to KV.
 	globalMap tableDeltaMap
-	// feedback is used to store query feedback info.
-	feedback []*statistics.QueryFeedback
 
 	lease atomic2.Duration
 }
@@ -88,27 +84,21 @@ func (h *Handle) Clear() {
 	for len(h.ddlEventCh) > 0 {
 		<-h.ddlEventCh
 	}
-	h.feedback = h.feedback[:0]
 	h.mu.ctx.GetSessionVars().InitChunkSize = 1
 	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
 	h.mu.ctx.GetSessionVars().EnableChunkRPC = false
 	h.mu.ctx.GetSessionVars().ProjectionConcurrency = 0
-	h.listHead = &SessionStatsCollector{mapper: make(tableDeltaMap), rateMap: make(errorRateDeltaMap)}
+	h.listHead = &SessionStatsCollector{mapper: make(tableDeltaMap)}
 	h.globalMap = make(tableDeltaMap)
-	h.mu.rateMap = make(errorRateDeltaMap)
 	h.mu.Unlock()
 }
-
-// MaxQueryFeedbackCount is the max number of feedback that cache in memory.
-var MaxQueryFeedbackCount = atomic2.NewInt64(1 << 10)
 
 // NewHandle creates a Handle for update stats.
 func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
 	handle := &Handle{
 		ddlEventCh: make(chan *util.Event, 100),
-		listHead:   &SessionStatsCollector{mapper: make(tableDeltaMap), rateMap: make(errorRateDeltaMap)},
+		listHead:   &SessionStatsCollector{mapper: make(tableDeltaMap)},
 		globalMap:  make(tableDeltaMap),
-		feedback:   make([]*statistics.QueryFeedback, 0, MaxQueryFeedbackCount.Load()),
 	}
 	handle.lease.Store(lease)
 	// It is safe to use it concurrently because the exec won't touch the ctx.
@@ -116,7 +106,6 @@ func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
 		handle.restrictedExec = exec
 	}
 	handle.mu.ctx = ctx
-	handle.mu.rateMap = make(errorRateDeltaMap)
 	handle.statsCache.Store(statsCache{tables: make(map[int64]*statistics.Table)})
 	return handle
 }
@@ -129,14 +118,6 @@ func (h *Handle) Lease() time.Duration {
 // SetLease sets the stats lease.
 func (h *Handle) SetLease(lease time.Duration) {
 	h.lease.Store(lease)
-}
-
-// GetQueryFeedback gets the query feedback. It is only use in test.
-func (h *Handle) GetQueryFeedback() []*statistics.QueryFeedback {
-	defer func() {
-		h.feedback = h.feedback[:0]
-	}()
-	return h.feedback
 }
 
 // DurationToTS converts duration to timestamp.
@@ -338,9 +319,6 @@ func (h *Handle) FlushStats() {
 	if err := h.DumpStatsDeltaToKV(DumpAll); err != nil {
 		logutil.BgLogger().Debug("[stats] dump stats delta fail", zap.Error(err))
 	}
-	if err := h.DumpStatsFeedbackToKV(); err != nil {
-		logutil.BgLogger().Debug("[stats] dump stats feedback fail", zap.Error(err))
-	}
 }
 
 func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.CMSketch, err error) {
@@ -363,16 +341,6 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, t
 	histVer := row.GetUint64(4)
 	nullCount := row.GetInt64(5)
 	idx := table.Indices[histID]
-	errorRate := statistics.ErrorRate{}
-	flag := row.GetInt64(8)
-	lastAnalyzePos := row.GetDatum(10, types.NewFieldType(mysql.TypeBlob))
-	if statistics.IsAnalyzed(flag) {
-		h.mu.Lock()
-		h.mu.rateMap.clear(table.PhysicalID, histID, true)
-		h.mu.Unlock()
-	} else if idx != nil {
-		errorRate = idx.ErrorRate
-	}
 	for _, idxInfo := range tableInfo.Indices {
 		if histID != idxInfo.ID {
 			continue
@@ -386,7 +354,7 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, t
 			if err != nil {
 				return errors.Trace(err)
 			}
-			idx = &statistics.Index{Histogram: *hg, CMSketch: cms, Info: idxInfo, ErrorRate: errorRate, StatsVer: row.GetInt64(7), Flag: flag, LastAnalyzePos: *lastAnalyzePos.Copy()}
+			idx = &statistics.Index{Histogram: *hg, CMSketch: cms, Info: idxInfo, StatsVer: row.GetInt64(7)}
 		}
 		break
 	}
@@ -405,17 +373,7 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 	nullCount := row.GetInt64(5)
 	totColSize := row.GetInt64(6)
 	correlation := row.GetFloat64(9)
-	lastAnalyzePos := row.GetDatum(10, types.NewFieldType(mysql.TypeBlob))
 	col := table.Columns[histID]
-	errorRate := statistics.ErrorRate{}
-	flag := row.GetInt64(8)
-	if statistics.IsAnalyzed(flag) {
-		h.mu.Lock()
-		h.mu.rateMap.clear(table.PhysicalID, histID, false)
-		h.mu.Unlock()
-	} else if col != nil {
-		errorRate = col.ErrorRate
-	}
 	for _, colInfo := range tableInfo.Columns {
 		if histID != colInfo.ID {
 			continue
@@ -440,10 +398,7 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 				Histogram:      *statistics.NewHistogram(histID, distinct, nullCount, histVer, &colInfo.FieldType, 0, totColSize),
 				Info:           colInfo,
 				Count:          count + nullCount,
-				ErrorRate:      errorRate,
 				IsHandle:       tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
-				Flag:           flag,
-				LastAnalyzePos: *lastAnalyzePos.Copy(),
 			}
 			col.Histogram.Correlation = correlation
 			break
@@ -463,10 +418,7 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 				Info:           colInfo,
 				CMSketch:       cms,
 				Count:          int64(hg.TotalRowCount()),
-				ErrorRate:      errorRate,
 				IsHandle:       tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
-				Flag:           flag,
-				LastAnalyzePos: *lastAnalyzePos.Copy(),
 			}
 			break
 		}
@@ -533,7 +485,7 @@ func (h *Handle) tableStatsFromStorage(tableInfo *model.TableInfo, physicalID in
 }
 
 // SaveStatsToStorage saves the stats to storage.
-func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg *statistics.Histogram, cms *statistics.CMSketch, isAnalyzed int64) (err error) {
+func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg *statistics.Histogram, cms *statistics.CMSketch) (err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ctx := context.TODO()
@@ -567,15 +519,10 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	for _, meta := range cms.TopN() {
 		sqls = append(sqls, fmt.Sprintf("insert into mysql.stats_top_n (table_id, is_index, hist_id, value, count) values (%d, %d, %d, X'%X', %d)", tableID, isIndex, hg.ID, meta.Data, meta.Count))
 	}
-	flag := 0
-	if isAnalyzed == 1 {
-		flag = statistics.AnalyzeFlag
-	}
 	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_histograms (table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver, flag, correlation) values (%d, %d, %d, %d, %d, %d, X'%X', %d, %d, %d, %f)",
-		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, statistics.CurStatsVersion, flag, hg.Correlation))
+		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, statistics.CurStatsVersion, 0, hg.Correlation))
 	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
 	sc := h.mu.ctx.GetSessionVars().StmtCtx
-	var lastAnalyzePos []byte
 	for i := range hg.Buckets {
 		count := hg.Buckets[i].Count
 		if i > 0 {
@@ -586,18 +533,12 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 		if err != nil {
 			return
 		}
-		if i == len(hg.Buckets)-1 {
-			lastAnalyzePos = upperBound.GetBytes()
-		}
 		var lowerBound types.Datum
 		lowerBound, err = hg.GetLower(i).ConvertTo(sc, types.NewFieldType(mysql.TypeBlob))
 		if err != nil {
 			return
 		}
 		sqls = append(sqls, fmt.Sprintf("insert into mysql.stats_buckets(table_id, is_index, hist_id, bucket_id, count, repeats, lower_bound, upper_bound) values(%d, %d, %d, %d, %d, %d, X'%X', X'%X')", tableID, isIndex, hg.ID, i, count, hg.Buckets[i].Repeat, lowerBound.GetBytes(), upperBound.GetBytes()))
-	}
-	if isAnalyzed == 1 && len(lastAnalyzePos) > 0 {
-		sqls = append(sqls, fmt.Sprintf("update mysql.stats_histograms set last_analyze_pos = X'%X' where table_id = %d and is_index = %d and hist_id = %d", lastAnalyzePos, tableID, isIndex, hg.ID))
 	}
 	return execSQLs(context.Background(), exec, sqls)
 }
