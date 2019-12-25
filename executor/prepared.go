@@ -201,7 +201,6 @@ func (e *PrepareExec) Next(ctx context.Context, req *chunk.Chunk) error {
 
 	preparedObj := &plannercore.CachedPrepareStmt{
 		PreparedAst: prepared,
-		VisitInfos:  destBuilder.GetVisitInfo(),
 	}
 	return vars.AddPreparedStmt(e.ID, preparedObj)
 }
@@ -308,7 +307,6 @@ func CompileExecutePreparedStmt(ctx context.Context, sctx sessionctx.Context,
 			return nil, errors.Errorf("invalid CachedPrepareStmt type")
 		}
 		stmt.Text = preparedObj.PreparedAst.Stmt.Text()
-		sctx.GetSessionVars().StmtCtx.OriginalSQL = stmt.Text
 	}
 	return stmt, nil
 }

@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
@@ -124,17 +123,6 @@ type StatementContext struct {
 	nowTs          time.Time // use this variable for now/current_timestamp calculation/cache for one stmt
 	stmtTimeCached bool
 	StmtType       string
-	OriginalSQL    string
-	digestMemo     struct {
-		sync.Once
-		normalized string
-		digest     string
-	}
-	// planNormalized use for cache the normalized plan, avoid duplicate builds.
-	planNormalized string
-	planDigest     string
-	Tables         []TableEntry
-	PointExec      bool // for point update cached execution, Constant expression need to set "paramMarker"
 }
 
 // StmtHints are SessionVars related sql hints.
@@ -164,31 +152,6 @@ func (sc *StatementContext) GetNowTsCached() time.Time {
 // ResetNowTs resetter for nowTs, clear cached time flag
 func (sc *StatementContext) ResetNowTs() {
 	sc.stmtTimeCached = false
-}
-
-// SQLDigest gets normalized and digest for provided sql.
-// it will cache result after first calling.
-func (sc *StatementContext) SQLDigest() (normalized, sqlDigest string) {
-	sc.digestMemo.Do(func() {
-		sc.digestMemo.normalized, sc.digestMemo.digest = parser.NormalizeDigest(sc.OriginalSQL)
-	})
-	return sc.digestMemo.normalized, sc.digestMemo.digest
-}
-
-// GetPlanDigest gets the normalized plan and plan digest.
-func (sc *StatementContext) GetPlanDigest() (normalized, planDigest string) {
-	return sc.planNormalized, sc.planDigest
-}
-
-// SetPlanDigest sets the normalized plan and plan digest.
-func (sc *StatementContext) SetPlanDigest(normalized, planDigest string) {
-	sc.planNormalized, sc.planDigest = normalized, planDigest
-}
-
-// TableEntry presents table in db.
-type TableEntry struct {
-	DB    string
-	Table string
 }
 
 // AddAffectedRows adds affected rows.

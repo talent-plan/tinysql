@@ -136,11 +136,6 @@ func (e *Execute) OptimizePreparedPlan(ctx context.Context, sctx sessionctx.Cont
 	}
 
 	if prepared.SchemaVersion != is.SchemaMetaVersion() {
-		// In order to avoid some correctness issues, we have to clear the
-		// cached plan once the schema version is changed.
-		// Cached plan in prepared struct does NOT have a "cache key" with
-		// schema version like prepared plan cache key
-		prepared.CachedPlan = nil
 		preparedObj.Executor = nil
 		// If the schema version has changed we need to preprocess it again,
 		// if this time it failed, the real reason for the error is schema changed.
@@ -160,22 +155,6 @@ func (e *Execute) OptimizePreparedPlan(ctx context.Context, sctx sessionctx.Cont
 
 func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, is infoschema.InfoSchema, preparedStmt *CachedPrepareStmt) error {
 	prepared := preparedStmt.PreparedAst
-	if prepared.CachedPlan != nil {
-		// Rewriting the expression in the select.where condition  will convert its
-		// type from "paramMarker" to "Constant".When Point Select queries are executed,
-		// the expression in the where condition will not be evaluated,
-		// so you don't need to consider whether prepared.useCache is enabled.
-		plan := prepared.CachedPlan.(Plan)
-		names := prepared.CachedNames.(types.NameSlice)
-		err := e.rebuildRange(plan)
-		if err != nil {
-			return err
-		}
-		e.names = names
-		e.Plan = plan
-		sctx.GetSessionVars().StmtCtx.PointExec = true
-		return nil
-	}
 	p, names, err := OptimizeAstNode(ctx, sctx, prepared.Stmt, is)
 	if err != nil {
 		return err

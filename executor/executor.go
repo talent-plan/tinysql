@@ -1193,8 +1193,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 			return
 		}
 	}
-	// execute missed stmtID uses empty sql
-	sc.OriginalSQL = s.Text()
 	if explainStmt, ok := s.(*ast.ExplainStmt); ok {
 		sc.InExplainStmt = true
 		sc.CastStrToIntStrict = true

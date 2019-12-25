@@ -40,8 +40,6 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 		return nil, nil, err
 	}
 
-	sctx.GetSessionVars().StmtCtx.Tables = builder.GetDBTableInfo()
-
 	// Handle the execute statement.
 	if execPlan, ok := p.(*plannercore.Execute); ok {
 		err := execPlan.OptimizePreparedPlan(ctx, sctx, is)

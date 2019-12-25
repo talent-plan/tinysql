@@ -20,7 +20,7 @@ import (
 // CachedPrepareStmt store prepared ast from PrepareExec and other related fields
 type CachedPrepareStmt struct {
 	PreparedAst *ast.Prepared
-	VisitInfos  []visitInfo
+
 	ColumnInfos interface{}
 	Executor    interface{}
 }
