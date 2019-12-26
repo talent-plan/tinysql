@@ -48,7 +48,6 @@ var (
 	_ LogicalPlan = &LogicalSort{}
 	_ LogicalPlan = &LogicalLock{}
 	_ LogicalPlan = &LogicalLimit{}
-	_ LogicalPlan = &LogicalWindow{}
 )
 
 // JoinType contains CrossJoin, InnerJoin, LeftOuterJoin, RightOuterJoin, FullOuterJoin, SemiJoin.
@@ -820,41 +819,6 @@ type LogicalLock struct {
 
 	Lock         ast.SelectLockType
 	tblID2Handle map[int64][]*expression.Column
-}
-
-// WindowFrame represents a window function frame.
-type WindowFrame struct {
-	Type  ast.FrameType
-	Start *FrameBound
-	End   *FrameBound
-}
-
-// FrameBound is the boundary of a frame.
-type FrameBound struct {
-	Type      ast.BoundType
-	UnBounded bool
-	Num       uint64
-	// CalcFuncs is used for range framed windows.
-	// We will build the date_add or date_sub functions for frames like `INTERVAL '2:30' MINUTE_SECOND FOLLOWING`,
-	// and plus or minus for frames like `1 preceding`.
-	CalcFuncs []expression.Expression
-	// CmpFuncs is used to decide whether one row is included in the current frame.
-	CmpFuncs []expression.CompareFunc
-}
-
-// LogicalWindow represents a logical window function plan.
-type LogicalWindow struct {
-	logicalSchemaProducer
-
-	WindowFuncDescs []*aggregation.WindowFuncDesc
-	PartitionBy     []property.Item
-	OrderBy         []property.Item
-	Frame           *WindowFrame
-}
-
-// GetWindowResultColumns returns the columns storing the result of the window function.
-func (p *LogicalWindow) GetWindowResultColumns() []*expression.Column {
-	return p.schema.Columns[p.schema.Len()-len(p.WindowFuncDescs):]
 }
 
 // extractCorColumnsBySchema only extracts the correlated columns that match the specified schema.

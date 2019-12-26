@@ -220,7 +220,6 @@ type PlanBuilder struct {
 	rewriterPool    []*expressionRewriter
 	rewriterCounter int
 
-	windowSpecs  map[string]*ast.WindowSpec
 	inUpdateStmt bool
 	// inStraightJoin represents whether the current "SELECT" statement has
 	// "STRAIGHT_JOIN" option.
@@ -467,22 +466,6 @@ func (b *PlanBuilder) detectSelectAgg(sel *ast.SelectStmt) bool {
 	if sel.OrderBy != nil {
 		for _, item := range sel.OrderBy.Items {
 			if ast.HasAggFlag(item.Expr) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (b *PlanBuilder) detectSelectWindow(sel *ast.SelectStmt) bool {
-	for _, f := range sel.Fields.Fields {
-		if ast.HasWindowFlag(f.Expr) {
-			return true
-		}
-	}
-	if sel.OrderBy != nil {
-		for _, item := range sel.OrderBy.Items {
-			if ast.HasWindowFlag(item.Expr) {
 				return true
 			}
 		}
@@ -1402,7 +1385,7 @@ func (b *PlanBuilder) buildSetValuesOfInsert(ctx context.Context, insert *ast.In
 			}
 			return ErrBadGeneratedColumn.GenWithStackByArgs(assign.Column.Name.O, tableInfo.Name.O)
 		}
-		expr, _, err := b.rewriteWithPreprocess(ctx, assign.Expr, mockTablePlan, nil, nil, true, checkRefColumn)
+		expr, _, err := b.rewriteWithPreprocess(ctx, assign.Expr, mockTablePlan, nil, true, checkRefColumn)
 		if err != nil {
 			return err
 		}
@@ -1474,7 +1457,7 @@ func (b *PlanBuilder) buildValuesListOfInsert(ctx context.Context, insert *ast.I
 					RetType: &x.Type,
 				}
 			default:
-				expr, _, err = b.rewriteWithPreprocess(ctx, valueItem, mockTablePlan, nil, nil, true, checkRefColumn)
+				expr, _, err = b.rewriteWithPreprocess(ctx, valueItem, mockTablePlan, nil, true, checkRefColumn)
 			}
 			if err != nil {
 				return err

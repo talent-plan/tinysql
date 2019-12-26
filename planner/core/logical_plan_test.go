@@ -22,7 +22,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/format"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -53,9 +52,7 @@ type testPlanSuite struct {
 func (s *testPlanSuite) SetUpSuite(c *C) {
 	s.is = infoschema.MockInfoSchema([]*model.TableInfo{MockSignedTable(), MockUnsignedTable(), MockView()})
 	s.ctx = MockContext()
-	s.ctx.GetSessionVars().EnableWindowFunction = true
 	s.Parser = parser.New()
-	s.Parser.EnableWindowFunc(true)
 
 	var err error
 	s.testData, err = testutil.LoadTestSuiteData("testdata", "plan_suite_unexported")
@@ -1017,62 +1014,6 @@ func (s *testPlanSuite) TestSelectView(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(ToString(p), Equals, tt.best, comment)
 	}
-}
-
-func (s *testPlanSuite) TestWindowFunction(c *C) {
-	defer testleak.AfterTest(c)()
-	var input, output []string
-	s.testData.GetTestCases(c, &input, &output)
-
-	ctx := context.TODO()
-	for i, tt := range input {
-		comment := Commentf("case:%v sql:%s", i, tt)
-		p, stmt, err := s.optimize(ctx, tt)
-		if err != nil {
-			s.testData.OnRecord(func() {
-				output[i] = err.Error()
-			})
-			c.Assert(err.Error(), Equals, output[i], comment)
-			continue
-		}
-		s.testData.OnRecord(func() {
-			output[i] = ToString(p)
-		})
-		c.Assert(ToString(p), Equals, output[i], comment)
-
-		var sb strings.Builder
-		// After restore, the result should be the same.
-		err = stmt.Restore(format.NewRestoreCtx(format.DefaultRestoreFlags, &sb))
-		c.Assert(err, IsNil)
-		p, _, err = s.optimize(ctx, sb.String())
-		if err != nil {
-			c.Assert(err.Error(), Equals, output[i], comment)
-			continue
-		}
-		c.Assert(ToString(p), Equals, output[i], comment)
-	}
-}
-
-func (s *testPlanSuite) optimize(ctx context.Context, sql string) (PhysicalPlan, ast.Node, error) {
-	stmt, err := s.ParseOneStmt(sql, "", "")
-	if err != nil {
-		return nil, nil, err
-	}
-	err = Preprocess(s.ctx, stmt, s.is)
-	if err != nil {
-		return nil, nil, err
-	}
-	builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
-	p, err := builder.Build(ctx, stmt)
-	if err != nil {
-		return nil, nil, err
-	}
-	p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
-	if err != nil {
-		return nil, nil, err
-	}
-	p, err = physicalOptimize(p.(LogicalPlan))
-	return p.(PhysicalPlan), stmt, err
 }
 
 func byItemsToProperty(byItems []*ByItems) *property.PhysicalProperty {

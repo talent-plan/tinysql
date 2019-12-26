@@ -45,24 +45,7 @@ var (
 	ErrNonUpdatableTable               = terror.ClassOptimizer.New(mysql.ErrNonUpdatableTable, mysql.MySQLErrName[mysql.ErrNonUpdatableTable])
 	ErrInternal                        = terror.ClassOptimizer.New(mysql.ErrInternal, mysql.MySQLErrName[mysql.ErrInternal])
 	ErrNonUniqTable                    = terror.ClassOptimizer.New(mysql.ErrNonuniqTable, mysql.MySQLErrName[mysql.ErrNonuniqTable])
-	ErrWindowInvalidWindowFuncUse      = terror.ClassOptimizer.New(mysql.ErrWindowInvalidWindowFuncUse, mysql.MySQLErrName[mysql.ErrWindowInvalidWindowFuncUse])
-	ErrWindowInvalidWindowFuncAliasUse = terror.ClassOptimizer.New(mysql.ErrWindowInvalidWindowFuncAliasUse, mysql.MySQLErrName[mysql.ErrWindowInvalidWindowFuncAliasUse])
-	ErrWindowNoSuchWindow              = terror.ClassOptimizer.New(mysql.ErrWindowNoSuchWindow, mysql.MySQLErrName[mysql.ErrWindowNoSuchWindow])
-	ErrWindowCircularityInWindowGraph  = terror.ClassOptimizer.New(mysql.ErrWindowCircularityInWindowGraph, mysql.MySQLErrName[mysql.ErrWindowCircularityInWindowGraph])
-	ErrWindowNoChildPartitioning       = terror.ClassOptimizer.New(mysql.ErrWindowNoChildPartitioning, mysql.MySQLErrName[mysql.ErrWindowNoChildPartitioning])
-	ErrWindowNoInherentFrame           = terror.ClassOptimizer.New(mysql.ErrWindowNoInherentFrame, mysql.MySQLErrName[mysql.ErrWindowNoInherentFrame])
-	ErrWindowNoRedefineOrderBy         = terror.ClassOptimizer.New(mysql.ErrWindowNoRedefineOrderBy, mysql.MySQLErrName[mysql.ErrWindowNoRedefineOrderBy])
-	ErrWindowDuplicateName             = terror.ClassOptimizer.New(mysql.ErrWindowDuplicateName, mysql.MySQLErrName[mysql.ErrWindowDuplicateName])
 	ErrPartitionClauseOnNonpartitioned = terror.ClassOptimizer.New(mysql.ErrPartitionClauseOnNonpartitioned, mysql.MySQLErrName[mysql.ErrPartitionClauseOnNonpartitioned])
-	ErrWindowFrameStartIllegal         = terror.ClassOptimizer.New(mysql.ErrWindowFrameStartIllegal, mysql.MySQLErrName[mysql.ErrWindowFrameStartIllegal])
-	ErrWindowFrameEndIllegal           = terror.ClassOptimizer.New(mysql.ErrWindowFrameEndIllegal, mysql.MySQLErrName[mysql.ErrWindowFrameEndIllegal])
-	ErrWindowFrameIllegal              = terror.ClassOptimizer.New(mysql.ErrWindowFrameIllegal, mysql.MySQLErrName[mysql.ErrWindowFrameIllegal])
-	ErrWindowRangeFrameOrderType       = terror.ClassOptimizer.New(mysql.ErrWindowRangeFrameOrderType, mysql.MySQLErrName[mysql.ErrWindowRangeFrameOrderType])
-	ErrWindowRangeFrameTemporalType    = terror.ClassOptimizer.New(mysql.ErrWindowRangeFrameTemporalType, mysql.MySQLErrName[mysql.ErrWindowRangeFrameTemporalType])
-	ErrWindowRangeFrameNumericType     = terror.ClassOptimizer.New(mysql.ErrWindowRangeFrameNumericType, mysql.MySQLErrName[mysql.ErrWindowRangeFrameNumericType])
-	ErrWindowRangeBoundNotConstant     = terror.ClassOptimizer.New(mysql.ErrWindowRangeBoundNotConstant, mysql.MySQLErrName[mysql.ErrWindowRangeBoundNotConstant])
-	ErrWindowRowsIntervalUse           = terror.ClassOptimizer.New(mysql.ErrWindowRowsIntervalUse, mysql.MySQLErrName[mysql.ErrWindowRowsIntervalUse])
-	ErrWindowFunctionIgnoresFrame      = terror.ClassOptimizer.New(mysql.ErrWindowFunctionIgnoresFrame, mysql.MySQLErrName[mysql.ErrWindowFunctionIgnoresFrame])
 	ErrUnsupportedOnGeneratedColumn    = terror.ClassOptimizer.New(mysql.ErrUnsupportedOnGeneratedColumn, mysql.MySQLErrName[mysql.ErrUnsupportedOnGeneratedColumn])
 	ErrPrivilegeCheckFail              = terror.ClassOptimizer.New(mysql.ErrPrivilegeCheckFail, mysql.MySQLErrName[mysql.ErrPrivilegeCheckFail])
 	ErrInvalidWildCard                 = terror.ClassOptimizer.New(mysql.ErrInvalidWildCard, mysql.MySQLErrName[mysql.ErrInvalidWildCard])
@@ -112,28 +95,11 @@ func init() {
 		mysql.ErrMixOfGroupFuncAndFieldsIncompatible: mysql.ErrMixOfGroupFuncAndFieldsIncompatible,
 		mysql.ErrWrongNumberOfColumnsInSelect:        mysql.ErrWrongNumberOfColumnsInSelect,
 		mysql.ErrWrongValueCountOnRow:                mysql.ErrWrongValueCountOnRow,
-		mysql.ErrWindowInvalidWindowFuncUse:          mysql.ErrWindowInvalidWindowFuncUse,
-		mysql.ErrWindowInvalidWindowFuncAliasUse:     mysql.ErrWindowInvalidWindowFuncAliasUse,
-		mysql.ErrWindowNoSuchWindow:                  mysql.ErrWindowNoSuchWindow,
-		mysql.ErrWindowCircularityInWindowGraph:      mysql.ErrWindowCircularityInWindowGraph,
-		mysql.ErrWindowNoChildPartitioning:           mysql.ErrWindowNoChildPartitioning,
-		mysql.ErrWindowNoInherentFrame:               mysql.ErrWindowNoInherentFrame,
-		mysql.ErrWindowNoRedefineOrderBy:             mysql.ErrWindowNoRedefineOrderBy,
-		mysql.ErrWindowDuplicateName:                 mysql.ErrWindowDuplicateName,
 		mysql.ErrPartitionClauseOnNonpartitioned:     mysql.ErrPartitionClauseOnNonpartitioned,
 		mysql.ErrDBaccessDenied:                      mysql.ErrDBaccessDenied,
 		mysql.ErrTableaccessDenied:                   mysql.ErrTableaccessDenied,
 		mysql.ErrSpecificAccessDenied:                mysql.ErrSpecificAccessDenied,
 		mysql.ErrViewNoExplain:                       mysql.ErrViewNoExplain,
-		mysql.ErrWindowFrameStartIllegal:             mysql.ErrWindowFrameStartIllegal,
-		mysql.ErrWindowFrameEndIllegal:               mysql.ErrWindowFrameEndIllegal,
-		mysql.ErrWindowFrameIllegal:                  mysql.ErrWindowFrameIllegal,
-		mysql.ErrWindowRangeFrameOrderType:           mysql.ErrWindowRangeFrameOrderType,
-		mysql.ErrWindowRangeFrameTemporalType:        mysql.ErrWindowRangeFrameTemporalType,
-		mysql.ErrWindowRangeFrameNumericType:         mysql.ErrWindowRangeFrameNumericType,
-		mysql.ErrWindowRangeBoundNotConstant:         mysql.ErrWindowRangeBoundNotConstant,
-		mysql.ErrWindowRowsIntervalUse:               mysql.ErrWindowRowsIntervalUse,
-		mysql.ErrWindowFunctionIgnoresFrame:          mysql.ErrWindowFunctionIgnoresFrame,
 		mysql.ErrUnsupportedOnGeneratedColumn:        mysql.ErrUnsupportedOnGeneratedColumn,
 		mysql.ErrNoSuchThread:                        mysql.ErrNoSuchThread,
 		mysql.ErrAccessDenied:                        mysql.ErrAccessDenied,

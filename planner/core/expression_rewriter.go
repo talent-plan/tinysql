@@ -81,7 +81,7 @@ func (b *PlanBuilder) rewriteInsertOnDuplicateUpdate(ctx context.Context, exprNo
 // asScalar means whether this expression must be treated as a scalar expression.
 // And this function returns a result expression, a new plan that may have apply or semi-join.
 func (b *PlanBuilder) rewrite(ctx context.Context, exprNode ast.ExprNode, p LogicalPlan, aggMapper map[*ast.AggregateFuncExpr]int, asScalar bool) (expression.Expression, LogicalPlan, error) {
-	expr, resultPlan, err := b.rewriteWithPreprocess(ctx, exprNode, p, aggMapper, nil, asScalar, nil)
+	expr, resultPlan, err := b.rewriteWithPreprocess(ctx, exprNode, p, aggMapper, asScalar, nil)
 	return expr, resultPlan, err
 }
 
@@ -92,7 +92,6 @@ func (b *PlanBuilder) rewriteWithPreprocess(
 	ctx context.Context,
 	exprNode ast.ExprNode,
 	p LogicalPlan, aggMapper map[*ast.AggregateFuncExpr]int,
-	windowMapper map[*ast.WindowFuncExpr]int,
 	asScalar bool,
 	preprocess func(ast.Node) ast.Node,
 ) (expression.Expression, LogicalPlan, error) {
@@ -109,7 +108,6 @@ func (b *PlanBuilder) rewriteWithPreprocess(
 	}
 
 	rewriter.aggrMap = aggMapper
-	rewriter.windowMap = windowMapper
 	rewriter.asScalar = asScalar
 	rewriter.preprocess = preprocess
 
@@ -189,7 +187,6 @@ type expressionRewriter struct {
 	names      []*types.FieldName
 	err        error
 	aggrMap    map[*ast.AggregateFuncExpr]int
-	windowMap  map[*ast.WindowFuncExpr]int
 	b          *PlanBuilder
 	sctx       sessionctx.Context
 	ctx        context.Context
@@ -369,17 +366,6 @@ func (er *expressionRewriter) Enter(inNode ast.Node) (ast.Node, bool) {
 		}
 		col := schema.Columns[idx]
 		er.ctxStackAppend(expression.NewValuesFunc(er.sctx, col.Index, col.RetType), types.EmptyName)
-		return inNode, true
-	case *ast.WindowFuncExpr:
-		index, ok := -1, false
-		if er.windowMap != nil {
-			index, ok = er.windowMap[v]
-		}
-		if !ok {
-			er.err = ErrWindowInvalidWindowFuncUse.GenWithStackByArgs(strings.ToLower(v.F))
-			return inNode, true
-		}
-		er.ctxStackAppend(er.schema.Columns[index], er.names[index])
 		return inNode, true
 	case *ast.FuncCallExpr:
 		if _, ok := expression.DisableFoldFunctions[v.FnName.L]; ok {
@@ -903,7 +889,7 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 	}
 	switch v := inNode.(type) {
 	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause,
-		*ast.SubqueryExpr, *ast.ExistsSubqueryExpr, *ast.CompareSubqueryExpr, *ast.ValuesExpr, *ast.WindowFuncExpr:
+		*ast.SubqueryExpr, *ast.ExistsSubqueryExpr, *ast.CompareSubqueryExpr, *ast.ValuesExpr:
 	case *driver.ValueExpr:
 		value := &expression.Constant{Value: v.Datum, RetType: &v.Type}
 		er.ctxStackAppend(value, types.EmptyName)

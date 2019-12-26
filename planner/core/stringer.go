@@ -14,7 +14,6 @@
 package core
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 )
@@ -226,12 +225,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		if x.SelectPlan != nil {
 			str = fmt.Sprintf("%s->Insert", ToString(x.SelectPlan))
 		}
-	case *LogicalWindow:
-		buffer := bytes.NewBufferString("")
-		formatWindowFuncDescs(buffer, x.WindowFuncDescs, x.schema)
-		str = fmt.Sprintf("Window(%s)", buffer.String())
-	case *PhysicalWindow:
-		str = fmt.Sprintf("Window(%s)", x.ExplainInfo())
 	default:
 		str = fmt.Sprintf("%T", in)
 	}

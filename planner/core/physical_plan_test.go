@@ -44,7 +44,6 @@ type testPlanSuiteBase struct {
 func (s *testPlanSuiteBase) SetUpSuite(c *C) {
 	s.is = infoschema.MockInfoSchema([]*model.TableInfo{core.MockSignedTable(), core.MockUnsignedTable()})
 	s.Parser = parser.New()
-	s.Parser.EnableWindowFunc(true)
 }
 
 type testPlanSerialSuite struct {

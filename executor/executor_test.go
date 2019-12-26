@@ -1946,19 +1946,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	}
 	rs.Close()
 
-	// Test issue https://github.com/pingcap/tidb/issues/9639 .
-	// Both window function and expression appear in final result field.
-	tk.MustExec("set @@tidb_enable_window_function = 1")
-	rs, err = tk.Exec("select 1+1, row_number() over() num from t")
-	c.Check(err, IsNil)
-	fields = rs.Fields()
-	c.Assert(fields[0].Column.Name.L, Equals, "1+1")
-	c.Assert(fields[0].ColumnAsName.L, Equals, "1+1")
-	c.Assert(fields[1].Column.Name.L, Equals, "num")
-	c.Assert(fields[1].ColumnAsName.L, Equals, "num")
-	tk.MustExec("set @@tidb_enable_window_function = 0")
-	rs.Close()
-
 	rs, err = tk.Exec("select if(1,c,c) from t;")
 	c.Check(err, IsNil)
 	fields = rs.Fields()
@@ -3371,17 +3358,6 @@ func (s *testSuite) TestSelectView(c *C) {
 	tk.MustQuery("select * from view3;").Check(testkit.Rows("1 2"))
 	tk.MustExec("drop table view_t;")
 	tk.MustExec("drop view view1,view2,view3;")
-
-	tk.MustExec("set @@tidb_enable_window_function = 1")
-	defer func() {
-		tk.MustExec("set @@tidb_enable_window_function = 0")
-	}()
-	tk.MustExec("create table t(a int, b int)")
-	tk.MustExec("insert into t values (1,1),(1,2),(2,1),(2,2)")
-	tk.MustExec("create definer='root'@'localhost' view v as select a, first_value(a) over(rows between 1 preceding and 1 following), last_value(a) over(rows between 1 preceding and 1 following) from t")
-	result := tk.MustQuery("select * from v")
-	result.Check(testkit.Rows("1 1 1", "1 1 2", "2 1 2", "2 2 2"))
-	tk.MustExec("drop view v;")
 }
 
 type testSuite2 struct {
@@ -3900,20 +3876,6 @@ func testGetTableByName(c *C, ctx sessionctx.Context, db, table string) table.Ta
 	tbl, err := dom.InfoSchema().TableByName(model.NewCIStr(db), model.NewCIStr(table))
 	c.Assert(err, IsNil)
 	return tbl
-}
-
-func (s *testSuiteP2) TestIssue10435(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1(i int, j int, k int)")
-	tk.MustExec("insert into t1 VALUES (1,1,1),(2,2,2),(3,3,3),(4,4,4)")
-	tk.MustExec("INSERT INTO t1 SELECT 10*i,j,5*j FROM t1 UNION SELECT 20*i,j,5*j FROM t1 UNION SELECT 30*i,j,5*j FROM t1")
-
-	tk.MustExec("set @@session.tidb_enable_window_function=1")
-	tk.MustQuery("SELECT SUM(i) OVER W FROM t1 WINDOW w AS (PARTITION BY j ORDER BY i) ORDER BY 1+SUM(i) OVER w").Check(
-		testkit.Rows("1", "2", "3", "4", "11", "22", "31", "33", "44", "61", "62", "93", "122", "124", "183", "244"),
-	)
 }
 
 func (s *testSuite1) TestPartitionHashCode(c *C) {

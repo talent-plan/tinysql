@@ -44,7 +44,6 @@ func (s *testTransformationRuleSuite) SetUpSuite(c *C) {
 	var err error
 	s.testData, err = testutil.LoadTestSuiteData("testdata", "transformation_rules_suite")
 	c.Assert(err, IsNil)
-	s.Parser.EnableWindowFunc(true)
 }
 
 func (s *testTransformationRuleSuite) TearDownSuite(c *C) {
@@ -126,7 +125,6 @@ func (s *testTransformationRuleSuite) TestPredicatePushDown(c *C) {
 			NewRulePushSelDownJoin(),
 			NewRulePushSelDownIndexScan(),
 			NewRulePushSelDownUnionAll(),
-			NewRulePushSelDownWindow(),
 		},
 		memo.OperandDataSource: {
 			NewRuleEnumeratePaths(),

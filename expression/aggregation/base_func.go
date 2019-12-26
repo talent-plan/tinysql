@@ -92,21 +92,10 @@ func (a *baseFuncDesc) typeInfer(ctx sessionctx.Context) error {
 		a.typeInfer4Avg(ctx)
 	case ast.AggFuncGroupConcat:
 		a.typeInfer4GroupConcat(ctx)
-	case ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncFirstRow,
-		ast.WindowFuncFirstValue, ast.WindowFuncLastValue, ast.WindowFuncNthValue:
+	case ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncFirstRow:
 		a.typeInfer4MaxMin(ctx)
 	case ast.AggFuncBitAnd, ast.AggFuncBitOr, ast.AggFuncBitXor:
 		a.typeInfer4BitFuncs(ctx)
-	case ast.WindowFuncRowNumber, ast.WindowFuncRank, ast.WindowFuncDenseRank:
-		a.typeInfer4NumberFuncs()
-	case ast.WindowFuncCumeDist:
-		a.typeInfer4CumeDist()
-	case ast.WindowFuncNtile:
-		a.typeInfer4Ntile()
-	case ast.WindowFuncPercentRank:
-		a.typeInfer4PercentRank()
-	case ast.WindowFuncLead, ast.WindowFuncLag:
-		a.typeInfer4LeadLag(ctx)
 	default:
 		return errors.Errorf("unsupported agg function: %s", a.Name)
 	}
@@ -201,38 +190,6 @@ func (a *baseFuncDesc) typeInfer4BitFuncs(ctx sessionctx.Context) {
 	// TODO: a.Args[0] = expression.WrapWithCastAsInt(ctx, a.Args[0])
 }
 
-func (a *baseFuncDesc) typeInfer4NumberFuncs() {
-	a.RetTp = types.NewFieldType(mysql.TypeLonglong)
-	a.RetTp.Flen = 21
-	types.SetBinChsClnFlag(a.RetTp)
-}
-
-func (a *baseFuncDesc) typeInfer4CumeDist() {
-	a.RetTp = types.NewFieldType(mysql.TypeDouble)
-	a.RetTp.Flen, a.RetTp.Decimal = mysql.MaxRealWidth, mysql.NotFixedDec
-}
-
-func (a *baseFuncDesc) typeInfer4Ntile() {
-	a.RetTp = types.NewFieldType(mysql.TypeLonglong)
-	a.RetTp.Flen = 21
-	types.SetBinChsClnFlag(a.RetTp)
-	a.RetTp.Flag |= mysql.UnsignedFlag
-}
-
-func (a *baseFuncDesc) typeInfer4PercentRank() {
-	a.RetTp = types.NewFieldType(mysql.TypeDouble)
-	a.RetTp.Flag, a.RetTp.Decimal = mysql.MaxRealWidth, mysql.NotFixedDec
-}
-
-func (a *baseFuncDesc) typeInfer4LeadLag(ctx sessionctx.Context) {
-	if len(a.Args) <= 2 {
-		a.typeInfer4MaxMin(ctx)
-	} else {
-		// Merge the type of first and third argument.
-		a.RetTp = expression.InferType4ControlFuncs(a.Args[0].GetType(), a.Args[2].GetType())
-	}
-}
-
 // GetDefaultValue gets the default value when the function's input is null.
 // According to MySQL, default values of the function are listed as follows:
 // e.g.
@@ -269,7 +226,6 @@ var noNeedCastAggFuncs = map[string]struct{}{
 	ast.AggFuncMax:      {},
 	ast.AggFuncMin:      {},
 	ast.AggFuncFirstRow: {},
-	ast.WindowFuncNtile: {},
 }
 
 // WrapCastForAggArgs wraps the args of an aggregate function with a cast function.
@@ -302,10 +258,6 @@ func (a *baseFuncDesc) WrapCastForAggArgs(ctx sessionctx.Context) {
 		panic("should never happen in baseFuncDesc.WrapCastForAggArgs")
 	}
 	for i := range a.Args {
-		// Do not cast the second args of these functions, as they are simply non-negative numbers.
-		if i == 1 && (a.Name == ast.WindowFuncLead || a.Name == ast.WindowFuncLag || a.Name == ast.WindowFuncNthValue) {
-			continue
-		}
 		a.Args[i] = castFunc(ctx, a.Args[i])
 		if a.Name != ast.AggFuncAvg && a.Name != ast.AggFuncSum {
 			continue

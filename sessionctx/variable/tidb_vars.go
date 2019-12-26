@@ -271,9 +271,6 @@ const (
 	// It could hurt the performance of bulking insert when it is ON.
 	TiDBConstraintCheckInPlace = "tidb_constraint_check_in_place"
 
-	// tidb_enable_window_function is used to control whether to enable the window function.
-	TiDBEnableWindowFunction = "tidb_enable_window_function"
-
 	// tidb_enable_vectorized_expression is used to control whether to enable the vectorized expression evaluation.
 	TiDBEnableVectorizedExpression = "tidb_enable_vectorized_expression"
 
@@ -360,7 +357,6 @@ const (
 	DefTiDBHashAggFinalConcurrency   = 4
 	DefTiDBForcePriority             = mysql.NoPriority
 	DefTiDBUseRadixJoin              = false
-	DefEnableWindowFunction          = true
 	DefEnableVectorizedExpression    = true
 	DefTiDBOptJoinReorderThreshold   = 0
 	DefTiDBUseFastAnalyze            = false

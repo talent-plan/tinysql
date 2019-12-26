@@ -85,8 +85,6 @@ const (
 	TypeTableReader = "TableReader"
 	// TypeIndexReader is the type of IndexReader.
 	TypeIndexReader = "IndexReader"
-	// TypeWindow is the type of Window.
-	TypeWindow = "Window"
 	// TypeTiKVSingleGather is the type of TiKVSingleGather.
 	TypeTiKVSingleGather = "TiKVSingleGather"
 	// TypeIndexMerge is the type of IndexMergeReader
@@ -256,20 +254,6 @@ func (p LogicalMaxOneRow) Init(ctx sessionctx.Context, offset int) *LogicalMaxOn
 // Init initializes PhysicalMaxOneRow.
 func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalMaxOneRow {
 	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMaxOneRow, &p, offset)
-	p.childrenReqProps = props
-	p.stats = stats
-	return &p
-}
-
-// Init initializes LogicalWindow.
-func (p LogicalWindow) Init(ctx sessionctx.Context, offset int) *LogicalWindow {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeWindow, &p, offset)
-	return &p
-}
-
-// Init initializes PhysicalWindow.
-func (p PhysicalWindow) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalWindow {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeWindow, &p, offset)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p

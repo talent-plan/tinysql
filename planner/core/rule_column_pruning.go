@@ -342,50 +342,6 @@ func (p *LogicalLock) PruneColumns(parentUsedCols []*expression.Column) error {
 	return p.children[0].PruneColumns(parentUsedCols)
 }
 
-// PruneColumns implements LogicalPlan interface.
-func (p *LogicalWindow) PruneColumns(parentUsedCols []*expression.Column) error {
-	windowColumns := p.GetWindowResultColumns()
-	len := 0
-	for _, col := range parentUsedCols {
-		used := false
-		for _, windowColumn := range windowColumns {
-			if windowColumn.Equal(nil, col) {
-				used = true
-				break
-			}
-		}
-		if !used {
-			parentUsedCols[len] = col
-			len++
-		}
-	}
-	parentUsedCols = parentUsedCols[:len]
-	parentUsedCols = p.extractUsedCols(parentUsedCols)
-	err := p.children[0].PruneColumns(parentUsedCols)
-	if err != nil {
-		return err
-	}
-
-	p.SetSchema(p.children[0].Schema().Clone())
-	p.Schema().Append(windowColumns...)
-	return nil
-}
-
-func (p *LogicalWindow) extractUsedCols(parentUsedCols []*expression.Column) []*expression.Column {
-	for _, desc := range p.WindowFuncDescs {
-		for _, arg := range desc.Args {
-			parentUsedCols = append(parentUsedCols, expression.ExtractColumns(arg)...)
-		}
-	}
-	for _, by := range p.PartitionBy {
-		parentUsedCols = append(parentUsedCols, by.Col)
-	}
-	for _, by := range p.OrderBy {
-		parentUsedCols = append(parentUsedCols, by.Col)
-	}
-	return parentUsedCols
-}
-
 func (*columnPruner) name() string {
 	return "column_prune"
 }

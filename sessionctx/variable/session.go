@@ -342,9 +342,6 @@ type SessionVars struct {
 	// EnableCascadesPlanner enables the cascades planner.
 	EnableCascadesPlanner bool
 
-	// EnableWindowFunction enables the window function.
-	EnableWindowFunction bool
-
 	// EnableVectorizedExpression  enables the vectorized expression evaluation.
 	EnableVectorizedExpression bool
 
@@ -883,8 +880,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		atomic.StoreInt32(&ForcePriority, int32(mysql.Str2Priority(val)))
 	case TiDBEnableRadixJoin:
 		s.EnableRadixJoin = TiDBOptOn(val)
-	case TiDBEnableWindowFunction:
-		s.EnableWindowFunction = TiDBOptOn(val)
 	case TiDBEnableVectorizedExpression:
 		s.EnableVectorizedExpression = TiDBOptOn(val)
 	case TiDBOptJoinReorderThreshold:

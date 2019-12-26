@@ -50,7 +50,6 @@ var (
 	_ PhysicalPlan = &PhysicalHashJoin{}
 	_ PhysicalPlan = &PhysicalMergeJoin{}
 	_ PhysicalPlan = &PhysicalUnionScan{}
-	_ PhysicalPlan = &PhysicalWindow{}
 )
 
 // PhysicalTableReader is the table reader in tidb.
@@ -489,16 +488,6 @@ func (p *PhysicalTableDual) OutputNames() types.NameSlice {
 // SetOutputNames sets the outputting name by the given slice.
 func (p *PhysicalTableDual) SetOutputNames(names types.NameSlice) {
 	p.names = names
-}
-
-// PhysicalWindow is the physical operator of window function.
-type PhysicalWindow struct {
-	physicalSchemaProducer
-
-	WindowFuncDescs []*aggregation.WindowFuncDesc
-	PartitionBy     []property.Item
-	OrderBy         []property.Item
-	Frame           *WindowFrame
 }
 
 // CollectPlanStatsVersion uses to collect the statistics version of the plan.
