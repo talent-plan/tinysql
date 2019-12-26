@@ -55,7 +55,6 @@ type tableHintInfo struct {
 	tiflashTables       []hintTableInfo
 	tikvTables          []hintTableInfo
 	aggHints            aggHintInfo
-	indexMergeHintList  []indexHintInfo
 }
 
 type hintTableInfo struct {

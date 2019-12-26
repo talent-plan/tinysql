@@ -1449,7 +1449,6 @@ var builtinGlobalVariable = []string{
 	variable.TiDBEnableVectorizedExpression,
 	variable.TiDBEnableFastAnalyze,
 	variable.TiDBEnableNoopFuncs,
-	variable.TiDBEnableIndexMerge,
 	variable.TiDBMaxDeltaSchemaCount,
 	variable.TiDBIsolationReadEngines,
 }

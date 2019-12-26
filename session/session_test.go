@@ -2717,35 +2717,3 @@ func (s *testSessionSuite2) TestIsolationRead(c *C) {
 	c.Assert(hasTiFlash, Equals, true)
 	c.Assert(hasTiKV, Equals, false)
 }
-
-func (s *testSessionSuite2) TestStmtHints(c *C) {
-	var err error
-	tk := testkit.NewTestKit(c, s.store)
-	tk.Se, err = session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-
-	// Test NO_INDEX_MERGE hint
-	tk.MustExec("select /*+ NO_INDEX_MERGE() */ 1;")
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.NoIndexMergeHint, IsTrue)
-	tk.MustExec("select /*+ NO_INDEX_MERGE(), NO_INDEX_MERGE() */ 1;")
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-
-	// Test USE_TOJA hint
-	tk.Se.GetSessionVars().SetAllowInSubqToJoinAndAgg(true)
-	tk.MustExec("select /*+ USE_TOJA(false) */ 1;")
-	c.Assert(tk.Se.GetSessionVars().GetAllowInSubqToJoinAndAgg(), IsFalse)
-	tk.Se.GetSessionVars().SetAllowInSubqToJoinAndAgg(false)
-	tk.MustExec("select /*+ USE_TOJA(true) */ 1;")
-	c.Assert(tk.Se.GetSessionVars().GetAllowInSubqToJoinAndAgg(), IsTrue)
-	tk.MustExec("select /*+ USE_TOJA(false), USE_TOJA(true) */ 1;")
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-	c.Assert(tk.Se.GetSessionVars().GetAllowInSubqToJoinAndAgg(), IsTrue)
-
-	// Test READ_CONSISTENT_REPLICA hint
-	tk.Se.GetSessionVars().SetReplicaRead(kv.ReplicaReadLeader)
-	tk.MustExec("select /*+ READ_CONSISTENT_REPLICA() */ 1;")
-	c.Assert(tk.Se.GetSessionVars().GetReplicaRead(), Equals, kv.ReplicaReadFollower)
-	tk.MustExec("select /*+ READ_CONSISTENT_REPLICA(), READ_CONSISTENT_REPLICA() */ 1;")
-	c.Assert(tk.Se.GetSessionVars().StmtCtx.GetWarnings(), HasLen, 1)
-	c.Assert(tk.Se.GetSessionVars().GetReplicaRead(), Equals, kv.ReplicaReadFollower)
-}

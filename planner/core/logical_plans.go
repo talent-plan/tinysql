@@ -378,8 +378,6 @@ type DataSource struct {
 	DBName     model.CIStr
 
 	TableAsName *model.CIStr
-	// indexMergeHints are the hint for indexmerge.
-	indexMergeHints []*ast.IndexHint
 	// pushedDownConds are the conditions that will be pushed down to coprocessor.
 	pushedDownConds []expression.Expression
 	// allConds contains all the filters on this table. For now it's maintained
@@ -533,8 +531,7 @@ func (ds *DataSource) Convert2Gathers() (gathers []LogicalPlan) {
 
 // deriveTablePathStats will fulfill the information that the AccessPath need.
 // And it will check whether the primary key is covered only by point query.
-// isIm indicates whether this function is called to generate the partial path for IndexMerge.
-func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expression.Expression, isIm bool) (bool, error) {
+func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expression.Expression) (bool, error) {
 	var err error
 	sc := ds.ctx.GetSessionVars().StmtCtx
 	path.CountAfterAccess = float64(ds.statisticTable.Count)
@@ -602,7 +599,7 @@ func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expres
 	path.CountAfterAccess, err = ds.statisticTable.GetRowCountByIntColumnRanges(sc, pkCol.ID, path.Ranges)
 	// If the `CountAfterAccess` is less than `stats.RowCount`, there must be some inconsistent stats info.
 	// We prefer the `stats.RowCount` because it could use more stats info to calculate the selectivity.
-	if path.CountAfterAccess < ds.stats.RowCount && !isIm {
+	if path.CountAfterAccess < ds.stats.RowCount {
 		path.CountAfterAccess = math.Min(ds.stats.RowCount/selectionFactor, float64(ds.statisticTable.Count))
 	}
 	// Check whether the primary key is covered by point query.
@@ -654,8 +651,7 @@ func (ds *DataSource) fillIndexPath(path *util.AccessPath, conds []expression.Ex
 // And it will check whether this index is full matched by point query. We will use this check to
 // determine whether we remove other paths or not.
 // conds is the conditions used to generate the DetachRangeResult for path.
-// isIm indicates whether this function is called to generate the partial path for IndexMerge.
-func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath, conds []expression.Expression, isIm bool) bool {
+func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath) bool {
 	sc := ds.ctx.GetSessionVars().StmtCtx
 	if path.EqOrInCondCount == len(path.AccessConds) {
 		accesses, remained := path.SplitCorColAccessCondFromFilters(path.EqOrInCondCount)
@@ -679,7 +675,7 @@ func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath, conds []expres
 	path.IndexFilters, path.TableFilters = splitIndexFilterConditions(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	// If the `CountAfterAccess` is less than `stats.RowCount`, there must be some inconsistent stats info.
 	// We prefer the `stats.RowCount` because it could use more stats info to calculate the selectivity.
-	if path.CountAfterAccess < ds.stats.RowCount && !isIm {
+	if path.CountAfterAccess < ds.stats.RowCount {
 		path.CountAfterAccess = math.Min(ds.stats.RowCount/selectionFactor, float64(ds.statisticTable.Count))
 	}
 	if path.IndexFilters != nil {
@@ -688,11 +684,7 @@ func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath, conds []expres
 			logutil.BgLogger().Debug("calculate selectivity failed, use selection factor", zap.Error(err))
 			selectivity = selectionFactor
 		}
-		if isIm {
-			path.CountAfterIndex = path.CountAfterAccess * selectivity
-		} else {
-			path.CountAfterIndex = math.Max(path.CountAfterAccess*selectivity, ds.stats.RowCount)
-		}
+		path.CountAfterIndex = math.Max(path.CountAfterAccess*selectivity, ds.stats.RowCount)
 	}
 	// Check whether there's only point query.
 	noIntervalRanges := true

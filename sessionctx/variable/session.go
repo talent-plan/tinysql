@@ -423,9 +423,6 @@ type SessionVars struct {
 	// allowInSubqToJoinAndAgg can be set to false to forbid rewriting the semi join to inner join with agg.
 	allowInSubqToJoinAndAgg bool
 
-	// EnableIndexMerge enables the generation of IndexMergePath.
-	enableIndexMerge bool
-
 	// replicaRead is used for reading data from replicas, only follower is supported at this time.
 	replicaRead kv.ReplicaReadType
 
@@ -504,7 +501,6 @@ func NewSessionVars() *SessionVars {
 		TiDBOptJoinReorderThreshold: DefTiDBOptJoinReorderThreshold,
 		WaitSplitRegionFinish:       DefTiDBWaitSplitRegionFinish,
 		WaitSplitRegionTimeout:      DefWaitSplitRegionTimeout,
-		enableIndexMerge:            false,
 		EnableNoopFuncs:             DefTiDBEnableNoopFuncs,
 		replicaRead:                 kv.ReplicaReadLeader,
 		AllowRemoveAutoInc:          DefTiDBAllowRemoveAutoInc,
@@ -556,16 +552,6 @@ func (s *SessionVars) GetAllowInSubqToJoinAndAgg() bool {
 // SetAllowInSubqToJoinAndAgg set SessionVars.allowInSubqToJoinAndAgg.
 func (s *SessionVars) SetAllowInSubqToJoinAndAgg(val bool) {
 	s.allowInSubqToJoinAndAgg = val
-}
-
-// GetEnableIndexMerge get EnableIndexMerge from SessionVars.enableIndexMerge.
-func (s *SessionVars) GetEnableIndexMerge() bool {
-	return s.enableIndexMerge
-}
-
-// SetEnableIndexMerge set SessionVars.enableIndexMerge.
-func (s *SessionVars) SetEnableIndexMerge(val bool) {
-	s.enableIndexMerge = val
 }
 
 // GetReplicaRead get ReplicaRead from sql hints and SessionVars.replicaRead.
@@ -896,8 +882,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.WaitSplitRegionTimeout = uint64(tidbOptPositiveInt32(val, DefWaitSplitRegionTimeout))
 	case TiDBLowResolutionTSO:
 		s.LowResolutionTSO = TiDBOptOn(val)
-	case TiDBEnableIndexMerge:
-		s.SetEnableIndexMerge(TiDBOptOn(val))
 	case TiDBEnableNoopFuncs:
 		s.EnableNoopFuncs = TiDBOptOn(val)
 	case TiDBReplicaRead:

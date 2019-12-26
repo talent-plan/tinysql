@@ -133,7 +133,6 @@ type StmtHints struct {
 
 	// Hint Information
 	AllowInSubqToJoinAndAgg bool
-	NoIndexMergeHint        bool
 	MemQuotaQuery           int64
 	ReplicaRead             byte
 }

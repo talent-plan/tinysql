@@ -42,7 +42,6 @@ var (
 	_ PhysicalPlan = &PhysicalTableReader{}
 	_ PhysicalPlan = &PhysicalIndexReader{}
 	_ PhysicalPlan = &PhysicalIndexLookUpReader{}
-	_ PhysicalPlan = &PhysicalIndexMergeReader{}
 	_ PhysicalPlan = &PhysicalHashAgg{}
 	_ PhysicalPlan = &PhysicalStreamAgg{}
 	_ PhysicalPlan = &PhysicalApply{}
@@ -141,18 +140,6 @@ type PhysicalIndexLookUpReader struct {
 	ExtraHandleCol *expression.Column
 	// PushedLimit is used to avoid unnecessary table scan tasks of IndexLookUpReader.
 	PushedLimit *PushedDownLimit
-}
-
-// PhysicalIndexMergeReader is the reader using multiple indexes in tidb.
-type PhysicalIndexMergeReader struct {
-	physicalSchemaProducer
-
-	// PartialPlans flats the partialPlans to construct executor pb.
-	PartialPlans [][]PhysicalPlan
-	// TablePlans flats the tablePlan to construct executor pb.
-	TablePlans   []PhysicalPlan
-	partialPlans []PhysicalPlan
-	tablePlan    PhysicalPlan
 }
 
 // PhysicalIndexScan represents an index scan plan.

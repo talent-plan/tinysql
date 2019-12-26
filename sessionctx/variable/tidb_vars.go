@@ -284,9 +284,6 @@ const (
 	// TiDBEnableFastAnalyze indicates to use fast analyze.
 	TiDBEnableFastAnalyze = "tidb_enable_fast_analyze"
 
-	// TiDBEnableIndexMerge indicates to generate IndexMergePath.
-	TiDBEnableIndexMerge = "tidb_enable_index_merge"
-
 	// TiDBEnableNoopFuncs set true will enable using fake funcs(like get_lock release_lock)
 	TiDBEnableNoopFuncs = "tidb_enable_noop_functions"
 

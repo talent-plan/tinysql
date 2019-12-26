@@ -27,10 +27,8 @@ import (
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/set"
-	"go.uber.org/zap"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -311,20 +309,11 @@ func (ds *DataSource) getIndexCandidate(path *util.AccessPath, prop *property.Ph
 	return candidate
 }
 
-func (ds *DataSource) getIndexMergeCandidate(path *util.AccessPath) *candidatePath {
-	candidate := &candidatePath{path: path}
-	return candidate
-}
-
 // skylinePruning prunes access paths according to different factors. An access path can be pruned only if
 // there exists a path that is not worse than it at all factors and there is at least one better factor.
 func (ds *DataSource) skylinePruning(prop *property.PhysicalProperty) []*candidatePath {
 	candidates := make([]*candidatePath, 0, 4)
 	for _, path := range ds.possibleAccessPaths {
-		if path.PartialIndexPaths != nil {
-			candidates = append(candidates, ds.getIndexMergeCandidate(path))
-			continue
-		}
 		// if we already know the range of the scan is empty, just return a TableDual
 		if len(path.Ranges) == 0 {
 			return []*candidatePath{{path: path}}
@@ -418,16 +407,6 @@ func (ds *DataSource) findBestTask(prop *property.PhysicalProperty) (t task, err
 
 	for _, candidate := range candidates {
 		path := candidate.path
-		if path.PartialIndexPaths != nil {
-			idxMergeTask, err := ds.convertToIndexMergeScan(prop, candidate)
-			if err != nil {
-				return nil, err
-			}
-			if idxMergeTask.cost() < t.cost() {
-				t = idxMergeTask
-			}
-			continue
-		}
 		// if we already know the range of the scan is empty, just return a TableDual
 		if len(path.Ranges) == 0 {
 			dual := PhysicalTableDual{}.Init(ds.ctx, ds.stats, ds.blockOffset)
@@ -466,134 +445,6 @@ func (ds *DataSource) findBestTask(prop *property.PhysicalProperty) (t task, err
 	}
 
 	return
-}
-
-func (ds *DataSource) convertToIndexMergeScan(prop *property.PhysicalProperty, candidate *candidatePath) (task task, err error) {
-	if prop.TaskTp != property.RootTaskType || !prop.IsEmpty() {
-		return invalidTask, nil
-	}
-	path := candidate.path
-	var totalCost, totalRowCount float64
-	scans := make([]PhysicalPlan, 0, len(path.PartialIndexPaths))
-	cop := &copTask{
-		indexPlanFinished: true,
-		tblColHists:       ds.TblColHists,
-	}
-	allCovered := true
-	for _, partPath := range path.PartialIndexPaths {
-		var scan PhysicalPlan
-		var partialCost, rowCount float64
-		var tempCovered bool
-		if partPath.IsTablePath {
-			scan, partialCost, rowCount, tempCovered = ds.convertToPartialTableScan(prop, partPath)
-		} else {
-			scan, partialCost, rowCount, tempCovered = ds.convertToPartialIndexScan(prop, partPath)
-		}
-		scans = append(scans, scan)
-		totalCost += partialCost
-		totalRowCount += rowCount
-		allCovered = allCovered && tempCovered
-	}
-
-	if !allCovered || len(path.TableFilters) > 0 {
-		ts, partialCost := ds.buildIndexMergeTableScan(prop, path.TableFilters, totalRowCount)
-		totalCost += partialCost
-		cop.tablePlan = ts
-	}
-	cop.idxMergePartPlans = scans
-	cop.cst = totalCost
-	task = finishCopTask(ds.ctx, cop)
-	return task, nil
-}
-
-func (ds *DataSource) convertToPartialIndexScan(prop *property.PhysicalProperty, path *util.AccessPath) (
-	indexPlan PhysicalPlan,
-	partialCost float64,
-	rowCount float64,
-	isCovered bool) {
-	idx := path.Index
-	is, partialCost, rowCount := ds.getOriginalPhysicalIndexScan(prop, path, false, false)
-	rowSize := is.indexScanRowSize(idx, ds, false)
-	isCovered = isCoveringIndex(ds.schema.Columns, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo.PKIsHandle)
-	indexConds := path.IndexFilters
-	sessVars := ds.ctx.GetSessionVars()
-	if indexConds != nil {
-		var selectivity float64
-		partialCost += rowCount * sessVars.CopCPUFactor
-		if path.CountAfterAccess > 0 {
-			selectivity = path.CountAfterIndex / path.CountAfterAccess
-		}
-		rowCount = is.stats.RowCount * selectivity
-		stats := &property.StatsInfo{RowCount: rowCount}
-		stats.StatsVersion = ds.statisticTable.Version
-		if ds.statisticTable.Pseudo {
-			stats.StatsVersion = statistics.PseudoVersion
-		}
-		indexPlan := PhysicalSelection{Conditions: indexConds}.Init(is.ctx, stats, ds.blockOffset)
-		indexPlan.SetChildren(is)
-		partialCost += rowCount * rowSize * sessVars.NetworkFactor
-		return indexPlan, partialCost, rowCount, isCovered
-	}
-	partialCost += rowCount * rowSize * sessVars.NetworkFactor
-	indexPlan = is
-	return indexPlan, partialCost, rowCount, isCovered
-}
-
-func (ds *DataSource) convertToPartialTableScan(prop *property.PhysicalProperty, path *util.AccessPath) (
-	tablePlan PhysicalPlan,
-	partialCost float64,
-	rowCount float64,
-	isCovered bool) {
-	ts, partialCost, rowCount := ds.getOriginalPhysicalTableScan(prop, path, false)
-	rowSize := ds.TblColHists.GetAvgRowSize(ds.TblCols, false)
-	sessVars := ds.ctx.GetSessionVars()
-	if len(ts.filterCondition) > 0 {
-		selectivity, _, err := ds.tableStats.HistColl.Selectivity(ds.ctx, ts.filterCondition, nil)
-		if err != nil {
-			logutil.BgLogger().Debug("calculate selectivity failed, use selection factor", zap.Error(err))
-			selectivity = selectionFactor
-		}
-		tablePlan = PhysicalSelection{Conditions: ts.filterCondition}.Init(ts.ctx, ts.stats.ScaleByExpectCnt(selectivity*rowCount), ds.blockOffset)
-		tablePlan.SetChildren(ts)
-		partialCost += rowCount * sessVars.CopCPUFactor
-		partialCost += selectivity * rowCount * rowSize * sessVars.NetworkFactor
-		return tablePlan, partialCost, rowCount, true
-	}
-	partialCost += rowCount * rowSize * sessVars.NetworkFactor
-	tablePlan = ts
-	return tablePlan, partialCost, rowCount, true
-}
-
-func (ds *DataSource) buildIndexMergeTableScan(prop *property.PhysicalProperty, tableFilters []expression.Expression, totalRowCount float64) (PhysicalPlan, float64) {
-	var partialCost float64
-	sessVars := ds.ctx.GetSessionVars()
-	ts := PhysicalTableScan{
-		Table:           ds.tableInfo,
-		Columns:         ds.Columns,
-		TableAsName:     ds.TableAsName,
-		DBName:          ds.DBName,
-		isPartition:     ds.isPartition,
-		physicalTableID: ds.physicalTableID,
-	}.Init(ds.ctx, ds.blockOffset)
-	ts.SetSchema(ds.schema.Clone())
-	rowSize := ds.TblColHists.GetTableAvgRowSize(ds.TblCols, ts.StoreType, true)
-	partialCost += totalRowCount * rowSize * sessVars.ScanFactor
-	ts.stats = ds.tableStats.ScaleByExpectCnt(totalRowCount)
-	if ds.statisticTable.Pseudo {
-		ts.stats.StatsVersion = statistics.PseudoVersion
-	}
-	if len(tableFilters) > 0 {
-		partialCost += totalRowCount * sessVars.CopCPUFactor
-		selectivity, _, err := ds.tableStats.HistColl.Selectivity(ds.ctx, tableFilters, nil)
-		if err != nil {
-			logutil.BgLogger().Debug("calculate selectivity failed, use selection factor", zap.Error(err))
-			selectivity = selectionFactor
-		}
-		sel := PhysicalSelection{Conditions: tableFilters}.Init(ts.ctx, ts.stats.ScaleByExpectCnt(selectivity*totalRowCount), ts.blockOffset)
-		sel.SetChildren(ts)
-		return sel, partialCost
-	}
-	return ts, partialCost
 }
 
 func isCoveringIndex(columns, indexColumns []*expression.Column, idxColLens []int, pkIsHandle bool) bool {

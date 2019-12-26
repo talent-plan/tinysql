@@ -198,11 +198,6 @@ func (p *PhysicalIndexLookUpReader) ExplainInfo() string {
 }
 
 // ExplainInfo implements Plan interface.
-func (p *PhysicalIndexMergeReader) ExplainInfo() string {
-	return ""
-}
-
-// ExplainInfo implements Plan interface.
 func (p *PhysicalUnionScan) ExplainInfo() string {
 	return string(expression.SortedExplainExpressionList(p.Conditions))
 }

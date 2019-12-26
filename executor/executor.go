@@ -1114,7 +1114,7 @@ func handleStmtHints(hints []*ast.TableOptimizerHint) (stmtHints stmtctx.StmtHin
 		return
 	}
 	var memoryQuotaHint, useToJAHint *ast.TableOptimizerHint
-	var memoryQuotaHintCnt, useToJAHintCnt, noIndexMergeHintCnt, readReplicaHintCnt int
+	var memoryQuotaHintCnt, useToJAHintCnt, readReplicaHintCnt int
 	for _, hint := range hints {
 		switch hint.HintName.L {
 		case "memory_quota":
@@ -1123,8 +1123,6 @@ func handleStmtHints(hints []*ast.TableOptimizerHint) (stmtHints stmtctx.StmtHin
 		case "use_toja":
 			useToJAHint = hint
 			useToJAHintCnt++
-		case "no_index_merge":
-			noIndexMergeHintCnt++
 		case "read_consistent_replica":
 			readReplicaHintCnt++
 		}
@@ -1156,14 +1154,6 @@ func handleStmtHints(hints []*ast.TableOptimizerHint) (stmtHints stmtctx.StmtHin
 		}
 		stmtHints.HasAllowInSubqToJoinAndAggHint = true
 		stmtHints.AllowInSubqToJoinAndAgg = useToJAHint.HintFlag
-	}
-	// Handle NO_INDEX_MERGE
-	if noIndexMergeHintCnt != 0 {
-		if noIndexMergeHintCnt > 1 {
-			warn := errors.New("There are multiple NO_INDEX_MERGE hints, only the last one will take effect")
-			warns = append(warns, warn)
-		}
-		stmtHints.NoIndexMergeHint = true
 	}
 	// Handle READ_CONSISTENT_REPLICA
 	if readReplicaHintCnt != 0 {

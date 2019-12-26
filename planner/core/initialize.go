@@ -87,8 +87,6 @@ const (
 	TypeIndexReader = "IndexReader"
 	// TypeTiKVSingleGather is the type of TiKVSingleGather.
 	TypeTiKVSingleGather = "TiKVSingleGather"
-	// TypeIndexMerge is the type of IndexMergeReader
-	TypeIndexMerge = "IndexMerge"
 	// TypeShowDDLJobs is the type of show ddl jobs.
 	TypeShowDDLJobs = "ShowDDLJobs"
 )
@@ -408,39 +406,6 @@ func (p PhysicalIndexLookUpReader) Init(ctx sessionctx.Context, offset int) *Phy
 	p.TablePlans = flattenPushDownPlan(p.tablePlan)
 	p.IndexPlans = flattenPushDownPlan(p.indexPlan)
 	p.schema = p.tablePlan.Schema()
-	return &p
-}
-
-// Init initializes PhysicalIndexMergeReader.
-func (p PhysicalIndexMergeReader) Init(ctx sessionctx.Context, offset int) *PhysicalIndexMergeReader {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexMerge, &p, offset)
-	if p.tablePlan != nil {
-		p.stats = p.tablePlan.statsInfo()
-	} else {
-		var totalRowCount float64
-		for _, partPlan := range p.partialPlans {
-			totalRowCount += partPlan.StatsCount()
-		}
-		p.stats.StatsVersion = p.partialPlans[0].statsInfo().StatsVersion
-		p.stats = p.partialPlans[0].statsInfo().ScaleByExpectCnt(totalRowCount)
-	}
-	p.PartialPlans = make([][]PhysicalPlan, 0, len(p.partialPlans))
-	for _, partialPlan := range p.partialPlans {
-		tempPlans := flattenPushDownPlan(partialPlan)
-		p.PartialPlans = append(p.PartialPlans, tempPlans)
-	}
-	if p.tablePlan != nil {
-		p.TablePlans = flattenPushDownPlan(p.tablePlan)
-		p.schema = p.tablePlan.Schema()
-	} else {
-		switch p.PartialPlans[0][0].(type) {
-		case *PhysicalTableScan:
-			p.schema = p.PartialPlans[0][0].Schema()
-		default:
-			is := p.PartialPlans[0][0].(*PhysicalIndexScan)
-			p.schema = is.dataSourceSchema
-		}
-	}
 	return &p
 }
 
