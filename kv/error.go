@@ -45,9 +45,6 @@ var (
 	// ErrWriteConflict is the error when the commit meets an write conflict error.
 	ErrWriteConflict = terror.ClassKV.New(mysql.ErrWriteConflict,
 		mysql.MySQLErrName[mysql.ErrWriteConflict]+" "+TxnRetryableMark)
-	// ErrWriteConflictInTiDB is the error when the commit meets an write conflict error when local latch is enabled.
-	ErrWriteConflictInTiDB = terror.ClassKV.New(mysql.ErrWriteConflictInTiDB,
-		mysql.MySQLErrName[mysql.ErrWriteConflictInTiDB]+" "+TxnRetryableMark)
 )
 
 func init() {
@@ -73,7 +70,7 @@ func IsTxnRetryableError(err error) bool {
 		return false
 	}
 
-	if ErrTxnRetryable.Equal(err) || ErrWriteConflict.Equal(err) || ErrWriteConflictInTiDB.Equal(err) {
+	if ErrTxnRetryable.Equal(err) || ErrWriteConflict.Equal(err) {
 		return true
 	}
 

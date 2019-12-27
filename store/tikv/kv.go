@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 
-	"github.com/pingcap/tidb/store/tikv/latch"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/oracle/oracles"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -71,7 +70,6 @@ func (d Driver) Open(path string) (kv.Storage, error) {
 	defer mc.Unlock()
 
 	security := config.GetGlobalConfig().Security
-	txnLocalLatches := config.GetGlobalConfig().TxnLocalLatches
 	etcdAddrs, disableGC, err := parsePath(path)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -107,9 +105,6 @@ func (d Driver) Open(path string) (kv.Storage, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if txnLocalLatches.Enabled {
-		s.EnableTxnLocalLatches(txnLocalLatches.Capacity)
-	}
 	s.etcdAddrs = etcdAddrs
 	s.tlsConfig = tlsConfig
 
@@ -135,7 +130,6 @@ type tikvStore struct {
 	pdClient     pd.Client
 	regionCache  *RegionCache
 	lockResolver *LockResolver
-	txnLatches   *latch.LatchesScheduler
 	gcWorker     GCHandler
 	etcdAddrs    []string
 	tlsConfig    *tls.Config
@@ -202,15 +196,6 @@ func newTikvStore(uuid string, pdClient pd.Client, spkv SafePointKV, client Clie
 	go store.runSafePointChecker()
 
 	return store, nil
-}
-
-func (s *tikvStore) EnableTxnLocalLatches(size uint) {
-	s.txnLatches = latch.NewScheduler(size)
-}
-
-// IsLatchEnabled is used by mockstore.TestConfig.
-func (s *tikvStore) IsLatchEnabled() bool {
-	return s.txnLatches != nil
 }
 
 func (s *tikvStore) EtcdAddrs() []string {
@@ -298,9 +283,6 @@ func (s *tikvStore) Close() error {
 		return errors.Trace(err)
 	}
 
-	if s.txnLatches != nil {
-		s.txnLatches.Close()
-	}
 	s.regionCache.Close()
 	return nil
 }

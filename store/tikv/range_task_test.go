@@ -64,7 +64,7 @@ func (s *testRangeTaskSuite) SetUpTest(c *C) {
 	client, pdClient, err := mocktikv.NewTiKVAndPDClient(s.cluster, nil, "")
 	c.Assert(err, IsNil)
 
-	store, err := NewTestTiKVStore(client, pdClient, nil, nil, 0)
+	store, err := NewTestTiKVStore(client, pdClient, nil, nil)
 	c.Assert(err, IsNil)
 	s.store = store.(*tikvStore)
 

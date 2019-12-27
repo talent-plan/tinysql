@@ -2536,9 +2536,7 @@ func (s *testSchemaSuite) TestDisableTxnAutoRetry(c *C) {
 	tk1.MustExec("update no_retry set id = 7")
 	tk1.MustExec("commit")
 
-	// test for disable transaction local latch
 	tk1.Se.GetSessionVars().InRestrictedSQL = false
-	config.GetGlobalConfig().TxnLocalLatches.Enabled = false
 	tk1.MustExec("begin")
 	tk1.MustExec("update no_retry set id = 9")
 
@@ -2549,16 +2547,6 @@ func (s *testSchemaSuite) TestDisableTxnAutoRetry(c *C) {
 	c.Assert(kv.ErrWriteConflict.Equal(err), IsTrue, Commentf("error: %s", err))
 	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
 	tk1.MustExec("rollback")
-
-	config.GetGlobalConfig().TxnLocalLatches.Enabled = true
-	tk1.MustExec("begin")
-	tk2.MustExec("alter table no_retry add index idx(id)")
-	tk2.MustQuery("select * from no_retry").Check(testkit.Rows("8"))
-	tk1.MustExec("update no_retry set id = 10")
-	_, err = tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(err, NotNil)
-	c.Assert(domain.ErrInfoSchemaChanged.Equal(err), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
 
 	// set autocommit to begin and commit
 	tk1.MustExec("set autocommit = 0")

@@ -34,7 +34,6 @@ func (s testErrorSuite) TestError(c *C) {
 		ErrKeyExists,
 		ErrNotImplemented,
 		ErrWriteConflict,
-		ErrWriteConflictInTiDB,
 	}
 	for _, err := range kvErrs {
 		code := err.ToSQLError().Code

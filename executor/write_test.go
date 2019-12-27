@@ -22,9 +22,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
@@ -1947,62 +1945,6 @@ func (s *testSuite4) TestNotNullDefault(c *C) {
 	tk.MustExec("create table t1 (a int not null default null default 1);")
 	tk.MustExec("create table t2 (a int);")
 	tk.MustExec("alter table  t2 change column a a int not null default null default 1;")
-}
-
-func (s *testBypassSuite) TestLatch(c *C) {
-	store, err := mockstore.NewMockTikvStore(
-		// Small latch slot size to make conflicts.
-		mockstore.WithTxnLocalLatches(64),
-	)
-	c.Assert(err, IsNil)
-	defer store.Close()
-
-	dom, err1 := session.BootstrapSession(store)
-	c.Assert(err1, IsNil)
-	defer dom.Close()
-
-	tk1 := testkit.NewTestKit(c, store)
-	tk1.MustExec("use test")
-	tk1.MustExec("drop table if exists t")
-	tk1.MustExec("create table t (id int)")
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = true")
-
-	tk2 := testkit.NewTestKit(c, store)
-	tk2.MustExec("use test")
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = true")
-
-	fn := func() {
-		tk1.MustExec("begin")
-		for i := 0; i < 100; i++ {
-			tk1.MustExec(fmt.Sprintf("insert into t values (%d)", i))
-		}
-		tk2.MustExec("begin")
-		for i := 100; i < 200; i++ {
-			tk1.MustExec(fmt.Sprintf("insert into t values (%d)", i))
-		}
-		tk2.MustExec("commit")
-	}
-
-	// txn1 and txn2 data range do not overlap, using latches should not
-	// result in txn conflict.
-	fn()
-	tk1.MustExec("commit")
-
-	tk1.MustExec("truncate table t")
-	fn()
-	tk1.MustExec("commit")
-
-	// Test the error type of latch and it could be retry if TiDB enable the retry.
-	tk1.MustExec("begin")
-	tk1.MustExec("update t set id = id + 1")
-	tk2.MustExec("update t set id = id + 1")
-	_, err = tk1.Exec("commit")
-	c.Assert(kv.ErrWriteConflictInTiDB.Equal(err), IsTrue)
-
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("update t set id = id + 1")
-	tk2.MustExec("update t set id = id + 1")
-	tk1.MustExec("commit")
 }
 
 // TestIssue4067 Test issue https://github.com/pingcap/tidb/issues/4067

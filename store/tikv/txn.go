@@ -234,25 +234,7 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 		return nil
 	}
 
-	// latches disabled
-	if txn.store.txnLatches == nil {
-		err = committer.execute(ctx)
-		logutil.Logger(ctx).Debug("[kv] txnLatches disabled, 2pc directly", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	// latches enabled
-	// for transactions which need to acquire latches
-	lock := txn.store.txnLatches.Lock(committer.startTS, committer.keys)
-	defer txn.store.txnLatches.UnLock(lock)
-	if lock.IsStale() {
-		return kv.ErrWriteConflictInTiDB.FastGenByArgs(txn.startTS)
-	}
 	err = committer.execute(ctx)
-	if err == nil {
-		lock.SetCommitTS(committer.commitTS)
-	}
-	logutil.Logger(ctx).Debug("[kv] txnLatches enabled while txn retryable", zap.Error(err))
 	return errors.Trace(err)
 }
 

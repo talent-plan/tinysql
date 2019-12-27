@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -40,20 +39,15 @@ func (d MockDriver) Open(path string) (kv.Storage, error) {
 	}
 
 	opts := []MockTiKVStoreOption{WithPath(u.Path)}
-	txnLocalLatches := config.GetGlobalConfig().TxnLocalLatches
-	if txnLocalLatches.Enabled {
-		opts = append(opts, WithTxnLocalLatches(txnLocalLatches.Capacity))
-	}
 	return NewMockTikvStore(opts...)
 }
 
 type mockOptions struct {
-	cluster         *mocktikv.Cluster
-	mvccStore       mocktikv.MVCCStore
-	clientHijack    func(tikv.Client) tikv.Client
-	pdClientHijack  func(pd.Client) pd.Client
-	path            string
-	txnLocalLatches uint
+	cluster        *mocktikv.Cluster
+	mvccStore      mocktikv.MVCCStore
+	clientHijack   func(tikv.Client) tikv.Client
+	pdClientHijack func(pd.Client) pd.Client
+	path           string
 }
 
 // MockTiKVStoreOption is used to control some behavior of mock tikv.
@@ -88,13 +82,6 @@ func WithPath(path string) MockTiKVStoreOption {
 	}
 }
 
-// WithTxnLocalLatches enable txnLocalLatches, when capacity > 0.
-func WithTxnLocalLatches(capacity uint) MockTiKVStoreOption {
-	return func(c *mockOptions) {
-		c.txnLocalLatches = capacity
-	}
-}
-
 // NewMockTikvStore creates a mocked tikv store, the path is the file path to store the data.
 // If path is an empty string, a memory storage will be created.
 func NewMockTikvStore(options ...MockTiKVStoreOption) (kv.Storage, error) {
@@ -108,5 +95,5 @@ func NewMockTikvStore(options ...MockTiKVStoreOption) (kv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return tikv.NewTestTiKVStore(client, pdClient, opt.clientHijack, opt.pdClientHijack, opt.txnLocalLatches)
+	return tikv.NewTestTiKVStore(client, pdClient, opt.clientHijack, opt.pdClientHijack)
 }

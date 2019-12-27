@@ -271,12 +271,6 @@ enable-chunk-rpc = true
 # will be reloaded from the PD.
 region-cache-ttl = 600
 
-[txn-local-latches]
-# Enable local latches for transactions. Enable it when
-# there are lots of conflicts between transactions.
-enabled = false
-capacity = 2048000
-
 [binlog]
 # enable to write binlog.
 enable = false
