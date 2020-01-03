@@ -67,9 +67,6 @@ const (
 
 	nmDdlLease   = "lease"
 	nmTokenLimit = "token-limit"
-
-	nmProxyProtocolNetworks      = "proxy-protocol-networks"
-	nmProxyProtocolHeaderTimeout = "proxy-protocol-header-timeout"
 )
 
 var (
@@ -97,10 +94,6 @@ var (
 	reportStatus = flagBoolean(nmReportStatus, true, "If enable status report HTTP service.")
 	statusHost   = flag.String(nmStatusHost, "0.0.0.0", "tidb server status host")
 	statusPort   = flag.String(nmStatusPort, "10080", "tidb server status port")
-
-	// PROXY Protocol
-	proxyProtocolNetworks      = flag.String(nmProxyProtocolNetworks, "", "proxy protocol networks allowed IP or *, empty mean disable proxy protocol support")
-	proxyProtocolHeaderTimeout = flag.Uint(nmProxyProtocolHeaderTimeout, 5, "proxy protocol header read timeout, unit is second.")
 )
 
 var (
@@ -299,14 +292,6 @@ func overrideConfig() {
 		p, err = strconv.Atoi(*statusPort)
 		terror.MustNil(err)
 		cfg.Status.StatusPort = uint(p)
-	}
-
-	// PROXY Protocol
-	if actualFlags[nmProxyProtocolNetworks] {
-		cfg.ProxyProtocol.Networks = *proxyProtocolNetworks
-	}
-	if actualFlags[nmProxyProtocolHeaderTimeout] {
-		cfg.ProxyProtocol.HeaderTimeout = *proxyProtocolHeaderTimeout
 	}
 }
 

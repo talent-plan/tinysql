@@ -19,8 +19,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb/config"
-
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
 
@@ -48,12 +46,8 @@ type RawKVClient struct {
 }
 
 // NewRawKVClient creates a client with PD cluster addrs.
-func NewRawKVClient(pdAddrs []string, security config.Security) (*RawKVClient, error) {
-	pdCli, err := pd.NewClient(pdAddrs, pd.SecurityOption{
-		CAPath:   security.ClusterSSLCA,
-		CertPath: security.ClusterSSLCert,
-		KeyPath:  security.ClusterSSLKey,
-	})
+func NewRawKVClient(pdAddrs []string) (*RawKVClient, error) {
+	pdCli, err := pd.NewClient(pdAddrs, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -61,7 +55,7 @@ func NewRawKVClient(pdAddrs []string, security config.Security) (*RawKVClient, e
 		clusterID:   pdCli.GetClusterID(context.TODO()),
 		regionCache: NewRegionCache(pdCli),
 		pdClient:    pdCli,
-		rpcClient:   newRPCClient(security),
+		rpcClient:   newRPCClient(),
 	}, nil
 }
 

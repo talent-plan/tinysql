@@ -14,12 +14,8 @@
 package config
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 	"time"
 
@@ -28,7 +24,6 @@ import (
 	zaplog "github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/util/logutil"
-	tracing "github.com/uber/jaeger-client-go/config"
 	"go.uber.org/atomic"
 )
 
@@ -70,17 +65,14 @@ type Config struct {
 	EnableBatchDML   bool   `toml:"enable-batch-dml" json:"enable-batch-dml"`
 	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
 	// TODO: We actually only support mode 2, which keeps the original case, but the comparison is case-insensitive.
-	LowerCaseTableNames int           `toml:"lower-case-table-names" json:"lower-case-table-names"`
-	ServerVersion       string        `toml:"server-version" json:"server-version"`
-	Log                 Log           `toml:"log" json:"log"`
-	Security            Security      `toml:"security" json:"security"`
-	Status              Status        `toml:"status" json:"status"`
-	Performance         Performance   `toml:"performance" json:"performance"`
-	OpenTracing         OpenTracing   `toml:"opentracing" json:"opentracing"`
-	ProxyProtocol       ProxyProtocol `toml:"proxy-protocol" json:"proxy-protocol"`
-	TiKVClient          TiKVClient    `toml:"tikv-client" json:"tikv-client"`
-	CompatibleKillQuery bool          `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	CheckMb4ValueInUTF8 bool          `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
+	LowerCaseTableNames int         `toml:"lower-case-table-names" json:"lower-case-table-names"`
+	ServerVersion       string      `toml:"server-version" json:"server-version"`
+	Log                 Log         `toml:"log" json:"log"`
+	Status              Status      `toml:"status" json:"status"`
+	Performance         Performance `toml:"performance" json:"performance"`
+	TiKVClient          TiKVClient  `toml:"tikv-client" json:"tikv-client"`
+	CompatibleKillQuery bool        `toml:"compatible-kill-query" json:"compatible-kill-query"`
+	CheckMb4ValueInUTF8 bool        `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
 	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
@@ -192,17 +184,6 @@ func (l *Log) getDisableErrorStack() bool {
 	return !l.EnableErrorStack.toBool()
 }
 
-// Security is the security section of the config.
-type Security struct {
-	SkipGrantTable bool   `toml:"skip-grant-table" json:"skip-grant-table"`
-	SSLCA          string `toml:"ssl-ca" json:"ssl-ca"`
-	SSLCert        string `toml:"ssl-cert" json:"ssl-cert"`
-	SSLKey         string `toml:"ssl-key" json:"ssl-key"`
-	ClusterSSLCA   string `toml:"cluster-ssl-ca" json:"cluster-ssl-ca"`
-	ClusterSSLCert string `toml:"cluster-ssl-cert" json:"cluster-ssl-cert"`
-	ClusterSSLKey  string `toml:"cluster-ssl-key" json:"cluster-ssl-key"`
-}
-
 // The ErrConfigValidationFailed error is used so that external callers can do a type assertion
 // to defer handling of this specific error when someone does not want strict type checking.
 // This is needed only because logging hasn't been set up at the time we parse the config file.
@@ -214,41 +195,6 @@ type ErrConfigValidationFailed struct {
 
 func (e *ErrConfigValidationFailed) Error() string {
 	return fmt.Sprintf("config file %s contained unknown configuration options: %s", e.confFile, strings.Join(e.UndecodedItems, ", "))
-}
-
-// ToTLSConfig generates tls's config based on security section of the config.
-func (s *Security) ToTLSConfig() (*tls.Config, error) {
-	var tlsConfig *tls.Config
-	if len(s.ClusterSSLCA) != 0 {
-		var certificates = make([]tls.Certificate, 0)
-		if len(s.ClusterSSLCert) != 0 && len(s.ClusterSSLKey) != 0 {
-			// Load the client certificates from disk
-			certificate, err := tls.LoadX509KeyPair(s.ClusterSSLCert, s.ClusterSSLKey)
-			if err != nil {
-				return nil, errors.Errorf("could not load client key pair: %s", err)
-			}
-			certificates = append(certificates, certificate)
-		}
-
-		// Create a certificate pool from the certificate authority
-		certPool := x509.NewCertPool()
-		ca, err := ioutil.ReadFile(s.ClusterSSLCA)
-		if err != nil {
-			return nil, errors.Errorf("could not read ca certificate: %s", err)
-		}
-
-		// Append the certificates from the CA
-		if !certPool.AppendCertsFromPEM(ca) {
-			return nil, errors.New("failed to append ca certs")
-		}
-
-		tlsConfig = &tls.Config{
-			Certificates: certificates,
-			RootCAs:      certPool,
-		}
-	}
-
-	return tlsConfig, nil
 }
 
 // Status is the status section of the config.
@@ -280,43 +226,6 @@ type PlanCache struct {
 	Enabled  bool `toml:"enabled" json:"enabled"`
 	Capacity uint `toml:"capacity" json:"capacity"`
 	Shards   uint `toml:"shards" json:"shards"`
-}
-
-// OpenTracing is the opentracing section of the config.
-type OpenTracing struct {
-	Enable bool `toml:"enable" json:"enable"`
-
-	Sampler  OpenTracingSampler  `toml:"sampler" json:"sampler"`
-	Reporter OpenTracingReporter `toml:"reporter" json:"reporter"`
-}
-
-// OpenTracingSampler is the config for opentracing sampler.
-// See https://godoc.org/github.com/uber/jaeger-client-go/config#SamplerConfig
-type OpenTracingSampler struct {
-	Type                    string        `toml:"type" json:"type"`
-	Param                   float64       `toml:"param" json:"param"`
-	SamplingServerURL       string        `toml:"sampling-server-url" json:"sampling-server-url"`
-	MaxOperations           int           `toml:"max-operations" json:"max-operations"`
-	SamplingRefreshInterval time.Duration `toml:"sampling-refresh-interval" json:"sampling-refresh-interval"`
-}
-
-// OpenTracingReporter is the config for opentracing reporter.
-// See https://godoc.org/github.com/uber/jaeger-client-go/config#ReporterConfig
-type OpenTracingReporter struct {
-	QueueSize           int           `toml:"queue-size" json:"queue-size"`
-	BufferFlushInterval time.Duration `toml:"buffer-flush-interval" json:"buffer-flush-interval"`
-	LogSpans            bool          `toml:"log-spans" json:"log-spans"`
-	LocalAgentHostPort  string        `toml:"local-agent-host-port" json:"local-agent-host-port"`
-}
-
-// ProxyProtocol is the PROXY protocol section of the config.
-type ProxyProtocol struct {
-	// PROXY protocol acceptable client networks.
-	// Empty string means disable PROXY protocol,
-	// * means all networks.
-	Networks string `toml:"networks" json:"networks"`
-	// PROXY protocol header read timeout, Unit is second.
-	HeaderTimeout uint `toml:"header-timeout" json:"header-timeout"`
 }
 
 // TiKVClient is the config for tikv client.
@@ -398,18 +307,6 @@ var defaultConf = Config{
 		ForcePriority:       "NO_PRIORITY",
 		TxnTotalSizeLimit:   DefTxnTotalSizeLimit,
 	},
-	ProxyProtocol: ProxyProtocol{
-		Networks:      "",
-		HeaderTimeout: 5,
-	},
-	OpenTracing: OpenTracing{
-		Enable: false,
-		Sampler: OpenTracingSampler{
-			Type:  "const",
-			Param: 1.0,
-		},
-		Reporter: OpenTracingReporter{},
-	},
 	TiKVClient: TiKVClient{
 		GrpcConnectionCount:  4,
 		GrpcKeepAliveTime:    10,
@@ -484,9 +381,6 @@ func (c *Config) Valid() error {
 		// if two options conflict, we will use the value of EnableTimestamp
 		c.Log.DisableTimestamp = nbUnset
 	}
-	if c.Security.SkipGrantTable && !hasRootPrivilege() {
-		return fmt.Errorf("TiDB run with skip-grant-table need root privilege")
-	}
 	if _, ok := ValidStorage[c.Store]; !ok {
 		nameList := make([]string, 0, len(ValidStorage))
 		for k, v := range ValidStorage {
@@ -523,34 +417,9 @@ func (c *Config) Valid() error {
 	return nil
 }
 
-func hasRootPrivilege() bool {
-	return os.Geteuid() == 0
-}
-
 // ToLogConfig converts *Log to *logutil.LogConfig.
 func (l *Log) ToLogConfig() *logutil.LogConfig {
 	return logutil.NewLogConfig(l.Level, l.Format, l.File, l.getDisableTimestamp(), func(config *zaplog.Config) { config.DisableErrorVerbose = l.getDisableErrorStack() })
-}
-
-// ToTracingConfig converts *OpenTracing to *tracing.Configuration.
-func (t *OpenTracing) ToTracingConfig() *tracing.Configuration {
-	ret := &tracing.Configuration{
-		Disabled: !t.Enable,
-
-		Reporter: &tracing.ReporterConfig{},
-		Sampler:  &tracing.SamplerConfig{},
-	}
-	ret.Reporter.QueueSize = t.Reporter.QueueSize
-	ret.Reporter.BufferFlushInterval = t.Reporter.BufferFlushInterval
-	ret.Reporter.LogSpans = t.Reporter.LogSpans
-	ret.Reporter.LocalAgentHostPort = t.Reporter.LocalAgentHostPort
-
-	ret.Sampler.Type = t.Sampler.Type
-	ret.Sampler.Param = t.Sampler.Param
-	ret.Sampler.SamplingServerURL = t.Sampler.SamplingServerURL
-	ret.Sampler.MaxOperations = t.Sampler.MaxOperations
-	ret.Sampler.SamplingRefreshInterval = t.Sampler.SamplingRefreshInterval
-	return ret
 }
 
 func init() {

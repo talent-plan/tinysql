@@ -39,13 +39,11 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-
 	"github.com/pingcap/tidb/owner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
@@ -1224,11 +1222,9 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 	timeutil.SetSystemTZ(tz)
 	dom := domain.GetDomain(se)
 
-	if !config.GetGlobalConfig().Security.SkipGrantTable {
-		err = dom.LoadPrivilegeLoop(se)
-		if err != nil {
-			return nil, err
-		}
+	err = dom.LoadPrivilegeLoop(se)
+	if err != nil {
+		return nil, err
 	}
 
 	se1, err := createSession(store)

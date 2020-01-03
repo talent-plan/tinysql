@@ -31,10 +31,8 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -183,7 +181,6 @@ func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 		clients:           make(map[uint32]*clientConn),
 		stopListenerCh:    make(chan struct{}, 1),
 	}
-	s.loadTLSCertificates()
 	setSystemTimeZoneVariable()
 
 	s.capability = defaultCapability
@@ -212,17 +209,6 @@ func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 		err = errors.New("Server not configured to listen on either -socket or -host and -port")
 	}
 
-	if cfg.ProxyProtocol.Networks != "" {
-		pplistener, errProxy := proxyprotocol.NewListener(s.listener, cfg.ProxyProtocol.Networks,
-			int(cfg.ProxyProtocol.HeaderTimeout))
-		if errProxy != nil {
-			logutil.BgLogger().Error("ProxyProtocol networks parameter invalid")
-			return nil, errors.Trace(errProxy)
-		}
-		logutil.BgLogger().Info("server is running MySQL protocol (through PROXY protocol)", zap.String("host", s.cfg.Host))
-		s.listener = pplistener
-	}
-
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -230,53 +216,6 @@ func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 	// Init rand seed for randomBuf()
 	rand.Seed(time.Now().UTC().UnixNano())
 	return s, nil
-}
-
-func (s *Server) loadTLSCertificates() {
-	defer func() {
-		if s.tlsConfig != nil {
-			logutil.BgLogger().Info("secure connection is enabled", zap.Bool("client verification enabled", len(variable.SysVars["ssl_ca"].Value) > 0))
-			variable.SysVars["have_openssl"].Value = "YES"
-			variable.SysVars["have_ssl"].Value = "YES"
-			variable.SysVars["ssl_cert"].Value = s.cfg.Security.SSLCert
-			variable.SysVars["ssl_key"].Value = s.cfg.Security.SSLKey
-		} else {
-			logutil.BgLogger().Warn("secure connection is not enabled")
-		}
-	}()
-
-	if len(s.cfg.Security.SSLCert) == 0 || len(s.cfg.Security.SSLKey) == 0 {
-		s.tlsConfig = nil
-		return
-	}
-
-	tlsCert, err := tls.LoadX509KeyPair(s.cfg.Security.SSLCert, s.cfg.Security.SSLKey)
-	if err != nil {
-		logutil.BgLogger().Warn("load x509 failed", zap.Error(err))
-		s.tlsConfig = nil
-		return
-	}
-
-	// Try loading CA cert.
-	clientAuthPolicy := tls.NoClientCert
-	var certPool *x509.CertPool
-	if len(s.cfg.Security.SSLCA) > 0 {
-		caCert, err := ioutil.ReadFile(s.cfg.Security.SSLCA)
-		if err != nil {
-			logutil.BgLogger().Warn("read file failed", zap.Error(err))
-		} else {
-			certPool = x509.NewCertPool()
-			if certPool.AppendCertsFromPEM(caCert) {
-				clientAuthPolicy = tls.VerifyClientCertIfGiven
-			}
-			variable.SysVars["ssl_ca"].Value = s.cfg.Security.SSLCA
-		}
-	}
-	s.tlsConfig = &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		ClientCAs:    certPool,
-		ClientAuth:   clientAuthPolicy,
-	}
 }
 
 // Run runs the server.

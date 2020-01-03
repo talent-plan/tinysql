@@ -48,7 +48,7 @@ func (s *testClientSuite) TestConn(c *C) {
 	maxBatchSize := config.GetGlobalConfig().TiKVClient.MaxBatchSize
 	setMaxBatchSize(0)
 
-	client := newRPCClient(config.Security{})
+	client := newRPCClient()
 
 	addr := "127.0.0.1:6379"
 	conn1, err := client.getConnArray(addr)
@@ -106,7 +106,7 @@ func (s *testClientSuite) TestSendWhenReconnect(c *C) {
 	server, port := startMockTikvService()
 	c.Assert(port > 0, IsTrue)
 
-	rpcClient := newRPCClient(config.Security{})
+	rpcClient := newRPCClient()
 	addr := fmt.Sprintf("%s:%d", "127.0.0.1", port)
 	conn, err := rpcClient.getConnArray(addr)
 	c.Assert(err, IsNil)

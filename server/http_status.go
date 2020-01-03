@@ -96,17 +96,10 @@ func (s *Server) setupStatusServer(addr string, serverMux *http.ServeMux) {
 
 	s.statusServer = &http.Server{Addr: addr, Handler: CorsHandler{handler: serverMux, cfg: s.cfg}}
 
-	if len(s.cfg.Security.ClusterSSLCA) != 0 {
-		go util.WithRecovery(func() {
-			err := s.statusServer.ServeTLS(httpL, s.cfg.Security.ClusterSSLCert, s.cfg.Security.ClusterSSLKey)
-			logutil.BgLogger().Error("http server error", zap.Error(err))
-		}, nil)
-	} else {
-		go util.WithRecovery(func() {
-			err := s.statusServer.Serve(httpL)
-			logutil.BgLogger().Error("http server error", zap.Error(err))
-		}, nil)
-	}
+	go util.WithRecovery(func() {
+		err := s.statusServer.Serve(httpL)
+		logutil.BgLogger().Error("http server error", zap.Error(err))
+	}, nil)
 	err = m.Serve()
 	if err != nil {
 		logutil.BgLogger().Error("start status/rpc server error", zap.Error(err))
