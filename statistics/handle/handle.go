@@ -618,20 +618,3 @@ func (h *Handle) columnCountFromStorage(tableID, colID int64) (int64, error) {
 	}
 	return rows[0].GetMyDecimal(0).ToInt()
 }
-
-func (h *Handle) statsMetaByTableIDFromStorage(tableID int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (version uint64, modifyCount, count int64, err error) {
-	selSQL := fmt.Sprintf("SELECT version, modify_count, count from mysql.stats_meta where table_id = %d order by version", tableID)
-	var rows []chunk.Row
-	if historyStatsExec == nil {
-		rows, _, err = h.restrictedExec.ExecRestrictedSQL(selSQL)
-	} else {
-		rows, _, err = historyStatsExec.ExecRestrictedSQLWithSnapshot(selSQL)
-	}
-	if err != nil || len(rows) == 0 {
-		return
-	}
-	version = rows[0].GetUint64(0)
-	modifyCount = rows[0].GetInt64(1)
-	count = rows[0].GetInt64(2)
-	return
-}

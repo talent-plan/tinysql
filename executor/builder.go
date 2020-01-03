@@ -87,8 +87,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildExplain(v)
 	case *plannercore.Insert:
 		return b.buildInsert(v)
-	case *plannercore.LoadStats:
-		return b.buildLoadStats(v)
 	case *plannercore.PhysicalLimit:
 		return b.buildLimit(v)
 	case *plannercore.Prepare:
@@ -413,14 +411,6 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 		OnDuplicate:  append(v.OnDuplicate, v.GenCols.OnDuplicates...),
 	}
 	return insert
-}
-
-func (b *executorBuilder) buildLoadStats(v *plannercore.LoadStats) Executor {
-	e := &LoadStatsExec{
-		baseExecutor: newBaseExecutor(b.ctx, nil, v.ExplainID()),
-		info:         &LoadStatsInfo{v.Path, b.ctx},
-	}
-	return e
 }
 
 func (b *executorBuilder) buildReplace(vals *InsertValues) Executor {

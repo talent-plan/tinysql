@@ -873,62 +873,7 @@ func (cc *clientConn) writeEOF(serverStatus uint16) error {
 	return err
 }
 
-func (cc *clientConn) writeReq(filePath string) error {
-	data := cc.alloc.AllocWithLen(4, 5+len(filePath))
-	data = append(data, mysql.LocalInFileHeader)
-	data = append(data, filePath...)
-
-	err := cc.writePacket(data)
-	if err != nil {
-		return err
-	}
-
-	return cc.flush()
-}
-
-// getDataFromPath gets file contents from file path.
-func (cc *clientConn) getDataFromPath(path string) ([]byte, error) {
-	err := cc.writeReq(path)
-	if err != nil {
-		return nil, err
-	}
-	var prevData, curData []byte
-	for {
-		curData, err = cc.readPacket()
-		if err != nil && terror.ErrorNotEqual(err, io.EOF) {
-			return nil, err
-		}
-		if len(curData) == 0 {
-			break
-		}
-		prevData = append(prevData, curData...)
-	}
-	return prevData, nil
-}
-
-// handleLoadStats does the additional work after processing the 'load stats' query.
-// It sends client a file path, then reads the file content from client, loads it into the storage.
-func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *executor.LoadStatsInfo) error {
-	// If the server handles the load data request, the client has to set the ClientLocalFiles capability.
-	if cc.capability&mysql.ClientLocalFiles == 0 {
-		return errNotAllowedCommand
-	}
-	if loadStatsInfo == nil {
-		return errors.New("load stats: info is empty")
-	}
-	data, err := cc.getDataFromPath(loadStatsInfo.Path)
-	if err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return nil
-	}
-	return loadStatsInfo.Update(data)
-}
-
 // handleQuery executes the sql query string and writes result set or result ok to the client.
-
-// There is a special query `load stats` that does not return result, which is handled differently.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
@@ -949,14 +894,6 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 			err = cc.writeMultiResultset(ctx, rss, false)
 		}
 	} else {
-		loadStats := cc.ctx.Value(executor.LoadStatsVarKey)
-		if loadStats != nil {
-			defer cc.ctx.SetValue(executor.LoadStatsVarKey, nil)
-			if err = cc.handleLoadStats(ctx, loadStats.(*executor.LoadStatsInfo)); err != nil {
-				return err
-			}
-		}
-
 		err = cc.writeOK()
 	}
 	return err

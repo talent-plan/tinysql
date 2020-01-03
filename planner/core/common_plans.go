@@ -271,13 +271,6 @@ type Analyze struct {
 	Opts     map[ast.AnalyzeOptionType]uint64
 }
 
-// LoadStats represents a load stats plan.
-type LoadStats struct {
-	baseSchemaProducer
-
-	Path string
-}
-
 // SplitRegion represents a split regions plan.
 type SplitRegion struct {
 	baseSchemaProducer

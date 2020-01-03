@@ -331,8 +331,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildExplainFor(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
-	case *ast.LoadStatsStmt:
-		return b.buildLoadStats(x), nil
 	case *ast.PrepareStmt:
 		return b.buildPrepare(x), nil
 	case *ast.SelectStmt:
@@ -1532,11 +1530,6 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 	insertPlan.Schema4OnDuplicate = expression.MergeSchema(insertPlan.tableSchema, schema4NewRow)
 	insertPlan.names4OnDuplicate = append(insertPlan.tableColNames.Shallow(), names4NewRow...)
 	return nil
-}
-
-func (b *PlanBuilder) buildLoadStats(ld *ast.LoadStatsStmt) Plan {
-	p := &LoadStats{Path: ld.Path}
-	return p
 }
 
 func (b *PlanBuilder) buildSplitRegion(node *ast.SplitRegionStmt) (Plan, error) {

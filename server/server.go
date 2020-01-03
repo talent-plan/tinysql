@@ -62,11 +62,10 @@ var (
 )
 
 var (
-	errUnknownFieldType  = terror.ClassServer.New(mysql.ErrUnknownFieldType, mysql.MySQLErrName[mysql.ErrUnknownFieldType])
-	errInvalidSequence   = terror.ClassServer.New(mysql.ErrInvalidSequence, mysql.MySQLErrName[mysql.ErrInvalidSequence])
-	errInvalidType       = terror.ClassServer.New(mysql.ErrInvalidType, mysql.MySQLErrName[mysql.ErrInvalidType])
-	errNotAllowedCommand = terror.ClassServer.New(mysql.ErrNotAllowedCommand, mysql.MySQLErrName[mysql.ErrNotAllowedCommand])
-	errAccessDenied      = terror.ClassServer.New(mysql.ErrAccessDenied, mysql.MySQLErrName[mysql.ErrAccessDenied])
+	errUnknownFieldType = terror.ClassServer.New(mysql.ErrUnknownFieldType, mysql.MySQLErrName[mysql.ErrUnknownFieldType])
+	errInvalidSequence  = terror.ClassServer.New(mysql.ErrInvalidSequence, mysql.MySQLErrName[mysql.ErrInvalidSequence])
+	errInvalidType      = terror.ClassServer.New(mysql.ErrInvalidType, mysql.MySQLErrName[mysql.ErrInvalidType])
+	errAccessDenied     = terror.ClassServer.New(mysql.ErrAccessDenied, mysql.MySQLErrName[mysql.ErrAccessDenied])
 )
 
 // DefaultCapability is the capability of the server when it is created using the default configuration.
