@@ -4,7 +4,7 @@ jobs:
   build:
     docker:
       - image: golang:1.13
-    working_directory: /go/src/github.com/pingcap/tidb
+    working_directory: /go/src/github.com/pingcap/tinysql
     steps:
       - checkout
       - run:
