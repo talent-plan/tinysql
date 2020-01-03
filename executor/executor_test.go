@@ -132,7 +132,6 @@ func (s *baseTestSuite) SetUpSuite(c *C) {
 	}
 	d, err := session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-	d.SetStatsUpdating(true)
 	s.domain = d
 }
 
@@ -2434,7 +2433,6 @@ func (s *testSuite1) SetUpSuite(c *C) {
 	session.SetStatsLease(0)
 	s.dom, err = session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-	s.dom.SetStatsUpdating(true)
 }
 
 func (s *testSuite1) TearDownSuite(c *C) {

@@ -46,7 +46,6 @@ func (s *testAdminSuite) SetUpSuite(c *C) {
 	session.DisableStats4Test()
 	d, err := session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-	d.SetStatsUpdating(true)
 	s.domain = d
 }
 

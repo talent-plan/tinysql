@@ -16,6 +16,7 @@ package handle
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/parser/terror"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,11 +66,6 @@ type Handle struct {
 
 	restrictedExec sqlexec.RestrictedSQLExecutor
 
-	// listHead contains all the stats collector required by session.
-	listHead *SessionStatsCollector
-	// globalMap contains all the delta map from collectors when we dump them to KV.
-	globalMap tableDeltaMap
-
 	lease atomic2.Duration
 }
 
@@ -81,17 +77,12 @@ func (h *Handle) Clear() {
 	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
 	h.mu.ctx.GetSessionVars().EnableChunkRPC = false
 	h.mu.ctx.GetSessionVars().ProjectionConcurrency = 0
-	h.listHead = &SessionStatsCollector{mapper: make(tableDeltaMap)}
-	h.globalMap = make(tableDeltaMap)
 	h.mu.Unlock()
 }
 
 // NewHandle creates a Handle for update stats.
 func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
-	handle := &Handle{
-		listHead:  &SessionStatsCollector{mapper: make(tableDeltaMap)},
-		globalMap: make(tableDeltaMap),
-	}
+	handle := &Handle{}
 	handle.lease.Store(lease)
 	// It is safe to use it concurrently because the exec won't touch the ctx.
 	if exec, ok := ctx.(sqlexec.RestrictedSQLExecutor); ok {
@@ -309,13 +300,6 @@ func (h *Handle) LastUpdateVersion() uint64 {
 func (h *Handle) SetLastUpdateVersion(version uint64) {
 	statsCache := h.statsCache.Load().(statsCache)
 	h.updateStatsCache(statsCache.update(nil, nil, version))
-}
-
-// FlushStats flushes the cached stats update into store.
-func (h *Handle) FlushStats() {
-	if err := h.DumpStatsDeltaToKV(DumpAll); err != nil {
-		logutil.BgLogger().Debug("[stats] dump stats delta fail", zap.Error(err))
-	}
 }
 
 func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.CMSketch, err error) {
@@ -557,6 +541,27 @@ func (h *Handle) SaveMetaToStorage(tableID, count, modifyCount int64) (err error
 	sql = fmt.Sprintf("replace into mysql.stats_meta (version, table_id, count, modify_count) values (%d, %d, %d, %d)", version, tableID, count, modifyCount)
 	_, err = exec.Execute(ctx, sql)
 	return
+}
+
+// finishTransaction will execute `commit` when error is nil, otherwise `rollback`.
+func finishTransaction(ctx context.Context, exec sqlexec.SQLExecutor, err error) error {
+	if err == nil {
+		_, err = exec.Execute(ctx, "commit")
+	} else {
+		_, err1 := exec.Execute(ctx, "rollback")
+		terror.Log(errors.Trace(err1))
+	}
+	return errors.Trace(err)
+}
+
+func execSQLs(ctx context.Context, exec sqlexec.SQLExecutor, sqls []string) error {
+	for _, sql := range sqls {
+		_, err := exec.Execute(ctx, sql)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.FieldType, distinct int64, isIndex int, ver uint64, nullCount int64, totColSize int64, corr float64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.Histogram, err error) {

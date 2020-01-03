@@ -49,7 +49,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
@@ -139,7 +138,6 @@ type session struct {
 	sessionVars    *variable.SessionVars
 	sessionManager util.SessionManager
 
-	statsCollector *handle.SessionStatsCollector
 	// ddlOwnerChecker is used in `select tidb_is_ddl_owner()` statement;
 	ddlOwnerChecker owner.DDLOwnerChecker
 
@@ -346,12 +344,6 @@ func (s *session) doCommitWithRetry(ctx context.Context) error {
 			zap.String("finished txn", s.txn.GoString()),
 			zap.Error(err))
 		return err
-	}
-	mapper := s.GetSessionVars().TxnCtx.TableDeltaMap
-	if s.statsCollector != nil && mapper != nil {
-		for id, item := range mapper {
-			s.statsCollector.Update(id, item.Delta, item.Count, &item.ColSize)
-		}
 	}
 	return nil
 }
@@ -1126,9 +1118,6 @@ func (s *session) ClearValue(key fmt.Stringer) {
 
 // Close function does some clean work when session end.
 func (s *session) Close() {
-	if s.statsCollector != nil {
-		s.statsCollector.Delete()
-	}
 	ctx := context.TODO()
 	s.RollbackTxn(ctx)
 	if s.sessionVars != nil {
@@ -1162,19 +1151,6 @@ func CreateSession(store kv.Storage) (Session, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Add auth here.
-	do, err := domap.Get(store)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add stats collector, and it will be freed by background stats worker
-	// which periodically updates stats using the collected data.
-	if do.StatsHandle() != nil && do.StatsUpdating() {
-		s.statsCollector = do.StatsHandle().NewSessionStatsCollector()
-	}
-
 	return s, nil
 }
 

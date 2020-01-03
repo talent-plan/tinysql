@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/statistics"
-	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -129,7 +128,6 @@ func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	do, err := session.BootstrapSession(store)
-	do.SetStatsUpdating(true)
 	return store, do, errors.Trace(err)
 }
 
@@ -368,82 +366,6 @@ func getRange(start, end int64) []*ranger.Range {
 	return []*ranger.Range{ran}
 }
 
-func (s *testStatsSuite) TestEstimationForUnknownValues(c *C) {
-	defer cleanEnv(c, s.store, s.do)
-	testKit := testkit.NewTestKit(c, s.store)
-	testKit.MustExec("use test")
-	testKit.MustExec("drop table if exists t")
-	testKit.MustExec("create table t(a int, b int, key idx(a, b))")
-	testKit.MustExec("analyze table t")
-	for i := 0; i < 10; i++ {
-		testKit.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
-	}
-	h := s.do.StatsHandle()
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	testKit.MustExec("analyze table t")
-	for i := 0; i < 10; i++ {
-		testKit.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i+10, i+10))
-	}
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	c.Assert(h.Update(s.do.InfoSchema()), IsNil)
-	table, err := s.do.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	statsTbl := h.GetTableStats(table.Meta())
-
-	sc := &stmtctx.StatementContext{}
-	colID := table.Meta().Columns[0].ID
-	count, err := statsTbl.GetRowCountByColumnRanges(sc, colID, getRange(30, 30))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 2.0)
-
-	count, err = statsTbl.GetRowCountByColumnRanges(sc, colID, getRange(9, 30))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 4.2)
-
-	count, err = statsTbl.GetRowCountByColumnRanges(sc, colID, getRange(9, math.MaxInt64))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 4.2)
-
-	idxID := table.Meta().Indices[0].ID
-	count, err = statsTbl.GetRowCountByIndexRanges(sc, idxID, getRange(30, 30))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 0.2)
-
-	count, err = statsTbl.GetRowCountByIndexRanges(sc, idxID, getRange(9, 30))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 2.2)
-
-	testKit.MustExec("truncate table t")
-	testKit.MustExec("insert into t values (null, null)")
-	testKit.MustExec("analyze table t")
-	table, err = s.do.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	statsTbl = h.GetTableStats(table.Meta())
-
-	colID = table.Meta().Columns[0].ID
-	count, err = statsTbl.GetRowCountByColumnRanges(sc, colID, getRange(1, 30))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 0.0)
-
-	testKit.MustExec("drop table t")
-	testKit.MustExec("create table t(a int, b int, index idx(b))")
-	testKit.MustExec("insert into t values (1,1)")
-	testKit.MustExec("analyze table t")
-	table, err = s.do.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	statsTbl = h.GetTableStats(table.Meta())
-
-	colID = table.Meta().Columns[0].ID
-	count, err = statsTbl.GetRowCountByColumnRanges(sc, colID, getRange(2, 2))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 0.0)
-
-	idxID = table.Meta().Indices[0].ID
-	count, err = statsTbl.GetRowCountByIndexRanges(sc, idxID, getRange(2, 2))
-	c.Assert(err, IsNil)
-	c.Assert(count, Equals, 0.0)
-}
-
 func (s *testStatsSuite) TestEstimationUniqueKeyEqualConds(c *C) {
 	defer cleanEnv(c, s.store, s.do)
 	testKit := testkit.NewTestKit(c, s.store)
@@ -546,7 +468,6 @@ func (s *testStatsSuite) TestColumnIndexNullEstimation(c *C) {
 	testKit.MustExec("create table t(a int, b int, c int, index idx_b(b), index idx_c_a(c, a))")
 	testKit.MustExec("insert into t values(1,null,1),(2,null,2),(3,3,3),(4,null,4),(null,null,null);")
 	h := s.do.StatsHandle()
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	testKit.MustExec("analyze table t")
 	var (
 		input  []string
@@ -577,8 +498,6 @@ func (s *testStatsSuite) TestUniqCompEqualEst(c *C) {
 	testKit.MustExec("drop table if exists t")
 	testKit.MustExec("create table t(a int, b int, primary key(a, b))")
 	testKit.MustExec("insert into t values(1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(1,9),(1,10)")
-	h := s.do.StatsHandle()
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	testKit.MustExec("analyze table t")
 	var (
 		input  []string

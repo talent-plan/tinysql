@@ -54,7 +54,6 @@ func (s *testUpdateSuite) SetUpSuite(c *C) {
 	}
 	d, err := session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-	d.SetStatsUpdating(true)
 	s.domain = d
 }
 

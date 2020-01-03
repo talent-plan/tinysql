@@ -22,7 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/ngaut/pools"
-	"github.com/ngaut/sync2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/model"
@@ -63,7 +62,6 @@ type Domain struct {
 	etcdClient      *clientv3.Client
 	gvc             GlobalVariableCache
 	wg              sync.WaitGroup
-	statsUpdating   sync2.AtomicInt32
 }
 
 // loadInfoSchema loads infoschema at startTS into handle, usedSchemaVersion is the currently used
@@ -744,20 +742,6 @@ func (do *Domain) CreateStatsHandle(ctx sessionctx.Context) {
 	atomic.StorePointer(&do.statsHandle, unsafe.Pointer(handle.NewHandle(ctx, do.statsLease)))
 }
 
-// StatsUpdating checks if the stats worker is updating.
-func (do *Domain) StatsUpdating() bool {
-	return do.statsUpdating.Get() > 0
-}
-
-// SetStatsUpdating sets the value of stats updating.
-func (do *Domain) SetStatsUpdating(val bool) {
-	if val {
-		do.statsUpdating.Set(1)
-	} else {
-		do.statsUpdating.Set(0)
-	}
-}
-
 // UpdateTableStatsLoop creates a goroutine loads stats info and updates stats info in a loop.
 // It will also start a goroutine to analyze tables automatically.
 // It should be called only once in BootstrapSession.
@@ -773,12 +757,6 @@ func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 		do.wg.Add(1)
 		go do.loadStatsWorker()
 	}
-	if do.statsLease <= 0 {
-		return nil
-	}
-	do.wg.Add(1)
-	do.SetStatsUpdating(true)
-	go do.updateStatsWorker()
 	return nil
 }
 
@@ -805,30 +783,6 @@ func (do *Domain) loadStatsWorker() {
 			}
 		case <-do.exit:
 			return
-		}
-	}
-}
-
-func (do *Domain) updateStatsWorker() {
-	defer recoverInDomain("updateStatsWorker", false)
-	lease := do.statsLease
-	deltaUpdateTicker := time.NewTicker(20 * lease)
-	defer deltaUpdateTicker.Stop()
-	statsHandle := do.StatsHandle()
-	defer func() {
-		do.SetStatsUpdating(false)
-		do.wg.Done()
-	}()
-	for {
-		select {
-		case <-do.exit:
-			statsHandle.FlushStats()
-			return
-		case <-deltaUpdateTicker.C:
-			err := statsHandle.DumpStatsDeltaToKV(handle.DumpDelta)
-			if err != nil {
-				logutil.BgLogger().Debug("dump stats delta failed", zap.Error(err))
-			}
 		}
 	}
 }

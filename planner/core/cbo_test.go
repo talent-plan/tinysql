@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/statistics"
-	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
@@ -49,38 +47,6 @@ func (s *testAnalyzeSuite) SetUpSuite(c *C) {
 
 func (s *testAnalyzeSuite) TearDownSuite(c *C) {
 	c.Assert(s.testData.GenerateOutputIfNeeded(), IsNil)
-}
-
-// TestCBOWithoutAnalyze tests the plan with stats that only have count info.
-func (s *testAnalyzeSuite) TestCBOWithoutAnalyze(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t1 (a int)")
-	testKit.MustExec("create table t2 (a int)")
-	testKit.MustExec("analyze table t1, t2")
-	h := dom.StatsHandle()
-	testKit.MustExec("insert into t1 values (1), (2), (3), (4), (5), (6)")
-	testKit.MustExec("insert into t2 values (1), (2), (3), (4), (5), (6)")
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	c.Assert(h.Update(dom.InfoSchema()), IsNil)
-	testKit.MustQuery("explain select * from t1, t2 where t1.a = t2.a").Check(testkit.Rows(
-		"HashLeftJoin_8 7.49 root inner join, equal:[eq(test.t1.a, test.t2.a)]",
-		"├─TableReader_12 5.99 root data:Selection_11",
-		"│ └─Selection_11 5.99 cop[tikv] not(isnull(test.t1.a))",
-		"│   └─TableScan_10 6.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
-		"└─TableReader_15 5.99 root data:Selection_14",
-		"  └─Selection_14 5.99 cop[tikv] not(isnull(test.t2.a))",
-		"    └─TableScan_13 6.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
-	))
-	testKit.MustQuery("explain format = 'hint' select * from t1, t2 where t1.a = t2.a").Check(testkit.Rows(
-		"USE_INDEX(@`sel_1` `test`.`t1` ), USE_INDEX(@`sel_1` `test`.`t2` ), HASH_JOIN(@`sel_1` `test`.`t1`)"))
 }
 
 func (s *testAnalyzeSuite) TestStraightJoin(c *C) {
@@ -119,13 +85,9 @@ func (s *testAnalyzeSuite) TestTableDual(c *C) {
 
 	testKit := testkit.NewTestKit(c, store)
 	testKit.MustExec(`use test`)
-	h := dom.StatsHandle()
 	testKit.MustExec(`create table t(a int)`)
-	testKit.MustExec("analyze table t")
 	testKit.MustExec("insert into t values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)")
-
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	c.Assert(h.Update(dom.InfoSchema()), IsNil)
+	testKit.MustExec("analyze table t")
 
 	testKit.MustQuery(`explain select * from t where 1 = 0`).Check(testkit.Rows(
 		`TableDual_6 0.00 root rows:0`,
@@ -133,39 +95,6 @@ func (s *testAnalyzeSuite) TestTableDual(c *C) {
 
 	testKit.MustQuery(`explain select * from t where 1 = 1 limit 0`).Check(testkit.Rows(
 		`TableDual_5 0.00 root rows:0`,
-	))
-}
-
-func (s *testAnalyzeSuite) TestEstimation(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-		statistics.RatioOfPseudoEstimate.Store(0.7)
-	}()
-	statistics.RatioOfPseudoEstimate.Store(10.0)
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t (a int)")
-	testKit.MustExec("analyze table t")
-	testKit.MustExec("insert into t values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)")
-	testKit.MustExec("insert into t select * from t")
-	testKit.MustExec("insert into t select * from t")
-	h := dom.StatsHandle()
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	testKit.MustExec("analyze table t")
-	for i := 1; i <= 8; i++ {
-		testKit.MustExec("delete from t where a = ?", i)
-	}
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	c.Assert(h.Update(dom.InfoSchema()), IsNil)
-	testKit.MustQuery("explain select count(*) from t group by a").Check(testkit.Rows(
-		"HashAgg_9 2.00 root group by:test.t.a, funcs:count(Column#4)->Column#3",
-		"└─TableReader_10 2.00 root data:HashAgg_5",
-		"  └─HashAgg_5 2.00 cop[tikv] group by:test.t.a, funcs:count(1)->Column#4",
-		"    └─TableScan_8 8.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false",
 	))
 }
 
@@ -279,43 +208,6 @@ func (s *testAnalyzeSuite) TestAnalyze(c *C) {
 	}
 }
 
-func (s *testAnalyzeSuite) TestOutdatedAnalyze(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t (a int, b int, index idx(a))")
-	testKit.MustExec("analyze table t")
-	for i := 0; i < 10; i++ {
-		testKit.MustExec(fmt.Sprintf("insert into t values (%d,%d)", i, i))
-	}
-	h := dom.StatsHandle()
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	testKit.MustExec("analyze table t")
-	testKit.MustExec("insert into t select * from t")
-	testKit.MustExec("insert into t select * from t")
-	testKit.MustExec("insert into t select * from t")
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	c.Assert(h.Update(dom.InfoSchema()), IsNil)
-	statistics.RatioOfPseudoEstimate.Store(10.0)
-	testKit.MustQuery("explain select * from t where a <= 5 and b <= 5").Check(testkit.Rows(
-		"TableReader_7 35.91 root data:Selection_6",
-		"└─Selection_6 35.91 cop[tikv] le(test.t.a, 5), le(test.t.b, 5)",
-		"  └─TableScan_5 80.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false",
-	))
-	statistics.RatioOfPseudoEstimate.Store(0.1)
-	testKit.MustQuery("explain select * from t where a <= 5 and b <= 5").Check(testkit.Rows(
-		"TableReader_7 8.84 root data:Selection_6",
-		"└─Selection_6 8.84 cop[tikv] le(test.t.a, 5), le(test.t.b, 5)",
-		"  └─TableScan_5 80.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false, stats:pseudo",
-	))
-}
-
 func (s *testAnalyzeSuite) TestPreparedNullParam(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()
@@ -424,7 +316,6 @@ func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 		return nil, nil, err
 	}
 
-	dom.SetStatsUpdating(true)
 	return store, dom, errors.Trace(err)
 }
 

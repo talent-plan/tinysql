@@ -42,7 +42,6 @@ import (
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics/handle"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -89,7 +88,6 @@ func (s *seqTestSuite) SetUpSuite(c *C) {
 	}
 	d, err := session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-	d.SetStatsUpdating(true)
 	s.domain = d
 }
 
@@ -583,31 +581,6 @@ func (s *seqTestSuite) TestShow(c *C) {
 		"c8|datetime|YES||CURRENT_TIMESTAMP|DEFAULT_GENERATED on update CURRENT_TIMESTAMP",
 		"c9|year(4)|YES||2014|",
 	))
-}
-
-func (s *seqTestSuite) TestShowStatsHealthy(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int)")
-	tk.MustExec("create index idx on t(a)")
-	tk.MustExec("analyze table t")
-	tk.MustQuery("show stats_healthy").Check(testkit.Rows("test t  100"))
-	tk.MustExec("insert into t values (1), (2)")
-	do, _ := session.GetDomain(s.store)
-	do.StatsHandle().DumpStatsDeltaToKV(handle.DumpAll)
-	tk.MustExec("analyze table t")
-	tk.MustQuery("show stats_healthy").Check(testkit.Rows("test t  100"))
-	tk.MustExec("insert into t values (3), (4), (5), (6), (7), (8), (9), (10)")
-	do.StatsHandle().DumpStatsDeltaToKV(handle.DumpAll)
-	do.StatsHandle().Update(do.InfoSchema())
-	tk.MustQuery("show stats_healthy").Check(testkit.Rows("test t  19"))
-	tk.MustExec("analyze table t")
-	tk.MustQuery("show stats_healthy").Check(testkit.Rows("test t  100"))
-	tk.MustExec("delete from t")
-	do.StatsHandle().DumpStatsDeltaToKV(handle.DumpAll)
-	do.StatsHandle().Update(do.InfoSchema())
-	tk.MustQuery("show stats_healthy").Check(testkit.Rows("test t  0"))
 }
 
 // TestIndexDoubleReadClose checks that when a index double read returns before reading all the rows, the goroutine doesn't
