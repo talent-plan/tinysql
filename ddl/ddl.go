@@ -246,8 +246,6 @@ type DDL interface {
 	GetScope(status string) variable.ScopeFlag
 	// Stop stops DDL worker.
 	Stop() error
-	// RegisterEventCh registers event channel for ddl.
-	RegisterEventCh(chan<- *util.Event)
 	// SchemaSyncer gets the schema syncer.
 	SchemaSyncer() util.SchemaSyncer
 	// OwnerManager gets the owner manager.
@@ -278,7 +276,6 @@ type ddlCtx struct {
 	ownerManager owner.Manager
 	schemaSyncer util.SchemaSyncer
 	ddlJobDoneCh chan struct{}
-	ddlEventCh   chan<- *util.Event
 	lease        time.Duration // lease is schema lease.
 	infoHandle   *infoschema.Handle
 
@@ -297,35 +294,6 @@ func (dc *ddlCtx) isOwner() bool {
 
 	}
 	return isOwner
-}
-
-// RegisterEventCh registers passed channel for ddl Event.
-func (d *ddl) RegisterEventCh(ch chan<- *util.Event) {
-	d.ddlEventCh = ch
-}
-
-// asyncNotifyEvent will notify the ddl event to outside world, say statistic handle. When the channel is full, we may
-// give up notify and log it.
-func asyncNotifyEvent(d *ddlCtx, e *util.Event) {
-	if d.ddlEventCh != nil {
-		if d.lease == 0 {
-			// If lease is 0, it's always used in test.
-			select {
-			case d.ddlEventCh <- e:
-			default:
-			}
-			return
-		}
-		for i := 0; i < 10; i++ {
-			select {
-			case d.ddlEventCh <- e:
-				return
-			default:
-				logutil.BgLogger().Warn("[ddl] fail to notify DDL event", zap.String("event", e.String()))
-				time.Sleep(time.Microsecond * 10)
-			}
-		}
-	}
 }
 
 // NewDDL creates a new DDL.

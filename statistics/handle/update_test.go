@@ -57,6 +57,8 @@ func (s *testStatsSuite) TestSingleSessionInsert(c *C) {
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t1 (c1 int, c2 int)")
 	testKit.MustExec("create table t2 (c1 int, c2 int)")
+	testKit.MustExec("analyze table t1")
+	testKit.MustExec("analyze table t2")
 
 	rowCount1 := 10
 	rowCount2 := 20
@@ -72,9 +74,6 @@ func (s *testStatsSuite) TestSingleSessionInsert(c *C) {
 	c.Assert(err, IsNil)
 	tableInfo1 := tbl1.Meta()
 	h := s.do.StatsHandle()
-
-	h.HandleDDLEvent(<-h.DDLEventCh())
-	h.HandleDDLEvent(<-h.DDLEventCh())
 
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(is), IsNil)
@@ -177,6 +176,7 @@ func (s *testStatsSuite) TestRollback(c *C) {
 	testKit := testkit.NewTestKit(c, s.store)
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t (a int, b int)")
+	testKit.MustExec("analyze table t")
 	testKit.MustExec("begin")
 	testKit.MustExec("insert into t values (1,2)")
 	testKit.MustExec("rollback")
@@ -186,7 +186,6 @@ func (s *testStatsSuite) TestRollback(c *C) {
 	c.Assert(err, IsNil)
 	tableInfo := tbl.Meta()
 	h := s.do.StatsHandle()
-	h.HandleDDLEvent(<-h.DDLEventCh())
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(is), IsNil)
 
@@ -200,6 +199,7 @@ func (s *testStatsSuite) TestMultiSession(c *C) {
 	testKit := testkit.NewTestKit(c, s.store)
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t1 (c1 int, c2 int)")
+	testKit.MustExec("analyze table t1")
 
 	rowCount1 := 10
 	for i := 0; i < rowCount1; i++ {
@@ -219,8 +219,6 @@ func (s *testStatsSuite) TestMultiSession(c *C) {
 	c.Assert(err, IsNil)
 	tableInfo1 := tbl1.Meta()
 	h := s.do.StatsHandle()
-
-	h.HandleDDLEvent(<-h.DDLEventCh())
 
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(is), IsNil)
@@ -257,14 +255,13 @@ func (s *testStatsSuite) TestTxnWithFailure(c *C) {
 	testKit := testkit.NewTestKit(c, s.store)
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t1 (c1 int primary key, c2 int)")
+	testKit.MustExec("analyze table t1")
 
 	is := s.do.InfoSchema()
 	tbl1, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t1"))
 	c.Assert(err, IsNil)
 	tableInfo1 := tbl1.Meta()
 	h := s.do.StatsHandle()
-
-	h.HandleDDLEvent(<-h.DDLEventCh())
 
 	rowCount1 := 10
 	testKit.MustExec("begin")
@@ -305,14 +302,13 @@ func (s *testStatsSuite) TestUpdatePartition(c *C) {
 	testKit.MustExec("drop table if exists t")
 	createTable := `CREATE TABLE t (a int, b char(5)) PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (6),PARTITION p1 VALUES LESS THAN (11))`
 	testKit.MustExec(createTable)
+	testKit.MustExec("analyze table t")
 	do := s.do
 	is := do.InfoSchema()
 	tbl, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
 	c.Assert(err, IsNil)
 	tableInfo := tbl.Meta()
 	h := do.StatsHandle()
-	err = h.HandleDDLEvent(<-h.DDLEventCh())
-	c.Assert(err, IsNil)
 	pi := tableInfo.GetPartitionInfo()
 	c.Assert(len(pi.Definitions), Equals, 2)
 	bColID := tableInfo.Columns[1].ID
@@ -420,7 +416,7 @@ func (s *testStatsSuite) TestOutOfOrderUpdate(c *C) {
 	c.Assert(err, IsNil)
 	tableInfo := tbl.Meta()
 	h := do.StatsHandle()
-	h.HandleDDLEvent(<-h.DDLEventCh())
+	testKit.MustExec("analyze table t")
 
 	// Simulate the case that another tidb has inserted some value, but delta info has not been dumped to kv yet.
 	testKit.MustExec("insert into t values (2,2),(4,5)")

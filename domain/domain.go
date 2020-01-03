@@ -765,7 +765,9 @@ func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 	ctx.GetSessionVars().InRestrictedSQL = true
 	statsHandle := handle.NewHandle(ctx, do.statsLease)
 	atomic.StorePointer(&do.statsHandle, unsafe.Pointer(statsHandle))
-	do.ddl.RegisterEventCh(statsHandle.DDLEventCh())
+	if err := statsHandle.Update(do.InfoSchema()); err != nil {
+		return err
+	}
 	// Negative stats lease indicates that it is in test, it does not need update.
 	if do.statsLease >= 0 {
 		do.wg.Add(1)
@@ -790,17 +792,10 @@ func (do *Domain) loadStatsWorker() {
 	loadTicker := time.NewTicker(lease)
 	defer loadTicker.Stop()
 	statsHandle := do.StatsHandle()
-	t := time.Now()
-	err := statsHandle.InitStats(do.InfoSchema())
-	if err != nil {
-		logutil.BgLogger().Debug("init stats info failed", zap.Error(err))
-	} else {
-		logutil.BgLogger().Info("init stats info time", zap.Duration("take time", time.Since(t)))
-	}
 	for {
 		select {
 		case <-loadTicker.C:
-			err = statsHandle.Update(do.InfoSchema())
+			err := statsHandle.Update(do.InfoSchema())
 			if err != nil {
 				logutil.BgLogger().Debug("update stats info failed", zap.Error(err))
 			}
@@ -829,12 +824,6 @@ func (do *Domain) updateStatsWorker() {
 		case <-do.exit:
 			statsHandle.FlushStats()
 			return
-			// This channel is sent only by ddl owner.
-		case t := <-statsHandle.DDLEventCh():
-			err := statsHandle.HandleDDLEvent(t)
-			if err != nil {
-				logutil.BgLogger().Debug("handle ddl event failed", zap.Error(err))
-			}
 		case <-deltaUpdateTicker.C:
 			err := statsHandle.DumpStatsDeltaToKV(handle.DumpDelta)
 			if err != nil {

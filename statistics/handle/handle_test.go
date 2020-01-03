@@ -317,64 +317,6 @@ func (s *testStatsSuite) TestVersion(c *C) {
 	c.Assert(statsTbl2.Columns[int64(3)], NotNil)
 }
 
-func (s *testStatsSuite) TestLoadHist(c *C) {
-	defer cleanEnv(c, s.store, s.do)
-	testKit := testkit.NewTestKit(c, s.store)
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t (c1 varchar(12), c2 char(12))")
-	do := s.do
-	h := do.StatsHandle()
-	err := h.HandleDDLEvent(<-h.DDLEventCh())
-	c.Assert(err, IsNil)
-	rowCount := 10
-	for i := 0; i < rowCount; i++ {
-		testKit.MustExec("insert into t values('a','ddd')")
-	}
-	testKit.MustExec("analyze table t")
-	is := do.InfoSchema()
-	tbl, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tableInfo := tbl.Meta()
-	oldStatsTbl := h.GetTableStats(tableInfo)
-	for i := 0; i < rowCount; i++ {
-		testKit.MustExec("insert into t values('bb','sdfga')")
-	}
-	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
-	h.Update(do.InfoSchema())
-	newStatsTbl := h.GetTableStats(tableInfo)
-	// The stats table is updated.
-	c.Assert(oldStatsTbl == newStatsTbl, IsFalse)
-	// Only the TotColSize of histograms is updated.
-	for id, hist := range oldStatsTbl.Columns {
-		c.Assert(hist.TotColSize, Less, newStatsTbl.Columns[id].TotColSize)
-
-		temp := hist.TotColSize
-		hist.TotColSize = newStatsTbl.Columns[id].TotColSize
-		c.Assert(statistics.HistogramEqual(&hist.Histogram, &newStatsTbl.Columns[id].Histogram, false), IsTrue)
-		hist.TotColSize = temp
-
-		c.Assert(hist.CMSketch.Equal(newStatsTbl.Columns[id].CMSketch), IsTrue)
-		c.Assert(hist.Count, Equals, newStatsTbl.Columns[id].Count)
-		c.Assert(hist.Info, Equals, newStatsTbl.Columns[id].Info)
-	}
-	// Add column c3, we only update c3.
-	testKit.MustExec("alter table t add column c3 int")
-	err = h.HandleDDLEvent(<-h.DDLEventCh())
-	c.Assert(err, IsNil)
-	is = do.InfoSchema()
-	tbl, err = is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tableInfo = tbl.Meta()
-	c.Assert(h.Update(is), IsNil)
-	newStatsTbl2 := h.GetTableStats(tableInfo)
-	c.Assert(newStatsTbl2 == newStatsTbl, IsFalse)
-	// The histograms is not updated.
-	for id, hist := range newStatsTbl.Columns {
-		c.Assert(hist, Equals, newStatsTbl2.Columns[id])
-	}
-	c.Assert(newStatsTbl2.Columns[int64(3)].LastUpdateVersion, Greater, newStatsTbl2.Columns[int64(1)].LastUpdateVersion)
-}
-
 func (s *testStatsSuite) TestLoadStats(c *C) {
 	defer cleanEnv(c, s.store, s.do)
 	testKit := testkit.NewTestKit(c, s.store)

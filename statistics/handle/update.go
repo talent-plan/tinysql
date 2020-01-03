@@ -16,6 +16,7 @@ package handle
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/parser/terror"
 	"strings"
 	"sync"
 	"time"
@@ -213,6 +214,27 @@ func (h *Handle) dumpTableStatCountToKV(id int64, delta variable.TableDelta) (up
 	err = execSQLs(context.Background(), exec, []string{sql})
 	updated = h.mu.ctx.GetSessionVars().StmtCtx.AffectedRows() > 0
 	return
+}
+
+// finishTransaction will execute `commit` when error is nil, otherwise `rollback`.
+func finishTransaction(ctx context.Context, exec sqlexec.SQLExecutor, err error) error {
+	if err == nil {
+		_, err = exec.Execute(ctx, "commit")
+	} else {
+		_, err1 := exec.Execute(ctx, "rollback")
+		terror.Log(errors.Trace(err1))
+	}
+	return errors.Trace(err)
+}
+
+func execSQLs(ctx context.Context, exec sqlexec.SQLExecutor, sqls []string) error {
+	for _, sql := range sqls {
+		_, err := exec.Execute(ctx, sql)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handle) dumpTableStatColSizeToKV(id int64, delta variable.TableDelta) error {

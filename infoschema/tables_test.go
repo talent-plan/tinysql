@@ -153,7 +153,7 @@ func (s *testTableSuite) TestDataForTableStatsField(c *C) {
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (c int, d int, e char(5), index idx(e))")
-	h.HandleDDLEvent(<-h.DDLEventCh())
+	tk.MustExec("analyze table t")
 	tk.MustQuery("select table_rows, avg_row_length, data_length, index_length from information_schema.tables where table_name='t'").Check(
 		testkit.Rows("0 0 0 0"))
 	tk.MustExec(`insert into t(c, d, e) values(1, 2, "c"), (2, 3, "d"), (3, 4, "e")`)
@@ -180,7 +180,7 @@ func (s *testTableSuite) TestDataForTableStatsField(c *C) {
 	// Test partition table.
 	tk.MustExec("drop table if exists t")
 	tk.MustExec(`CREATE TABLE t (a int, b int, c varchar(5), primary key(a), index idx(c)) PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (6), PARTITION p1 VALUES LESS THAN (11), PARTITION p2 VALUES LESS THAN (16))`)
-	h.HandleDDLEvent(<-h.DDLEventCh())
+	tk.MustExec("analyze table t")
 	tk.MustExec(`insert into t(a, b, c) values(1, 2, "c"), (7, 3, "d"), (12, 4, "e")`)
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(is), IsNil)

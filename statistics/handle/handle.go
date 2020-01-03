@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -66,9 +65,6 @@ type Handle struct {
 
 	restrictedExec sqlexec.RestrictedSQLExecutor
 
-	// ddlEventCh is a channel to notify a ddl operation has happened.
-	// It is sent only by owner or the drop stats executor, and read by stats handle.
-	ddlEventCh chan *util.Event
 	// listHead contains all the stats collector required by session.
 	listHead *SessionStatsCollector
 	// globalMap contains all the delta map from collectors when we dump them to KV.
@@ -81,9 +77,6 @@ type Handle struct {
 func (h *Handle) Clear() {
 	h.mu.Lock()
 	h.statsCache.Store(statsCache{tables: make(map[int64]*statistics.Table)})
-	for len(h.ddlEventCh) > 0 {
-		<-h.ddlEventCh
-	}
 	h.mu.ctx.GetSessionVars().InitChunkSize = 1
 	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
 	h.mu.ctx.GetSessionVars().EnableChunkRPC = false
@@ -96,9 +89,8 @@ func (h *Handle) Clear() {
 // NewHandle creates a Handle for update stats.
 func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
 	handle := &Handle{
-		ddlEventCh: make(chan *util.Event, 100),
-		listHead:   &SessionStatsCollector{mapper: make(tableDeltaMap)},
-		globalMap:  make(tableDeltaMap),
+		listHead:  &SessionStatsCollector{mapper: make(tableDeltaMap)},
+		globalMap: make(tableDeltaMap),
 	}
 	handle.lease.Store(lease)
 	// It is safe to use it concurrently because the exec won't touch the ctx.
@@ -181,6 +173,17 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 	}
 	h.updateStatsCache(oldCache.update(tables, deletedTableIDs, lastVersion))
 	return nil
+}
+
+func getFullTableName(is infoschema.InfoSchema, tblInfo *model.TableInfo) string {
+	for _, schema := range is.AllSchemas() {
+		if t, err := is.TableByName(schema.Name, tblInfo.Name); err == nil {
+			if t.Meta().ID == tblInfo.ID {
+				return schema.Name.O + "." + tblInfo.Name.O
+			}
+		}
+	}
+	return fmt.Sprintf("%d", tblInfo.ID)
 }
 
 func (h *Handle) getTableByPhysicalID(is infoschema.InfoSchema, physicalID int64) (table.Table, bool) {
@@ -310,12 +313,6 @@ func (h *Handle) SetLastUpdateVersion(version uint64) {
 
 // FlushStats flushes the cached stats update into store.
 func (h *Handle) FlushStats() {
-	for len(h.ddlEventCh) > 0 {
-		e := <-h.ddlEventCh
-		if err := h.HandleDDLEvent(e); err != nil {
-			logutil.BgLogger().Debug("[stats] handle ddl event fail", zap.Error(err))
-		}
-	}
 	if err := h.DumpStatsDeltaToKV(DumpAll); err != nil {
 		logutil.BgLogger().Debug("[stats] dump stats delta fail", zap.Error(err))
 	}

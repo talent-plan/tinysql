@@ -64,9 +64,8 @@ func (s *testAnalyzeSuite) TestCBOWithoutAnalyze(c *C) {
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t1 (a int)")
 	testKit.MustExec("create table t2 (a int)")
+	testKit.MustExec("analyze table t1, t2")
 	h := dom.StatsHandle()
-	c.Assert(h.HandleDDLEvent(<-h.DDLEventCh()), IsNil)
-	c.Assert(h.HandleDDLEvent(<-h.DDLEventCh()), IsNil)
 	testKit.MustExec("insert into t1 values (1), (2), (3), (4), (5), (6)")
 	testKit.MustExec("insert into t2 values (1), (2), (3), (4), (5), (6)")
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
@@ -94,10 +93,9 @@ func (s *testAnalyzeSuite) TestStraightJoin(c *C) {
 		store.Close()
 	}()
 	testKit.MustExec("use test")
-	h := dom.StatsHandle()
 	for _, tblName := range []string{"t1", "t2", "t3", "t4"} {
 		testKit.MustExec(fmt.Sprintf("create table %s (a int)", tblName))
-		c.Assert(h.HandleDDLEvent(<-h.DDLEventCh()), IsNil)
+		testKit.MustExec(fmt.Sprintf("analyze table %s", tblName))
 	}
 	var input []string
 	var output [][]string
@@ -123,8 +121,8 @@ func (s *testAnalyzeSuite) TestTableDual(c *C) {
 	testKit.MustExec(`use test`)
 	h := dom.StatsHandle()
 	testKit.MustExec(`create table t(a int)`)
+	testKit.MustExec("analyze table t")
 	testKit.MustExec("insert into t values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)")
-	c.Assert(h.HandleDDLEvent(<-h.DDLEventCh()), IsNil)
 
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	c.Assert(h.Update(dom.InfoSchema()), IsNil)
@@ -151,11 +149,11 @@ func (s *testAnalyzeSuite) TestEstimation(c *C) {
 	statistics.RatioOfPseudoEstimate.Store(10.0)
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t (a int)")
+	testKit.MustExec("analyze table t")
 	testKit.MustExec("insert into t values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)")
 	testKit.MustExec("insert into t select * from t")
 	testKit.MustExec("insert into t select * from t")
 	h := dom.StatsHandle()
-	h.HandleDDLEvent(<-h.DDLEventCh())
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	testKit.MustExec("analyze table t")
 	for i := 1; i <= 8; i++ {
@@ -292,11 +290,11 @@ func (s *testAnalyzeSuite) TestOutdatedAnalyze(c *C) {
 	}()
 	testKit.MustExec("use test")
 	testKit.MustExec("create table t (a int, b int, index idx(a))")
+	testKit.MustExec("analyze table t")
 	for i := 0; i < 10; i++ {
 		testKit.MustExec(fmt.Sprintf("insert into t values (%d,%d)", i, i))
 	}
 	h := dom.StatsHandle()
-	h.HandleDDLEvent(<-h.DDLEventCh())
 	c.Assert(h.DumpStatsDeltaToKV(handle.DumpAll), IsNil)
 	testKit.MustExec("analyze table t")
 	testKit.MustExec("insert into t select * from t")
