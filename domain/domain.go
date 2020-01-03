@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics/handle"
@@ -759,9 +758,6 @@ func (do *Domain) SetStatsUpdating(val bool) {
 	}
 }
 
-// RunAutoAnalyze indicates if this TiDB server starts auto analyze worker and can run auto analyze job.
-var RunAutoAnalyze = true
-
 // UpdateTableStatsLoop creates a goroutine loads stats info and updates stats info in a loop.
 // It will also start a goroutine to analyze tables automatically.
 // It should be called only once in BootstrapSession.
@@ -778,32 +774,10 @@ func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 	if do.statsLease <= 0 {
 		return nil
 	}
-	owner := do.newOwnerManager(handle.StatsPrompt, handle.StatsOwnerKey)
 	do.wg.Add(1)
 	do.SetStatsUpdating(true)
 	go do.updateStatsWorker()
-	if RunAutoAnalyze {
-		do.wg.Add(1)
-		go do.autoAnalyzeWorker(owner)
-	}
 	return nil
-}
-
-func (do *Domain) newOwnerManager(prompt, ownerKey string) owner.Manager {
-	id := do.ddl.OwnerManager().ID()
-	cancelCtx, cancelFunc := context.WithCancel(context.Background())
-	var statsOwner owner.Manager
-	if do.etcdClient == nil {
-		statsOwner = owner.NewMockManager(id, cancelFunc)
-	} else {
-		statsOwner = owner.NewOwnerManager(do.etcdClient, prompt, id, ownerKey, cancelFunc)
-	}
-	// TODO: Need to do something when err is not nil.
-	err := statsOwner.CampaignOwner(cancelCtx)
-	if err != nil {
-		logutil.BgLogger().Warn("campaign owner failed", zap.Error(err))
-	}
-	return statsOwner
 }
 
 func (do *Domain) loadStatsWorker() {
@@ -866,26 +840,6 @@ func (do *Domain) updateStatsWorker() {
 			if err != nil {
 				logutil.BgLogger().Debug("dump stats delta failed", zap.Error(err))
 			}
-		}
-	}
-}
-
-func (do *Domain) autoAnalyzeWorker(owner owner.Manager) {
-	defer recoverInDomain("autoAnalyzeWorker", false)
-	statsHandle := do.StatsHandle()
-	analyzeTicker := time.NewTicker(do.statsLease)
-	defer func() {
-		analyzeTicker.Stop()
-		do.wg.Done()
-	}()
-	for {
-		select {
-		case <-analyzeTicker.C:
-			if owner.IsOwner() {
-				statsHandle.HandleAutoAnalyze(do.InfoSchema())
-			}
-		case <-do.exit:
-			return
 		}
 	}
 }

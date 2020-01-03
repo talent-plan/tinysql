@@ -128,7 +128,6 @@ func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 	}
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
-	domain.RunAutoAnalyze = false
 	do, err := session.BootstrapSession(store)
 	do.SetStatsUpdating(true)
 	return store, do, errors.Trace(err)

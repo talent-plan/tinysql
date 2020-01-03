@@ -16,22 +16,13 @@ package handle
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/pingcap/tidb/util/timeutil"
-	"go.uber.org/zap"
 )
 
 type tableDeltaMap map[int64]variable.TableDelta
@@ -242,162 +233,4 @@ func (h *Handle) dumpTableStatColSizeToKV(id int64, delta variable.TableDelta) e
 		"values %s on duplicate key update tot_col_size = tot_col_size + values(tot_col_size)", strings.Join(values, ","))
 	_, _, err := h.restrictedExec.ExecRestrictedSQL(sql)
 	return errors.Trace(err)
-}
-
-const (
-	// StatsOwnerKey is the stats owner path that is saved to etcd.
-	StatsOwnerKey = "/tidb/stats/owner"
-	// StatsPrompt is the prompt for stats owner manager.
-	StatsPrompt = "stats"
-)
-
-// AutoAnalyzeMinCnt means if the count of table is less than this value, we needn't do auto analyze.
-var AutoAnalyzeMinCnt int64 = 1000
-
-// TableAnalyzed checks if the table is analyzed.
-func TableAnalyzed(tbl *statistics.Table) bool {
-	for _, col := range tbl.Columns {
-		if col.Count > 0 {
-			return true
-		}
-	}
-	for _, idx := range tbl.Indices {
-		if idx.Histogram.Len() > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// NeedAnalyzeTable checks if we need to analyze the table:
-// 1. If the table has never been analyzed, we need to analyze it when it has
-//    not been modified for a while.
-// 2. If the table had been analyzed before, we need to analyze it when
-//    "tbl.ModifyCount/tbl.Count > autoAnalyzeRatio" and the current time is
-//    between `start` and `end`.
-func NeedAnalyzeTable(tbl *statistics.Table, limit time.Duration, autoAnalyzeRatio float64, start, end, now time.Time) (bool, string) {
-	analyzed := TableAnalyzed(tbl)
-	if !analyzed {
-		t := time.Unix(0, oracle.ExtractPhysical(tbl.Version)*int64(time.Millisecond))
-		dur := time.Since(t)
-		return dur >= limit, fmt.Sprintf("table unanalyzed, time since last updated %vs", dur)
-	}
-	// Auto analyze is disabled.
-	if autoAnalyzeRatio == 0 {
-		return false, ""
-	}
-	// No need to analyze it.
-	if float64(tbl.ModifyCount)/float64(tbl.Count) <= autoAnalyzeRatio {
-		return false, ""
-	}
-	// Tests if current time is within the time period.
-	return timeutil.WithinDayTimePeriod(start, end, now), fmt.Sprintf("too many modifications(%v/%v>%v)", tbl.ModifyCount, tbl.Count, autoAnalyzeRatio)
-}
-
-func (h *Handle) getAutoAnalyzeParameters() map[string]string {
-	sql := fmt.Sprintf("select variable_name, variable_value from mysql.global_variables where variable_name in ('%s', '%s', '%s')",
-		variable.TiDBAutoAnalyzeRatio, variable.TiDBAutoAnalyzeStartTime, variable.TiDBAutoAnalyzeEndTime)
-	rows, _, err := h.restrictedExec.ExecRestrictedSQL(sql)
-	if err != nil {
-		return map[string]string{}
-	}
-	parameters := make(map[string]string)
-	for _, row := range rows {
-		parameters[row.GetString(0)] = row.GetString(1)
-	}
-	return parameters
-}
-
-func parseAutoAnalyzeRatio(ratio string) float64 {
-	autoAnalyzeRatio, err := strconv.ParseFloat(ratio, 64)
-	if err != nil {
-		return variable.DefAutoAnalyzeRatio
-	}
-	return math.Max(autoAnalyzeRatio, 0)
-}
-
-func parseAnalyzePeriod(start, end string) (time.Time, time.Time, error) {
-	if start == "" {
-		start = variable.DefAutoAnalyzeStartTime
-	}
-	if end == "" {
-		end = variable.DefAutoAnalyzeEndTime
-	}
-	s, err := time.ParseInLocation(variable.FullDayTimeFormat, start, time.UTC)
-	if err != nil {
-		return s, s, errors.Trace(err)
-	}
-	e, err := time.ParseInLocation(variable.FullDayTimeFormat, end, time.UTC)
-	return s, e, err
-}
-
-// HandleAutoAnalyze analyzes the newly created table or index.
-func (h *Handle) HandleAutoAnalyze(is infoschema.InfoSchema) {
-	dbs := is.AllSchemaNames()
-	parameters := h.getAutoAnalyzeParameters()
-	autoAnalyzeRatio := parseAutoAnalyzeRatio(parameters[variable.TiDBAutoAnalyzeRatio])
-	start, end, err := parseAnalyzePeriod(parameters[variable.TiDBAutoAnalyzeStartTime], parameters[variable.TiDBAutoAnalyzeEndTime])
-	if err != nil {
-		logutil.BgLogger().Error("[stats] parse auto analyze period failed", zap.Error(err))
-		return
-	}
-	for _, db := range dbs {
-		tbls := is.SchemaTables(model.NewCIStr(db))
-		for _, tbl := range tbls {
-			tblInfo := tbl.Meta()
-			pi := tblInfo.GetPartitionInfo()
-			tblName := "`" + db + "`.`" + tblInfo.Name.O + "`"
-			if pi == nil {
-				statsTbl := h.GetTableStats(tblInfo)
-				sql := fmt.Sprintf("analyze table %s", tblName)
-				analyzed := h.autoAnalyzeTable(tblInfo, statsTbl, start, end, autoAnalyzeRatio, sql)
-				if analyzed {
-					return
-				}
-				continue
-			}
-			for _, def := range pi.Definitions {
-				sql := fmt.Sprintf("analyze table %s partition `%s`", tblName, def.Name.O)
-				statsTbl := h.GetPartitionStats(tblInfo, def.ID)
-				analyzed := h.autoAnalyzeTable(tblInfo, statsTbl, start, end, autoAnalyzeRatio, sql)
-				if analyzed {
-					return
-				}
-				continue
-			}
-		}
-	}
-}
-
-func (h *Handle) autoAnalyzeTable(tblInfo *model.TableInfo, statsTbl *statistics.Table, start, end time.Time, ratio float64, sql string) bool {
-	if statsTbl.Pseudo || statsTbl.Count < AutoAnalyzeMinCnt {
-		return false
-	}
-	if needAnalyze, reason := NeedAnalyzeTable(statsTbl, 20*h.Lease(), ratio, start, end, time.Now()); needAnalyze {
-		logutil.BgLogger().Info("[stats] auto analyze triggered", zap.String("sql", sql), zap.String("reason", reason))
-		h.execAutoAnalyze(sql)
-		return true
-	}
-	for _, idx := range tblInfo.Indices {
-		if _, ok := statsTbl.Indices[idx.ID]; !ok && idx.State == model.StatePublic {
-			sql = fmt.Sprintf("%s index `%s`", sql, idx.Name.O)
-			logutil.BgLogger().Info("[stats] auto analyze for unanalyzed", zap.String("sql", sql))
-			h.execAutoAnalyze(sql)
-			return true
-		}
-	}
-	return false
-}
-
-func (h *Handle) execAutoAnalyze(sql string) {
-	startTime := time.Now()
-	_, _, err := h.restrictedExec.ExecRestrictedSQL(sql)
-	dur := time.Since(startTime)
-
-	if err != nil {
-		logutil.BgLogger().Error("[stats] auto analyze failed", zap.String("sql", sql), zap.Duration("cost_time", dur), zap.Error(err))
-
-	} else {
-
-	}
 }

@@ -1422,7 +1422,6 @@ var builtinGlobalVariable = []string{
 	variable.TiDBDisableTxnAutoRetry,
 	variable.TiDBEnableTablePartition,
 	variable.TiDBEnableVectorizedExpression,
-	variable.TiDBEnableFastAnalyze,
 	variable.TiDBEnableNoopFuncs,
 	variable.TiDBMaxDeltaSchemaCount,
 	variable.TiDBIsolationReadEngines,

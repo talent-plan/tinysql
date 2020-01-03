@@ -399,8 +399,6 @@ func (s *testVarsutilSuite) TestValidate(c *C) {
 		value string
 		error bool
 	}{
-		{TiDBAutoAnalyzeStartTime, "15:04", false},
-		{TiDBAutoAnalyzeStartTime, "15:04 -0700", false},
 		{DelayKeyWrite, "ON", false},
 		{DelayKeyWrite, "OFF", false},
 		{DelayKeyWrite, "ALL", false},

@@ -45,13 +45,6 @@ const (
 	// tidb_opt_write_row_id is used to enable/disable the operations of insert、replace and update to _tidb_rowid.
 	TiDBOptWriteRowID = "tidb_opt_write_row_id"
 
-	// Auto analyze will run if (table modify count)/(table row count) is greater than this value.
-	TiDBAutoAnalyzeRatio = "tidb_auto_analyze_ratio"
-
-	// Auto analyze will run if current time is within start time and end time.
-	TiDBAutoAnalyzeStartTime = "tidb_auto_analyze_start_time"
-	TiDBAutoAnalyzeEndTime   = "tidb_auto_analyze_end_time"
-
 	// statement, when a table has multiple indices, those indices can be
 	// scanned concurrently, with the cost of higher system performance impact.
 	TiDBChecksumTableConcurrency = "tidb_checksum_table_concurrency"
@@ -281,9 +274,6 @@ const (
 	// SlowQueryFile indicates which slow query log file for SLOW_QUERY table to parse.
 	TiDBSlowQueryFile = "tidb_slow_query_file"
 
-	// TiDBEnableFastAnalyze indicates to use fast analyze.
-	TiDBEnableFastAnalyze = "tidb_enable_fast_analyze"
-
 	// TiDBEnableNoopFuncs set true will enable using fake funcs(like get_lock release_lock)
 	TiDBEnableNoopFuncs = "tidb_enable_noop_functions"
 
@@ -302,9 +292,6 @@ const (
 	DefIndexLookupSize               = 20000
 	DefDistSQLScanConcurrency        = 15
 	DefBuildStatsConcurrency         = 4
-	DefAutoAnalyzeRatio              = 0.5
-	DefAutoAnalyzeStartTime          = "00:00 +0000"
-	DefAutoAnalyzeEndTime            = "23:59 +0000"
 	DefChecksumTableConcurrency      = 4
 	DefSkipUTF8Check                 = false
 	DefOptAggPushDown                = false
@@ -330,14 +317,6 @@ const (
 	DefDMLBatchSize                  = 20000
 	DefMaxPreparedStmtCount          = -1
 	DefWaitTimeout                   = 0
-	DefTiDBMemQuotaHashJoin          = 32 << 30 // 32GB.
-	DefTiDBMemQuotaMergeJoin         = 32 << 30 // 32GB.
-	DefTiDBMemQuotaSort              = 32 << 30 // 32GB.
-	DefTiDBMemQuotaTopn              = 32 << 30 // 32GB.
-	DefTiDBMemQuotaIndexLookupReader = 32 << 30 // 32GB.
-	DefTiDBMemQuotaIndexLookupJoin   = 32 << 30 // 32GB.
-	DefTiDBMemQuotaNestedLoopApply   = 32 << 30 // 32GB.
-	DefTiDBMemQuotaDistSQL           = 32 << 30 // 32GB.
 	DefTiDBGeneralLog                = 0
 	DefTiDBRetryLimit                = 10
 	DefTiDBDisableTxnAutoRetry       = true
@@ -345,7 +324,6 @@ const (
 	DefTiDBHashJoinConcurrency       = 5
 	DefTiDBProjectionConcurrency     = 4
 	DefTiDBOptimizerSelectivityLevel = 0
-	DefTiDBTxnMode                   = ""
 	DefTiDBDDLReorgWorkerCount       = 4
 	DefTiDBDDLReorgBatchSize         = 256
 	DefTiDBDDLErrorCountLimit        = 512

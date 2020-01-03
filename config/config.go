@@ -217,7 +217,6 @@ type Performance struct {
 	TxnTotalSizeLimit   uint64  `toml:"txn-total-size-limit" json:"txn-total-size-limit"`
 	TCPKeepAlive        bool    `toml:"tcp-keep-alive" json:"tcp-keep-alive"`
 	CrossJoin           bool    `toml:"cross-join" json:"cross-join"`
-	RunAutoAnalyze      bool    `toml:"run-auto-analyze" json:"run-auto-analyze"`
 }
 
 // PlanCache is the PlanCache section of the config.
@@ -291,7 +290,6 @@ var defaultConf = Config{
 		TCPKeepAlive:        true,
 		CrossJoin:           true,
 		StatsLease:          "3s",
-		RunAutoAnalyze:      true,
 		StmtCountLimit:      5000,
 		PseudoEstimateRatio: 0.8,
 		ForcePriority:       "NO_PRIORITY",

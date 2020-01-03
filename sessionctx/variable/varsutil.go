@@ -377,8 +377,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 			return "1", nil
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-	case TiDBSkipUTF8Check, TiDBOptAggPushDown,
-		TiDBOptInSubqToJoinAndAgg, TiDBEnableFastAnalyze,
+	case TiDBSkipUTF8Check, TiDBOptAggPushDown, TiDBOptInSubqToJoinAndAgg,
 		TiDBBatchInsert, TiDBDisableTxnAutoRetry, TiDBEnableStreaming, TiDBEnableChunkRPC,
 		TiDBBatchDelete, TiDBBatchCommit, TiDBEnableCascadesPlanner,
 		TiDBCheckMb4ValueInUTF8, TiDBLowResolutionTSO, TiDBEnableNoopFuncs,
@@ -501,18 +500,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		_, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return value, ErrWrongValueForVar.GenWithStackByArgs(name)
-		}
-		return value, nil
-	case TiDBAutoAnalyzeStartTime, TiDBAutoAnalyzeEndTime:
-		v, err := setDayTime(vars, value)
-		if err != nil {
-			return "", err
-		}
-		return v, nil
-	case TiDBAutoAnalyzeRatio:
-		v, err := strconv.ParseFloat(value, 64)
-		if err != nil || v < 0 {
-			return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 		}
 		return value, nil
 	case TxnIsolation, TransactionIsolation:
@@ -707,24 +694,4 @@ func setSnapshotTS(s *SessionVars, sVal string) error {
 func GoTimeToTS(t time.Time) uint64 {
 	ts := (t.UnixNano() / int64(time.Millisecond)) << epochShiftBits
 	return uint64(ts)
-}
-
-const (
-	localDayTimeFormat = "15:04"
-	// FullDayTimeFormat is the full format of analyze start time and end time.
-	FullDayTimeFormat = "15:04 -0700"
-)
-
-func setDayTime(s *SessionVars, val string) (string, error) {
-	var t time.Time
-	var err error
-	if len(val) <= len(localDayTimeFormat) {
-		t, err = time.ParseInLocation(localDayTimeFormat, val, s.TimeZone)
-	} else {
-		t, err = time.ParseInLocation(FullDayTimeFormat, val, s.TimeZone)
-	}
-	if err != nil {
-		return "", err
-	}
-	return t.Format(FullDayTimeFormat), nil
 }

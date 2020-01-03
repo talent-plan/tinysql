@@ -868,8 +868,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		config.GetGlobalConfig().CheckMb4ValueInUTF8 = TiDBOptOn(val)
 	case TiDBSlowQueryFile:
 		s.SlowQueryFile = val
-	case TiDBEnableFastAnalyze:
-		s.EnableFastAnalyze = TiDBOptOn(val)
 	case TiDBWaitSplitRegionFinish:
 		s.WaitSplitRegionFinish = TiDBOptOn(val)
 	case TiDBWaitSplitRegionTimeout:
