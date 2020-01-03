@@ -92,9 +92,6 @@ const (
 	// tidb_enable_chunk_rpc enables TiDB to use Chunk format for coprocessor requests.
 	TiDBEnableChunkRPC = "tidb_enable_chunk_rpc"
 
-	// tidb_optimizer_selectivity_level is used to control the selectivity estimation level.
-	TiDBOptimizerSelectivityLevel = "tidb_optimizer_selectivity_level"
-
 	// tidb_enable_table_partition is used to control table partition feature.
 	// The valid value include auto/on/off:
 	// auto: enable table partition when that feature is implemented.
@@ -323,7 +320,6 @@ const (
 	DefTiDBConstraintCheckInPlace    = false
 	DefTiDBHashJoinConcurrency       = 5
 	DefTiDBProjectionConcurrency     = 4
-	DefTiDBOptimizerSelectivityLevel = 0
 	DefTiDBDDLReorgWorkerCount       = 4
 	DefTiDBDDLReorgBatchSize         = 256
 	DefTiDBDDLErrorCountLimit        = 512

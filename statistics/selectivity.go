@@ -35,8 +35,6 @@ type StatsNode struct {
 	ID int64
 	// mask is a bit pattern whose ith bit will indicate whether the ith expression is covered by this index/column.
 	mask int64
-	// Ranges contains all the Ranges we got.
-	Ranges []*ranger.Range
 	// Selectivity indicates the Selectivity of this column/index.
 	Selectivity float64
 	// numCols is the number of columns contained in the index or column(which is always 1).
@@ -148,15 +146,15 @@ func isColEqCorCol(filter expression.Expression) *expression.Column {
 // The definition of selectivity is (row count after filter / row count before filter).
 // And exprs must be CNF now, in other words, `exprs[0] and exprs[1] and ... and exprs[len - 1]` should be held when you call this.
 // Currently the time complexity is o(n^2).
-func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Expression, filledPaths []*planutil.AccessPath) (float64, []*StatsNode, error) {
+func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Expression, filledPaths []*planutil.AccessPath) (float64, error) {
 	// If table's count is zero or conditions are empty, we should return 100% selectivity.
 	if coll.Count == 0 || len(exprs) == 0 {
-		return 1, nil, nil
+		return 1, nil
 	}
 	// TODO: If len(exprs) is bigger than 63, we could use bitset structure to replace the int64.
 	// This will simplify some code and speed up if we use this rather than a boolean slice.
 	if len(exprs) > 63 || (len(coll.Columns) == 0 && len(coll.Indices) == 0) {
-		return pseudoSelectivity(coll, exprs), nil, nil
+		return pseudoSelectivity(coll, exprs), nil
 	}
 	ret := 1.0
 	var nodes []*StatsNode
@@ -192,22 +190,22 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 		if col != nil {
 			maskCovered, ranges, _, err := getMaskAndRanges(ctx, remainedExprs, ranger.ColumnRangeType, nil, nil, col)
 			if err != nil {
-				return 0, nil, errors.Trace(err)
+				return 0, errors.Trace(err)
 			}
-			nodes = append(nodes, &StatsNode{Tp: ColType, ID: id, mask: maskCovered, Ranges: ranges, numCols: 1})
+			nodes = append(nodes, &StatsNode{Tp: ColType, ID: id, mask: maskCovered, numCols: 1})
 			if colInfo.IsHandle {
 				nodes[len(nodes)-1].Tp = PkType
 				var cnt float64
 				cnt, err = coll.GetRowCountByIntColumnRanges(sc, id, ranges)
 				if err != nil {
-					return 0, nil, errors.Trace(err)
+					return 0, errors.Trace(err)
 				}
 				nodes[len(nodes)-1].Selectivity = cnt / float64(coll.Count)
 				continue
 			}
 			cnt, err := coll.GetRowCountByColumnRanges(sc, id, ranges)
 			if err != nil {
-				return 0, nil, errors.Trace(err)
+				return 0, errors.Trace(err)
 			}
 			nodes[len(nodes)-1].Selectivity = cnt / float64(coll.Count)
 		}
@@ -228,18 +226,17 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 			}
 			maskCovered, ranges, partCover, err := getMaskAndRanges(ctx, remainedExprs, ranger.IndexRangeType, lengths, id2Paths[idxInfo.ID], idxCols...)
 			if err != nil {
-				return 0, nil, errors.Trace(err)
+				return 0, errors.Trace(err)
 			}
 			cnt, err := coll.GetRowCountByIndexRanges(sc, id, ranges)
 			if err != nil {
-				return 0, nil, errors.Trace(err)
+				return 0, errors.Trace(err)
 			}
 			selectivity := cnt / float64(coll.Count)
 			nodes = append(nodes, &StatsNode{
 				Tp:          IndexType,
 				ID:          id,
 				mask:        maskCovered,
-				Ranges:      ranges,
 				numCols:     len(idxInfo.Info.Columns),
 				Selectivity: selectivity,
 				partCover:   partCover,
@@ -264,7 +261,7 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 	if mask > 0 {
 		ret *= selectionFactor
 	}
-	return ret, nodes, nil
+	return ret, nil
 }
 
 func getMaskAndRanges(ctx sessionctx.Context, exprs []expression.Expression, rangeType ranger.RangeType, lengths []int, cachedPath *planutil.AccessPath, cols ...*expression.Column) (mask int64, ranges []*ranger.Range, partCover bool, err error) {
