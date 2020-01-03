@@ -81,7 +81,7 @@ gosec:tools/bin/gosec
 	tools/bin/gosec $$($(PACKAGE_DIRECTORIES))
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run -v --disable-all --deadline=3m \
+	tools/bin/golangci-lint run -v --disable-all --deadline=4m \
 	  --enable=misspell \
 	  --enable=ineffassign \
 	  --enable=unused \
