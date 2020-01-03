@@ -66,3 +66,4 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 func init() {
 	plannercore.OptimizeAstNode = Optimize
 }
+
