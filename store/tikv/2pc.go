@@ -27,11 +27,9 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
 
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
 )
 
@@ -682,7 +680,6 @@ func (c *twoPhaseCommitter) cleanupKeys(bo *Backoffer, keys [][]byte) error {
 
 // execute executes the two-phase commit protocol.
 func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
-	var binlogSkipped bool
 	defer func() {
 		// Always clean up all written keys if the txn does not commit.
 		c.mu.RLock()
@@ -706,30 +703,10 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 			}()
 		}
 		c.txn.commitTS = c.commitTS
-		if binlogSkipped {
-			binloginfo.RemoveOneSkippedCommitter()
-		} else {
-			if err != nil {
-				c.writeFinishBinlog(ctx, binlog.BinlogType_Rollback, 0)
-			} else {
-				c.writeFinishBinlog(ctx, binlog.BinlogType_Commit, int64(c.commitTS))
-			}
-		}
 	}()
 
-	binlogChan := c.prewriteBinlog(ctx)
 	prewriteBo := NewBackoffer(ctx, PrewriteMaxBackoff).WithVars(c.txn.vars)
 	err = c.prewriteKeys(prewriteBo, c.keys)
-	if binlogChan != nil {
-		binlogWriteResult := <-binlogChan
-		if binlogWriteResult != nil {
-			binlogSkipped = binlogWriteResult.Skipped()
-			binlogErr := binlogWriteResult.GetError()
-			if binlogErr != nil {
-				return binlogErr
-			}
-		}
-	}
 	if err != nil {
 		logutil.Logger(ctx).Debug("2PC failed on prewrite",
 			zap.Error(err),
@@ -802,54 +779,6 @@ func (c *twoPhaseCommitter) checkSchemaValid() error {
 		}
 	}
 	return nil
-}
-
-func (c *twoPhaseCommitter) prewriteBinlog(ctx context.Context) chan *binloginfo.WriteResult {
-	if !c.shouldWriteBinlog() {
-		return nil
-	}
-	ch := make(chan *binloginfo.WriteResult, 1)
-	go func() {
-		logutil.Eventf(ctx, "start prewrite binlog")
-		binInfo := c.txn.us.GetOption(kv.BinlogInfo).(*binloginfo.BinlogInfo)
-		bin := binInfo.Data
-		bin.StartTs = int64(c.startTS)
-		if bin.Tp == binlog.BinlogType_Prewrite {
-			bin.PrewriteKey = c.keys[0]
-		}
-		wr := binInfo.WriteBinlog(c.store.clusterID)
-		if wr.Skipped() {
-			binInfo.Data.PrewriteValue = nil
-			binloginfo.AddOneSkippedCommitter()
-		}
-		logutil.Eventf(ctx, "finish prewrite binlog")
-		ch <- wr
-	}()
-	return ch
-}
-
-func (c *twoPhaseCommitter) writeFinishBinlog(ctx context.Context, tp binlog.BinlogType, commitTS int64) {
-	if !c.shouldWriteBinlog() {
-		return
-	}
-	binInfo := c.txn.us.GetOption(kv.BinlogInfo).(*binloginfo.BinlogInfo)
-	binInfo.Data.Tp = tp
-	binInfo.Data.CommitTs = commitTS
-	binInfo.Data.PrewriteValue = nil
-	go func() {
-		logutil.Eventf(ctx, "start write finish binlog")
-		binlogWriteResult := binInfo.WriteBinlog(c.store.clusterID)
-		err := binlogWriteResult.GetError()
-		if err != nil {
-			logutil.BgLogger().Error("failed to write binlog",
-				zap.Error(err))
-		}
-		logutil.Eventf(ctx, "finish write finish binlog")
-	}()
-}
-
-func (c *twoPhaseCommitter) shouldWriteBinlog() bool {
-	return c.txn.us.GetOption(kv.BinlogInfo) != nil
 }
 
 // TiKV recommends each RPC packet should be less than ~1MB. We keep each packet's

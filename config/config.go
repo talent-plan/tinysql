@@ -79,7 +79,6 @@ type Config struct {
 	OpenTracing         OpenTracing   `toml:"opentracing" json:"opentracing"`
 	ProxyProtocol       ProxyProtocol `toml:"proxy-protocol" json:"proxy-protocol"`
 	TiKVClient          TiKVClient    `toml:"tikv-client" json:"tikv-client"`
-	Binlog              Binlog        `toml:"binlog" json:"binlog"`
 	CompatibleKillQuery bool          `toml:"compatible-kill-query" json:"compatible-kill-query"`
 	CheckMb4ValueInUTF8 bool          `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
@@ -349,19 +348,6 @@ type TiKVClient struct {
 	RegionCacheTTL uint `toml:"region-cache-ttl" json:"region-cache-ttl"`
 }
 
-// Binlog is the config for binlog.
-type Binlog struct {
-	Enable bool `toml:"enable" json:"enable"`
-	// If IgnoreError is true, when writing binlog meets error, TiDB would
-	// ignore the error.
-	IgnoreError  bool   `toml:"ignore-error" json:"ignore-error"`
-	WriteTimeout string `toml:"write-timeout" json:"write-timeout"`
-	// Use socket file to write binlog, for compatible with kafka version tidb-binlog.
-	BinlogSocket string `toml:"binlog-socket" json:"binlog-socket"`
-	// The strategy for sending binlog to pump, value can be "range" or "hash" now.
-	Strategy string `toml:"strategy" json:"strategy"`
-}
-
 var defaultConf = Config{
 	Host:                         "0.0.0.0",
 	AdvertiseAddress:             "",
@@ -438,10 +424,6 @@ var defaultConf = Config{
 		EnableChunkRPC: true,
 
 		RegionCacheTTL: 600,
-	},
-	Binlog: Binlog{
-		WriteTimeout: "15s",
-		Strategy:     "range",
 	},
 }
 
@@ -535,9 +517,6 @@ func (c *Config) Valid() error {
 		return fmt.Errorf("grpc-connection-count should be greater than 0")
 	}
 
-	if c.Performance.TxnTotalSizeLimit > 100<<20 && c.Binlog.Enable {
-		return fmt.Errorf("txn-total-size-limit should be less than %d with binlog enabled", 100<<20)
-	}
 	if c.Performance.TxnTotalSizeLimit > 10<<30 {
 		return fmt.Errorf("txn-total-size-limit should be less than %d", 10<<30)
 	}

@@ -148,9 +148,6 @@ disable-error-stack = false
 
 func (s *testConfigSuite) TestConfig(c *C) {
 	conf := new(Config)
-	conf.Binlog.Enable = true
-	conf.Binlog.IgnoreError = true
-	conf.Binlog.Strategy = "hash"
 	conf.Performance.TxnTotalSizeLimit = 1000
 	conf.TiKVClient.CommitTimeout = "10s"
 	conf.TiKVClient.RegionCacheTTL = 600
@@ -194,9 +191,6 @@ region-cache-ttl=6000
 
 	c.Assert(conf.ServerVersion, Equals, "test_version")
 	c.Assert(mysql.ServerVersion, Equals, conf.ServerVersion)
-	// Test that the original value will not be clear by load the config file that does not contain the option.
-	c.Assert(conf.Binlog.Enable, Equals, true)
-	c.Assert(conf.Binlog.Strategy, Equals, "hash")
 
 	// Test that the value will be overwritten by the config file.
 	c.Assert(conf.Performance.TxnTotalSizeLimit, Equals, uint64(2000))
@@ -333,8 +327,4 @@ func (s *testConfigSuite) TestTxnTotalSizeLimitValid(c *C) {
 		conf.Performance.TxnTotalSizeLimit = tt.limit
 		c.Assert(conf.Valid() == nil, Equals, tt.valid)
 	}
-
-	conf.Binlog.Enable = true
-	conf.Performance.TxnTotalSizeLimit = 100<<20 + 1
-	c.Assert(conf.Valid(), NotNil)
 }

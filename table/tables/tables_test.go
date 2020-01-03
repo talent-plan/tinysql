@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
@@ -33,8 +32,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
-	binlog "github.com/pingcap/tipb/go-binlog"
-	"google.golang.org/grpc"
 )
 
 func TestT(t *testing.T) {
@@ -60,7 +57,6 @@ func (ts *testSuite) SetUpSuite(c *C) {
 	ts.se, err = session.CreateSession4Test(ts.store)
 	c.Assert(err, IsNil)
 	ctx := ts.se
-	ctx.GetSessionVars().BinlogClient = binloginfo.MockPumpsClient(mockPumpClient{})
 	ctx.GetSessionVars().InRestrictedSQL = false
 }
 
@@ -68,16 +64,6 @@ func (ts *testSuite) TearDownSuite(c *C) {
 	ts.dom.Close()
 	c.Assert(ts.store.Close(), IsNil)
 	testleak.AfterTest(c)()
-}
-
-type mockPumpClient struct{}
-
-func (m mockPumpClient) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq, opts ...grpc.CallOption) (*binlog.WriteBinlogResp, error) {
-	return &binlog.WriteBinlogResp{}, nil
-}
-
-func (m mockPumpClient) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq, opts ...grpc.CallOption) (binlog.Pump_PullBinlogsClient, error) {
-	return nil, nil
 }
 
 func (ts *testSuite) TestBasic(c *C) {

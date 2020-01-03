@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/pd/client"
-	pumpcli "github.com/pingcap/tidb-tools/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -36,7 +34,6 @@ import (
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics"
 	kvstore "github.com/pingcap/tidb/store"
@@ -61,7 +58,6 @@ const (
 	nmPort             = "P"
 	nmCors             = "cors"
 	nmSocket           = "socket"
-	nmEnableBinlog     = "enable-binlog"
 	nmRunDDL           = "run-ddl"
 	nmLogLevel         = "L"
 	nmLogFile          = "log-file"
@@ -89,7 +85,6 @@ var (
 	port             = flag.String(nmPort, "4000", "tidb server port")
 	cors             = flag.String(nmCors, "", "tidb server allow cors origin")
 	socket           = flag.String(nmSocket, "", "The socket file to use for connection.")
-	enableBinlog     = flagBoolean(nmEnableBinlog, false, "enable generate binlog")
 	runDDL           = flagBoolean(nmRunDDL, true, "run ddl worker on this tidb-server")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
@@ -138,7 +133,6 @@ func main() {
 	if configWarning != "" {
 		log.Warn(configWarning)
 	}
-	setupBinlogClient()
 	createStoreAndDomain()
 	createServer()
 	signal.SetupSignalHandler(serverShutdown)
@@ -170,41 +164,6 @@ func createStoreAndDomain() {
 	// Bootstrap a session to load information schema.
 	dom, err = session.BootstrapSession(storage)
 	terror.MustNil(err)
-}
-
-func setupBinlogClient() {
-	if !cfg.Binlog.Enable {
-		return
-	}
-
-	if cfg.Binlog.IgnoreError {
-		binloginfo.SetIgnoreError(true)
-	}
-
-	var (
-		client *pumpcli.PumpsClient
-		err    error
-	)
-
-	securityOption := pd.SecurityOption{
-		CAPath:   cfg.Security.ClusterSSLCA,
-		CertPath: cfg.Security.ClusterSSLCert,
-		KeyPath:  cfg.Security.ClusterSSLKey,
-	}
-
-	if len(cfg.Binlog.BinlogSocket) == 0 {
-		client, err = pumpcli.NewPumpsClient(cfg.Path, cfg.Binlog.Strategy, parseDuration(cfg.Binlog.WriteTimeout), securityOption)
-	} else {
-		client, err = pumpcli.NewLocalPumpsClient(cfg.Path, cfg.Binlog.BinlogSocket, parseDuration(cfg.Binlog.WriteTimeout), securityOption)
-	}
-
-	terror.MustNil(err)
-
-	err = pumpcli.InitLogger(cfg.Log.ToLogConfig())
-	terror.MustNil(err)
-
-	binloginfo.SetPumpsClient(client)
-	log.Info("tidb-server", zap.Bool("create pumps client success, ignore binlog error", cfg.Binlog.IgnoreError))
 }
 
 // parseDuration parses lease argument string.
@@ -310,9 +269,6 @@ func overrideConfig() {
 	if actualFlags[nmSocket] {
 		cfg.Socket = *socket
 	}
-	if actualFlags[nmEnableBinlog] {
-		cfg.Binlog.Enable = *enableBinlog
-	}
 	if actualFlags[nmRunDDL] {
 		cfg.RunDDL = *runDDL
 	}
@@ -374,7 +330,6 @@ func setGlobalVars() {
 	variable.SysVars[variable.TiDBForcePriority].Value = mysql.Priority2Str[priority]
 
 	variable.SysVars["lower_case_table_names"].Value = strconv.Itoa(cfg.LowerCaseTableNames)
-	variable.SysVars[variable.LogBin].Value = variable.BoolToIntStr(config.GetGlobalConfig().Binlog.Enable)
 
 	variable.SysVars[variable.Port].Value = fmt.Sprintf("%d", cfg.Port)
 	variable.SysVars[variable.Socket].Value = cfg.Socket

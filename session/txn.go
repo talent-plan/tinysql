@@ -25,13 +25,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +45,6 @@ type TxnState struct {
 	txnFuture *txnFuture
 
 	buf          kv.MemBuffer
-	mutations    map[int64]*binlog.TableMutation
 	dirtyTableOP []dirtyTableOperation
 
 	// If doNotCommit is not nil, Commit() will not commit the transaction.
@@ -58,7 +54,6 @@ type TxnState struct {
 
 func (st *TxnState) init() {
 	st.buf = kv.NewMemDbBuffer(kv.DefaultTxnMembufCap)
-	st.mutations = make(map[int64]*binlog.TableMutation)
 }
 
 // Valid implements the kv.Transaction interface.
@@ -95,9 +90,6 @@ func (st *TxnState) GoString() string {
 		fmt.Fprintf(&s, ", txnStartTS=%d", st.Transaction.StartTS())
 		if len(st.dirtyTableOP) > 0 {
 			fmt.Fprintf(&s, ", len(dirtyTable)=%d, %#v", len(st.dirtyTableOP), st.dirtyTableOP)
-		}
-		if len(st.mutations) > 0 {
-			fmt.Fprintf(&s, ", len(mutations)=%d, %#v", len(st.mutations), st.mutations)
 		}
 		if st.buf != nil && st.buf.Len() != 0 {
 			fmt.Fprintf(&s, ", buf.length: %d, buf.size: %d", st.buf.Len(), st.buf.Size())
@@ -164,7 +156,7 @@ func mockAutoIDRetry() bool {
 // Commit overrides the Transaction interface.
 func (st *TxnState) Commit(ctx context.Context) error {
 	defer st.reset()
-	if len(st.mutations) != 0 || len(st.dirtyTableOP) != 0 || st.buf.Len() != 0 {
+	if len(st.dirtyTableOP) != 0 || st.buf.Len() != 0 {
 		logutil.BgLogger().Error("the code should never run here",
 			zap.String("TxnState", st.GoString()),
 			zap.Stack("something must be wrong"))
@@ -301,9 +293,6 @@ func (st *TxnState) cleanup() {
 	} else {
 		st.buf.Reset()
 	}
-	for key := range st.mutations {
-		delete(st.mutations, key)
-	}
 	if st.dirtyTableOP != nil {
 		empty := dirtyTableOperation{}
 		for i := 0; i < len(st.dirtyTableOP); i++ {
@@ -352,27 +341,6 @@ func keyNeedToLock(k, v []byte) bool {
 	isNonUniqueIndex := tablecodec.IsIndexKey(k) && len(v) == 1
 	// Put row key and unique index need to lock.
 	return !isNonUniqueIndex
-}
-
-func getBinlogMutation(ctx sessionctx.Context, tableID int64) *binlog.TableMutation {
-	bin := binloginfo.GetPrewriteValue(ctx, true)
-	for i := range bin.Mutations {
-		if bin.Mutations[i].TableId == tableID {
-			return &bin.Mutations[i]
-		}
-	}
-	idx := len(bin.Mutations)
-	bin.Mutations = append(bin.Mutations, binlog.TableMutation{TableId: tableID})
-	return &bin.Mutations[idx]
-}
-
-func mergeToMutation(m1, m2 *binlog.TableMutation) {
-	m1.InsertedRows = append(m1.InsertedRows, m2.InsertedRows...)
-	m1.UpdatedRows = append(m1.UpdatedRows, m2.UpdatedRows...)
-	m1.DeletedIds = append(m1.DeletedIds, m2.DeletedIds...)
-	m1.DeletedPks = append(m1.DeletedPks, m2.DeletedPks...)
-	m1.DeletedRows = append(m1.DeletedRows, m2.DeletedRows...)
-	m1.Sequence = append(m1.Sequence, m2.Sequence...)
 }
 
 func mergeToDirtyDB(dirtyDB *executor.DirtyDB, op dirtyTableOperation) {
@@ -456,12 +424,6 @@ func (s *session) StmtCommit() error {
 		return err
 	}
 
-	// Need to flush binlog.
-	for tableID, delta := range st.mutations {
-		mutation := getBinlogMutation(s, tableID)
-		mergeToMutation(mutation, delta)
-	}
-
 	if len(st.dirtyTableOP) > 0 {
 		dirtyDB := executor.GetDirtyDB(s)
 		for _, op := range st.dirtyTableOP {
@@ -474,15 +436,6 @@ func (s *session) StmtCommit() error {
 // StmtRollback implements the sessionctx.Context interface.
 func (s *session) StmtRollback() {
 	s.txn.cleanup()
-}
-
-// StmtGetMutation implements the sessionctx.Context interface.
-func (s *session) StmtGetMutation(tableID int64) *binlog.TableMutation {
-	st := &s.txn
-	if _, ok := st.mutations[tableID]; !ok {
-		st.mutations[tableID] = &binlog.TableMutation{TableId: tableID}
-	}
-	return st.mutations[tableID]
 }
 
 func (s *session) StmtAddDirtyTableOP(op int, tid int64, handle int64) {

@@ -31,8 +31,6 @@ const (
 	// PresumeKeyNotExistsError is the option key for error.
 	// When PresumeKeyNotExists is set and condition is not match, should throw the error.
 	PresumeKeyNotExistsError
-	// BinlogInfo contains the binlog data and client.
-	BinlogInfo
 	// SchemaChecker is used for checking schema-validity.
 	SchemaChecker
 	// IsolationLevel sets isolation level for current transaction. The default level is SI.

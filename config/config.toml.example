@@ -136,12 +136,6 @@ status-host = "0.0.0.0"
 # TiDB status port.
 status-port = 10080
 
-# Prometheus pushgateway address, leaves it empty will disable push to pushgateway.
-
-
-# Prometheus client push interval in second, set \"0\" to disable push to pushgateway.
-
-
 # Record statements qps by database name if it is enabled.
 record-db-qps = false
 
@@ -270,20 +264,3 @@ enable-chunk-rpc = true
 # If a Region has not been accessed for more than the given duration (in seconds), it
 # will be reloaded from the PD.
 region-cache-ttl = 600
-
-[binlog]
-# enable to write binlog.
-enable = false
-
-# WriteTimeout specifies how long it will wait for writing binlog to pump.
-write-timeout = "15s"
-
-# If IgnoreError is true, when writing binlog meets error, TiDB would stop writing binlog,
-# but still provide service.
-ignore-error = false
-
-# use socket file to write binlog, for compatible with kafka version tidb-binlog.
-binlog-socket = ""
-
-# the strategy for sending binlog to pump, value can be "range" or "hash" now.
-strategy = "range"
