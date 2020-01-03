@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
-	"strconv"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -27,7 +25,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/debugpb"
 	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -956,22 +953,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleSplitRegion(r)
-	// DebugGetRegionProperties is for fast analyze in mock tikv.
-	case tikvrpc.CmdDebugGetRegionProperties:
-		r := req.DebugGetRegionProperties()
-		region, _ := c.Cluster.GetRegion(r.RegionId)
-		var reqCtx kvrpcpb.Context
-		scanResp := handler.handleKvScan(&kvrpcpb.ScanRequest{
-			Context:  &reqCtx,
-			StartKey: MvccKey(region.StartKey).Raw(),
-			EndKey:   MvccKey(region.EndKey).Raw(),
-			Version:  math.MaxUint64,
-			Limit:    math.MaxUint32})
-		resp.Resp = &debugpb.GetRegionPropertiesResponse{
-			Props: []*debugpb.Property{{
-				Name:  "mvcc.num_rows",
-				Value: strconv.Itoa(len(scanResp.Pairs)),
-			}}}
 	default:
 		return nil, errors.Errorf("unsupported this request type %v", req.Type)
 	}

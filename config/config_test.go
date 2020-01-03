@@ -179,7 +179,6 @@ server-version = "test_version"
 txn-total-size-limit=2000
 [tikv-client]
 commit-timeout="41s"
-max-batch-size=128
 region-cache-ttl=6000
 `)
 
@@ -196,7 +195,6 @@ region-cache-ttl=6000
 	c.Assert(conf.AlterPrimaryKey, Equals, true)
 
 	c.Assert(conf.TiKVClient.CommitTimeout, Equals, "41s")
-	c.Assert(conf.TiKVClient.MaxBatchSize, Equals, uint(128))
 	c.Assert(conf.TiKVClient.RegionCacheTTL, Equals, uint(6000))
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))

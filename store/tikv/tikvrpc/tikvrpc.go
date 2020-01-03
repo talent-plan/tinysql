@@ -125,8 +125,6 @@ func (t CmdType) String() string {
 		return "SplitRegion"
 	case CmdCheckTxnStatus:
 		return "CheckTxnStatus"
-	case CmdDebugGetRegionProperties:
-		return "DebugGetRegionProperties"
 	case CmdTxnHeartBeat:
 		return "TxnHeartBeat"
 	}
@@ -305,124 +303,9 @@ func (req *Request) TxnHeartBeat() *kvrpcpb.TxnHeartBeatRequest {
 	return req.req.(*kvrpcpb.TxnHeartBeatRequest)
 }
 
-// ToBatchCommandsRequest converts the request to an entry in BatchCommands request.
-func (req *Request) ToBatchCommandsRequest() *tikvpb.BatchCommandsRequest_Request {
-	switch req.Type {
-	case CmdGet:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Get{Get: req.Get()}}
-	case CmdScan:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Scan{Scan: req.Scan()}}
-	case CmdPrewrite:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Prewrite{Prewrite: req.Prewrite()}}
-	case CmdCommit:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Commit{Commit: req.Commit()}}
-	case CmdCleanup:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Cleanup{Cleanup: req.Cleanup()}}
-	case CmdBatchGet:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_BatchGet{BatchGet: req.BatchGet()}}
-	case CmdBatchRollback:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_BatchRollback{BatchRollback: req.BatchRollback()}}
-	case CmdScanLock:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_ScanLock{ScanLock: req.ScanLock()}}
-	case CmdResolveLock:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_ResolveLock{ResolveLock: req.ResolveLock()}}
-	case CmdGC:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_GC{GC: req.GC()}}
-	case CmdDeleteRange:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_DeleteRange{DeleteRange: req.DeleteRange()}}
-	case CmdRawGet:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawGet{RawGet: req.RawGet()}}
-	case CmdRawBatchGet:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchGet{RawBatchGet: req.RawBatchGet()}}
-	case CmdRawPut:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawPut{RawPut: req.RawPut()}}
-	case CmdRawBatchPut:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchPut{RawBatchPut: req.RawBatchPut()}}
-	case CmdRawDelete:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawDelete{RawDelete: req.RawDelete()}}
-	case CmdRawBatchDelete:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchDelete{RawBatchDelete: req.RawBatchDelete()}}
-	case CmdRawDeleteRange:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawDeleteRange{RawDeleteRange: req.RawDeleteRange()}}
-	case CmdRawScan:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawScan{RawScan: req.RawScan()}}
-	case CmdCop:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Coprocessor{Coprocessor: req.Cop()}}
-	case CmdEmpty:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Empty{Empty: req.Empty()}}
-	case CmdCheckTxnStatus:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_CheckTxnStatus{CheckTxnStatus: req.CheckTxnStatus()}}
-	case CmdTxnHeartBeat:
-		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_TxnHeartBeat{TxnHeartBeat: req.TxnHeartBeat()}}
-	}
-	return nil
-}
-
-// IsDebugReq check whether the req is debug req.
-func (req *Request) IsDebugReq() bool {
-	switch req.Type {
-	case CmdDebugGetRegionProperties:
-		return true
-	}
-	return false
-}
-
 // Response wraps all kv/coprocessor responses.
 type Response struct {
 	Resp interface{}
-}
-
-// FromBatchCommandsResponse converts a BatchCommands response to Response.
-func FromBatchCommandsResponse(res *tikvpb.BatchCommandsResponse_Response) *Response {
-	switch res := res.GetCmd().(type) {
-	case *tikvpb.BatchCommandsResponse_Response_Get:
-		return &Response{Resp: res.Get}
-	case *tikvpb.BatchCommandsResponse_Response_Scan:
-		return &Response{Resp: res.Scan}
-	case *tikvpb.BatchCommandsResponse_Response_Prewrite:
-		return &Response{Resp: res.Prewrite}
-	case *tikvpb.BatchCommandsResponse_Response_Commit:
-		return &Response{Resp: res.Commit}
-	case *tikvpb.BatchCommandsResponse_Response_Cleanup:
-		return &Response{Resp: res.Cleanup}
-	case *tikvpb.BatchCommandsResponse_Response_BatchGet:
-		return &Response{Resp: res.BatchGet}
-	case *tikvpb.BatchCommandsResponse_Response_BatchRollback:
-		return &Response{Resp: res.BatchRollback}
-	case *tikvpb.BatchCommandsResponse_Response_ScanLock:
-		return &Response{Resp: res.ScanLock}
-	case *tikvpb.BatchCommandsResponse_Response_ResolveLock:
-		return &Response{Resp: res.ResolveLock}
-	case *tikvpb.BatchCommandsResponse_Response_GC:
-		return &Response{Resp: res.GC}
-	case *tikvpb.BatchCommandsResponse_Response_DeleteRange:
-		return &Response{Resp: res.DeleteRange}
-	case *tikvpb.BatchCommandsResponse_Response_RawGet:
-		return &Response{Resp: res.RawGet}
-	case *tikvpb.BatchCommandsResponse_Response_RawBatchGet:
-		return &Response{Resp: res.RawBatchGet}
-	case *tikvpb.BatchCommandsResponse_Response_RawPut:
-		return &Response{Resp: res.RawPut}
-	case *tikvpb.BatchCommandsResponse_Response_RawBatchPut:
-		return &Response{Resp: res.RawBatchPut}
-	case *tikvpb.BatchCommandsResponse_Response_RawDelete:
-		return &Response{Resp: res.RawDelete}
-	case *tikvpb.BatchCommandsResponse_Response_RawBatchDelete:
-		return &Response{Resp: res.RawBatchDelete}
-	case *tikvpb.BatchCommandsResponse_Response_RawDeleteRange:
-		return &Response{Resp: res.RawDeleteRange}
-	case *tikvpb.BatchCommandsResponse_Response_RawScan:
-		return &Response{Resp: res.RawScan}
-	case *tikvpb.BatchCommandsResponse_Response_Coprocessor:
-		return &Response{Resp: res.Coprocessor}
-	case *tikvpb.BatchCommandsResponse_Response_Empty:
-		return &Response{Resp: res.Empty}
-	case *tikvpb.BatchCommandsResponse_Response_TxnHeartBeat:
-		return &Response{Resp: res.TxnHeartBeat}
-	case *tikvpb.BatchCommandsResponse_Response_CheckTxnStatus:
-		return &Response{Resp: res.CheckTxnStatus}
-	}
-	return nil
 }
 
 // CopStreamResponse combinates tikvpb.Tikv_CoprocessorStreamClient and the first Recv() result together.
@@ -724,19 +607,6 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		return nil, errors.Trace(err)
 	}
 	return resp, nil
-}
-
-// CallDebugRPC launches a debug rpc call.
-func CallDebugRPC(ctx context.Context, client debugpb.DebugClient, req *Request) (*Response, error) {
-	resp := &Response{}
-	var err error
-	switch req.Type {
-	case CmdDebugGetRegionProperties:
-		resp.Resp, err = client.GetRegionProperties(ctx, req.DebugGetRegionProperties())
-	default:
-		return nil, errors.Errorf("invalid request type: %v", req.Type)
-	}
-	return resp, err
 }
 
 // Lease is used to implement grpc stream timeout.

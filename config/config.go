@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -242,15 +241,6 @@ type TiKVClient struct {
 	// CommitTimeout is the max time which command 'commit' will wait.
 	CommitTimeout string `toml:"commit-timeout" json:"commit-timeout"`
 
-	// MaxBatchSize is the max batch size when calling batch commands API.
-	MaxBatchSize uint `toml:"max-batch-size" json:"max-batch-size"`
-	// If TiKV load is greater than this, TiDB will wait for a while to avoid little batch.
-	OverloadThreshold uint `toml:"overload-threshold" json:"overload-threshold"`
-	// MaxBatchWaitTime in nanosecond is the max wait time for batch.
-	MaxBatchWaitTime time.Duration `toml:"max-batch-wait-time" json:"max-batch-wait-time"`
-	// BatchWaitSize is the max wait size for batch.
-	BatchWaitSize uint `toml:"batch-wait-size" json:"batch-wait-size"`
-	// EnableChunkRPC indicate the data encode in chunk format for coprocessor requests.
 	EnableChunkRPC bool `toml:"enable-chunk-rpc" json:"enable-chunk-rpc"`
 	// If a Region has not been accessed for more than the given duration (in seconds), it
 	// will be reloaded from the PD.
@@ -312,11 +302,6 @@ var defaultConf = Config{
 		GrpcKeepAliveTime:    10,
 		GrpcKeepAliveTimeout: 3,
 		CommitTimeout:        "41s",
-
-		MaxBatchSize:      128,
-		OverloadThreshold: 200,
-		MaxBatchWaitTime:  0,
-		BatchWaitSize:     8,
 
 		EnableChunkRPC: true,
 

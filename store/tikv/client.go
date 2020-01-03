@@ -25,16 +25,13 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/debugpb"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -74,9 +71,7 @@ type connArray struct {
 	v     []*grpc.ClientConn
 	// streamTimeout binds with a background goroutine to process coprocessor streaming timeout.
 	streamTimeout chan *tikvrpc.Lease
-	// batchConn is not null when batch is enabled.
-	*batchConn
-	done chan struct{}
+	done          chan struct{}
 }
 
 func newConnArray(maxSize uint, addr string, idleNotify *uint32) (*connArray, error) {
@@ -103,11 +98,6 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 		streamInterceptor grpc.StreamClientInterceptor
 	)
 
-	allowBatch := cfg.TiKVClient.MaxBatchSize > 0
-	if allowBatch {
-		a.batchConn = newBatchConn(uint(len(a.v)), cfg.TiKVClient.MaxBatchSize, idleNotify)
-
-	}
 	keepAlive := cfg.TiKVClient.GrpcKeepAliveTime
 	keepAliveTimeout := cfg.TiKVClient.GrpcKeepAliveTimeout
 	for i := range a.v {
@@ -143,24 +133,8 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 			return errors.Trace(err)
 		}
 		a.v[i] = conn
-
-		if allowBatch {
-			batchClient := &batchCommandsClient{
-				target:        a.target,
-				conn:          conn,
-				batched:       sync.Map{},
-				idAlloc:       0,
-				closed:        0,
-				tikvClientCfg: cfg.TiKVClient,
-				tikvLoad:      &a.tikvTransportLayerLoad,
-			}
-			a.batchCommandsClients = append(a.batchCommandsClients, batchClient)
-		}
 	}
 	go tikvrpc.CheckStreamTimeoutLoop(a.streamTimeout, a.done)
-	if allowBatch {
-		go a.batchSendLoop(cfg.TiKVClient)
-	}
 
 	return nil
 }
@@ -171,10 +145,6 @@ func (a *connArray) Get() *grpc.ClientConn {
 }
 
 func (a *connArray) Close() {
-	if a.batchConn != nil {
-		a.batchConn.Close()
-	}
-
 	for i, c := range a.v {
 		if c != nil {
 			err := c.Close()
@@ -266,35 +236,12 @@ func (c *rpcClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 		ctx = opentracing.ContextWithSpan(ctx, span1)
 	}
 
-	if atomic.CompareAndSwapUint32(&c.idleNotify, 1, 0) {
-		c.recycleIdleConnArray()
-	}
-
 	connArray, err := c.getConnArray(addr)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	// TiDB RPC server not support batch RPC now.
-	// TODO: remove this store type check after TiDB RPC Server support stream.
-	if config.GetGlobalConfig().TiKVClient.MaxBatchSize > 0 && req.StoreTp != kv.TiDB {
-		if batchReq := req.ToBatchCommandsRequest(); batchReq != nil {
-			return sendBatchRequest(ctx, addr, connArray.batchConn, batchReq, timeout)
-		}
-	}
-
 	clientConn := connArray.Get()
-	if state := clientConn.GetState(); state == connectivity.TransientFailure {
-
-	}
-
-	if req.IsDebugReq() {
-		client := debugpb.NewDebugClient(clientConn)
-		ctx1, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		return tikvrpc.CallDebugRPC(ctx1, client, req)
-	}
-
 	client := tikvpb.NewTikvClient(clientConn)
 
 	if req.Type != tikvrpc.CmdCopStream {

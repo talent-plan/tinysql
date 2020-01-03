@@ -171,15 +171,6 @@ grpc-keepalive-timeout = 3
 # Max time for commit command, must be twice bigger than raft election timeout.
 commit-timeout = "41s"
 
-# Max batch size in gRPC.
-max-batch-size = 128
-# Overload threshold of TiKV.
-overload-threshold = 200
-# Max batch wait time in nanosecond to avoid waiting too long. 0 means disable this feature.
-max-batch-wait-time = 0
-# Batch wait size, to avoid waiting too long.
-batch-wait-size = 8
-
 # Enable chunk encoded data for coprocessor requests.
 enable-chunk-rpc = true
 
