@@ -31,15 +31,12 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	pumpcli "github.com/pingcap/tidb-tools/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	tidbutil "github.com/pingcap/tidb/util"
@@ -259,8 +256,6 @@ type DDL interface {
 	GetID() string
 	// GetTableMaxRowID gets the max row ID of a normal table or a partition.
 	GetTableMaxRowID(startTS uint64, tbl table.PhysicalTable) (int64, bool, error)
-	// SetBinlogClient sets the binlog client for DDL worker. It's exported for testing.
-	SetBinlogClient(*pumpcli.PumpsClient)
 	// GetHook gets the hook. It's exported for testing.
 	GetHook() Callback
 }
@@ -284,8 +279,7 @@ type ddlCtx struct {
 	schemaSyncer util.SchemaSyncer
 	ddlJobDoneCh chan struct{}
 	ddlEventCh   chan<- *util.Event
-	lease        time.Duration        // lease is schema lease.
-	binlogCli    *pumpcli.PumpsClient // binlogCli is used for Binlog.
+	lease        time.Duration // lease is schema lease.
 	infoHandle   *infoschema.Handle
 
 	// hook may be modified.
@@ -368,7 +362,6 @@ func newDDL(ctx context.Context, options ...Option) *ddl {
 		ddlJobDoneCh: make(chan struct{}, 1),
 		ownerManager: manager,
 		schemaSyncer: syncer,
-		binlogCli:    binloginfo.GetPumpsClient(),
 		infoHandle:   opt.InfoHandle,
 	}
 	ddlCtx.mu.hook = opt.Hook
@@ -615,11 +608,6 @@ func (d *ddl) callHookOnChanged(err error) error {
 
 	err = d.mu.hook.OnChanged(err)
 	return errors.Trace(err)
-}
-
-// SetBinlogClient implements DDL.SetBinlogClient interface.
-func (d *ddl) SetBinlogClient(binlogCli *pumpcli.PumpsClient) {
-	d.binlogCli = binlogCli
 }
 
 // GetHook implements DDL.GetHook interface.

@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	pumpcli "github.com/pingcap/tidb-tools/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
@@ -93,7 +92,6 @@ func (r *RetryInfo) GetCurrAutoIncrementID() (int64, error) {
 type TransactionContext struct {
 	forUpdateTS   uint64
 	DirtyDB       interface{}
-	Binlog        interface{}
 	InfoSchema    interface{}
 	History       interface{}
 	SchemaVersion int64
@@ -128,7 +126,6 @@ func (tc *TransactionContext) UpdateDeltaForTable(tableID int64, delta int64, co
 func (tc *TransactionContext) Cleanup() {
 	// tc.InfoSchema = nil; we cannot do it now, because some operation like handleFieldList depend on this.
 	tc.DirtyDB = nil
-	tc.Binlog = nil
 	tc.History = nil
 	tc.TableDeltaMap = nil
 }
@@ -260,9 +257,6 @@ type SessionVars struct {
 	// SnapshotInfoschema is used with SnapshotTS, when the schema version at snapshotTS less than current schema
 	// version, we load an old version schema for query.
 	SnapshotInfoschema interface{}
-
-	// BinlogClient is used to write binlog.
-	BinlogClient *pumpcli.PumpsClient
 
 	// GlobalVarsAccessor is used to set and get global variables.
 	GlobalVarsAccessor GlobalVarAccessor

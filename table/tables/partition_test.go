@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
@@ -32,8 +31,6 @@ import (
 func (ts *testSuite) TestPartitionBasic(c *C) {
 	tk := testkit.NewTestKitWithInit(c, ts.store)
 	tk.MustExec("use test")
-	ctx := tk.Se
-	ctx.GetSessionVars().BinlogClient = binloginfo.MockPumpsClient(mockPumpClient{})
 	tk.MustExec("set @@session.tidb_enable_table_partition = '1'")
 	tk.MustExec(`CREATE TABLE partition_basic (id int(11), unique index(id))
 PARTITION BY RANGE COLUMNS ( id ) (
@@ -128,7 +125,7 @@ PARTITION BY RANGE ( id ) (
 	_, err = tb.AddRecord(ts.se, types.MakeDatums(22))
 	c.Assert(err, IsNil) // Insert into maxvalue partition.
 
-	createTable3 := `create table test.t3 (id int) partition by range (id) 
+	createTable3 := `create table test.t3 (id int) partition by range (id)
 	(
        partition p0 values less than (10)
 	)`

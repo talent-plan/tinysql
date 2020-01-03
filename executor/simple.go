@@ -105,9 +105,6 @@ func (e *SimpleExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeSetPwd(x)
 	case *ast.KillStmt:
 		err = e.executeKillStmt(x)
-	case *ast.BinlogStmt:
-		// We just ignore it.
-		return nil
 	case *ast.SetRoleStmt:
 		err = e.executeSetRole(x)
 	case *ast.RevokeRoleStmt:

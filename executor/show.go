@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
@@ -30,10 +29,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb-tools/pkg/etcd"
-	"github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tidb-tools/tidb-binlog/node"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -50,8 +45,6 @@ import (
 	"github.com/pingcap/tidb/util/format"
 	"github.com/pingcap/tidb/util/sqlexec"
 )
-
-var etcdDialTimeout = 5 * time.Second
 
 // ShowExec represents a show executor.
 type ShowExec struct {
@@ -125,8 +118,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowCreateDatabase()
 	case ast.ShowDatabases:
 		return e.fetchShowDatabases()
-	case ast.ShowDrainerStatus:
-		return e.fetchShowPumpOrDrainerStatus(node.DrainerNode)
 	case ast.ShowEngines:
 		return e.fetchShowEngines()
 	case ast.ShowGrants:
@@ -135,8 +126,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowIndex()
 	case ast.ShowProcedureStatus:
 		return e.fetchShowProcedureStatus()
-	case ast.ShowPumpStatus:
-		return e.fetchShowPumpOrDrainerStatus(node.PumpNode)
 	case ast.ShowStatus:
 		return e.fetchShowStatus()
 	case ast.ShowTables:
@@ -973,46 +962,6 @@ func (e *ShowExec) fetchShowWarnings(errOnly bool) error {
 		}
 	}
 	return nil
-}
-
-// fetchShowPumpOrDrainerStatus gets status of all pumps or drainers and fill them into e.rows.
-func (e *ShowExec) fetchShowPumpOrDrainerStatus(kind string) error {
-	registry, err := createRegistry(config.GetGlobalConfig().Path)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	nodes, _, err := registry.Nodes(context.Background(), node.NodePrefix[kind])
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = registry.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	for _, n := range nodes {
-		if n.State == node.Offline {
-			continue
-		}
-		e.appendRow([]interface{}{n.NodeID, n.Addr, n.State, n.MaxCommitTS, utils.TSOToRoughTime(n.UpdateTS).Format(types.TimeFormat)})
-	}
-
-	return nil
-}
-
-// createRegistry returns an ectd registry
-func createRegistry(urls string) (*node.EtcdRegistry, error) {
-	ectdEndpoints, err := utils.ParseHostPortAddr(urls)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	cli, err := etcd.NewClientFromCfg(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return node.NewEtcdRegistry(cli, etcdDialTimeout), nil
 }
 
 func (e *ShowExec) getTable() (table.Table, error) {

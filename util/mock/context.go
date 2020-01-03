@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ sessionctx.Context = (*Context)(nil)
@@ -192,11 +191,6 @@ func (c *Context) StmtCommit() error {
 
 // StmtRollback implements the sessionctx.Context interface.
 func (c *Context) StmtRollback() {
-}
-
-// StmtGetMutation implements the sessionctx.Context interface.
-func (c *Context) StmtGetMutation(tableID int64) *binlog.TableMutation {
-	return nil
 }
 
 // StmtAddDirtyTableOP implements the sessionctx.Context interface.

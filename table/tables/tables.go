@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
-	binlog "github.com/pingcap/tipb/go-binlog"
 	"github.com/spaolacci/murmur3"
 	"go.uber.org/zap"
 )
@@ -277,15 +276,10 @@ func (t *TableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 	}
 	numColsCap := len(newData) + 1 // +1 for the extra handle column that we may need to append.
 
-	var colIDs, binlogColIDs []int64
-	var row, binlogOldRow, binlogNewRow []types.Datum
+	var colIDs []int64
+	var row []types.Datum
 	colIDs = make([]int64, 0, numColsCap)
 	row = make([]types.Datum, 0, numColsCap)
-	if shouldWriteBinlog(ctx) {
-		binlogColIDs = make([]int64, 0, numColsCap)
-		binlogOldRow = make([]types.Datum, 0, numColsCap)
-		binlogNewRow = make([]types.Datum, 0, numColsCap)
-	}
 
 	for _, col := range t.WritableCols() {
 		var value types.Datum
@@ -300,11 +294,6 @@ func (t *TableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 		if !t.canSkip(col, value) {
 			colIDs = append(colIDs, col.ID)
 			row = append(row, value)
-		}
-		if shouldWriteBinlog(ctx) && !t.canSkipUpdateBinlog(col, value) {
-			binlogColIDs = append(binlogColIDs, col.ID)
-			binlogOldRow = append(binlogOldRow, oldData[col.Offset])
-			binlogNewRow = append(binlogNewRow, value)
 		}
 	}
 
@@ -323,17 +312,6 @@ func (t *TableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 	}
 	ctx.StmtAddDirtyTableOP(table.DirtyTableDeleteRow, t.physicalTableID, h)
 	ctx.StmtAddDirtyTableOP(table.DirtyTableAddRow, t.physicalTableID, h)
-	if shouldWriteBinlog(ctx) {
-		if !t.meta.PKIsHandle {
-			binlogColIDs = append(binlogColIDs, model.ExtraHandleID)
-			binlogOldRow = append(binlogOldRow, types.NewIntDatum(h))
-			binlogNewRow = append(binlogNewRow, types.NewIntDatum(h))
-		}
-		err = t.addUpdateBinlog(ctx, binlogOldRow, binlogNewRow, binlogColIDs)
-		if err != nil {
-			return err
-		}
-	}
 	colSize := make(map[int64]int64, len(t.Cols()))
 	for id, col := range t.Cols() {
 		size, err := codec.EstimateValueSize(sc, newData[id])
@@ -493,8 +471,8 @@ func (t *TableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 		return h, err
 	}
 
-	var colIDs, binlogColIDs []int64
-	var row, binlogRow []types.Datum
+	var colIDs []int64
+	var row []types.Datum
 	colIDs = make([]int64, 0, len(r))
 	row = make([]types.Datum, 0, len(r))
 
@@ -541,15 +519,6 @@ func (t *TableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	}
 	ctx.StmtAddDirtyTableOP(table.DirtyTableAddRow, t.physicalTableID, recordID)
 
-	if shouldWriteBinlog(ctx) {
-		// For insert, TiDB and Binlog can use same row and schema.
-		binlogRow = row
-		binlogColIDs = colIDs
-		err = t.addInsertBinlog(ctx, recordID, binlogRow, binlogColIDs)
-		if err != nil {
-			return 0, err
-		}
-	}
 	sc.AddAffectedRows(1)
 	colSize := make(map[int64]int64, len(r))
 	for id, col := range t.Cols() {
@@ -717,23 +686,6 @@ func (t *TableCommon) RemoveRecord(ctx sessionctx.Context, h int64, r []types.Da
 	}
 
 	ctx.StmtAddDirtyTableOP(table.DirtyTableDeleteRow, t.physicalTableID, h)
-	if shouldWriteBinlog(ctx) {
-		cols := t.Cols()
-		colIDs := make([]int64, 0, len(cols)+1)
-		for _, col := range cols {
-			colIDs = append(colIDs, col.ID)
-		}
-		var binlogRow []types.Datum
-		if !t.meta.PKIsHandle {
-			colIDs = append(colIDs, model.ExtraHandleID)
-			binlogRow = make([]types.Datum, 0, len(r)+1)
-			binlogRow = append(binlogRow, r...)
-			binlogRow = append(binlogRow, types.NewIntDatum(h))
-		} else {
-			binlogRow = r
-		}
-		err = t.addDeleteBinlog(ctx, binlogRow, colIDs)
-	}
 	colSize := make(map[int64]int64, len(t.Cols()))
 	sc := ctx.GetSessionVars().StmtCtx
 	for id, col := range t.Cols() {
@@ -745,49 +697,6 @@ func (t *TableCommon) RemoveRecord(ctx sessionctx.Context, h int64, r []types.Da
 	}
 	ctx.GetSessionVars().TxnCtx.UpdateDeltaForTable(t.physicalTableID, -1, 1, colSize)
 	return err
-}
-
-func (t *TableCommon) addInsertBinlog(ctx sessionctx.Context, h int64, row []types.Datum, colIDs []int64) error {
-	mutation := t.getMutation(ctx)
-	pk, err := codec.EncodeValue(ctx.GetSessionVars().StmtCtx, nil, types.NewIntDatum(h))
-	if err != nil {
-		return err
-	}
-	value, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, row, colIDs, nil, nil)
-	if err != nil {
-		return err
-	}
-	bin := append(pk, value...)
-	mutation.InsertedRows = append(mutation.InsertedRows, bin)
-	mutation.Sequence = append(mutation.Sequence, binlog.MutationType_Insert)
-	return nil
-}
-
-func (t *TableCommon) addUpdateBinlog(ctx sessionctx.Context, oldRow, newRow []types.Datum, colIDs []int64) error {
-	old, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, oldRow, colIDs, nil, nil)
-	if err != nil {
-		return err
-	}
-	newVal, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, newRow, colIDs, nil, nil)
-	if err != nil {
-		return err
-	}
-	bin := append(old, newVal...)
-	mutation := t.getMutation(ctx)
-	mutation.UpdatedRows = append(mutation.UpdatedRows, bin)
-	mutation.Sequence = append(mutation.Sequence, binlog.MutationType_Update)
-	return nil
-}
-
-func (t *TableCommon) addDeleteBinlog(ctx sessionctx.Context, r []types.Datum, colIDs []int64) error {
-	data, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, r, colIDs, nil, nil)
-	if err != nil {
-		return err
-	}
-	mutation := t.getMutation(ctx)
-	mutation.DeletedRows = append(mutation.DeletedRows, data)
-	mutation.Sequence = append(mutation.Sequence, binlog.MutationType_DeleteRow)
-	return nil
 }
 
 func (t *TableCommon) removeRowData(ctx sessionctx.Context, h int64) error {
@@ -1043,17 +952,6 @@ func (t *TableCommon) Type() table.Type {
 	return table.NormalTable
 }
 
-func shouldWriteBinlog(ctx sessionctx.Context) bool {
-	if ctx.GetSessionVars().BinlogClient == nil {
-		return false
-	}
-	return !ctx.GetSessionVars().InRestrictedSQL
-}
-
-func (t *TableCommon) getMutation(ctx sessionctx.Context) *binlog.TableMutation {
-	return ctx.StmtGetMutation(t.tableID)
-}
-
 func (t *TableCommon) canSkip(col *table.Column, value types.Datum) bool {
 	return CanSkip(t.Meta(), col, value)
 }
@@ -1069,14 +967,6 @@ func CanSkip(info *model.TableInfo, col *table.Column, value types.Datum) bool {
 	if col.GetDefaultValue() == nil && value.IsNull() {
 		return true
 	}
-	if col.IsGenerated() && !col.GeneratedStored {
-		return true
-	}
-	return false
-}
-
-// canSkipUpdateBinlog checks whether the column can be skipped or not.
-func (t *TableCommon) canSkipUpdateBinlog(col *table.Column, value types.Datum) bool {
 	if col.IsGenerated() && !col.GeneratedStored {
 		return true
 	}

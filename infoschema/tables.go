@@ -1837,7 +1837,7 @@ func dataForServersInfo() ([][]types.Datum, error) {
 			info.Lease,           // LEASE
 			info.Version,         // VERSION
 			info.GitHash,         // GIT_HASH
-			info.BinlogStatus,    // BINLOG_STATUS
+			"",                   // BINLOG_STATUS
 		)
 		rows = append(rows, row)
 	}

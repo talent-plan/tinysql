@@ -33,7 +33,6 @@ require (
 	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
 	github.com/pingcap/parser v0.0.0-20191216031109-53ef01243aa6
 	github.com/pingcap/pd v1.1.0-beta.0.20191210055626-676ddd3fbd2d
-	github.com/pingcap/tidb-tools v3.0.6-0.20191106033616-90632dda3863+incompatible
 	github.com/pingcap/tipb v0.0.0-20191209145133-44f75c9bef33
 	github.com/remyoudompheng/bigfft v0.0.0-20190512091148-babf20351dd7 // indirect
 	github.com/sirupsen/logrus v1.2.0

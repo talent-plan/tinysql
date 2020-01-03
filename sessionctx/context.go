@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tipb/go-binlog"
 )
 
 // Context is an interface for transaction and executive args environment.
@@ -69,8 +68,6 @@ type Context interface {
 	StmtCommit() error
 	// StmtRollback provides statement level rollback.
 	StmtRollback()
-	// StmtGetMutation gets the binlog mutation for current statement.
-	StmtGetMutation(int64) *binlog.TableMutation
 	// StmtAddDirtyTableOP adds the dirty table operation for current statement.
 	StmtAddDirtyTableOP(op int, physicalID int64, handle int64)
 	// DDLOwnerChecker returns owner.DDLOwnerChecker.
