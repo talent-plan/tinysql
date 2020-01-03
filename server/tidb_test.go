@@ -16,25 +16,15 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"io/ioutil"
-	"math/big"
 	"os"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
@@ -186,94 +176,6 @@ func (ts *TidbTestSuite) TestSocket(c *C) {
 
 }
 
-// generateCert generates a private key and a certificate in PEM format based on parameters.
-// If parentCert and parentCertKey is specified, the new certificate will be signed by the parentCert.
-// Otherwise, the new certificate will be self-signed and is a CA.
-func generateCert(sn int, commonName string, parentCert *x509.Certificate, parentCertKey *rsa.PrivateKey, outKeyFile string, outCertFile string) (*x509.Certificate, *rsa.PrivateKey, error) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 528)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	notBefore := time.Now().Add(-10 * time.Minute).UTC()
-	notAfter := notBefore.Add(1 * time.Hour).UTC()
-
-	template := x509.Certificate{
-		SerialNumber:          big.NewInt(int64(sn)),
-		Subject:               pkix.Name{CommonName: commonName},
-		NotBefore:             notBefore,
-		NotAfter:              notAfter,
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-	}
-
-	var parent *x509.Certificate
-	var priv *rsa.PrivateKey
-
-	if parentCert == nil || parentCertKey == nil {
-		template.IsCA = true
-		template.KeyUsage |= x509.KeyUsageCertSign
-		parent = &template
-		priv = privateKey
-	} else {
-		parent = parentCert
-		priv = parentCertKey
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, parent, &privateKey.PublicKey, priv)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	cert, err := x509.ParseCertificate(derBytes)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	certOut, err := os.Create(outCertFile)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	certOut.Close()
-
-	keyOut, err := os.OpenFile(outKeyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-	keyOut.Close()
-
-	return cert, privateKey, nil
-}
-
-// registerTLSConfig registers a mysql client TLS config.
-// See https://godoc.org/github.com/go-sql-driver/mysql#RegisterTLSConfig for details.
-func registerTLSConfig(configName string, caCertPath string, clientCertPath string, clientKeyPath string, serverName string, verifyServer bool) error {
-	rootCertPool := x509.NewCertPool()
-	data, err := ioutil.ReadFile(caCertPath)
-	if err != nil {
-		return err
-	}
-	if ok := rootCertPool.AppendCertsFromPEM(data); !ok {
-		return errors.New("Failed to append PEM")
-	}
-	clientCert := make([]tls.Certificate, 0, 1)
-	certs, err := tls.LoadX509KeyPair(clientCertPath, clientKeyPath)
-	if err != nil {
-		return err
-	}
-	clientCert = append(clientCert, certs)
-	tlsConfig := &tls.Config{
-		RootCAs:            rootCertPool,
-		Certificates:       clientCert,
-		ServerName:         serverName,
-		InsecureSkipVerify: !verifyServer,
-	}
-	mysql.RegisterTLSConfig(configName, tlsConfig)
-	return nil
-}
-
 func (ts *TidbTestSuite) TestSystemTimeZone(c *C) {
 	tk := testkit.NewTestKit(c, ts.store)
 	cfg := config.NewConfig()
@@ -285,103 +187,6 @@ func (ts *TidbTestSuite) TestSystemTimeZone(c *C) {
 
 	tz1 := tk.MustQuery("select variable_value from mysql.tidb where variable_name = 'system_tz'").Rows()
 	tk.MustQuery("select @@system_time_zone").Check(tz1)
-}
-
-func (ts *TidbTestSuite) TestTLS(c *C) {
-	// Generate valid TLS certificates.
-	caCert, caKey, err := generateCert(0, "TiDB CA", nil, nil, "/tmp/ca-key.pem", "/tmp/ca-cert.pem")
-	c.Assert(err, IsNil)
-	_, _, err = generateCert(1, "tidb-server", caCert, caKey, "/tmp/server-key.pem", "/tmp/server-cert.pem")
-	c.Assert(err, IsNil)
-	_, _, err = generateCert(2, "SQL Client Certificate", caCert, caKey, "/tmp/client-key.pem", "/tmp/client-cert.pem")
-	c.Assert(err, IsNil)
-	err = registerTLSConfig("client-certificate", "/tmp/ca-cert.pem", "/tmp/client-cert.pem", "/tmp/client-key.pem", "tidb-server", true)
-	c.Assert(err, IsNil)
-
-	defer func() {
-		os.Remove("/tmp/ca-key.pem")
-		os.Remove("/tmp/ca-cert.pem")
-		os.Remove("/tmp/server-key.pem")
-		os.Remove("/tmp/server-cert.pem")
-		os.Remove("/tmp/client-key.pem")
-		os.Remove("/tmp/client-cert.pem")
-	}()
-
-	// Start the server without TLS.
-	connOverrider := func(config *mysql.Config) {
-		config.TLSConfig = "skip-verify"
-		config.Addr = "localhost:4002"
-	}
-	cfg := config.NewConfig()
-	cfg.Port = 4002
-	cfg.Status.ReportStatus = false
-	server, err := NewServer(cfg, ts.tidbdrv)
-	c.Assert(err, IsNil)
-	go server.Run()
-	time.Sleep(time.Millisecond * 100)
-	err = runTestTLSConnection(c, connOverrider) // We should get ErrNoTLS.
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, mysql.ErrNoTLS.Error())
-	server.Close()
-
-	// Start the server with TLS but without CA, in this case the server will not verify client's certificate.
-	connOverrider = func(config *mysql.Config) {
-		config.TLSConfig = "skip-verify"
-		config.Addr = "localhost:4003"
-	}
-	cfg = config.NewConfig()
-	cfg.Port = 4003
-	cfg.Status.ReportStatus = false
-	cfg.Security = config.Security{
-		SSLCert: "/tmp/server-cert.pem",
-		SSLKey:  "/tmp/server-key.pem",
-	}
-	server, err = NewServer(cfg, ts.tidbdrv)
-	c.Assert(err, IsNil)
-	go server.Run()
-	time.Sleep(time.Millisecond * 100)
-	err = runTestTLSConnection(c, connOverrider) // We should establish connection successfully.
-	c.Assert(err, IsNil)
-	runTestRegression(c, connOverrider, "TLSRegression")
-	// Perform server verification.
-	connOverrider = func(config *mysql.Config) {
-		config.TLSConfig = "client-certificate"
-		config.Addr = "localhost:4003"
-	}
-	err = runTestTLSConnection(c, connOverrider) // We should establish connection successfully.
-	c.Assert(err, IsNil, Commentf("%v", errors.ErrorStack(err)))
-	runTestRegression(c, connOverrider, "TLSRegression")
-	server.Close()
-
-	// Start the server with TLS & CA, if the client presents its certificate, the certificate will be verified.
-	cfg = config.NewConfig()
-	cfg.Port = 4004
-	cfg.Status.ReportStatus = false
-	cfg.Security = config.Security{
-		SSLCA:   "/tmp/ca-cert.pem",
-		SSLCert: "/tmp/server-cert.pem",
-		SSLKey:  "/tmp/server-key.pem",
-	}
-	server, err = NewServer(cfg, ts.tidbdrv)
-	c.Assert(err, IsNil)
-	go server.Run()
-	time.Sleep(time.Millisecond * 100)
-	// The client does not provide a certificate, the connection should succeed.
-	connOverrider = func(config *mysql.Config) {
-		config.Addr = "localhost:4004"
-	}
-	err = runTestTLSConnection(c, connOverrider)
-	c.Assert(err, IsNil)
-	runTestRegression(c, connOverrider, "TLSRegression")
-	// The client provides a valid certificate.
-	connOverrider = func(config *mysql.Config) {
-		config.TLSConfig = "client-certificate"
-		config.Addr = "localhost:4004"
-	}
-	err = runTestTLSConnection(c, connOverrider)
-	c.Assert(err, IsNil)
-	runTestRegression(c, connOverrider, "TLSRegression")
-	server.Close()
 }
 
 func (ts *TidbTestSuite) TestClientWithCollation(c *C) {

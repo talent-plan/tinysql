@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
@@ -31,13 +30,11 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -82,40 +79,29 @@ type connArray struct {
 	done chan struct{}
 }
 
-func newConnArray(maxSize uint, addr string, security config.Security, idleNotify *uint32) (*connArray, error) {
+func newConnArray(maxSize uint, addr string, idleNotify *uint32) (*connArray, error) {
 	a := &connArray{
 		index:         0,
 		v:             make([]*grpc.ClientConn, maxSize),
 		streamTimeout: make(chan *tikvrpc.Lease, 1024),
 		done:          make(chan struct{}),
 	}
-	if err := a.Init(addr, security, idleNotify); err != nil {
+	if err := a.Init(addr, idleNotify); err != nil {
 		return nil, err
 	}
 	return a, nil
 }
 
-func (a *connArray) Init(addr string, security config.Security, idleNotify *uint32) error {
+func (a *connArray) Init(addr string, idleNotify *uint32) error {
 	a.target = addr
 
 	opt := grpc.WithInsecure()
-	if len(security.ClusterSSLCA) != 0 {
-		tlsConfig, err := security.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-	}
 
 	cfg := config.GetGlobalConfig()
 	var (
 		unaryInterceptor  grpc.UnaryClientInterceptor
 		streamInterceptor grpc.StreamClientInterceptor
 	)
-	if cfg.OpenTracing.Enable {
-		unaryInterceptor = grpc_opentracing.UnaryClientInterceptor()
-		streamInterceptor = grpc_opentracing.StreamClientInterceptor()
-	}
 
 	allowBatch := cfg.TiKVClient.MaxBatchSize > 0
 	if allowBatch {
@@ -207,8 +193,7 @@ func (a *connArray) Close() {
 type rpcClient struct {
 	sync.RWMutex
 
-	conns    map[string]*connArray
-	security config.Security
+	conns map[string]*connArray
 
 	idleNotify uint32
 	// Periodically check whether there is any connection that is idle and then close and remove these idle connections.
@@ -216,16 +201,15 @@ type rpcClient struct {
 	isClosed bool
 }
 
-func newRPCClient(security config.Security) *rpcClient {
+func newRPCClient() *rpcClient {
 	return &rpcClient{
-		conns:    make(map[string]*connArray),
-		security: security,
+		conns: make(map[string]*connArray),
 	}
 }
 
 // NewTestRPCClient is for some external tests.
 func NewTestRPCClient() Client {
-	return newRPCClient(config.Security{})
+	return newRPCClient()
 }
 
 func (c *rpcClient) getConnArray(addr string) (*connArray, error) {
@@ -253,7 +237,7 @@ func (c *rpcClient) createConnArray(addr string) (*connArray, error) {
 	if !ok {
 		var err error
 		connCount := config.GetGlobalConfig().TiKVClient.GrpcConnectionCount
-		array, err = newConnArray(connCount, addr, c.security, &c.idleNotify)
+		array, err = newConnArray(connCount, addr, &c.idleNotify)
 		if err != nil {
 			return nil, err
 		}

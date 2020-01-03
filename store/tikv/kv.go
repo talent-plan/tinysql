@@ -28,9 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/oracle/oracles"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -50,12 +48,11 @@ var mc storeCache
 type Driver struct {
 }
 
-func createEtcdKV(addrs []string, tlsConfig *tls.Config) (*clientv3.Client, error) {
+func createEtcdKV(addrs []string) (*clientv3.Client, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:        addrs,
 		AutoSyncInterval: 30 * time.Second,
 		DialTimeout:      5 * time.Second,
-		TLS:              tlsConfig,
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -69,17 +66,12 @@ func (d Driver) Open(path string) (kv.Storage, error) {
 	mc.Lock()
 	defer mc.Unlock()
 
-	security := config.GetGlobalConfig().Security
 	etcdAddrs, disableGC, err := parsePath(path)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	pdCli, err := pd.NewClient(etcdAddrs, pd.SecurityOption{
-		CAPath:   security.ClusterSSLCA,
-		CertPath: security.ClusterSSLCert,
-		KeyPath:  security.ClusterSSLKey,
-	})
+	pdCli, err := pd.NewClient(etcdAddrs, pd.SecurityOption{})
 
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -91,22 +83,16 @@ func (d Driver) Open(path string) (kv.Storage, error) {
 		return store, nil
 	}
 
-	tlsConfig, err := security.ToTLSConfig()
+	spkv, err := NewEtcdSafePointKV(etcdAddrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	spkv, err := NewEtcdSafePointKV(etcdAddrs, tlsConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	s, err := newTikvStore(uuid, &codecPDClient{pdCli}, spkv, newRPCClient(security), !disableGC)
+	s, err := newTikvStore(uuid, &codecPDClient{pdCli}, spkv, newRPCClient(), !disableGC)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	s.etcdAddrs = etcdAddrs
-	s.tlsConfig = tlsConfig
 
 	mc.cache[uuid] = s
 	return s, nil
@@ -132,7 +118,6 @@ type tikvStore struct {
 	lockResolver *LockResolver
 	gcWorker     GCHandler
 	etcdAddrs    []string
-	tlsConfig    *tls.Config
 	mock         bool
 	enableGC     bool
 
@@ -200,10 +185,6 @@ func newTikvStore(uuid string, pdClient pd.Client, spkv SafePointKV, client Clie
 
 func (s *tikvStore) EtcdAddrs() []string {
 	return s.etcdAddrs
-}
-
-func (s *tikvStore) TLSConfig() *tls.Config {
-	return s.tlsConfig
 }
 
 // StartGCWorker starts GC worker, it's called in BootstrapSession, don't call this function more than once.

@@ -502,14 +502,6 @@ func runTestMultiStatements(c *C) {
 	})
 }
 
-func runTestTLSConnection(t *C, overrider configOverrider) error {
-	db, err := sql.Open("mysql", getDSN(overrider))
-	t.Assert(err, IsNil)
-	defer db.Close()
-	_, err = db.Exec("USE test")
-	return err
-}
-
 func runTestSumAvg(c *C) {
 	runTests(c, nil, func(dbt *DBTest) {
 		dbt.mustExec("create table sumavg (a int, b decimal, c double)")
