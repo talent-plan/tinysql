@@ -148,7 +148,6 @@ disable-error-stack = false
 func (s *testConfigSuite) TestConfig(c *C) {
 	conf := new(Config)
 	conf.Performance.TxnTotalSizeLimit = 1000
-	conf.TiKVClient.CommitTimeout = "10s"
 	configFile := "config.toml"
 	_, localFile, _, _ := runtime.Caller(0)
 	configFile = filepath.Join(filepath.Dir(localFile), configFile)
@@ -176,8 +175,6 @@ enable-batch-dml = true
 server-version = "test_version"
 [performance]
 txn-total-size-limit=2000
-[tikv-client]
-commit-timeout="41s"
 `)
 
 	c.Assert(err, IsNil)
@@ -192,7 +189,6 @@ commit-timeout="41s"
 	c.Assert(conf.Performance.TxnTotalSizeLimit, Equals, uint64(2000))
 	c.Assert(conf.AlterPrimaryKey, Equals, true)
 
-	c.Assert(conf.TiKVClient.CommitTimeout, Equals, "41s")
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.EnableBatchDML, Equals, true)

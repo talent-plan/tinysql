@@ -28,7 +28,6 @@ type testClientSuite struct {
 }
 
 var _ = Suite(&testClientSuite{})
-var _ = Suite(&testClientFailSuite{})
 
 func (s *testClientSuite) TestConn(c *C) {
 	client := newRPCClient()

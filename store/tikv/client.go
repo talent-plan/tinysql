@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"google.golang.org/grpc"
@@ -92,14 +91,11 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 
 	opt := grpc.WithInsecure()
 
-	cfg := config.GetGlobalConfig()
 	var (
 		unaryInterceptor  grpc.UnaryClientInterceptor
 		streamInterceptor grpc.StreamClientInterceptor
 	)
 
-	keepAlive := cfg.TiKVClient.GrpcKeepAliveTime
-	keepAliveTimeout := cfg.TiKVClient.GrpcKeepAliveTimeout
 	for i := range a.v {
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		conn, err := grpc.DialContext(
@@ -121,8 +117,8 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 				MinConnectTimeout: dialTimeout,
 			}),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                time.Duration(keepAlive) * time.Second,
-				Timeout:             time.Duration(keepAliveTimeout) * time.Second,
+				Time:                time.Duration(10) * time.Second,
+				Timeout:             time.Duration(3) * time.Second,
 				PermitWithoutStream: true,
 			}),
 		)
@@ -206,8 +202,7 @@ func (c *rpcClient) createConnArray(addr string) (*connArray, error) {
 	array, ok := c.conns[addr]
 	if !ok {
 		var err error
-		connCount := config.GetGlobalConfig().TiKVClient.GrpcConnectionCount
-		array, err = newConnArray(connCount, addr, &c.idleNotify)
+		array, err = newConnArray(4, addr, &c.idleNotify)
 		if err != nil {
 			return nil, err
 		}

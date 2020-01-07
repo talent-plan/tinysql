@@ -67,7 +67,6 @@ type Config struct {
 	Log                 Log         `toml:"log" json:"log"`
 	Status              Status      `toml:"status" json:"status"`
 	Performance         Performance `toml:"performance" json:"performance"`
-	TiKVClient          TiKVClient  `toml:"tikv-client" json:"tikv-client"`
 	CompatibleKillQuery bool        `toml:"compatible-kill-query" json:"compatible-kill-query"`
 	CheckMb4ValueInUTF8 bool        `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
@@ -217,21 +216,6 @@ type Performance struct {
 	CrossJoin           bool    `toml:"cross-join" json:"cross-join"`
 }
 
-// TiKVClient is the config for tikv client.
-type TiKVClient struct {
-	// GrpcConnectionCount is the max gRPC connections that will be established
-	// with each tikv-server.
-	GrpcConnectionCount uint `toml:"grpc-connection-count" json:"grpc-connection-count"`
-	// After a duration of this time in seconds if the client doesn't see any activity it pings
-	// the server to see if the transport is still alive.
-	GrpcKeepAliveTime uint `toml:"grpc-keepalive-time" json:"grpc-keepalive-time"`
-	// After having pinged for keepalive check, the client waits for a duration of Timeout in seconds
-	// and if no activity is seen even after that the connection is closed.
-	GrpcKeepAliveTimeout uint `toml:"grpc-keepalive-timeout" json:"grpc-keepalive-timeout"`
-	// CommitTimeout is the max time which command 'commit' will wait.
-	CommitTimeout string `toml:"commit-timeout" json:"commit-timeout"`
-}
-
 var defaultConf = Config{
 	Host:                         "0.0.0.0",
 	AdvertiseAddress:             "",
@@ -278,12 +262,6 @@ var defaultConf = Config{
 		PseudoEstimateRatio: 0.8,
 		ForcePriority:       "NO_PRIORITY",
 		TxnTotalSizeLimit:   DefTxnTotalSizeLimit,
-	},
-	TiKVClient: TiKVClient{
-		GrpcConnectionCount:  4,
-		GrpcKeepAliveTime:    10,
-		GrpcKeepAliveTimeout: 3,
-		CommitTimeout:        "41s",
 	},
 }
 
@@ -362,11 +340,6 @@ func (c *Config) Valid() error {
 	// lower_case_table_names is allowed to be 0, 1, 2
 	if c.LowerCaseTableNames < 0 || c.LowerCaseTableNames > 2 {
 		return fmt.Errorf("lower-case-table-names should be 0 or 1 or 2")
-	}
-
-	// For tikvclient.
-	if c.TiKVClient.GrpcConnectionCount == 0 {
-		return fmt.Errorf("grpc-connection-count should be greater than 0")
 	}
 
 	if c.Performance.TxnTotalSizeLimit > 10<<30 {
