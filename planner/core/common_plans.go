@@ -271,19 +271,6 @@ type Analyze struct {
 	Opts     map[ast.AnalyzeOptionType]uint64
 }
 
-// SplitRegion represents a split regions plan.
-type SplitRegion struct {
-	baseSchemaProducer
-
-	TableInfo      *model.TableInfo
-	PartitionNames []model.CIStr
-	IndexInfo      *model.IndexInfo
-	Lower          []types.Datum
-	Upper          []types.Datum
-	Num            int
-	ValueLists     [][]types.Datum
-}
-
 // SplitRegionStatus represents a split regions status plan.
 type SplitRegionStatus struct {
 	baseSchemaProducer
