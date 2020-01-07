@@ -22,10 +22,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -244,11 +242,6 @@ func (t *partitionedTable) PartitionExpr(ctx sessionctx.Context, columns []*expr
 	// TODO: a better performance implementation:
 	// traverse the Expression, find all columns and rewrite them.
 	return newPartitionExprBySchema(ctx, t.meta, columns, names)
-}
-
-func partitionRecordKey(pid int64, handle int64) kv.Key {
-	recordPrefix := tablecodec.GenTableRecordPrefix(pid)
-	return tablecodec.EncodeRecordKey(recordPrefix, handle)
 }
 
 // locatePartition returns the partition ID of the input record.

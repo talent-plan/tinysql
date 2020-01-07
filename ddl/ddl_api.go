@@ -3255,41 +3255,6 @@ func validateCommentLength(vars *variable.SessionVars, indexName string, indexOp
 	return indexOption.Comment, nil
 }
 
-func checkRangeColumnsTypeAndValuesMatch(ctx sessionctx.Context, meta *model.TableInfo, colNames []model.CIStr, exprs []ast.ExprNode) error {
-	// Validate() has already checked len(colNames) = len(exprs)
-	// create table ... partition by range columns (cols)
-	// partition p0 values less than (expr)
-	// check the type of cols[i] and expr is consistent.
-	for i, colExpr := range exprs {
-		if _, ok := colExpr.(*ast.MaxValueExpr); ok {
-			continue
-		}
-
-		colName := colNames[i]
-		colInfo := getColumnInfoByName(meta, colName.L)
-		if colInfo == nil {
-			return errors.Trace(ErrFieldNotFoundPart)
-		}
-		colType := &colInfo.FieldType
-
-		val, err := expression.EvalAstExpr(ctx, colExpr)
-		if err != nil {
-			return err
-		}
-
-		// Check val.ConvertTo(colType) doesn't work, so we need this case by case check.
-		switch colType.Tp {
-		case mysql.TypeDate, mysql.TypeDatetime:
-			switch val.Kind() {
-			case types.KindString, types.KindBytes:
-			default:
-				return ErrWrongTypeColumnValue.GenWithStackByArgs()
-			}
-		}
-	}
-	return nil
-}
-
 // extractCollateFromOption take collates(may multiple) in option into consideration
 // when handle charset and collate of a column, rather than handling it separately.
 func extractCollateFromOption(def *ast.ColumnDef) []string {

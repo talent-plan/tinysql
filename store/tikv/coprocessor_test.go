@@ -203,14 +203,6 @@ func (s *testCoprocessorSuite) taskEqual(c *C, task *copTask, regionID uint64, k
 	}
 }
 
-func (s *testCoprocessorSuite) rangeEqual(c *C, ranges []kv.KeyRange, keys ...string) {
-	for i := 0; i < len(ranges); i++ {
-		r := ranges[i]
-		c.Assert(string(r.StartKey), Equals, keys[2*i])
-		c.Assert(string(r.EndKey), Equals, keys[2*i+1])
-	}
-}
-
 func (s *testCoprocessorSuite) TestCopRanges(c *C) {
 	ranges := []kv.KeyRange{
 		{StartKey: []byte("a"), EndKey: []byte("b")},

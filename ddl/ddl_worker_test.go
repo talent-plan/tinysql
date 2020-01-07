@@ -452,10 +452,6 @@ func buildCancelJobTests(firstID int64) []testCancelJob {
 	return tests
 }
 
-func (s *testDDLSuite) checkDropIdx(c *C, d *ddl, schemaID int64, tableID int64, idxName string, success bool) {
-	checkIdxExist(c, d, schemaID, tableID, idxName, !success)
-}
-
 func (s *testDDLSuite) checkAddIdx(c *C, d *ddl, schemaID int64, tableID int64, idxName string, success bool) {
 	checkIdxExist(c, d, schemaID, tableID, idxName, success)
 }

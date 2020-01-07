@@ -189,16 +189,6 @@ func buildCreateIdxJob(dbInfo *model.DBInfo, tblInfo *model.TableInfo, unique bo
 	}
 }
 
-func testCreatePrimaryKey(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo, colName string) *model.Job {
-	job := buildCreateIdxJob(dbInfo, tblInfo, true, "primary", colName)
-	job.Type = model.ActionAddPrimaryKey
-	err := d.doDDLJob(ctx, job)
-	c.Assert(err, IsNil)
-	v := getSchemaVer(c, ctx)
-	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
-	return job
-}
-
 func testCreateIndex(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo, unique bool, indexName string, colName string) *model.Job {
 	job := buildCreateIdxJob(dbInfo, tblInfo, unique, indexName, colName)
 	err := d.doDDLJob(ctx, job)
