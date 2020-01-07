@@ -576,31 +576,6 @@ func (h *rpcHandler) fillUpData4SelectResponse(selResp *tipb.SelectResponse, dag
 	return nil
 }
 
-func (h *rpcHandler) constructRespSchema(dagCtx *dagContext) []*types.FieldType {
-	root := dagCtx.dagReq.Executors[len(dagCtx.dagReq.Executors)-1]
-	agg := root.Aggregation
-	if root.StreamAgg != nil {
-		agg = root.StreamAgg
-	}
-	if agg == nil {
-		return dagCtx.evalCtx.fieldTps
-	}
-
-	schema := make([]*types.FieldType, 0, len(agg.AggFunc)+len(agg.GroupBy))
-	for i := range agg.AggFunc {
-		if agg.AggFunc[i].Tp == tipb.ExprType_Avg {
-			// Avg function requests two columns : Count , Sum
-			// This line addend the Count(TypeLonglong) to the schema.
-			schema = append(schema, types.NewFieldType(mysql.TypeLonglong))
-		}
-		schema = append(schema, expression.PbTypeToFieldType(agg.AggFunc[i].FieldType))
-	}
-	for i := range agg.GroupBy {
-		schema = append(schema, expression.PbTypeToFieldType(agg.GroupBy[i].FieldType))
-	}
-	return schema
-}
-
 func buildResp(selResp *tipb.SelectResponse, err error) *coprocessor.Response {
 	resp := &coprocessor.Response{}
 

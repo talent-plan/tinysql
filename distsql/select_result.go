@@ -52,10 +52,9 @@ type selectResult struct {
 	fieldTypes []*types.FieldType
 	ctx        sessionctx.Context
 
-	selectResp       *tipb.SelectResponse
-	selectRespSize   int // record the selectResp.Size() when it is initialized.
-	respChkIdx       int
-	respChunkDecoder *chunk.Decoder
+	selectResp     *tipb.SelectResponse
+	selectRespSize int // record the selectResp.Size() when it is initialized.
+	respChkIdx     int
 
 	partialCount int64 // number of partial results.
 
