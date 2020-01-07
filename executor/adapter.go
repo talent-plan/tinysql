@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
@@ -270,9 +269,6 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		maxExecutionTime := getMaxExecutionTime(sctx, a.StmtNode)
 		// Update processinfo, ShowProcess() will use it.
 		pi.SetProcessInfo(sql, time.Now(), cmd, maxExecutionTime)
-		if a.Ctx.GetSessionVars().StmtCtx.StmtType == "" {
-			a.Ctx.GetSessionVars().StmtCtx.StmtType = GetStmtLabel(a.StmtNode)
-		}
 	}
 
 	if handled, result, err := a.handleNoDelay(ctx, e); handled {
@@ -382,19 +378,6 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		stmtCtx := ctx.GetSessionVars().StmtCtx
-		if stmtPri := stmtCtx.Priority; stmtPri == mysql.NoPriority {
-			switch {
-			case useMaxTS:
-				stmtCtx.Priority = kv.PriorityHigh
-			case a.LowerPriority:
-				stmtCtx.Priority = kv.PriorityLow
-			}
-		}
-	}
-	if _, ok := a.Plan.(*plannercore.Analyze); ok && ctx.GetSessionVars().InRestrictedSQL {
-		ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityLow
 	}
 
 	b := newExecutorBuilder(ctx, a.InfoSchema)
@@ -412,9 +395,6 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 		a.OutputNames = executorExec.outputNames
 		a.isPreparedStmt = true
 		a.Plan = executorExec.plan
-		if executorExec.lowerPriority {
-			ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityLow
-		}
 		e = executorExec.stmtExec
 	}
 	a.isSelectForUpdate = b.isSelectForUpdate

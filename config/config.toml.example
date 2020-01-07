@@ -102,43 +102,6 @@ report-status = true
 status-host = "0.0.0.0"
 
 ## status-host is the HTTP address for reporting the internal status of a TiDB server, for example:
-## API for prometheus: http://${status-host}:${status_port}/metrics
 ## API for pprof:      http://${status-host}:${status_port}/debug/pprof
 # TiDB status port.
 status-port = 10080
-
-# Record statements qps by database name if it is enabled.
-record-db-qps = false
-
-[performance]
-# Max CPUs to use, 0 use number of CPUs in the machine.
-max-procs = 0
-
-# Max memory size to use, 0 use the total usable memory in the machine.
-max-memory = 0
-
-# StmtCountLimit limits the max count of statement inside a transaction.
-stmt-count-limit = 5000
-
-# Set keep alive option for tcp connection.
-tcp-keep-alive = true
-
-# Whether support cartesian product.
-cross-join = true
-
-# Stats lease duration, which influences the time of analyze and stats load.
-stats-lease = "3s"
-
-# Pseudo stats will be used if the ratio between the modify count and
-# row count in statistics of a table is greater than it.
-pseudo-estimate-ratio = 0.8
-
-# Force the priority of all statements in a specified priority.
-# The value could be "NO_PRIORITY", "LOW_PRIORITY", "HIGH_PRIORITY" or "DELAYED".
-force-priority = "NO_PRIORITY"
-
-# The limitation of the size in byte for the entries in one transaction.
-# If using TiKV as the storage, the entry represents a key/value pair.
-# WARNING: Do not set the value too large, otherwise it will make a very large impact on the TiKV cluster.
-# Please adjust this configuration carefully.
-txn-total-size-limit = 1073741824

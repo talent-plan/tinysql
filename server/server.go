@@ -122,11 +122,9 @@ func (s *Server) SetDomain(dom *domain.Domain) {
 // It allocates a connection ID and random salt data for authentication.
 func (s *Server) newConn(conn net.Conn) *clientConn {
 	cc := newClientConn(s)
-	if s.cfg.Performance.TCPKeepAlive {
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			if err := tcpConn.SetKeepAlive(true); err != nil {
-				logutil.BgLogger().Error("failed to set tcp keep alive option", zap.Error(err))
-			}
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		if err := tcpConn.SetKeepAlive(true); err != nil {
+			logutil.BgLogger().Error("failed to set tcp keep alive option", zap.Error(err))
 		}
 	}
 	cc.setConn(conn)

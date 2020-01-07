@@ -121,8 +121,6 @@ func GetSessionOnlySysVars(s *SessionVars, key string) (string, bool, error) {
 			return "", false, err
 		}
 		return string(j), true, nil
-	case TiDBForcePriority:
-		return mysql.Priority2Str[mysql.PriorityEnum(atomic.LoadInt32(&ForcePriority))], true, nil
 	case TiDBQueryLogMaxLen:
 		return strconv.FormatUint(atomic.LoadUint64(&config.GetGlobalConfig().Log.QueryLogMaxLen), 10), true, nil
 	case TiDBCheckMb4ValueInUTF8:

@@ -41,7 +41,6 @@ var suite = new(TidbTestSuite)
 var _ = Suite(suite)
 
 func (ts *TidbTestSuite) SetUpSuite(c *C) {
-
 	var err error
 	ts.store, err = mockstore.NewMockTikvStore()
 	session.DisableStats4Test()
@@ -53,7 +52,6 @@ func (ts *TidbTestSuite) SetUpSuite(c *C) {
 	cfg.Port = 4001
 	cfg.Status.ReportStatus = true
 	cfg.Status.StatusPort = 10090
-	cfg.Performance.TCPKeepAlive = true
 
 	server, err := NewServer(cfg, ts.tidbdrv)
 	c.Assert(err, IsNil)

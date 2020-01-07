@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/planner"
@@ -169,7 +168,6 @@ func (e *PrepareExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	}
 	prepared := &ast.Prepared{
 		Stmt:          stmt,
-		StmtType:      GetStmtLabel(stmt),
 		Params:        sorter.markers,
 		SchemaVersion: e.is.SchemaMetaVersion(),
 	}
@@ -210,15 +208,14 @@ func (e *PrepareExec) Next(ctx context.Context, req *chunk.Chunk) error {
 type ExecuteExec struct {
 	baseExecutor
 
-	is            infoschema.InfoSchema
-	name          string
-	usingVars     []expression.Expression
-	stmtExec      Executor
-	stmt          ast.StmtNode
-	plan          plannercore.Plan
-	id            uint32
-	lowerPriority bool
-	outputNames   []*types.FieldName
+	is          infoschema.InfoSchema
+	name        string
+	usingVars   []expression.Expression
+	stmtExec    Executor
+	stmt        ast.StmtNode
+	plan        plannercore.Plan
+	id          uint32
+	outputNames []*types.FieldName
 }
 
 // Next implements the Executor Next interface.
@@ -245,9 +242,6 @@ func (e *ExecuteExec) Build(b *executorBuilder) error {
 		return errors.Trace(b.err)
 	}
 	e.stmtExec = stmtExec
-	if e.ctx.GetSessionVars().StmtCtx.Priority == mysql.NoPriority {
-		e.lowerPriority = needLowerPriority(e.plan)
-	}
 	return nil
 }
 

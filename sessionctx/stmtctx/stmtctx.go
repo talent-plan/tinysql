@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
 )
 
@@ -115,7 +114,6 @@ type StatementContext struct {
 
 	// Copied from SessionVars.TimeZone.
 	TimeZone       *time.Location
-	Priority       mysql.PriorityEnum
 	NotFillCache   bool
 	TableIDs       []int64
 	IndexNames     []string
