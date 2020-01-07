@@ -15,8 +15,6 @@ package variable
 
 import (
 	"os"
-
-	"github.com/pingcap/parser/mysql"
 )
 
 /*
@@ -239,10 +237,6 @@ const (
 	// TiDBWaitSplitRegionTimeout uses to set the split and scatter region back off time.
 	TiDBWaitSplitRegionTimeout = "tidb_wait_split_region_timeout"
 
-	// tidb_force_priority defines the operations priority of all statements.
-	// It can be "NO_PRIORITY", "LOW_PRIORITY", "HIGH_PRIORITY", "DELAYED"
-	TiDBForcePriority = "tidb_force_priority"
-
 	// tidb_enable_radix_join indicates to use radix hash join algorithm to execute
 	// HashJoin.
 	TiDBEnableRadixJoin = "tidb_enable_radix_join"
@@ -315,7 +309,6 @@ const (
 	DefTiDBMaxDeltaSchemaCount       = 1024
 	DefTiDBHashAggPartialConcurrency = 4
 	DefTiDBHashAggFinalConcurrency   = 4
-	DefTiDBForcePriority             = mysql.NoPriority
 	DefTiDBUseRadixJoin              = false
 	DefEnableVectorizedExpression    = true
 	DefTiDBOptJoinReorderThreshold   = 0
@@ -340,7 +333,6 @@ var (
 	// Export for testing.
 	MaxDDLReorgBatchSize  int32  = 10240
 	MinDDLReorgBatchSize  int32  = 32
-	ForcePriority                = int32(DefTiDBForcePriority)
 	ServerHostname, _            = os.Hostname()
 	MaxOfMaxAllowedPacket uint64 = 1073741824
 )

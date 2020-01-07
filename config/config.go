@@ -61,13 +61,12 @@ type Config struct {
 	EnableBatchDML   bool   `toml:"enable-batch-dml" json:"enable-batch-dml"`
 	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
 	// TODO: We actually only support mode 2, which keeps the original case, but the comparison is case-insensitive.
-	LowerCaseTableNames int         `toml:"lower-case-table-names" json:"lower-case-table-names"`
-	ServerVersion       string      `toml:"server-version" json:"server-version"`
-	Log                 Log         `toml:"log" json:"log"`
-	Status              Status      `toml:"status" json:"status"`
-	Performance         Performance `toml:"performance" json:"performance"`
-	CompatibleKillQuery bool        `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	CheckMb4ValueInUTF8 bool        `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
+	LowerCaseTableNames int    `toml:"lower-case-table-names" json:"lower-case-table-names"`
+	ServerVersion       string `toml:"server-version" json:"server-version"`
+	Log                 Log    `toml:"log" json:"log"`
+	Status              Status `toml:"status" json:"status"`
+	CompatibleKillQuery bool   `toml:"compatible-kill-query" json:"compatible-kill-query"`
+	CheckMb4ValueInUTF8 bool   `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
 	// AlterPrimaryKey is used to control alter primary key feature.
 	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
 	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
@@ -198,21 +197,7 @@ type Status struct {
 
 	StatusPort uint `toml:"status-port" json:"status-port"`
 
-	ReportStatus  bool `toml:"report-status" json:"report-status"`
-	RecordQPSbyDB bool `toml:"record-db-qps" json:"record-db-qps"`
-}
-
-// Performance is the performance section of the config.
-type Performance struct {
-	MaxProcs            uint    `toml:"max-procs" json:"max-procs"`
-	MaxMemory           uint64  `toml:"max-memory" json:"max-memory"`
-	StatsLease          string  `toml:"stats-lease" json:"stats-lease"`
-	StmtCountLimit      uint    `toml:"stmt-count-limit" json:"stmt-count-limit"`
-	PseudoEstimateRatio float64 `toml:"pseudo-estimate-ratio" json:"pseudo-estimate-ratio"`
-	ForcePriority       string  `toml:"force-priority" json:"force-priority"`
-	TxnTotalSizeLimit   uint64  `toml:"txn-total-size-limit" json:"txn-total-size-limit"`
-	TCPKeepAlive        bool    `toml:"tcp-keep-alive" json:"tcp-keep-alive"`
-	CrossJoin           bool    `toml:"cross-join" json:"cross-join"`
+	ReportStatus bool `toml:"report-status" json:"report-status"`
 }
 
 var defaultConf = Config{
@@ -248,18 +233,6 @@ var defaultConf = Config{
 		ReportStatus: true,
 		StatusHost:   "0.0.0.0",
 		StatusPort:   10080,
-
-		RecordQPSbyDB: false,
-	},
-	Performance: Performance{
-		MaxMemory:           0,
-		TCPKeepAlive:        true,
-		CrossJoin:           true,
-		StatsLease:          "3s",
-		StmtCountLimit:      5000,
-		PseudoEstimateRatio: 0.8,
-		ForcePriority:       "NO_PRIORITY",
-		TxnTotalSizeLimit:   DefTxnTotalSizeLimit,
 	},
 }
 
@@ -338,10 +311,6 @@ func (c *Config) Valid() error {
 	// lower_case_table_names is allowed to be 0, 1, 2
 	if c.LowerCaseTableNames < 0 || c.LowerCaseTableNames > 2 {
 		return fmt.Errorf("lower-case-table-names should be 0 or 1 or 2")
-	}
-
-	if c.Performance.TxnTotalSizeLimit > 10<<30 {
-		return fmt.Errorf("txn-total-size-limit should be less than %d", 10<<30)
 	}
 	return nil
 }

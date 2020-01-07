@@ -147,7 +147,6 @@ disable-error-stack = false
 
 func (s *testConfigSuite) TestConfig(c *C) {
 	conf := new(Config)
-	conf.Performance.TxnTotalSizeLimit = 1000
 	configFile := "config.toml"
 	_, localFile, _, _ := runtime.Caller(0)
 	configFile = filepath.Join(filepath.Dir(localFile), configFile)
@@ -173,8 +172,6 @@ alter-primary-key = true
 split-region-max-num=10000
 enable-batch-dml = true
 server-version = "test_version"
-[performance]
-txn-total-size-limit=2000
 `)
 
 	c.Assert(err, IsNil)
@@ -185,8 +182,6 @@ txn-total-size-limit=2000
 	c.Assert(conf.ServerVersion, Equals, "test_version")
 	c.Assert(mysql.ServerVersion, Equals, conf.ServerVersion)
 
-	// Test that the value will be overwritten by the config file.
-	c.Assert(conf.Performance.TxnTotalSizeLimit, Equals, uint64(2000))
 	c.Assert(conf.AlterPrimaryKey, Equals, true)
 
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
@@ -203,21 +198,4 @@ txn-total-size-limit=2000
 
 	// Test for log config.
 	c.Assert(conf.Log.ToLogConfig(), DeepEquals, logutil.NewLogConfig("info", "text", conf.Log.File, false, func(config *zaplog.Config) { config.DisableErrorVerbose = conf.Log.getDisableErrorStack() }))
-}
-
-func (s *testConfigSuite) TestTxnTotalSizeLimitValid(c *C) {
-	conf := NewConfig()
-	tests := []struct {
-		limit uint64
-		valid bool
-	}{
-		{4 << 10, true},
-		{10 << 30, true},
-		{10<<30 + 1, false},
-	}
-
-	for _, tt := range tests {
-		conf.Performance.TxnTotalSizeLimit = tt.limit
-		c.Assert(conf.Valid() == nil, Equals, tt.valid)
-	}
 }

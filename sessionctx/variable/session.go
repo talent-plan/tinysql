@@ -818,8 +818,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.EnableTablePartition = val
 	case TiDBDDLReorgPriority:
 		s.setDDLReorgPriority(val)
-	case TiDBForcePriority:
-		atomic.StoreInt32(&ForcePriority, int32(mysql.Str2Priority(val)))
 	case TiDBEnableRadixJoin:
 		s.EnableRadixJoin = TiDBOptOn(val)
 	case TiDBEnableVectorizedExpression:

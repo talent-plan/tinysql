@@ -673,7 +673,6 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		Ranges:  task.ranges.toPBRanges(),
 	}, worker.req.ReplicaRead, worker.replicaReadSeed, kvrpcpb.Context{
 		IsolationLevel: pbIsolationLevel(worker.req.IsolationLevel),
-		Priority:       kvPriorityToCommandPri(worker.req.Priority),
 		NotFillCache:   worker.req.NotFillCache,
 		HandleTime:     true,
 		ScanDetail:     true,

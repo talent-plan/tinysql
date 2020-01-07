@@ -259,7 +259,6 @@ func (d *ddlCtx) buildDescTableScan(ctx context.Context, startTS uint64, tbl tab
 		SetConcurrency(1).SetDesc(true)
 
 	builder.Request.NotFillCache = true
-	builder.Request.Priority = kv.PriorityLow
 
 	kvReq, err := builder.Build()
 	if err != nil {

@@ -18,24 +18,20 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv"
@@ -298,20 +294,10 @@ func overrideConfig() {
 func setGlobalVars() {
 	ddlLeaseDuration := parseDuration(cfg.Lease)
 	session.SetSchemaLease(ddlLeaseDuration)
-	runtime.GOMAXPROCS(int(cfg.Performance.MaxProcs))
-	statsLeaseDuration := parseDuration(cfg.Performance.StatsLease)
-	session.SetStatsLease(statsLeaseDuration)
-	statistics.RatioOfPseudoEstimate.Store(cfg.Performance.PseudoEstimateRatio)
 	ddl.RunWorker = cfg.RunDDL
 	if cfg.SplitTable {
 		atomic.StoreUint32(&ddl.EnableSplitTableRegion, 1)
 	}
-	plannercore.AllowCartesianProduct.Store(cfg.Performance.CrossJoin)
-	kv.TxnTotalSizeLimit = cfg.Performance.TxnTotalSizeLimit
-
-	priority := mysql.Str2Priority(cfg.Performance.ForcePriority)
-	variable.ForcePriority = int32(priority)
-	variable.SysVars[variable.TiDBForcePriority].Value = mysql.Priority2Str[priority]
 
 	variable.SysVars["lower_case_table_names"].Value = strconv.Itoa(cfg.LowerCaseTableNames)
 
