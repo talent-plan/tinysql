@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/planner"
@@ -407,10 +406,9 @@ var QueryReplacer = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
 // FormatSQL is used to format the original SQL, e.g. truncating long SQL, appending prepared arguments.
 func FormatSQL(sql string, pps variable.PreparedParams) stringutil.StringerFunc {
 	return func() string {
-		cfg := config.GetGlobalConfig()
 		length := len(sql)
-		if maxQueryLen := atomic.LoadUint64(&cfg.Log.QueryLogMaxLen); uint64(length) > maxQueryLen {
-			sql = fmt.Sprintf("%.*q(len:%d)", maxQueryLen, sql, length)
+		if uint64(length) > logutil.DefaultQueryLogMaxLen {
+			sql = fmt.Sprintf("%.*q(len:%d)", logutil.DefaultQueryLogMaxLen, sql, length)
 		}
 		return QueryReplacer.Replace(sql) + pps.String()
 	}

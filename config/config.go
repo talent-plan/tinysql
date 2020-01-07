@@ -14,12 +14,10 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	zaplog "github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/util/logutil"
@@ -75,107 +73,12 @@ type Config struct {
 	SplitRegionMaxNum            uint64 `toml:"split-region-max-num" json:"split-region-max-num"`
 }
 
-// nullableBool defaults unset bool options to unset instead of false, which enables us to know if the user has set 2
-// conflict options at the same time.
-type nullableBool struct {
-	IsValid bool
-	IsTrue  bool
-}
-
-var (
-	nbUnset = nullableBool{false, false}
-	nbFalse = nullableBool{true, false}
-	nbTrue  = nullableBool{true, true}
-)
-
-func (b *nullableBool) toBool() bool {
-	return b.IsValid && b.IsTrue
-}
-
-func (b nullableBool) MarshalJSON() ([]byte, error) {
-	switch b {
-	case nbTrue:
-		return json.Marshal(true)
-	case nbFalse:
-		return json.Marshal(false)
-	default:
-		return json.Marshal(nil)
-	}
-}
-
-func (b *nullableBool) UnmarshalText(text []byte) error {
-	str := string(text)
-	switch str {
-	case "", "null":
-		*b = nbUnset
-		return nil
-	case "true":
-		*b = nbTrue
-	case "false":
-		*b = nbFalse
-	default:
-		*b = nbUnset
-		return errors.New("Invalid value for bool type: " + str)
-	}
-	return nil
-}
-
-func (b *nullableBool) UnmarshalJSON(data []byte) error {
-	var err error
-	var v interface{}
-	if err = json.Unmarshal(data, &v); err != nil {
-		return err
-	}
-	switch raw := v.(type) {
-	case bool:
-		*b = nullableBool{true, raw}
-	default:
-		*b = nbUnset
-	}
-	return err
-}
-
 // Log is the log section of config.
 type Log struct {
 	// Log level.
 	Level string `toml:"level" json:"level"`
-	// Log format. one of json, text, or console.
-	Format string `toml:"format" json:"format"`
-	// Disable automatic timestamps in output. Deprecated: use EnableTimestamp instead.
-	DisableTimestamp nullableBool `toml:"disable-timestamp" json:"disable-timestamp"`
-	// EnableTimestamp enables automatic timestamps in log output.
-	EnableTimestamp nullableBool `toml:"enable-timestamp" json:"enable-timestamp"`
-	// DisableErrorStack stops annotating logs with the full stack error
-	// message. Deprecated: use EnableErrorStack instead.
-	DisableErrorStack nullableBool `toml:"disable-error-stack" json:"disable-error-stack"`
-	// EnableErrorStack enables annotating logs with the full stack error
-	// message.
-	EnableErrorStack nullableBool `toml:"enable-error-stack" json:"enable-error-stack"`
 	// File log config.
 	File logutil.FileLogConfig `toml:"file" json:"file"`
-
-	ExpensiveThreshold uint   `toml:"expensive-threshold" json:"expensive-threshold"`
-	QueryLogMaxLen     uint64 `toml:"query-log-max-len" json:"query-log-max-len"`
-}
-
-func (l *Log) getDisableTimestamp() bool {
-	if l.EnableTimestamp == nbUnset && l.DisableTimestamp == nbUnset {
-		return false
-	}
-	if l.EnableTimestamp == nbUnset {
-		return l.DisableTimestamp.toBool()
-	}
-	return !l.EnableTimestamp.toBool()
-}
-
-func (l *Log) getDisableErrorStack() bool {
-	if l.EnableErrorStack == nbUnset && l.DisableErrorStack == nbUnset {
-		return true
-	}
-	if l.EnableErrorStack == nbUnset {
-		return l.DisableErrorStack.toBool()
-	}
-	return !l.EnableErrorStack.toBool()
 }
 
 // The ErrConfigValidationFailed error is used so that external callers can do a type assertion
@@ -219,15 +122,8 @@ var defaultConf = Config{
 	LowerCaseTableNames:          2,
 	ServerVersion:                "",
 	Log: Log{
-		Level:              "info",
-		Format:             "text",
-		File:               logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
-		ExpensiveThreshold: 10000,
-		DisableErrorStack:  nbUnset,
-		EnableErrorStack:   nbUnset, // If both options are nbUnset, getDisableErrorStack() returns true
-		EnableTimestamp:    nbUnset,
-		DisableTimestamp:   nbUnset, // If both options are nbUnset, getDisableTimestamp() returns false
-		QueryLogMaxLen:     logutil.DefaultQueryLogMaxLen,
+		Level: "info",
+		File:  logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
 	},
 	Status: Status{
 		ReportStatus: true,
@@ -283,16 +179,6 @@ func (c *Config) Load(confFile string) error {
 
 // Valid checks if this config is valid.
 func (c *Config) Valid() error {
-	if c.Log.EnableErrorStack == c.Log.DisableErrorStack && c.Log.EnableErrorStack != nbUnset {
-		logutil.BgLogger().Warn(fmt.Sprintf("\"enable-error-stack\" (%v) conflicts \"disable-error-stack\" (%v). \"disable-error-stack\" is deprecated, please use \"enable-error-stack\" instead. disable-error-stack is ignored.", c.Log.EnableErrorStack, c.Log.DisableErrorStack))
-		// if two options conflict, we will use the value of EnableErrorStack
-		c.Log.DisableErrorStack = nbUnset
-	}
-	if c.Log.EnableTimestamp == c.Log.DisableTimestamp && c.Log.EnableTimestamp != nbUnset {
-		logutil.BgLogger().Warn(fmt.Sprintf("\"enable-timestamp\" (%v) conflicts \"disable-timestamp\" (%v). \"disable-timestamp\" is deprecated, please use \"enable-timestamp\" instead", c.Log.EnableTimestamp, c.Log.DisableTimestamp))
-		// if two options conflict, we will use the value of EnableTimestamp
-		c.Log.DisableTimestamp = nbUnset
-	}
 	if _, ok := ValidStorage[c.Store]; !ok {
 		nameList := make([]string, 0, len(ValidStorage))
 		for k, v := range ValidStorage {
@@ -317,7 +203,7 @@ func (c *Config) Valid() error {
 
 // ToLogConfig converts *Log to *logutil.LogConfig.
 func (l *Log) ToLogConfig() *logutil.LogConfig {
-	return logutil.NewLogConfig(l.Level, l.Format, l.File, l.getDisableTimestamp(), func(config *zaplog.Config) { config.DisableErrorVerbose = l.getDisableErrorStack() })
+	return logutil.NewLogConfig(l.Level, "test", l.File, false, func(config *zaplog.Config) { config.DisableErrorVerbose = false })
 }
 
 func init() {
