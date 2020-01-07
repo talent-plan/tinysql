@@ -65,21 +65,6 @@ server-version = ""
 # Log level: debug, info, warn, error, fatal.
 level = "info"
 
-# Log format, one of json, text, console.
-format = "text"
-
-# Enable automatic timestamps in log output, if not set, it will be defaulted to true.
-# enable-timestamp = true
-
-# Enable annotating logs with the full stack error message, if not set, it will be defaulted to false.
-# enable-error-stack = false
-
-# Queries with internal result greater than this value will be logged.
-expensive-threshold = 10000
-
-# Maximum query length recorded in log.
-query-log-max-len = 4096
-
 # File logging.
 [log.file]
 # Log file name.
@@ -87,12 +72,6 @@ filename = ""
 
 # Max log file size in MB (upper limit to 4096MB).
 max-size = 300
-
-# Max log file keep days. No clean up by default.
-max-days = 0
-
-# Maximum number of old log files to retain. No clean up by default.
-max-backups = 0
 
 [status]
 # If enable status report HTTP service.
