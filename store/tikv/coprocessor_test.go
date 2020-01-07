@@ -145,59 +145,6 @@ func (s *testCoprocessorSuite) TestBuildTasks(c *C) {
 	s.taskEqual(c, tasks[1], regionIDs[2], "t\x80\x00\x00\x00\x00\x00\x00\x00_r\x00\x00\x00\x00\x00\x00\x00\x00", "t")
 }
 
-func (s *testCoprocessorSuite) TestSplitRegionRanges(c *C) {
-	// nil --- 'g' --- 'n' --- 't' --- nil
-	// <-  0  -> <- 1 -> <- 2 -> <- 3 ->
-	cluster := mocktikv.NewCluster()
-	mocktikv.BootstrapWithMultiRegions(cluster, []byte("g"), []byte("n"), []byte("t"))
-	pdCli := &codecPDClient{mocktikv.NewPDClient(cluster)}
-	cache := NewRegionCache(pdCli)
-	defer cache.Close()
-
-	bo := NewBackoffer(context.Background(), 3000)
-
-	ranges, err := SplitRegionRanges(bo, cache, buildKeyRanges("a", "c"))
-	c.Assert(err, IsNil)
-	c.Assert(ranges, HasLen, 1)
-	s.rangeEqual(c, ranges, "a", "c")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("h", "y"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 3)
-	s.rangeEqual(c, ranges, "h", "n", "n", "t", "t", "y")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("s", "z"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 2)
-	s.rangeEqual(c, ranges, "s", "t", "t", "z")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("s", "s"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 1)
-	s.rangeEqual(c, ranges, "s", "s")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("t", "t"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 1)
-	s.rangeEqual(c, ranges, "t", "t")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("t", "u"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 1)
-	s.rangeEqual(c, ranges, "t", "u")
-
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("u", "z"))
-	c.Assert(err, IsNil)
-	c.Assert(len(ranges), Equals, 1)
-	s.rangeEqual(c, ranges, "u", "z")
-
-	// min --> max
-	ranges, err = SplitRegionRanges(bo, cache, buildKeyRanges("a", "z"))
-	c.Assert(err, IsNil)
-	c.Assert(ranges, HasLen, 4)
-	s.rangeEqual(c, ranges, "a", "g", "g", "n", "n", "t", "t", "z")
-}
-
 func (s *testCoprocessorSuite) TestRebuild(c *C) {
 	// nil --- 'm' --- nil
 	// <-  0  -> <- 1 ->

@@ -1600,13 +1600,6 @@ func (s *testDBSuite2) TestDropColumn(c *C) {
 		}
 	}
 
-	// Test for drop partition table column.
-	s.tk.MustExec("drop table if exists t1")
-	s.tk.MustExec("create table t1 (a int,b int) partition by hash(a) partitions 4;")
-	_, err := s.tk.Exec("alter table t1 drop column a")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[expression:1054]Unknown column 'a' in 'expression'")
-
 	s.tk.MustExec("drop database drop_col_db")
 }
 
@@ -2905,16 +2898,6 @@ func (s *testDBSuite4) TestIfNotExists(c *C) {
 	s.mustExec(c, "create index if not exists idx_b on t1 (b)")
 	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1061|index already exist idx_b"))
-
-	// ADD PARTITION
-	s.mustExec(c, "drop table if exists t2")
-	s.mustExec(c, "create table t2 (a int key) partition by range(a) (partition p0 values less than (10), partition p1 values less than (20))")
-	sql = "alter table t2 add partition (partition p2 values less than (30))"
-	s.mustExec(c, sql)
-	s.tk.MustGetErrCode(sql, mysql.ErrSameNamePartition)
-	s.mustExec(c, "alter table t2 add partition if not exists (partition p2 values less than (30))")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1517|Duplicate partition name p2"))
 }
 
 func (s *testDBSuite4) TestIfExists(c *C) {
@@ -2955,16 +2938,6 @@ func (s *testDBSuite4) TestIfExists(c *C) {
 	s.mustExec(c, "alter table t1 drop index if exists idx_c")
 	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1091|index idx_c doesn't exist"))
-
-	// DROP PARTITION
-	s.mustExec(c, "drop table if exists t2")
-	s.mustExec(c, "create table t2 (a int key) partition by range(a) (partition p0 values less than (10), partition p1 values less than (20))")
-	sql = "alter table t2 drop partition p1"
-	s.mustExec(c, sql)
-	s.tk.MustGetErrCode(sql, mysql.ErrDropPartitionNonExistent)
-	s.mustExec(c, "alter table t2 drop partition if exists p1")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1507|Error in list of partitions to p1"))
 }
 
 func (s *testDBSuite5) TestAddIndexForGeneratedColumn(c *C) {
@@ -3139,26 +3112,6 @@ func (s *testDBSuite5) TestDefaultSQLFunction(c *C) {
 	tk.MustExec("drop table t1, t2, t3, t4;")
 }
 
-func (s *testDBSuite4) TestIssue9100(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test_db")
-	tk.MustExec("create table employ (a int, b int) partition by range (b) (partition p0 values less than (1));")
-	_, err := tk.Exec("alter table employ add unique index p_a (a);")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A UNIQUE INDEX must include all columns in the table's partitioning function")
-	_, err = tk.Exec("alter table employ add primary key p_a (a);")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A PRIMARY must include all columns in the table's partitioning function")
-
-	tk.MustExec("create table issue9100t1 (col1 int not null, col2 date not null, col3 int not null, unique key (col1, col2)) partition by range( col1 ) (partition p1 values less than (11))")
-	tk.MustExec("alter table issue9100t1 add unique index p_col1 (col1)")
-	tk.MustExec("alter table issue9100t1 add primary key p_col1 (col1)")
-
-	tk.MustExec("create table issue9100t2 (col1 int not null, col2 date not null, col3 int not null, unique key (col1, col3)) partition by range( col1 + col3 ) (partition p1 values less than (11))")
-	_, err = tk.Exec("alter table issue9100t2 add unique index p_col1 (col1)")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A UNIQUE INDEX must include all columns in the table's partitioning function")
-	_, err = tk.Exec("alter table issue9100t2 add primary key p_col1 (col1)")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A PRIMARY must include all columns in the table's partitioning function")
-}
-
 func (s *testDBSuite1) TestModifyColumnCharset(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test_db")
@@ -3297,20 +3250,6 @@ func (s *testDBSuite2) TestDDLWithInvalidTableInfo(c *C) {
 	);`)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 4 column 88 near \"then (c1 / c0) end))\n\t);\" ")
-
-	tk.MustExec("create table t (a bigint, b int, c int generated always as (b+1)) partition by hash(a) partitions 4;")
-	// Test drop partition column.
-	_, err = tk.Exec("alter table t drop column a;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[expression:1054]Unknown column 'a' in 'expression'")
-	// Test modify column with invalid expression.
-	_, err = tk.Exec("alter table t modify column c int GENERATED ALWAYS AS ((case when (a = 0) then 0when (a > 0) then (b / a) end));")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 97 near \"then (b / a) end));\" ")
-	// Test add column with invalid expression.
-	_, err = tk.Exec("alter table t add column d int GENERATED ALWAYS AS ((case when (a = 0) then 0when (a > 0) then (b / a) end));")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 94 near \"then (b / a) end));\" ")
 }
 
 func init() {
