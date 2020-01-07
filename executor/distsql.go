@@ -202,7 +202,6 @@ type IndexReaderExecutor struct {
 	columns []*model.ColumnInfo
 	// outputColumns are only required by union scan.
 	outputColumns []*expression.Column
-	streaming     bool
 
 	corColInFilter bool
 	corColInAccess bool
@@ -245,7 +244,7 @@ func (e *IndexReaderExecutor) Open(ctx context.Context) error {
 func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) error {
 	var err error
 	if e.corColInFilter {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.plans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
 		if err != nil {
 			return err
 		}
@@ -259,7 +258,6 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
@@ -284,9 +282,7 @@ type IndexLookUpExecutor struct {
 	handleIdx    int
 	tableRequest *tipb.DAGRequest
 	// columns are only required by union scan.
-	columns        []*model.ColumnInfo
-	indexStreaming bool
-	tableStreaming bool
+	columns []*model.ColumnInfo
 	*dataReaderBuilder
 	// All fields above are immutable.
 
@@ -343,14 +339,14 @@ func (e *IndexLookUpExecutor) open(ctx context.Context) error {
 
 	var err error
 	if e.corColInIdxSide {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.idxPlans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.idxPlans)
 		if err != nil {
 			return err
 		}
 	}
 
 	if e.corColInTblSide {
-		e.tableRequest.Executors, _, err = constructDistExec(e.ctx, e.tblPlans)
+		e.tableRequest.Executors, err = constructDistExec(e.ctx, e.tblPlans)
 		if err != nil {
 			return err
 		}
@@ -378,7 +374,6 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.indexStreaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
@@ -456,7 +451,6 @@ func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, handles []in
 		dagPB:          e.tableRequest,
 		startTS:        e.startTS,
 		columns:        e.columns,
-		streaming:      e.tableStreaming,
 		corColInFilter: e.corColInTblSide,
 		plans:          e.tblPlans,
 	}

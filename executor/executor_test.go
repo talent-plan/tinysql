@@ -58,7 +58,6 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
-	"github.com/pingcap/tidb/util/testutil"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -2819,41 +2818,6 @@ func (s *testSuite) TestContainDotColumn(c *C) {
 	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWrongTableName))
 }
 
-func (s *testSuite) TestCoprocessorStreamingFlag(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("use test")
-	tk.MustExec("create table t (id int, value int, index idx(id))")
-	// Add some data to make statistics work.
-	for i := 0; i < 100; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
-	}
-
-	tests := []struct {
-		sql    string
-		expect bool
-	}{
-		{"select * from t", true},                         // TableReader
-		{"select * from t where id = 5", true},            // IndexLookup
-		{"select * from t where id > 5", true},            // Filter
-		{"select * from t limit 3", false},                // Limit
-		{"select avg(id) from t", false},                  // Aggregate
-		{"select * from t order by value limit 3", false}, // TopN
-	}
-
-	ctx := context.Background()
-	for _, test := range tests {
-		ctx1 := context.WithValue(ctx, "CheckSelectRequestHook", func(req *kv.Request) {
-			if req.Streaming != test.expect {
-				c.Errorf("sql=%s, expect=%v, get=%v", test.sql, test.expect, req.Streaming)
-			}
-		})
-		rs, err := tk.Se.Execute(ctx1, test.sql)
-		c.Assert(err, IsNil)
-		tk.ResultSetToResult(rs[0], Commentf("sql: %v", test.sql))
-	}
-}
-
 func (s *testSuite) TestIncorrectLimitArg(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 
@@ -2918,19 +2882,6 @@ func (s *testSuite) TestLimit(c *C) {
 	))
 }
 
-func (s *testSuite) TestCoprocessorStreamingWarning(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a double)")
-	tk.MustExec("insert into t value(1.2)")
-	tk.MustExec("set @@session.tidb_enable_streaming = 1")
-
-	result := tk.MustQuery("select * from t where a/0 > 1")
-	result.Check(testkit.Rows())
-	tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1105|Division by 0"))
-}
-
 func (s *testSuite3) TestYearTypeDeleteIndex(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -2938,7 +2889,6 @@ func (s *testSuite3) TestYearTypeDeleteIndex(c *C) {
 	tk.MustExec("create table t(a YEAR, PRIMARY KEY(a));")
 	tk.MustExec("insert into t set a = '2151';")
 	tk.MustExec("delete from t;")
-
 }
 
 func (s *testSuite3) TestForSelectScopeInUnion(c *C) {

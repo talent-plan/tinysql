@@ -343,10 +343,6 @@ type SessionVars struct {
 	// WaitSplitRegionTimeout defines the split region timeout.
 	WaitSplitRegionTimeout uint64
 
-	// EnableStreaming indicates whether the coprocessor request can use streaming API.
-	// TODO: remove this after tidb-server configuration "enable-streaming' removed.
-	EnableStreaming bool
-
 	writeStmtBufs WriteStmtBufs
 
 	// EnableRadixJoin indicates whether to use radix hash join to execute
@@ -504,13 +500,6 @@ func NewSessionVars() *SessionVars {
 		MaxChunkSize:       DefMaxChunkSize,
 		DMLBatchSize:       DefDMLBatchSize,
 	}
-	var enableStreaming string
-	if config.GetGlobalConfig().EnableStreaming {
-		enableStreaming = "1"
-	} else {
-		enableStreaming = "0"
-	}
-	terror.Log(vars.SetSystemVar(TiDBEnableStreaming, enableStreaming))
 	return vars
 }
 
@@ -823,8 +812,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.RetryLimit = tidbOptInt64(val, DefTiDBRetryLimit)
 	case TiDBDisableTxnAutoRetry:
 		s.DisableTxnAutoRetry = TiDBOptOn(val)
-	case TiDBEnableStreaming:
-		s.EnableStreaming = TiDBOptOn(val)
 	case TiDBEnableCascadesPlanner:
 		s.EnableCascadesPlanner = TiDBOptOn(val)
 	case TiDBEnableTablePartition:

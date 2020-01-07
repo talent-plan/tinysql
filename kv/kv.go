@@ -263,9 +263,6 @@ type Request struct {
 	NotFillCache bool
 	// SyncLog decides whether the WAL(write-ahead log) of this request should be synchronized.
 	SyncLog bool
-	// Streaming indicates using streaming API for this request, result in that one Next()
-	// call would not corresponds to a whole region result.
-	Streaming bool
 	// ReplicaRead is used for reading data from replicas, only follower is supported at this time.
 	ReplicaRead ReplicaReadType
 	// StoreType represents this request is sent to the which type of store.
@@ -277,8 +274,6 @@ type Request struct {
 type ResultSubset interface {
 	// GetData gets the data.
 	GetData() []byte
-	// GetStartKey gets the start key.
-	GetStartKey() Key
 	// MemSize returns how many bytes of memory this result use for tracing memory usage.
 	MemSize() int64
 	// RespTime returns the response time for the request.

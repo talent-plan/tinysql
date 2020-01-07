@@ -15,7 +15,6 @@ package tikv_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -27,8 +26,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/session"
 	. "github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tidb/util/testkit"
 )
 
 var _ = Suite(new(testSQLSuite))
@@ -87,94 +84,4 @@ func (s *testSQLSuite) TestFailBusyServerCop(c *C) {
 func TestMain(m *testing.M) {
 	ReadTimeoutMedium = 2 * time.Second
 	os.Exit(m.Run())
-}
-
-func (s *testSQLSuite) TestCoprocessorStreamRecvTimeout(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t (id int)")
-	for i := 0; i < 200; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t values (%d)", i))
-	}
-	tk.Se.GetSessionVars().EnableStreaming = true
-
-	{
-		enable := true
-		visited := make(chan int, 1)
-		timeouted := false
-		timeout := ReadTimeoutMedium + 100*time.Second
-		ctx := context.WithValue(context.Background(), mock.HookKeyForTest("mockTiKVStreamRecvHook"), func(ctx context.Context) {
-			if !enable {
-				return
-			}
-			visited <- 1
-
-			select {
-			case <-ctx.Done():
-			case <-time.After(timeout):
-				timeouted = true
-			}
-			enable = false
-		})
-
-		res, err := tk.Se.Execute(ctx, "select * from t")
-		c.Assert(err, IsNil)
-
-		req := res[0].NewChunk()
-		for i := 0; ; i++ {
-			err := res[0].Next(ctx, req)
-			c.Assert(err, IsNil)
-			if req.NumRows() == 0 {
-				break
-			}
-			req.Reset()
-		}
-		select {
-		case <-visited:
-			// run with mocktikv
-			c.Assert(timeouted, IsFalse)
-		default:
-			// run with real tikv
-		}
-	}
-
-	{
-		enable := true
-		visited := make(chan int, 1)
-		timeouted := false
-		timeout := 1 * time.Millisecond
-		ctx := context.WithValue(context.Background(), mock.HookKeyForTest("mockTiKVStreamRecvHook"), func(ctx context.Context) {
-			if !enable {
-				return
-			}
-			visited <- 1
-
-			select {
-			case <-ctx.Done():
-			case <-time.After(timeout):
-				timeouted = true
-			}
-			enable = false
-		})
-
-		res, err := tk.Se.Execute(ctx, "select * from t")
-		c.Assert(err, IsNil)
-
-		req := res[0].NewChunk()
-		for i := 0; ; i++ {
-			err := res[0].Next(ctx, req)
-			c.Assert(err, IsNil)
-			if req.NumRows() == 0 {
-				break
-			}
-			req.Reset()
-		}
-		select {
-		case <-visited:
-			// run with mocktikv
-			c.Assert(timeouted, IsTrue)
-		default:
-			// run with real tikv
-		}
-	}
 }

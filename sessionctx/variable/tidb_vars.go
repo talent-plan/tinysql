@@ -86,9 +86,6 @@ const (
 	// tidb_disable_txn_auto_retry disables transaction auto retry.
 	TiDBDisableTxnAutoRetry = "tidb_disable_txn_auto_retry"
 
-	// tidb_enable_streaming enables TiDB to use streaming API for coprocessor requests.
-	TiDBEnableStreaming = "tidb_enable_streaming"
-
 	// tidb_enable_table_partition is used to control table partition feature.
 	// The valid value include auto/on/off:
 	// auto: enable table partition when that feature is implemented.

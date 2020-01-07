@@ -131,126 +131,6 @@ func (s *testSuite) TestSelectWithRuntimeStats(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *testSuite) createSelectStreaming(batch, totalRows int, c *C) (*streamResult, []*types.FieldType) {
-	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
-		SetDAGRequest(&tipb.DAGRequest{}).
-		SetDesc(false).
-		SetKeepOrder(false).
-		SetFromSessionVars(variable.NewSessionVars()).
-		SetStreaming(true).
-		Build()
-	c.Assert(err, IsNil)
-
-	/// 4 int64 types.
-	colTypes := []*types.FieldType{
-		{
-			Tp:      mysql.TypeLonglong,
-			Flen:    mysql.MaxIntWidth,
-			Decimal: 0,
-			Flag:    mysql.BinaryFlag,
-			Charset: charset.CharsetBin,
-			Collate: charset.CollationBin,
-		},
-	}
-	colTypes = append(colTypes, colTypes[0])
-	colTypes = append(colTypes, colTypes[0])
-	colTypes = append(colTypes, colTypes[0])
-
-	s.sctx.GetSessionVars().EnableStreaming = true
-
-	response, err := Select(context.TODO(), s.sctx, request, colTypes)
-	c.Assert(err, IsNil)
-	result, ok := response.(*streamResult)
-	c.Assert(ok, IsTrue)
-	c.Assert(result.rowLen, Equals, len(colTypes))
-
-	resp, ok := result.resp.(*mockResponse)
-	c.Assert(ok, IsTrue)
-	resp.total = totalRows
-	resp.batch = batch
-
-	return result, colTypes
-}
-
-func (s *testSuite) TestSelectStreaming(c *C) {
-	response, colTypes := s.createSelectStreaming(1, 2, c)
-
-	// Test Next.
-	chk := chunk.New(colTypes, 32, 32)
-	numAllRows := 0
-	for {
-		err := response.Next(context.TODO(), chk)
-		c.Assert(err, IsNil)
-		numAllRows += chk.NumRows()
-		if chk.NumRows() == 0 {
-			break
-		}
-	}
-	c.Assert(numAllRows, Equals, 2)
-	err := response.Close()
-	c.Assert(err, IsNil)
-}
-
-func (s *testSuite) TestSelectStreamingWithNextRaw(c *C) {
-	response, _ := s.createSelectStreaming(1, 2, c)
-	data, err := response.NextRaw(context.TODO())
-	c.Assert(err, IsNil)
-	c.Assert(len(data), Equals, 16)
-}
-
-func (s *testSuite) TestSelectStreamingChunkSize(c *C) {
-	response, colTypes := s.createSelectStreaming(100, 1000000, c)
-	s.testChunkSize(response, colTypes, c)
-	c.Assert(response.Close(), IsNil)
-}
-
-func (s *testSuite) testChunkSize(response SelectResult, colTypes []*types.FieldType, c *C) {
-	chk := chunk.New(colTypes, 32, 32)
-
-	err := response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-
-	chk.SetRequiredRows(1, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 1)
-
-	chk.SetRequiredRows(2, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 2)
-
-	chk.SetRequiredRows(17, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 17)
-
-	chk.SetRequiredRows(170, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-
-	chk.SetRequiredRows(32, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-
-	chk.SetRequiredRows(0, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-
-	chk.SetRequiredRows(-1, 32)
-	err = response.Next(context.TODO(), chk)
-	c.Assert(err, IsNil)
-	c.Assert(chk.NumRows(), Equals, 32)
-}
-
 func (s *testSuite) TestAnalyze(c *C) {
 	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
 		SetAnalyzeRequest(&tipb.AnalyzeReq{}).
@@ -352,9 +232,6 @@ type mockResultSubset struct{ data []byte }
 
 // GetData implements kv.ResultSubset interface.
 func (r *mockResultSubset) GetData() []byte { return r.data }
-
-// GetStartKey implements kv.ResultSubset interface.
-func (r *mockResultSubset) GetStartKey() kv.Key { return nil }
 
 // MemSize implements kv.ResultSubset interface.
 func (r *mockResultSubset) MemSize() int64 { return int64(cap(r.data)) }

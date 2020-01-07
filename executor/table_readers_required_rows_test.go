@@ -123,7 +123,7 @@ func buildTableReader(sctx sessionctx.Context) Executor {
 
 func buildMockDAGRequest(sctx sessionctx.Context) *tipb.DAGRequest {
 	builder := newExecutorBuilder(sctx, nil)
-	req, _, err := builder.constructDAGReq([]core.PhysicalPlan{&core.PhysicalTableScan{
+	req, err := builder.constructDAGReq([]core.PhysicalPlan{&core.PhysicalTableScan{
 		Columns: []*model.ColumnInfo{},
 		Table:   &model.TableInfo{ID: 12345, PKIsHandle: false},
 		Desc:    false,

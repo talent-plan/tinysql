@@ -308,7 +308,6 @@ func (s *testSuite) TestRequestBuilder1(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -383,7 +382,6 @@ func (s *testSuite) TestRequestBuilder2(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -428,7 +426,6 @@ func (s *testSuite) TestRequestBuilder3(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -458,7 +455,6 @@ func (s *testSuite) TestRequestBuilder4(c *C) {
 		SetDAGRequest(&tipb.DAGRequest{}).
 		SetDesc(false).
 		SetKeepOrder(false).
-		SetStreaming(true).
 		SetFromSessionVars(variable.NewSessionVars()).
 		Build()
 	c.Assert(err, IsNil)
@@ -472,7 +468,6 @@ func (s *testSuite) TestRequestBuilder4(c *C) {
 		Concurrency:    15,
 		IsolationLevel: 0,
 		Priority:       0,
-		Streaming:      true,
 		NotFillCache:   false,
 		SyncLog:        false,
 		ReplicaRead:    kv.ReplicaReadLeader,
@@ -518,7 +513,6 @@ func (s *testSuite) TestRequestBuilder5(c *C) {
 		Priority:       1,
 		NotFillCache:   true,
 		SyncLog:        false,
-		Streaming:      false,
 	}
 	c.Assert(actual, DeepEquals, expect)
 }
@@ -551,7 +545,6 @@ func (s *testSuite) TestRequestBuilder6(c *C) {
 		Priority:       0,
 		NotFillCache:   true,
 		SyncLog:        false,
-		Streaming:      false,
 	}
 
 	c.Assert(actual, DeepEquals, expect)
@@ -579,7 +572,6 @@ func (s *testSuite) TestRequestBuilder7(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadFollower,
 	}
 

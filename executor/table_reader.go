@@ -72,7 +72,6 @@ type TableReaderExecutor struct {
 
 	keepOrder bool
 	desc      bool
-	streaming bool
 	storeType kv.StoreType
 	// corColInFilter tells whether there's correlated column in filter.
 	corColInFilter bool
@@ -95,7 +94,7 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 
 	var err error
 	if e.corColInFilter {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.plans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
 		if err != nil {
 			return err
 		}
@@ -184,7 +183,6 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		SetStoreType(e.storeType).
 		Build()

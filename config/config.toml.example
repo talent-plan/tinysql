@@ -31,9 +31,6 @@ split-table = true
 # The limit of concurrent executed sessions.
 token-limit = 1000
 
-# Enable coprocessor streaming.
-enable-streaming = false
-
 # Enable batch commit for the DMLs.
 enable-batch-dml = false
 

@@ -58,7 +58,6 @@ type Config struct {
 	RunDDL           bool   `toml:"run-ddl" json:"run-ddl"`
 	SplitTable       bool   `toml:"split-table" json:"split-table"`
 	TokenLimit       uint   `toml:"token-limit" json:"token-limit"`
-	EnableStreaming  bool   `toml:"enable-streaming" json:"enable-streaming"`
 	EnableBatchDML   bool   `toml:"enable-batch-dml" json:"enable-batch-dml"`
 	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
 	// TODO: We actually only support mode 2, which keeps the original case, but the comparison is case-insensitive.
@@ -227,7 +226,6 @@ var defaultConf = Config{
 	SplitTable:                   true,
 	Lease:                        "45s",
 	TokenLimit:                   1000,
-	EnableStreaming:              false,
 	EnableBatchDML:               false,
 	CheckMb4ValueInUTF8:          true,
 	AlterPrimaryKey:              false,

@@ -158,12 +158,6 @@ func (builder *RequestBuilder) SetFromSessionVars(sv *variable.SessionVars) *Req
 	return builder
 }
 
-// SetStreaming sets "Streaming" flag for "kv.Request".
-func (builder *RequestBuilder) SetStreaming(streaming bool) *RequestBuilder {
-	builder.Request.Streaming = streaming
-	return builder
-}
-
 // SetConcurrency sets "Concurrency" for "kv.Request".
 func (builder *RequestBuilder) SetConcurrency(concurrency int) *RequestBuilder {
 	builder.Request.Concurrency = concurrency

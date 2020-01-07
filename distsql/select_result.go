@@ -29,10 +29,7 @@ import (
 	"github.com/pingcap/tipb/go-tipb"
 )
 
-var (
-	_ SelectResult = (*selectResult)(nil)
-	_ SelectResult = (*streamResult)(nil)
-)
+var _ SelectResult = (*selectResult)(nil)
 
 // SelectResult is an iterator of coprocessor partial results.
 type SelectResult interface {
