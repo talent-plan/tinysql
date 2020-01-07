@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics/handle"
+	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
@@ -732,13 +732,13 @@ func (do *Domain) LoadPrivilegeLoop(ctx sessionctx.Context) error {
 }
 
 // StatsHandle returns the statistic handle.
-func (do *Domain) StatsHandle() *handle.Handle {
-	return (*handle.Handle)(atomic.LoadPointer(&do.statsHandle))
+func (do *Domain) StatsHandle() *statistics.Handle {
+	return (*statistics.Handle)(atomic.LoadPointer(&do.statsHandle))
 }
 
 // CreateStatsHandle is used only for test.
 func (do *Domain) CreateStatsHandle(ctx sessionctx.Context) {
-	atomic.StorePointer(&do.statsHandle, unsafe.Pointer(handle.NewHandle(ctx, do.statsLease)))
+	atomic.StorePointer(&do.statsHandle, unsafe.Pointer(statistics.NewHandle(ctx, do.statsLease)))
 }
 
 // UpdateTableStatsLoop creates a goroutine loads stats info and updates stats info in a loop.
@@ -746,7 +746,7 @@ func (do *Domain) CreateStatsHandle(ctx sessionctx.Context) {
 // It should be called only once in BootstrapSession.
 func (do *Domain) UpdateTableStatsLoop(ctx sessionctx.Context) error {
 	ctx.GetSessionVars().InRestrictedSQL = true
-	statsHandle := handle.NewHandle(ctx, do.statsLease)
+	statsHandle := statistics.NewHandle(ctx, do.statsLease)
 	atomic.StorePointer(&do.statsHandle, unsafe.Pointer(statsHandle))
 	if err := statsHandle.Update(do.InfoSchema()); err != nil {
 		return err

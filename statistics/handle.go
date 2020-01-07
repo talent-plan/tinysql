@@ -11,12 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package handle
+package statistics
 
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/parser/terror"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,10 +24,10 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
@@ -41,7 +40,7 @@ import (
 
 // statsCache caches the tables in memory for Handle.
 type statsCache struct {
-	tables map[int64]*statistics.Table
+	tables map[int64]*Table
 	// version is the latest version of cache.
 	version uint64
 }
@@ -72,7 +71,7 @@ type Handle struct {
 // Clear the statsCache, only for test.
 func (h *Handle) Clear() {
 	h.mu.Lock()
-	h.statsCache.Store(statsCache{tables: make(map[int64]*statistics.Table)})
+	h.statsCache.Store(statsCache{tables: make(map[int64]*Table)})
 	h.mu.ctx.GetSessionVars().InitChunkSize = 1
 	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
 	h.mu.ctx.GetSessionVars().ProjectionConcurrency = 0
@@ -88,7 +87,7 @@ func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
 		handle.restrictedExec = exec
 	}
 	handle.mu.ctx = ctx
-	handle.statsCache.Store(statsCache{tables: make(map[int64]*statistics.Table)})
+	handle.statsCache.Store(statsCache{tables: make(map[int64]*Table)})
 	return handle
 }
 
@@ -128,7 +127,7 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 		return errors.Trace(err)
 	}
 
-	tables := make([]*statistics.Table, 0, len(rows))
+	tables := make([]*Table, 0, len(rows))
 	deletedTableIDs := make([]int64, 0, len(rows))
 	for _, row := range rows {
 		version := row.GetUint64(0)
@@ -205,18 +204,18 @@ func buildPartitionID2TableID(is infoschema.InfoSchema) map[int64]int64 {
 }
 
 // GetTableStats retrieves the statistics table from cache, and the cache will be updated by a goroutine.
-func (h *Handle) GetTableStats(tblInfo *model.TableInfo) *statistics.Table {
+func (h *Handle) GetTableStats(tblInfo *model.TableInfo) *Table {
 	return h.GetPartitionStats(tblInfo, tblInfo.ID)
 }
 
 // GetPartitionStats retrieves the partition stats from cache.
-func (h *Handle) GetPartitionStats(tblInfo *model.TableInfo, pid int64) *statistics.Table {
+func (h *Handle) GetPartitionStats(tblInfo *model.TableInfo, pid int64) *Table {
 	statsCache := h.statsCache.Load().(statsCache)
 	tbl, ok := statsCache.tables[pid]
 	if !ok {
-		tbl = statistics.PseudoTable(tblInfo)
+		tbl = PseudoTable(tblInfo)
 		tbl.PhysicalID = pid
-		h.updateStatsCache(statsCache.update([]*statistics.Table{tbl}, nil, statsCache.version))
+		h.updateStatsCache(statsCache.update([]*Table{tbl}, nil, statsCache.version))
 		return tbl
 	}
 	return tbl
@@ -232,7 +231,7 @@ func (h *Handle) updateStatsCache(newCache statsCache) {
 }
 
 func (sc statsCache) copy() statsCache {
-	newCache := statsCache{tables: make(map[int64]*statistics.Table, len(sc.tables)), version: sc.version}
+	newCache := statsCache{tables: make(map[int64]*Table, len(sc.tables)), version: sc.version}
 	for k, v := range sc.tables {
 		newCache.tables[k] = v
 	}
@@ -240,7 +239,7 @@ func (sc statsCache) copy() statsCache {
 }
 
 // update updates the statistics table cache using copy on write.
-func (sc statsCache) update(tables []*statistics.Table, deletedIDs []int64, newVersion uint64) statsCache {
+func (sc statsCache) update(tables []*Table, deletedIDs []int64, newVersion uint64) statsCache {
 	newCache := sc.copy()
 	newCache.version = newVersion
 	for _, tbl := range tables {
@@ -255,7 +254,7 @@ func (sc statsCache) update(tables []*statistics.Table, deletedIDs []int64, newV
 
 // LoadNeededHistograms will load histograms for those needed columns.
 func (h *Handle) LoadNeededHistograms() error {
-	cols := statistics.HistogramNeededColumns.AllCols()
+	cols := HistogramNeededColumns.AllCols()
 	for _, col := range cols {
 		statsCache := h.statsCache.Load().(statsCache)
 		tbl, ok := statsCache.tables[col.TableID]
@@ -265,7 +264,7 @@ func (h *Handle) LoadNeededHistograms() error {
 		tbl = tbl.Copy()
 		c, ok := tbl.Columns[col.ColumnID]
 		if !ok || c.Len() > 0 {
-			statistics.HistogramNeededColumns.Delete(col)
+			HistogramNeededColumns.Delete(col)
 			continue
 		}
 		hg, err := h.histogramFromStorage(col.TableID, c.ID, &c.Info.FieldType, c.NDV, 0, c.LastUpdateVersion, c.NullCount, c.TotColSize, c.Correlation, nil)
@@ -276,7 +275,7 @@ func (h *Handle) LoadNeededHistograms() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		tbl.Columns[c.ID] = &statistics.Column{
+		tbl.Columns[c.ID] = &Column{
 			PhysicalID: col.TableID,
 			Histogram:  *hg,
 			Info:       c.Info,
@@ -284,8 +283,8 @@ func (h *Handle) LoadNeededHistograms() error {
 			Count:      int64(hg.TotalRowCount()),
 			IsHandle:   c.IsHandle,
 		}
-		h.updateStatsCache(statsCache.update([]*statistics.Table{tbl}, nil, statsCache.version))
-		statistics.HistogramNeededColumns.Delete(col)
+		h.updateStatsCache(statsCache.update([]*Table{tbl}, nil, statsCache.version))
+		HistogramNeededColumns.Delete(col)
 	}
 	return nil
 }
@@ -301,7 +300,7 @@ func (h *Handle) SetLastUpdateVersion(version uint64) {
 	h.updateStatsCache(statsCache.update(nil, nil, version))
 }
 
-func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.CMSketch, err error) {
+func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *CMSketch, err error) {
 	selSQL := fmt.Sprintf("select cm_sketch from mysql.stats_histograms where table_id = %d and is_index = %d and hist_id = %d", tblID, isIndex, histID)
 	var rows []chunk.Row
 	if historyStatsExec != nil {
@@ -312,10 +311,10 @@ func (h *Handle) cmSketchFromStorage(tblID int64, isIndex, histID int64, history
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	return statistics.DecodeCMSketch(rows[0].GetBytes(0))
+	return DecodeCMSketch(rows[0].GetBytes(0))
 }
 
-func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, tableInfo *model.TableInfo, historyStatsExec sqlexec.RestrictedSQLExecutor) error {
+func (h *Handle) indexStatsFromStorage(row chunk.Row, table *Table, tableInfo *model.TableInfo, historyStatsExec sqlexec.RestrictedSQLExecutor) error {
 	histID := row.GetInt64(2)
 	distinct := row.GetInt64(3)
 	histVer := row.GetUint64(4)
@@ -334,7 +333,7 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, t
 			if err != nil {
 				return errors.Trace(err)
 			}
-			idx = &statistics.Index{Histogram: *hg, CMSketch: cms, Info: idxInfo}
+			idx = &Index{Histogram: *hg, CMSketch: cms, Info: idxInfo}
 		}
 		break
 	}
@@ -346,7 +345,7 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *statistics.Table, t
 	return nil
 }
 
-func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, tableInfo *model.TableInfo, loadAll bool, historyStatsExec sqlexec.RestrictedSQLExecutor) error {
+func (h *Handle) columnStatsFromStorage(row chunk.Row, table *Table, tableInfo *model.TableInfo, loadAll bool, historyStatsExec sqlexec.RestrictedSQLExecutor) error {
 	histID := row.GetInt64(2)
 	distinct := row.GetInt64(3)
 	histVer := row.GetUint64(4)
@@ -373,9 +372,9 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 			if err != nil {
 				return errors.Trace(err)
 			}
-			col = &statistics.Column{
+			col = &Column{
 				PhysicalID: table.PhysicalID,
-				Histogram:  *statistics.NewHistogram(histID, distinct, nullCount, histVer, &colInfo.FieldType, 0, totColSize),
+				Histogram:  *NewHistogram(histID, distinct, nullCount, histVer, &colInfo.FieldType, 0, totColSize),
 				Info:       colInfo,
 				Count:      count + nullCount,
 				IsHandle:   tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
@@ -392,7 +391,7 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 			if err != nil {
 				return errors.Trace(err)
 			}
-			col = &statistics.Column{
+			col = &Column{
 				PhysicalID: table.PhysicalID,
 				Histogram:  *hg,
 				Info:       colInfo,
@@ -421,18 +420,18 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *statistics.Table, 
 }
 
 // tableStatsFromStorage loads table stats info from storage.
-func (h *Handle) tableStatsFromStorage(tableInfo *model.TableInfo, physicalID int64, loadAll bool, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.Table, err error) {
+func (h *Handle) tableStatsFromStorage(tableInfo *model.TableInfo, physicalID int64, loadAll bool, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *Table, err error) {
 	table, ok := h.statsCache.Load().(statsCache).tables[physicalID]
 	// If table stats is pseudo, we also need to copy it, since we will use the column stats when
 	// the average error rate of it is small.
 	if !ok || historyStatsExec != nil {
-		histColl := statistics.HistColl{
+		histColl := HistColl{
 			PhysicalID:     physicalID,
 			HavePhysicalID: true,
-			Columns:        make(map[int64]*statistics.Column, len(tableInfo.Columns)),
-			Indices:        make(map[int64]*statistics.Index, len(tableInfo.Indices)),
+			Columns:        make(map[int64]*Column, len(tableInfo.Columns)),
+			Indices:        make(map[int64]*Index, len(tableInfo.Indices)),
 		}
-		table = &statistics.Table{
+		table = &Table{
 			HistColl: histColl,
 		}
 	} else {
@@ -465,7 +464,7 @@ func (h *Handle) tableStatsFromStorage(tableInfo *model.TableInfo, physicalID in
 }
 
 // SaveStatsToStorage saves the stats to storage.
-func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg *statistics.Histogram, cms *statistics.CMSketch) (err error) {
+func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg *Histogram, cms *CMSketch) (err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ctx := context.TODO()
@@ -490,7 +489,7 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	} else {
 		sqls = append(sqls, fmt.Sprintf("update mysql.stats_meta set version = %d where table_id = %d", version, tableID))
 	}
-	data, err := statistics.EncodeCMSketch(cms)
+	data, err := EncodeCMSketch(cms)
 	if err != nil {
 		return
 	}
@@ -563,7 +562,7 @@ func execSQLs(ctx context.Context, exec sqlexec.SQLExecutor, sqls []string) erro
 	return nil
 }
 
-func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.FieldType, distinct int64, isIndex int, ver uint64, nullCount int64, totColSize int64, corr float64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *statistics.Histogram, err error) {
+func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.FieldType, distinct int64, isIndex int, ver uint64, nullCount int64, totColSize int64, corr float64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *Histogram, err error) {
 	selSQL := fmt.Sprintf("select count, repeats, lower_bound, upper_bound from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d order by bucket_id", tableID, isIndex, colID)
 	var (
 		rows   []chunk.Row
@@ -578,7 +577,7 @@ func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.Fiel
 		return nil, errors.Trace(err)
 	}
 	bucketSize := len(rows)
-	hg := statistics.NewHistogram(colID, distinct, nullCount, ver, tp, bucketSize, totColSize)
+	hg := NewHistogram(colID, distinct, nullCount, ver, tp, bucketSize, totColSize)
 	hg.Correlation = corr
 	totalCount := int64(0)
 	for i := 0; i < bucketSize; i++ {

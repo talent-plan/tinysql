@@ -11,46 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package handle_test
+package statistics_test
 
 import (
-	"fmt"
-	"testing"
 	"time"
 	"unsafe"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/statistics"
-	"github.com/pingcap/tidb/statistics/handle"
-	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 )
-
-func TestT(t *testing.T) {
-	TestingT(t)
-}
-
-func cleanEnv(c *C, store kv.Storage, do *domain.Domain) {
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("use test")
-	r := tk.MustQuery("show tables")
-	for _, tb := range r.Rows() {
-		tableName := tb[0]
-		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-	}
-	tk.MustExec("delete from mysql.stats_meta")
-	tk.MustExec("delete from mysql.stats_histograms")
-	tk.MustExec("delete from mysql.stats_buckets")
-	do.StatsHandle().Clear()
-}
 
 func (s *testStatsSuite) TestStatsCache(c *C) {
 	defer cleanEnv(c, s.store, s.do)
@@ -235,7 +209,7 @@ func (s *testStatsSuite) TestAvgColLen(c *C) {
 func (s *testStatsSuite) TestDurationToTS(c *C) {
 	tests := []time.Duration{time.Millisecond, time.Second, time.Minute, time.Hour}
 	for _, t := range tests {
-		ts := handle.DurationToTS(t)
+		ts := statistics.DurationToTS(t)
 		c.Assert(oracle.ExtractPhysical(ts)*int64(time.Millisecond), Equals, int64(t))
 	}
 }
@@ -251,7 +225,7 @@ func (s *testStatsSuite) TestVersion(c *C) {
 	tbl1, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t1"))
 	c.Assert(err, IsNil)
 	tableInfo1 := tbl1.Meta()
-	h := handle.NewHandle(testKit.Se, time.Millisecond)
+	h := statistics.NewHandle(testKit.Se, time.Millisecond)
 	unit := oracle.ComposeTS(1, 0)
 	testKit.MustExec("update mysql.stats_meta set version = ? where table_id = ?", 2*unit, tableInfo1.ID)
 
@@ -355,17 +329,6 @@ func (s *testStatsSuite) TestLoadStats(c *C) {
 	stat = h.GetTableStats(tableInfo)
 	hg = stat.Columns[tableInfo.Columns[2].ID].Histogram
 	c.Assert(hg.Len(), Greater, 0)
-}
-
-func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
-	store, err := mockstore.NewMockTikvStore()
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	session.SetSchemaLease(0)
-	session.DisableStats4Test()
-	do, err := session.BootstrapSession(store)
-	return store, do, errors.Trace(err)
 }
 
 func (s *testStatsSuite) TestCorrelation(c *C) {

@@ -149,8 +149,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildIndexReader(v)
 	case *plannercore.PhysicalIndexLookUpReader:
 		return b.buildIndexLookUpReader(v)
-	case *plannercore.SplitRegion:
-		return b.buildSplitRegion(v)
 	default:
 		if mp, ok := p.(MockPhysicalPlan); ok {
 			return mp.GetExecutor()
@@ -940,40 +938,6 @@ func (b *executorBuilder) buildUnionAll(v *plannercore.PhysicalUnionAll) Executo
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), childExecs...),
 	}
 	return e
-}
-
-func (b *executorBuilder) buildSplitRegion(v *plannercore.SplitRegion) Executor {
-	base := newBaseExecutor(b.ctx, v.Schema(), v.ExplainID())
-	base.initCap = 1
-	base.maxChunkSize = 1
-	if v.IndexInfo != nil {
-		return &SplitIndexRegionExec{
-			baseExecutor:   base,
-			tableInfo:      v.TableInfo,
-			partitionNames: v.PartitionNames,
-			indexInfo:      v.IndexInfo,
-			lower:          v.Lower,
-			upper:          v.Upper,
-			num:            v.Num,
-			valueLists:     v.ValueLists,
-		}
-	}
-	if len(v.ValueLists) > 0 {
-		return &SplitTableRegionExec{
-			baseExecutor:   base,
-			tableInfo:      v.TableInfo,
-			partitionNames: v.PartitionNames,
-			valueLists:     v.ValueLists,
-		}
-	}
-	return &SplitTableRegionExec{
-		baseExecutor:   base,
-		tableInfo:      v.TableInfo,
-		partitionNames: v.PartitionNames,
-		lower:          v.Lower[0],
-		upper:          v.Upper[0],
-		num:            v.Num,
-	}
 }
 
 func (b *executorBuilder) buildUpdate(v *plannercore.Update) Executor {

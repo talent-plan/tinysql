@@ -31,13 +31,11 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
@@ -161,8 +159,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowMasterStatus()
 	case ast.ShowPrivileges:
 		return e.fetchShowPrivileges()
-	case ast.ShowRegions:
-		return e.fetchShowTableRegions()
 	case ast.ShowBuiltins:
 		return e.fetchShowBuiltins()
 	}
@@ -1015,116 +1011,6 @@ func (e *ShowExec) appendRow(row []interface{}) {
 		default:
 			e.result.AppendNull(i)
 		}
-	}
-}
-
-func (e *ShowExec) fetchShowTableRegions() error {
-	store := e.ctx.GetStore()
-	tikvStore, ok := store.(tikv.Storage)
-	if !ok {
-		return nil
-	}
-	splitStore, ok := store.(kv.SplittableStore)
-	if !ok {
-		return nil
-	}
-
-	tb, err := e.getTable()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// Get table regions from from pd, not from regionCache, because the region cache maybe outdated.
-	var regions []regionMeta
-	if len(e.IndexName.L) != 0 {
-		indexInfo := tb.Meta().FindIndexByName(e.IndexName.L)
-		if indexInfo == nil {
-			return plannercore.ErrKeyDoesNotExist.GenWithStackByArgs(e.IndexName, tb.Meta().Name)
-		}
-		regions, err = getTableIndexRegions(tb, indexInfo, tikvStore, splitStore)
-	} else {
-		regions, err = getTableRegions(tb, tikvStore, splitStore)
-	}
-
-	if err != nil {
-		return err
-	}
-	e.fillRegionsToChunk(regions)
-	return nil
-}
-
-func getTableRegions(tb table.Table, tikvStore tikv.Storage, splitStore kv.SplittableStore) ([]regionMeta, error) {
-	if info := tb.Meta().GetPartitionInfo(); info != nil {
-		return getPartitionTableRegions(info, tb.(table.PartitionedTable), tikvStore, splitStore)
-	}
-	return getPhysicalTableRegions(tb.Meta().ID, tb.Meta(), tikvStore, splitStore, nil)
-}
-
-func getTableIndexRegions(tb table.Table, indexInfo *model.IndexInfo, tikvStore tikv.Storage, splitStore kv.SplittableStore) ([]regionMeta, error) {
-	if info := tb.Meta().GetPartitionInfo(); info != nil {
-		return getPartitionIndexRegions(info, tb.(table.PartitionedTable), indexInfo, tikvStore, splitStore)
-	}
-	return getPhysicalIndexRegions(tb.Meta().ID, indexInfo, tikvStore, splitStore, nil)
-}
-
-func getPartitionTableRegions(info *model.PartitionInfo, tbl table.PartitionedTable, tikvStore tikv.Storage, splitStore kv.SplittableStore) ([]regionMeta, error) {
-	regions := make([]regionMeta, 0, len(info.Definitions))
-	uniqueRegionMap := make(map[uint64]struct{})
-	for _, def := range info.Definitions {
-		pid := def.ID
-		partition := tbl.GetPartition(pid)
-		partition.GetPhysicalID()
-		partitionRegions, err := getPhysicalTableRegions(partition.GetPhysicalID(), tbl.Meta(), tikvStore, splitStore, uniqueRegionMap)
-		if err != nil {
-			return nil, err
-		}
-		regions = append(regions, partitionRegions...)
-	}
-	return regions, nil
-}
-
-func getPartitionIndexRegions(info *model.PartitionInfo, tbl table.PartitionedTable, indexInfo *model.IndexInfo, tikvStore tikv.Storage, splitStore kv.SplittableStore) ([]regionMeta, error) {
-	var regions []regionMeta
-	uniqueRegionMap := make(map[uint64]struct{})
-	for _, def := range info.Definitions {
-		pid := def.ID
-		partition := tbl.GetPartition(pid)
-		partition.GetPhysicalID()
-		partitionRegions, err := getPhysicalIndexRegions(partition.GetPhysicalID(), indexInfo, tikvStore, splitStore, uniqueRegionMap)
-		if err != nil {
-			return nil, err
-		}
-		regions = append(regions, partitionRegions...)
-	}
-	return regions, nil
-}
-
-func (e *ShowExec) fillRegionsToChunk(regions []regionMeta) {
-	for i := range regions {
-		e.result.AppendUint64(0, regions[i].region.Id)
-		e.result.AppendString(1, regions[i].start)
-		e.result.AppendString(2, regions[i].end)
-		e.result.AppendUint64(3, regions[i].leaderID)
-		e.result.AppendUint64(4, regions[i].storeID)
-
-		peers := ""
-		for i, peer := range regions[i].region.Peers {
-			if i > 0 {
-				peers += ", "
-			}
-			peers += strconv.FormatUint(peer.Id, 10)
-		}
-		e.result.AppendString(5, peers)
-		if regions[i].scattering {
-			e.result.AppendInt64(6, 1)
-		} else {
-			e.result.AppendInt64(6, 0)
-		}
-
-		e.result.AppendInt64(7, regions[i].writtenBytes)
-		e.result.AppendInt64(8, regions[i].readBytes)
-		e.result.AppendInt64(9, regions[i].approximateSize)
-		e.result.AppendInt64(10, regions[i].approximateKeys)
 	}
 }
 
