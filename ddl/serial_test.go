@@ -277,14 +277,8 @@ func (s *testSerialSuite) TestCreateTableWithLike(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(tbl1.Meta().ForeignKeys, IsNil)
 
-	// for table partition
-	tk.MustExec("use ctwl_db")
-	tk.MustExec("create table pt1 (id int) partition by range columns (id) (partition p0 values less than (10))")
-	tk.MustExec("insert into pt1 values (1),(2),(3),(4);")
-	tk.MustExec("create table ctwl_db1.pt1 like ctwl_db.pt1;")
-	tk.MustQuery("select * from ctwl_db1.pt1").Check(testkit.Rows())
-
 	// for failure cases
+	tk.MustExec("use ctwl_db")
 	failSQL := fmt.Sprintf("create table t1 like test_not_exist.t")
 	tk.MustGetErrCode(failSQL, mysql.ErrNoSuchTable)
 	failSQL = fmt.Sprintf("create table t1 like test.t_not_exist")
