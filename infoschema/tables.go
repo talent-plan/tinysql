@@ -15,35 +15,24 @@ package infoschema
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/store/helper"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	binaryJson "github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/pdapi"
-	"github.com/pingcap/tidb/util/set"
 	"github.com/pingcap/tidb/util/sqlexec"
 )
 
@@ -82,11 +71,7 @@ const (
 	tableCollationCharacterSetApplicability = "COLLATION_CHARACTER_SET_APPLICABILITY"
 	tableProcesslist                        = "PROCESSLIST"
 	tableTiDBIndexes                        = "TIDB_INDEXES"
-	tableTiDBHotRegions                     = "TIDB_HOT_REGIONS"
-	tableTiKVStoreStatus                    = "TIKV_STORE_STATUS"
 	tableAnalyzeStatus                      = "ANALYZE_STATUS"
-	tableTiKVRegionStatus                   = "TIKV_REGION_STATUS"
-	tableTiKVRegionPeers                    = "TIKV_REGION_PEERS"
 	tableTiDBServersInfo                    = "TIDB_SERVERS_INFO"
 	tableTiFlashReplica                     = "TIFLASH_REPLICA"
 )
@@ -126,13 +111,9 @@ var tableIDMap = map[string]int64{
 	tableCollationCharacterSetApplicability: autoid.InformationSchemaDBID + 32,
 	tableProcesslist:                        autoid.InformationSchemaDBID + 33,
 	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
-	tableTiDBHotRegions:                     autoid.InformationSchemaDBID + 35,
-	tableTiKVStoreStatus:                    autoid.InformationSchemaDBID + 36,
-	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 37,
-	tableTiKVRegionStatus:                   autoid.InformationSchemaDBID + 38,
-	tableTiKVRegionPeers:                    autoid.InformationSchemaDBID + 39,
-	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 40,
-	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 41,
+	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 35,
+	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 36,
+	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 37,
 }
 
 type columnInfo struct {
@@ -605,41 +586,6 @@ var tableTiDBIndexesCols = []columnInfo{
 	{"INDEX_ID", mysql.TypeLonglong, 21, 0, nil, nil},
 }
 
-var tableTiDBHotRegionsCols = []columnInfo{
-	{"TABLE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"INDEX_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"DB_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"INDEX_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"REGION_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"TYPE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"MAX_HOT_DEGREE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"REGION_COUNT", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"FLOW_BYTES", mysql.TypeLonglong, 21, 0, nil, nil},
-}
-
-var tableTiKVStoreStatusCols = []columnInfo{
-	{"STORE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"ADDRESS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"STORE_STATE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"STORE_STATE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"LABEL", mysql.TypeJSON, 51, 0, nil, nil},
-	{"VERSION", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"CAPACITY", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"AVAILABLE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"LEADER_COUNT", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"LEADER_WEIGHT", mysql.TypeDouble, 22, 0, nil, nil},
-	{"LEADER_SCORE", mysql.TypeDouble, 22, 0, nil, nil},
-	{"LEADER_SIZE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"REGION_COUNT", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"REGION_WEIGHT", mysql.TypeDouble, 22, 0, nil, nil},
-	{"REGION_SCORE", mysql.TypeDouble, 22, 0, nil, nil},
-	{"REGION_SIZE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"START_TS", mysql.TypeDatetime, 0, 0, nil, nil},
-	{"LAST_HEARTBEAT_TS", mysql.TypeDatetime, 0, 0, nil, nil},
-	{"UPTIME", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
 var tableAnalyzeStatusCols = []columnInfo{
 	{"TABLE_SCHEMA", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
@@ -648,40 +594,6 @@ var tableAnalyzeStatusCols = []columnInfo{
 	{"PROCESSED_ROWS", mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
 	{"START_TIME", mysql.TypeDatetime, 0, 0, nil, nil},
 	{"STATE", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
-var tableTiKVRegionStatusCols = []columnInfo{
-	{"REGION_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"START_KEY", mysql.TypeBlob, types.UnspecifiedLength, 0, nil, nil},
-	{"END_KEY", mysql.TypeBlob, types.UnspecifiedLength, 0, nil, nil},
-	{"TABLE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"DB_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"IS_INDEX", mysql.TypeTiny, 1, mysql.NotNullFlag, 0, nil},
-	{"INDEX_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"INDEX_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"EPOCH_CONF_VER", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"EPOCH_VERSION", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"WRITTEN_BYTES", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"READ_BYTES", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"APPROXIMATE_SIZE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"APPROXIMATE_KEYS", mysql.TypeLonglong, 21, 0, nil, nil},
-}
-
-var tableTiKVRegionPeersCols = []columnInfo{
-	{"REGION_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"TABLE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"DB_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"IS_INDEX", mysql.TypeTiny, 1, mysql.NotNullFlag, 0, nil},
-	{"INDEX_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"INDEX_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PEER_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"STORE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"IS_LEARNER", mysql.TypeTiny, 1, mysql.NotNullFlag, 0, nil},
-	{"IS_LEADER", mysql.TypeTiny, 1, mysql.NotNullFlag, 0, nil},
-	{"STATUS", mysql.TypeVarchar, 10, 0, 0, nil},
-	{"DOWN_SECONDS", mysql.TypeLonglong, 21, 0, 0, nil},
 }
 
 var tableTiDBServersInfoCols = []columnInfo{
@@ -693,203 +605,6 @@ var tableTiDBServersInfoCols = []columnInfo{
 	{"VERSION", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"GIT_HASH", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"BINLOG_STATUS", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
-func dataForTiKVRegionStatus(ctx sessionctx.Context) (records [][]types.Datum, err error) {
-	tikvStore, ok := ctx.GetStore().(tikv.Storage)
-	if !ok {
-		return nil, errors.New("Information about TiKV region status can be gotten only when the storage is TiKV")
-	}
-	tikvHelper := &helper.Helper{
-		Store:       tikvStore,
-		RegionCache: tikvStore.GetRegionCache(),
-	}
-	regionsInfo, err := tikvHelper.GetRegionsInfo()
-	if err != nil {
-		return nil, err
-	}
-	allSchemas := ctx.GetSessionVars().TxnCtx.InfoSchema.(InfoSchema).AllSchemas()
-	tableInfos := tikvHelper.GetRegionsTableInfo(regionsInfo, allSchemas)
-	for _, region := range regionsInfo.Regions {
-		tableList := tableInfos[region.ID]
-		if len(tableList) == 0 {
-			records = append(records, newTiKVRegionStatusCol(&region, nil))
-		}
-		for _, table := range tableList {
-			row := newTiKVRegionStatusCol(&region, &table)
-			records = append(records, row)
-		}
-	}
-	return records, nil
-}
-
-func newTiKVRegionStatusCol(region *helper.RegionInfo, table *helper.TableInfo) []types.Datum {
-	row := make([]types.Datum, len(tableTiKVRegionStatusCols))
-	row[0].SetInt64(region.ID)
-	row[1].SetString(region.StartKey)
-	row[2].SetString(region.EndKey)
-	if table != nil {
-		row[3].SetInt64(table.Table.ID)
-		row[4].SetString(table.DB.Name.O)
-		row[5].SetString(table.Table.Name.O)
-		if table.IsIndex {
-			row[6].SetInt64(1)
-			row[7].SetInt64(table.Index.ID)
-			row[8].SetString(table.Index.Name.O)
-		} else {
-			row[6].SetInt64(0)
-		}
-	}
-	row[9].SetInt64(region.Epoch.ConfVer)
-	row[10].SetInt64(region.Epoch.Version)
-	row[11].SetInt64(region.WrittenBytes)
-	row[12].SetInt64(region.ReadBytes)
-	row[13].SetInt64(region.ApproximateSize)
-	row[14].SetInt64(region.ApproximateKeys)
-	return row
-}
-
-const (
-	normalPeer  = "NORMAL"
-	pendingPeer = "PENDING"
-	downPeer    = "DOWN"
-)
-
-func dataForTikVRegionPeers(ctx sessionctx.Context) (records [][]types.Datum, err error) {
-	tikvStore, ok := ctx.GetStore().(tikv.Storage)
-	if !ok {
-		return nil, errors.New("Information about TiKV region status can be gotten only when the storage is TiKV")
-	}
-	tikvHelper := &helper.Helper{
-		Store:       tikvStore,
-		RegionCache: tikvStore.GetRegionCache(),
-	}
-	regionsInfo, err := tikvHelper.GetRegionsInfo()
-	if err != nil {
-		return nil, err
-	}
-	allSchemas := ctx.GetSessionVars().TxnCtx.InfoSchema.(InfoSchema).AllSchemas()
-	tableInfos := tikvHelper.GetRegionsTableInfo(regionsInfo, allSchemas)
-	for _, region := range regionsInfo.Regions {
-		tableList := tableInfos[region.ID]
-		if len(tableList) == 0 {
-			records = append(records, newTiKVRegionPeersCols(&region, nil)...)
-		}
-		for _, table := range tableList {
-			rows := newTiKVRegionPeersCols(&region, &table)
-			records = append(records, rows...)
-		}
-	}
-	return records, nil
-}
-
-func newTiKVRegionPeersCols(region *helper.RegionInfo, table *helper.TableInfo) [][]types.Datum {
-	records := make([][]types.Datum, 0, len(region.Peers))
-	pendingPeerIDSet := set.NewInt64Set()
-	for _, peer := range region.PendingPeers {
-		pendingPeerIDSet.Insert(peer.ID)
-	}
-	downPeerMap := make(map[int64]int64)
-	for _, peerStat := range region.DownPeers {
-		downPeerMap[peerStat.ID] = peerStat.DownSec
-	}
-	template := make([]types.Datum, 7)
-	template[0].SetInt64(region.ID)
-	if table != nil {
-		template[1].SetInt64(table.Table.ID)
-		template[2].SetString(table.DB.Name.O)
-		template[3].SetString(table.Table.Name.O)
-		if table.IsIndex {
-			template[4].SetInt64(1)
-			template[5].SetInt64(table.Index.ID)
-			template[6].SetString(table.Index.Name.O)
-		} else {
-			template[4].SetInt64(0)
-		}
-	}
-	for _, peer := range region.Peers {
-		row := make([]types.Datum, len(tableTiKVRegionPeersCols))
-		copy(row, template)
-		row[7].SetInt64(peer.ID)
-		row[8].SetInt64(peer.StoreID)
-		if peer.IsLearner {
-			row[9].SetInt64(1)
-		} else {
-			row[9].SetInt64(0)
-		}
-		if peer.ID == region.Leader.ID {
-			row[10].SetInt64(1)
-		} else {
-			row[10].SetInt64(0)
-		}
-		if pendingPeerIDSet.Exist(peer.ID) {
-			row[11].SetString(pendingPeer)
-		} else if downSec, ok := downPeerMap[peer.ID]; ok {
-			row[11].SetString(downPeer)
-			row[12].SetInt64(downSec)
-		} else {
-			row[11].SetString(normalPeer)
-		}
-		records = append(records, row)
-	}
-	return records
-}
-
-func dataForTiKVStoreStatus(ctx sessionctx.Context) (records [][]types.Datum, err error) {
-	tikvStore, ok := ctx.GetStore().(tikv.Storage)
-	if !ok {
-		return nil, errors.New("Information about TiKV store status can be gotten only when the storage is TiKV")
-	}
-	tikvHelper := &helper.Helper{
-		Store:       tikvStore,
-		RegionCache: tikvStore.GetRegionCache(),
-	}
-	storesStat, err := tikvHelper.GetStoresStat()
-	if err != nil {
-		return nil, err
-	}
-	for _, storeStat := range storesStat.Stores {
-		row := make([]types.Datum, len(tableTiKVStoreStatusCols))
-		row[0].SetInt64(storeStat.Store.ID)
-		row[1].SetString(storeStat.Store.Address)
-		row[2].SetInt64(storeStat.Store.State)
-		row[3].SetString(storeStat.Store.StateName)
-		data, err := json.Marshal(storeStat.Store.Labels)
-		if err != nil {
-			return nil, err
-		}
-		bj := binaryJson.BinaryJSON{}
-		if err = bj.UnmarshalJSON(data); err != nil {
-			return nil, err
-		}
-		row[4].SetMysqlJSON(bj)
-		row[5].SetString(storeStat.Store.Version)
-		row[6].SetString(storeStat.Status.Capacity)
-		row[7].SetString(storeStat.Status.Available)
-		row[8].SetInt64(storeStat.Status.LeaderCount)
-		row[9].SetFloat64(storeStat.Status.LeaderWeight)
-		row[10].SetFloat64(storeStat.Status.LeaderScore)
-		row[11].SetInt64(storeStat.Status.LeaderSize)
-		row[12].SetInt64(storeStat.Status.RegionCount)
-		row[13].SetFloat64(storeStat.Status.RegionWeight)
-		row[14].SetFloat64(storeStat.Status.RegionScore)
-		row[15].SetInt64(storeStat.Status.RegionSize)
-		startTs := types.Time{
-			Time: types.FromGoTime(storeStat.Status.StartTs),
-			Type: mysql.TypeDatetime,
-			Fsp:  types.DefaultFsp,
-		}
-		row[16].SetMysqlTime(startTs)
-		lastHeartbeatTs := types.Time{
-			Time: types.FromGoTime(storeStat.Status.LastHeartbeatTs),
-			Type: mysql.TypeDatetime,
-			Fsp:  types.DefaultFsp,
-		}
-		row[17].SetMysqlTime(lastHeartbeatTs)
-		row[18].SetString(storeStat.Status.Uptime)
-		records = append(records, row)
-	}
-	return records, nil
 }
 
 func dataForCharacterSets() (records [][]types.Datum) {
@@ -1770,58 +1485,6 @@ func keyColumnUsageInTable(schema *model.DBInfo, table *model.TableInfo) [][]typ
 	return rows
 }
 
-func dataForTiDBHotRegions(ctx sessionctx.Context) (records [][]types.Datum, err error) {
-	tikvStore, ok := ctx.GetStore().(tikv.Storage)
-	if !ok {
-		return nil, errors.New("Information about hot region can be gotten only when the storage is TiKV")
-	}
-	allSchemas := ctx.GetSessionVars().TxnCtx.InfoSchema.(InfoSchema).AllSchemas()
-	tikvHelper := &helper.Helper{
-		Store:       tikvStore,
-		RegionCache: tikvStore.GetRegionCache(),
-	}
-	metrics, err := tikvHelper.ScrapeHotInfo(pdapi.HotRead, allSchemas)
-	if err != nil {
-		return nil, err
-	}
-	records = append(records, dataForHotRegionByMetrics(metrics, "read")...)
-	metrics, err = tikvHelper.ScrapeHotInfo(pdapi.HotWrite, allSchemas)
-	if err != nil {
-		return nil, err
-	}
-	records = append(records, dataForHotRegionByMetrics(metrics, "write")...)
-	return records, nil
-}
-
-func dataForHotRegionByMetrics(metrics []helper.HotTableIndex, tp string) [][]types.Datum {
-	rows := make([][]types.Datum, 0, len(metrics))
-	for _, tblIndex := range metrics {
-		row := make([]types.Datum, len(tableTiDBHotRegionsCols))
-		if tblIndex.IndexName != "" {
-			row[1].SetInt64(tblIndex.IndexID)
-			row[4].SetString(tblIndex.IndexName)
-		} else {
-			row[1].SetNull()
-			row[4].SetNull()
-		}
-		row[0].SetInt64(tblIndex.TableID)
-		row[2].SetString(tblIndex.DbName)
-		row[3].SetString(tblIndex.TableName)
-		row[5].SetUint64(tblIndex.RegionID)
-		row[6].SetString(tp)
-		if tblIndex.RegionMetric == nil {
-			row[7].SetNull()
-			row[8].SetNull()
-		} else {
-			row[7].SetInt64(int64(tblIndex.RegionMetric.MaxHotDegree))
-			row[8].SetInt64(int64(tblIndex.RegionMetric.Count))
-		}
-		row[9].SetUint64(tblIndex.RegionMetric.FlowBytes)
-		rows = append(rows, row)
-	}
-	return rows
-}
-
 func dataForServersInfo() ([][]types.Datum, error) {
 	serversInfo, err := infosync.GetAllServerInfo(context.Background())
 	if err != nil {
@@ -1851,150 +1514,6 @@ type ServerInfo struct {
 	StatusAddr string
 	Version    string
 	GitHash    string
-}
-
-// GetClusterServerInfo returns all components information of cluster
-func GetClusterServerInfo(ctx sessionctx.Context) ([]ServerInfo, error) {
-	failpoint.Inject("mockClusterInfo", func(val failpoint.Value) {
-		// The cluster topology is injected by `failpoint` expression and
-		// there is no extra checks for it. (let the test fail if the expression invalid)
-		if s := val.(string); len(s) > 0 {
-			var servers []ServerInfo
-			for _, server := range strings.Split(s, ";") {
-				parts := strings.Split(server, ",")
-				servers = append(servers, ServerInfo{
-					ServerType: parts[0],
-					Address:    parts[1],
-					StatusAddr: parts[2],
-					Version:    parts[3],
-					GitHash:    parts[4],
-				})
-			}
-			failpoint.Return(servers, nil)
-		}
-	})
-
-	type retriever func(ctx sessionctx.Context) ([]ServerInfo, error)
-	var servers []ServerInfo
-	for _, r := range []retriever{GetTiDBServerInfo, GetPDServerInfo, GetTiKVServerInfo} {
-		nodes, err := r(ctx)
-		if err != nil {
-			return nil, err
-		}
-		servers = append(servers, nodes...)
-	}
-	return servers, nil
-}
-
-// GetTiDBServerInfo returns all TiDB nodes information of cluster
-func GetTiDBServerInfo(ctx sessionctx.Context) ([]ServerInfo, error) {
-	// Get TiDB servers info.
-	tidbNodes, err := infosync.GetAllServerInfo(context.Background())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var servers []ServerInfo
-	for _, node := range tidbNodes {
-		servers = append(servers, ServerInfo{
-			ServerType: "tidb",
-			Address:    fmt.Sprintf("%s:%d", node.IP, node.Port),
-			StatusAddr: fmt.Sprintf("%s:%d", node.IP, node.StatusPort),
-			Version:    node.Version,
-			GitHash:    node.GitHash,
-		})
-	}
-	return servers, nil
-}
-
-// GetPDServerInfo returns all PD nodes information of cluster
-func GetPDServerInfo(ctx sessionctx.Context) ([]ServerInfo, error) {
-	// Get PD servers info.
-	store := ctx.GetStore()
-	etcd, ok := store.(tikv.EtcdBackend)
-	if !ok {
-		return nil, errors.Errorf("%T not an etcd backend", store)
-	}
-	var servers []ServerInfo
-	for _, addr := range etcd.EtcdAddrs() {
-		addr = strings.TrimSpace(addr)
-
-		// Get PD version
-		url := fmt.Sprintf("http://%s%s", addr, pdapi.ClusterVersion)
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		req.Header.Add("PD-Allow-follower-handle", "true")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		pdVersion, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		terror.Log(resp.Body.Close())
-		version := strings.Trim(strings.Trim(string(pdVersion), "\n"), "\"")
-
-		// Get PD git_hash
-		url = fmt.Sprintf("http://%s%s", addr, pdapi.Status)
-		req, err = http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		req.Header.Add("PD-Allow-follower-handle", "true")
-		resp, err = http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		var content = struct {
-			GitHash string `json:"git_hash"`
-		}{}
-		if err := json.NewDecoder(resp.Body).Decode(&content); err != nil {
-			return nil, errors.Trace(err)
-		}
-		terror.Log(resp.Body.Close())
-
-		servers = append(servers, ServerInfo{
-			ServerType: "pd",
-			Address:    addr,
-			StatusAddr: addr,
-			Version:    version,
-			GitHash:    content.GitHash,
-		})
-	}
-	return servers, nil
-}
-
-// GetTiKVServerInfo returns all TiKV nodes information of cluster
-func GetTiKVServerInfo(ctx sessionctx.Context) ([]ServerInfo, error) {
-	store := ctx.GetStore()
-	// Get TiKV servers info.
-	tikvStore, ok := store.(tikv.Storage)
-	if !ok {
-		return nil, errors.Errorf("%T is not an TiKV store instance", store)
-	}
-	tikvHelper := &helper.Helper{
-		Store:       tikvStore,
-		RegionCache: tikvStore.GetRegionCache(),
-	}
-
-	storesStat, err := tikvHelper.GetStoresStat()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var servers []ServerInfo
-	for _, storeStat := range storesStat.Stores {
-		servers = append(servers, ServerInfo{
-			ServerType: "tikv",
-			Address:    storeStat.Store.Address,
-			StatusAddr: storeStat.Store.StatusAddress,
-			Version:    storeStat.Store.Version,
-			GitHash:    storeStat.Store.GitHash,
-		})
-	}
-	return servers, nil
 }
 
 // dataForTableTiFlashReplica constructs data for table tiflash replica info.
@@ -2052,11 +1571,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableCollationCharacterSetApplicability: tableCollationCharacterSetApplicabilityCols,
 	tableProcesslist:                        tableProcesslistCols,
 	tableTiDBIndexes:                        tableTiDBIndexesCols,
-	tableTiDBHotRegions:                     tableTiDBHotRegionsCols,
-	tableTiKVStoreStatus:                    tableTiKVStoreStatusCols,
 	tableAnalyzeStatus:                      tableAnalyzeStatusCols,
-	tableTiKVRegionStatus:                   tableTiKVRegionStatusCols,
-	tableTiKVRegionPeers:                    tableTiKVRegionPeersCols,
 	tableTiDBServersInfo:                    tableTiDBServersInfoCols,
 	tableTiFlashReplica:                     tableTableTiFlashReplicaCols,
 }
@@ -2146,14 +1661,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForCollationCharacterSetApplicability()
 	case tableProcesslist:
 		fullRows = dataForProcesslist(ctx)
-	case tableTiDBHotRegions:
-		fullRows, err = dataForTiDBHotRegions(ctx)
-	case tableTiKVStoreStatus:
-		fullRows, err = dataForTiKVStoreStatus(ctx)
-	case tableTiKVRegionStatus:
-		fullRows, err = dataForTiKVRegionStatus(ctx)
-	case tableTiKVRegionPeers:
-		fullRows, err = dataForTikVRegionPeers(ctx)
 	case tableTiDBServersInfo:
 		fullRows, err = dataForServersInfo()
 	case tableTiFlashReplica:
