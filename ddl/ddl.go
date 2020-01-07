@@ -52,11 +52,6 @@ const (
 	ddlPrompt   = "ddl"
 
 	shardRowIDBitsMax = 15
-
-	// PartitionCountLimit is limit of the number of partitions in a table.
-	// Mysql maximum number of partitions is 8192, our maximum number of partitions is 1024.
-	// Reference linking https://dev.mysql.com/doc/refman/5.7/en/partitioning-limitations.html.
-	PartitionCountLimit = 1024
 )
 
 var (
@@ -101,7 +96,6 @@ var (
 	errInvalidSplitRegionRanges = terror.ClassDDL.New(mysql.ErrInvalidSplitRegionRanges, mysql.MySQLErrName[mysql.ErrInvalidSplitRegionRanges])
 	errReorgPanic               = terror.ClassDDL.New(mysql.ErrReorgPanic, mysql.MySQLErrName[mysql.ErrReorgPanic])
 
-	errOnlyOnRangeListPartition = terror.ClassDDL.New(mysql.ErrOnlyOnRangeListPartition, mysql.MySQLErrName[mysql.ErrOnlyOnRangeListPartition])
 	// errWrongKeyColumn is for table column cannot be indexed.
 	errWrongKeyColumn = terror.ClassDDL.New(mysql.ErrWrongKeyColumn, mysql.MySQLErrName[mysql.ErrWrongKeyColumn])
 	// errWrongFKOptionForGeneratedColumn is for wrong foreign key reference option on generated columns.
@@ -121,17 +115,9 @@ var (
 	ErrInvalidDefaultValue = terror.ClassDDL.New(mysql.ErrInvalidDefault, mysql.MySQLErrName[mysql.ErrInvalidDefault])
 	// ErrGeneratedColumnRefAutoInc forbids to refer generated columns to auto-increment columns .
 	ErrGeneratedColumnRefAutoInc = terror.ClassDDL.New(mysql.ErrGeneratedColumnRefAutoInc, mysql.MySQLErrName[mysql.ErrGeneratedColumnRefAutoInc])
-	// ErrUnsupportedAddPartition returns for does not support add partitions.
-	ErrUnsupportedAddPartition = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "add partitions"))
-	// ErrUnsupportedCoalescePartition returns for does not support coalesce partitions.
-	ErrUnsupportedCoalescePartition = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "coalesce partitions"))
 	// ErrGeneratedColumnFunctionIsNotAllowed returns for unsupported functions for generated columns.
 	ErrGeneratedColumnFunctionIsNotAllowed = terror.ClassDDL.New(mysql.ErrGeneratedColumnFunctionIsNotAllowed, mysql.MySQLErrName[mysql.ErrGeneratedColumnFunctionIsNotAllowed])
-	// ErrUnsupportedPartitionByRangeColumns returns for does unsupported partition by range columns.
-	ErrUnsupportedPartitionByRangeColumns = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "partition by range columns"))
-	errUnsupportedCreatePartition         = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "partition type, treat as normal table"))
-	errTablePartitionDisabled             = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, "Partitions are ignored because Table Partition is disabled, please set 'tidb_enable_table_partition' if you need to need to enable it")
-	errUnsupportedIndexType               = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "index type"))
+	errUnsupportedIndexType                = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "index type"))
 
 	// ErrDupKeyName returns for duplicated key name
 	ErrDupKeyName = terror.ClassDDL.New(mysql.ErrDupKeyName, mysql.MySQLErrName[mysql.ErrDupKeyName])
@@ -178,33 +164,12 @@ var (
 	// ErrErrorOnRename returns error for wrong database name in alter table rename
 	ErrErrorOnRename = terror.ClassDDL.New(mysql.ErrErrorOnRename, mysql.MySQLErrName[mysql.ErrErrorOnRename])
 
-	// ErrNotAllowedTypeInPartition returns not allowed type error when creating table partition with unsupported expression type.
-	ErrNotAllowedTypeInPartition = terror.ClassDDL.New(mysql.ErrFieldTypeNotAllowedAsPartitionField, mysql.MySQLErrName[mysql.ErrFieldTypeNotAllowedAsPartitionField])
 	// ErrPartitionMgmtOnNonpartitioned returns it's not a partition table.
 	ErrPartitionMgmtOnNonpartitioned = terror.ClassDDL.New(mysql.ErrPartitionMgmtOnNonpartitioned, mysql.MySQLErrName[mysql.ErrPartitionMgmtOnNonpartitioned])
-	// ErrDropPartitionNonExistent returns error in list of partition.
-	ErrDropPartitionNonExistent = terror.ClassDDL.New(mysql.ErrDropPartitionNonExistent, mysql.MySQLErrName[mysql.ErrDropPartitionNonExistent])
-	// ErrSameNamePartition returns duplicate partition name.
-	ErrSameNamePartition = terror.ClassDDL.New(mysql.ErrSameNamePartition, mysql.MySQLErrName[mysql.ErrSameNamePartition])
-	// ErrRangeNotIncreasing returns values less than value must be strictly increasing for each partition.
-	ErrRangeNotIncreasing = terror.ClassDDL.New(mysql.ErrRangeNotIncreasing, mysql.MySQLErrName[mysql.ErrRangeNotIncreasing])
-	// ErrPartitionMaxvalue returns maxvalue can only be used in last partition definition.
-	ErrPartitionMaxvalue = terror.ClassDDL.New(mysql.ErrPartitionMaxvalue, mysql.MySQLErrName[mysql.ErrPartitionMaxvalue])
-	//ErrDropLastPartition returns cannot remove all partitions, use drop table instead.
-	ErrDropLastPartition = terror.ClassDDL.New(mysql.ErrDropLastPartition, mysql.MySQLErrName[mysql.ErrDropLastPartition])
-	//ErrTooManyPartitions returns too many partitions were defined.
-	ErrTooManyPartitions = terror.ClassDDL.New(mysql.ErrTooManyPartitions, mysql.MySQLErrName[mysql.ErrTooManyPartitions])
-	//ErrPartitionFunctionIsNotAllowed returns this partition function is not allowed.
-	ErrPartitionFunctionIsNotAllowed = terror.ClassDDL.New(mysql.ErrPartitionFunctionIsNotAllowed, mysql.MySQLErrName[mysql.ErrPartitionFunctionIsNotAllowed])
-	// ErrPartitionFuncNotAllowed returns partition function returns the wrong type.
-	ErrPartitionFuncNotAllowed = terror.ClassDDL.New(mysql.ErrPartitionFuncNotAllowed, mysql.MySQLErrName[mysql.ErrPartitionFuncNotAllowed])
 	// ErrUniqueKeyNeedAllFieldsInPf returns must include all columns in the table's partitioning function.
 	ErrUniqueKeyNeedAllFieldsInPf = terror.ClassDDL.New(mysql.ErrUniqueKeyNeedAllFieldsInPf, mysql.MySQLErrName[mysql.ErrUniqueKeyNeedAllFieldsInPf])
-	errWrongExprInPartitionFunc   = terror.ClassDDL.New(mysql.ErrWrongExprInPartitionFunc, mysql.MySQLErrName[mysql.ErrWrongExprInPartitionFunc])
 	// ErrWarnDataTruncated returns data truncated error.
 	ErrWarnDataTruncated = terror.ClassDDL.New(mysql.WarnDataTruncated, mysql.MySQLErrName[mysql.WarnDataTruncated])
-	// ErrCoalesceOnlyOnHashPartition returns coalesce partition can only be used on hash/key partitions.
-	ErrCoalesceOnlyOnHashPartition = terror.ClassDDL.New(mysql.ErrCoalesceOnlyOnHashPartition, mysql.MySQLErrName[mysql.ErrCoalesceOnlyOnHashPartition])
 	// ErrViewWrongList returns create view must include all columns in the select clause
 	ErrViewWrongList = terror.ClassDDL.New(mysql.ErrViewWrongList, mysql.MySQLErrName[mysql.ErrViewWrongList])
 	// ErrAlterOperationNotSupported returns when alter operations is not supported.

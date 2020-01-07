@@ -15,8 +15,6 @@ package ddl
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
@@ -172,7 +170,7 @@ func onDropTableOrView(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 		// Finish this job.
 		job.FinishTableJob(model.JobStateDone, model.StateNone, ver, tblInfo)
 		startKey := tablecodec.EncodeTablePrefix(job.TableID)
-		job.Args = append(job.Args, startKey, getPartitionIDs(tblInfo))
+		job.Args = append(job.Args, startKey)
 	default:
 		err = ErrInvalidDDLState.GenWithStackByArgs("table", tblInfo.State)
 	}
@@ -261,12 +259,7 @@ func (w *worker) onRecoverTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver in
 			return ver, errors.Trace(err)
 		}
 		// Remove dropped table DDL job from gc_delete_range table.
-		var tids []int64
-		if tblInfo.GetPartitionInfo() != nil {
-			tids = getPartitionIDs(tblInfo)
-		} else {
-			tids = []int64{tblInfo.ID}
-		}
+		var tids = []int64{tblInfo.ID}
 		err = w.delRangeManager.removeFromGCDeleteRange(dropJobID, tids)
 		if err != nil {
 			return ver, errors.Trace(err)
@@ -424,16 +417,6 @@ func onTruncateTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ erro
 		}
 	})
 
-	var oldPartitionIDs []int64
-	if tblInfo.GetPartitionInfo() != nil {
-		oldPartitionIDs = getPartitionIDs(tblInfo)
-		// We use the new partition ID because all the old data is encoded with the old partition ID, it can not be accessed anymore.
-		err = truncateTableByReassignPartitionIDs(t, tblInfo)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-	}
-
 	tblInfo.ID = newTableID
 	err = t.CreateTableOrView(schemaID, tblInfo)
 	if err != nil {
@@ -447,6 +430,7 @@ func onTruncateTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ erro
 	}
 	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
 	startKey := tablecodec.EncodeTablePrefix(tableID)
+	var oldPartitionIDs []int64
 	job.Args = []interface{}{startKey, oldPartitionIDs}
 	return ver, nil
 }
@@ -811,90 +795,4 @@ func updateVersionAndTableInfo(t *meta.Meta, job *model.Job, tblInfo *model.Tabl
 		tblInfo.UpdateTS = t.StartTS
 	}
 	return ver, t.UpdateTable(job.SchemaID, tblInfo)
-}
-
-// TODO: It may have the issue when two clients concurrently add partitions to a table.
-func onAddTablePartition(t *meta.Meta, job *model.Job) (ver int64, _ error) {
-	partInfo := &model.PartitionInfo{}
-	err := job.DecodeArgs(&partInfo)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	tblInfo, err := getTableInfoAndCancelFaultJob(t, job, job.SchemaID)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-	err = checkAddPartitionTooManyPartitions(uint64(len(tblInfo.Partition.Definitions) + len(partInfo.Definitions)))
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	err = checkAddPartitionValue(tblInfo, partInfo)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	err = checkAddPartitionNameUnique(tblInfo, partInfo)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	updatePartitionInfo(partInfo, tblInfo)
-	ver, err = updateVersionAndTableInfo(t, job, tblInfo, true)
-	if err != nil {
-		return ver, errors.Trace(err)
-	}
-	// Finish this job.
-	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
-	return ver, errors.Trace(err)
-}
-
-func updatePartitionInfo(partitionInfo *model.PartitionInfo, tblInfo *model.TableInfo) {
-	parInfo := &model.PartitionInfo{}
-	oldDefs, newDefs := tblInfo.Partition.Definitions, partitionInfo.Definitions
-	parInfo.Definitions = make([]model.PartitionDefinition, 0, len(newDefs)+len(oldDefs))
-	parInfo.Definitions = append(parInfo.Definitions, oldDefs...)
-	parInfo.Definitions = append(parInfo.Definitions, newDefs...)
-	tblInfo.Partition.Definitions = parInfo.Definitions
-}
-
-// checkAddPartitionValue values less than value must be strictly increasing for each partition.
-func checkAddPartitionValue(meta *model.TableInfo, part *model.PartitionInfo) error {
-	if meta.Partition.Type == model.PartitionTypeRange && len(meta.Partition.Columns) == 0 {
-		newDefs, oldDefs := part.Definitions, meta.Partition.Definitions
-		rangeValue := oldDefs[len(oldDefs)-1].LessThan[0]
-		if strings.EqualFold(rangeValue, "MAXVALUE") {
-			return errors.Trace(ErrPartitionMaxvalue)
-		}
-
-		currentRangeValue, err := strconv.Atoi(rangeValue)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		for i := 0; i < len(newDefs); i++ {
-			ifMaxvalue := strings.EqualFold(newDefs[i].LessThan[0], "MAXVALUE")
-			if ifMaxvalue && i == len(newDefs)-1 {
-				return nil
-			} else if ifMaxvalue && i != len(newDefs)-1 {
-				return errors.Trace(ErrPartitionMaxvalue)
-			}
-
-			nextRangeValue, err := strconv.Atoi(newDefs[i].LessThan[0])
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if nextRangeValue <= currentRangeValue {
-				return errors.Trace(ErrRangeNotIncreasing)
-			}
-			currentRangeValue = nextRangeValue
-		}
-	}
-	return nil
 }

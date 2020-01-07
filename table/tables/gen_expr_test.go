@@ -40,5 +40,3 @@ func (s *testGenExprSuite) TestParseExpression(c *C) {
 		}
 	}
 }
-
-var PartitionRecordKey = partitionRecordKey

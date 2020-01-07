@@ -667,27 +667,6 @@ func (s *testStateChangeSuite) TestShowIndex(c *C) {
 	d.(ddl.DDLForTest).SetHook(originalCallback)
 
 	c.Assert(err, IsNil)
-
-	_, err = s.se.Execute(context.Background(), `create table tr(
-		id int, name varchar(50),
-		purchased date
-	)
-	partition by range( year(purchased) ) (
-    	partition p0 values less than (1990),
-    	partition p1 values less than (1995),
-    	partition p2 values less than (2000),
-    	partition p3 values less than (2005),
-    	partition p4 values less than (2010),
-    	partition p5 values less than (2015)
-   	);`)
-	c.Assert(err, IsNil)
-	defer s.se.Execute(context.Background(), "drop table tr")
-	_, err = s.se.Execute(context.Background(), "create index idx1 on tr (purchased);")
-	c.Assert(err, IsNil)
-	result, err = s.execQuery(tk, "show index from tr;")
-	c.Assert(err, IsNil)
-	err = checkResult(result, testkit.Rows("tr 1 idx1 1 purchased A 0 <nil> <nil> YES BTREE  "))
-	c.Assert(err, IsNil)
 }
 
 func (s *testStateChangeSuite) TestParallelAlterModifyColumn(c *C) {
@@ -775,17 +754,6 @@ func (s *testStateChangeSuite) TestParallelAddPrimaryKey(c *C) {
 		c.Assert(err2.Error(), Equals, "[schema:1068]Multiple primary key defined")
 	}
 	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
-func (s *testStateChangeSuite) TestParallelAlterAddPartition(c *C) {
-	sql1 := `alter table t_part add partition (
-    partition p2 values less than (30)
-   );`
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2.Error(), Equals, "[ddl:1493]VALUES LESS THAN value must be strictly increasing for each partition")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql1, f)
 }
 
 func (s *testStateChangeSuite) TestParallelDropColumn(c *C) {

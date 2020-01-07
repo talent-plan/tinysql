@@ -356,15 +356,6 @@ func (ts *testSuite) TestTableFromMeta(c *C) {
 	c.Assert(tb, IsNil)
 	c.Assert(err, NotNil)
 
-	tk.MustExec(`create table t_mock (id int) partition by range (id) (partition p0 values less than maxvalue)`)
-	tb, err = ts.dom.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t_mock"))
-	c.Assert(err, IsNil)
-	t := table.MockTableFromMeta(tb.Meta())
-	_, ok := t.(table.PartitionedTable)
-	c.Assert(ok, IsTrue)
-	tk.MustExec("drop table t_mock")
-	c.Assert(t.Type(), Equals, table.NormalTable)
-
 	tk.MustExec("create table t_meta (a int) shard_row_id_bits = 15")
 	tb, err = domain.GetDomain(tk.Se).InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t_meta"))
 	c.Assert(err, IsNil)
