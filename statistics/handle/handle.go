@@ -75,7 +75,6 @@ func (h *Handle) Clear() {
 	h.statsCache.Store(statsCache{tables: make(map[int64]*statistics.Table)})
 	h.mu.ctx.GetSessionVars().InitChunkSize = 1
 	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
-	h.mu.ctx.GetSessionVars().EnableChunkRPC = false
 	h.mu.ctx.GetSessionVars().ProjectionConcurrency = 0
 	h.mu.Unlock()
 }

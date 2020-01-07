@@ -658,7 +658,6 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, TiDBInitChunkSize, strconv.Itoa(DefInitChunkSize)},
 	{ScopeGlobal | ScopeSession, TiDBEnableCascadesPlanner, "0"},
 	{ScopeSession, TiDBEnableStreaming, "0"},
-	{ScopeSession, TiDBEnableChunkRPC, "1"},
 	{ScopeSession, TxnIsolationOneShot, ""},
 	{ScopeGlobal | ScopeSession, TiDBEnableTablePartition, "auto"},
 	{ScopeGlobal | ScopeSession, TiDBHashJoinConcurrency, strconv.Itoa(DefTiDBHashJoinConcurrency)},

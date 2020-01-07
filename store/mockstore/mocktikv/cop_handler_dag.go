@@ -28,14 +28,12 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	mockpkg "github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/timeutil"
@@ -81,7 +79,7 @@ func (h *rpcHandler) handleCopDAGRequest(req *coprocessor.Request) *coprocessor.
 
 	selResp := h.initSelectResponse(err, dagCtx.evalCtx.sc.GetWarnings(), e.Counts())
 	if err == nil {
-		err = h.fillUpData4SelectResponse(selResp, dagReq, dagCtx, rows)
+		err = h.fillUpData4SelectResponse(selResp, dagReq, rows)
 	}
 	// FIXME: some err such as (overflow) will be include in Response.OtherError with calling this buildResp.
 	//  Such err should only be marshal in the data but not in OtherError.
@@ -565,21 +563,16 @@ func (h *rpcHandler) initSelectResponse(err error, warnings []stmtctx.SQLWarn, c
 	return selResp
 }
 
-func (h *rpcHandler) fillUpData4SelectResponse(selResp *tipb.SelectResponse, dagReq *tipb.DAGRequest, dagCtx *dagContext, rows [][][]byte) error {
-	switch dagReq.EncodeType {
-	case tipb.EncodeType_TypeDefault:
-		h.encodeDefault(selResp, rows, dagReq.OutputOffsets)
-	case tipb.EncodeType_TypeChunk:
-		if dagReq.GetChunkMemoryLayout().GetEndian() != distsql.GetSystemEndian() {
-			return errors.Errorf("Mocktikv endian must be the same as TiDB system endian.")
+func (h *rpcHandler) fillUpData4SelectResponse(selResp *tipb.SelectResponse, dagReq *tipb.DAGRequest, rows [][][]byte) error {
+	var chunks []tipb.Chunk
+	for i := range rows {
+		requestedRow := dummySlice
+		for _, ordinal := range dagReq.OutputOffsets {
+			requestedRow = append(requestedRow, rows[i][ordinal]...)
 		}
-		colTypes := h.constructRespSchema(dagCtx)
-		loc := dagCtx.evalCtx.sc.TimeZone
-		err := h.encodeChunk(selResp, rows, colTypes, dagReq.OutputOffsets, loc)
-		if err != nil {
-			return err
-		}
+		chunks = appendRow(chunks, requestedRow, i)
 	}
+	selResp.Chunks = chunks
 	return nil
 }
 
@@ -606,53 +599,6 @@ func (h *rpcHandler) constructRespSchema(dagCtx *dagContext) []*types.FieldType 
 		schema = append(schema, expression.PbTypeToFieldType(agg.GroupBy[i].FieldType))
 	}
 	return schema
-}
-
-func (h *rpcHandler) encodeDefault(selResp *tipb.SelectResponse, rows [][][]byte, colOrdinal []uint32) {
-	var chunks []tipb.Chunk
-	for i := range rows {
-		requestedRow := dummySlice
-		for _, ordinal := range colOrdinal {
-			requestedRow = append(requestedRow, rows[i][ordinal]...)
-		}
-		chunks = appendRow(chunks, requestedRow, i)
-	}
-	selResp.Chunks = chunks
-	selResp.EncodeType = tipb.EncodeType_TypeDefault
-}
-
-func (h *rpcHandler) encodeChunk(selResp *tipb.SelectResponse, rows [][][]byte, colTypes []*types.FieldType, colOrdinal []uint32, loc *time.Location) error {
-	var chunks []tipb.Chunk
-	respColTypes := make([]*types.FieldType, 0, len(colOrdinal))
-	for _, ordinal := range colOrdinal {
-		respColTypes = append(respColTypes, colTypes[ordinal])
-	}
-	chk := chunk.NewChunkWithCapacity(respColTypes, rowsPerChunk)
-	encoder := chunk.NewCodec(respColTypes)
-	decoder := codec.NewDecoder(chk, loc)
-	for i := range rows {
-		for j, ordinal := range colOrdinal {
-			_, err := decoder.DecodeOne(rows[i][ordinal], j, colTypes[ordinal])
-			if err != nil {
-				return err
-			}
-		}
-		if i%rowsPerChunk == rowsPerChunk-1 {
-			chunks = append(chunks, tipb.Chunk{})
-			cur := &chunks[len(chunks)-1]
-			cur.RowsData = append(cur.RowsData, encoder.Encode(chk)...)
-			chk.Reset()
-		}
-	}
-	if chk.NumRows() > 0 {
-		chunks = append(chunks, tipb.Chunk{})
-		cur := &chunks[len(chunks)-1]
-		cur.RowsData = append(cur.RowsData, encoder.Encode(chk)...)
-		chk.Reset()
-	}
-	selResp.Chunks = chunks
-	selResp.EncodeType = tipb.EncodeType_TypeChunk
-	return nil
 }
 
 func buildResp(selResp *tipb.SelectResponse, err error) *coprocessor.Response {

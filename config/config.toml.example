@@ -167,10 +167,3 @@ grpc-keepalive-timeout = 3
 
 # Max time for commit command, must be twice bigger than raft election timeout.
 commit-timeout = "41s"
-
-# Enable chunk encoded data for coprocessor requests.
-enable-chunk-rpc = true
-
-# If a Region has not been accessed for more than the given duration (in seconds), it
-# will be reloaded from the PD.
-region-cache-ttl = 600

@@ -239,11 +239,6 @@ type TiKVClient struct {
 	GrpcKeepAliveTimeout uint `toml:"grpc-keepalive-timeout" json:"grpc-keepalive-timeout"`
 	// CommitTimeout is the max time which command 'commit' will wait.
 	CommitTimeout string `toml:"commit-timeout" json:"commit-timeout"`
-
-	EnableChunkRPC bool `toml:"enable-chunk-rpc" json:"enable-chunk-rpc"`
-	// If a Region has not been accessed for more than the given duration (in seconds), it
-	// will be reloaded from the PD.
-	RegionCacheTTL uint `toml:"region-cache-ttl" json:"region-cache-ttl"`
 }
 
 var defaultConf = Config{
@@ -300,10 +295,6 @@ var defaultConf = Config{
 		GrpcKeepAliveTime:    10,
 		GrpcKeepAliveTimeout: 3,
 		CommitTimeout:        "41s",
-
-		EnableChunkRPC: true,
-
-		RegionCacheTTL: 600,
 	},
 }
 

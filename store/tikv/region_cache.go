@@ -40,7 +40,7 @@ const (
 )
 
 // RegionCacheTTLSec is the max idle time for regions in the region cache.
-var RegionCacheTTLSec int64 = 600
+const RegionCacheTTLSec int64 = 600
 
 const (
 	updated  int32 = iota // region is updated and no need to reload.

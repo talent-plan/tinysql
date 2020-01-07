@@ -347,9 +347,6 @@ type SessionVars struct {
 	// TODO: remove this after tidb-server configuration "enable-streaming' removed.
 	EnableStreaming bool
 
-	// EnableChunkRPC indicates whether the coprocessor request can use chunk API.
-	EnableChunkRPC bool
-
 	writeStmtBufs WriteStmtBufs
 
 	// EnableRadixJoin indicates whether to use radix hash join to execute
@@ -514,14 +511,6 @@ func NewSessionVars() *SessionVars {
 		enableStreaming = "0"
 	}
 	terror.Log(vars.SetSystemVar(TiDBEnableStreaming, enableStreaming))
-
-	var enableChunkRPC string
-	if config.GetGlobalConfig().TiKVClient.EnableChunkRPC {
-		enableChunkRPC = "1"
-	} else {
-		enableChunkRPC = "0"
-	}
-	terror.Log(vars.SetSystemVar(TiDBEnableChunkRPC, enableChunkRPC))
 	return vars
 }
 
@@ -836,8 +825,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.DisableTxnAutoRetry = TiDBOptOn(val)
 	case TiDBEnableStreaming:
 		s.EnableStreaming = TiDBOptOn(val)
-	case TiDBEnableChunkRPC:
-		s.EnableChunkRPC = TiDBOptOn(val)
 	case TiDBEnableCascadesPlanner:
 		s.EnableCascadesPlanner = TiDBOptOn(val)
 	case TiDBEnableTablePartition:

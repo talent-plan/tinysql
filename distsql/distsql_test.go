@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/cznic/mathutil"
@@ -87,7 +86,6 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 
 func (s *testSuite) TestSelectNormal(c *C) {
 	response, colTypes := s.createSelectNormal(1, 2, c, nil)
-	response.Fetch(context.TODO())
 
 	// Test Next.
 	chk := chunk.New(colTypes, 32, 32)
@@ -116,8 +114,6 @@ func (s *testSuite) TestSelectWithRuntimeStats(c *C) {
 			c.Fatal("invalid copPlanIDs")
 		}
 	}
-
-	response.Fetch(context.TODO())
 
 	// Test Next.
 	chk := chunk.New(colTypes, 32, 32)
@@ -178,7 +174,6 @@ func (s *testSuite) createSelectStreaming(batch, totalRows int, c *C) (*streamRe
 
 func (s *testSuite) TestSelectStreaming(c *C) {
 	response, colTypes := s.createSelectStreaming(1, 2, c)
-	response.Fetch(context.TODO())
 
 	// Test Next.
 	chk := chunk.New(colTypes, 32, 32)
@@ -198,7 +193,6 @@ func (s *testSuite) TestSelectStreaming(c *C) {
 
 func (s *testSuite) TestSelectStreamingWithNextRaw(c *C) {
 	response, _ := s.createSelectStreaming(1, 2, c)
-	response.Fetch(context.TODO())
 	data, err := response.NextRaw(context.TODO())
 	c.Assert(err, IsNil)
 	c.Assert(len(data), Equals, 16)
@@ -206,7 +200,6 @@ func (s *testSuite) TestSelectStreamingWithNextRaw(c *C) {
 
 func (s *testSuite) TestSelectStreamingChunkSize(c *C) {
 	response, colTypes := s.createSelectStreaming(100, 1000000, c)
-	response.Fetch(context.TODO())
 	s.testChunkSize(response, colTypes, c)
 	c.Assert(response.Close(), IsNil)
 }
@@ -259,7 +252,6 @@ func (s *testSuite) testChunkSize(response SelectResult, colTypes []*types.Field
 }
 
 func (s *testSuite) TestAnalyze(c *C) {
-	s.sctx.GetSessionVars().EnableChunkRPC = false
 	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
 		SetAnalyzeRequest(&tipb.AnalyzeReq{}).
 		SetKeepOrder(true).
@@ -273,8 +265,6 @@ func (s *testSuite) TestAnalyze(c *C) {
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "analyze")
 
-	response.Fetch(context.TODO())
-
 	bytes, err := response.NextRaw(context.TODO())
 	c.Assert(err, IsNil)
 	c.Assert(len(bytes), Equals, 16)
@@ -284,7 +274,6 @@ func (s *testSuite) TestAnalyze(c *C) {
 }
 
 func (s *testSuite) TestChecksum(c *C) {
-	s.sctx.GetSessionVars().EnableChunkRPC = false
 	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
 		SetChecksumRequest(&tipb.ChecksumRequest{}).
 		Build()
@@ -296,8 +285,6 @@ func (s *testSuite) TestChecksum(c *C) {
 	result, ok := response.(*selectResult)
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "checksum")
-
-	response.Fetch(context.TODO())
 
 	bytes, err := response.NextRaw(context.TODO())
 	c.Assert(err, IsNil)
@@ -338,48 +325,19 @@ func (resp *mockResponse) Next(ctx context.Context) (kv.ResultSubset, error) {
 	resp.count += numRows
 
 	var chunks []tipb.Chunk
-	if !canUseChunkRPC(resp.ctx) {
-		datum := types.NewIntDatum(1)
-		bytes := make([]byte, 0, 100)
-		bytes, _ = codec.EncodeValue(nil, bytes, datum, datum, datum, datum)
-		chunks = make([]tipb.Chunk, numRows)
-		for i := range chunks {
-			chkData := make([]byte, len(bytes))
-			copy(chkData, bytes)
-			chunks[i] = tipb.Chunk{RowsData: chkData}
-		}
-	} else {
-		chunks = make([]tipb.Chunk, 0)
-		for numRows > 0 {
-			rows := mathutil.Min(numRows, 1024)
-			numRows -= rows
-
-			colTypes := make([]*types.FieldType, 4)
-			for i := 0; i < 4; i++ {
-				colTypes[i] = &types.FieldType{Tp: mysql.TypeLonglong}
-			}
-			chk := chunk.New(colTypes, numRows, numRows)
-
-			for rowOrdinal := 0; rowOrdinal < rows; rowOrdinal++ {
-				for colOrdinal := 0; colOrdinal < 4; colOrdinal++ {
-					chk.AppendInt64(colOrdinal, 123)
-				}
-			}
-
-			codec := chunk.NewCodec(colTypes)
-			buffer := codec.Encode(chk)
-			chunks = append(chunks, tipb.Chunk{RowsData: buffer})
-		}
+	datum := types.NewIntDatum(1)
+	bytes := make([]byte, 0, 100)
+	bytes, _ = codec.EncodeValue(nil, bytes, datum, datum, datum, datum)
+	chunks = make([]tipb.Chunk, numRows)
+	for i := range chunks {
+		chkData := make([]byte, len(bytes))
+		copy(chkData, bytes)
+		chunks[i] = tipb.Chunk{RowsData: chkData}
 	}
 
 	respPB := &tipb.SelectResponse{
 		Chunks:       chunks,
 		OutputCounts: []int64{1},
-	}
-	if canUseChunkRPC(resp.ctx) {
-		respPB.EncodeType = tipb.EncodeType_TypeChunk
-	} else {
-		respPB.EncodeType = tipb.EncodeType_TypeDefault
 	}
 	respBytes, err := respPB.Marshal()
 	if err != nil {
@@ -403,88 +361,3 @@ func (r *mockResultSubset) MemSize() int64 { return int64(cap(r.data)) }
 
 // RespTime implements kv.ResultSubset interface.
 func (r *mockResultSubset) RespTime() time.Duration { return 0 }
-
-func createSelectNormal(batch, totalRows int, ctx sessionctx.Context) (*selectResult, []*types.FieldType) {
-	request, _ := (&RequestBuilder{}).SetKeyRanges(nil).
-		SetDAGRequest(&tipb.DAGRequest{}).
-		SetDesc(false).
-		SetKeepOrder(false).
-		SetFromSessionVars(variable.NewSessionVars()).
-		Build()
-
-	/// 4 int64 types.
-	colTypes := []*types.FieldType{
-		{
-			Tp:      mysql.TypeLonglong,
-			Flen:    mysql.MaxIntWidth,
-			Decimal: 0,
-			Flag:    mysql.BinaryFlag,
-			Charset: charset.CharsetBin,
-			Collate: charset.CollationBin,
-		},
-	}
-	colTypes = append(colTypes, colTypes[0])
-	colTypes = append(colTypes, colTypes[0])
-	colTypes = append(colTypes, colTypes[0])
-
-	// Test Next.
-	var response SelectResult
-	response, _ = Select(context.TODO(), ctx, request, colTypes)
-
-	result, _ := response.(*selectResult)
-	resp, _ := result.resp.(*mockResponse)
-	resp.total = totalRows
-	resp.batch = batch
-
-	return result, colTypes
-}
-
-func BenchmarkSelectResponseChunk_BigResponse(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		s := &testSuite{}
-		s.SetUpSuite(nil)
-		s.sctx.GetSessionVars().InitChunkSize = 32
-		s.sctx.GetSessionVars().MaxChunkSize = 1024
-		selectResult, colTypes := createSelectNormal(4000, 20000, s.sctx)
-		selectResult.Fetch(context.TODO())
-		chk := chunk.NewChunkWithCapacity(colTypes, 1024)
-		b.StartTimer()
-		for {
-			err := selectResult.Next(context.TODO(), chk)
-			if err != nil {
-				panic(err)
-			}
-			if chk.NumRows() == 0 {
-				break
-			}
-			chk.Reset()
-		}
-		s.TearDownSuite(nil)
-	}
-}
-
-func BenchmarkSelectResponseChunk_SmallResponse(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		s := &testSuite{}
-		s.SetUpSuite(nil)
-		s.sctx.GetSessionVars().InitChunkSize = 32
-		s.sctx.GetSessionVars().MaxChunkSize = 1024
-		selectResult, colTypes := createSelectNormal(32, 3200, s.sctx)
-		selectResult.Fetch(context.TODO())
-		chk := chunk.NewChunkWithCapacity(colTypes, 1024)
-		b.StartTimer()
-		for {
-			err := selectResult.Next(context.TODO(), chk)
-			if err != nil {
-				panic(err)
-			}
-			if chk.NumRows() == 0 {
-				break
-			}
-			chk.Reset()
-		}
-		s.TearDownSuite(nil)
-	}
-}

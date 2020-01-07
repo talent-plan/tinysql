@@ -40,8 +40,6 @@ type streamResult struct {
 	partialCount int64
 }
 
-func (r *streamResult) Fetch(context.Context) {}
-
 func (r *streamResult) Next(ctx context.Context, chk *chunk.Chunk) error {
 	chk.Reset()
 	for !chk.IsFull() {

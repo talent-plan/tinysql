@@ -266,11 +266,7 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		return err
 	}
 	e.result, err = e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
-	if err != nil {
-		return err
-	}
-	e.result.Fetch(ctx)
-	return nil
+	return err
 }
 
 // IndexLookUpExecutor implements double read for index scan.
@@ -397,7 +393,6 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 	if err != nil {
 		return err
 	}
-	result.Fetch(ctx)
 	worker := &indexWorker{
 		idxLookup:       e,
 		workCh:          workCh,

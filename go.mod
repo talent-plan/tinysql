@@ -17,7 +17,6 @@ require (
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v1.6.2
 	github.com/gorilla/websocket v1.4.0 // indirect
-	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/montanaflynn/stats v0.0.0-20180911141734-db72e6cae808 // indirect
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7

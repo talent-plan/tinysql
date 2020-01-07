@@ -378,7 +378,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 	case TiDBSkipUTF8Check, TiDBOptAggPushDown, TiDBOptInSubqToJoinAndAgg,
-		TiDBBatchInsert, TiDBDisableTxnAutoRetry, TiDBEnableStreaming, TiDBEnableChunkRPC,
+		TiDBBatchInsert, TiDBDisableTxnAutoRetry, TiDBEnableStreaming,
 		TiDBBatchDelete, TiDBBatchCommit, TiDBEnableCascadesPlanner,
 		TiDBCheckMb4ValueInUTF8, TiDBLowResolutionTSO, TiDBEnableNoopFuncs,
 		TiDBScatterRegion, TiDBGeneralLog, TiDBConstraintCheckInPlace, TiDBEnableVectorizedExpression:

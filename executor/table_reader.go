@@ -192,12 +192,7 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 		return nil, err
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
-	result, err := e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
-	if err != nil {
-		return nil, err
-	}
-	result.Fetch(ctx)
-	return result, nil
+	return e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order

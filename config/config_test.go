@@ -149,7 +149,6 @@ func (s *testConfigSuite) TestConfig(c *C) {
 	conf := new(Config)
 	conf.Performance.TxnTotalSizeLimit = 1000
 	conf.TiKVClient.CommitTimeout = "10s"
-	conf.TiKVClient.RegionCacheTTL = 600
 	configFile := "config.toml"
 	_, localFile, _, _ := runtime.Caller(0)
 	configFile = filepath.Join(filepath.Dir(localFile), configFile)
@@ -179,7 +178,6 @@ server-version = "test_version"
 txn-total-size-limit=2000
 [tikv-client]
 commit-timeout="41s"
-region-cache-ttl=6000
 `)
 
 	c.Assert(err, IsNil)
@@ -195,7 +193,6 @@ region-cache-ttl=6000
 	c.Assert(conf.AlterPrimaryKey, Equals, true)
 
 	c.Assert(conf.TiKVClient.CommitTimeout, Equals, "41s")
-	c.Assert(conf.TiKVClient.RegionCacheTTL, Equals, uint(6000))
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.EnableBatchDML, Equals, true)

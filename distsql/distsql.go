@@ -16,15 +16,12 @@ package distsql
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tipb/go-tipb"
 )
 
 // Select sends a DAG request, returns SelectResult.
@@ -63,17 +60,12 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 			ctx:        sctx,
 		}, nil
 	}
-	encodetype := tipb.EncodeType_TypeDefault
-	if canUseChunkRPC(sctx) {
-		encodetype = tipb.EncodeType_TypeChunk
-	}
 	return &selectResult{
 		label:      "dag",
 		resp:       resp,
 		rowLen:     len(fieldTypes),
 		fieldTypes: fieldTypes,
 		ctx:        sctx,
-		encodeType: encodetype,
 	}, nil
 }
 
@@ -104,9 +96,8 @@ func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.
 
 	}
 	result := &selectResult{
-		label:      "analyze",
-		resp:       resp,
-		encodeType: tipb.EncodeType_TypeDefault,
+		label: "analyze",
+		resp:  resp,
 	}
 	return result, nil
 }
@@ -118,68 +109,8 @@ func Checksum(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv
 		return nil, errors.New("client returns nil response")
 	}
 	result := &selectResult{
-		label:      "checksum",
-		resp:       resp,
-		encodeType: tipb.EncodeType_TypeDefault,
+		label: "checksum",
+		resp:  resp,
 	}
 	return result, nil
-}
-
-// SetEncodeType sets the encoding method for the DAGRequest. The supported encoding
-// methods are:
-// 1. TypeChunk: the result is encoded using the Chunk format, refer util/chunk/chunk.go
-// 2. TypeDefault: the result is encoded row by row
-func SetEncodeType(ctx sessionctx.Context, dagReq *tipb.DAGRequest) {
-	if canUseChunkRPC(ctx) {
-		dagReq.EncodeType = tipb.EncodeType_TypeChunk
-		setChunkMemoryLayout(dagReq)
-	} else {
-		dagReq.EncodeType = tipb.EncodeType_TypeDefault
-	}
-}
-
-func canUseChunkRPC(ctx sessionctx.Context) bool {
-	if !ctx.GetSessionVars().EnableChunkRPC {
-		return false
-	}
-	if ctx.GetSessionVars().EnableStreaming {
-		return false
-	}
-	if !checkAlignment() {
-		return false
-	}
-	return true
-}
-
-var supportedAlignment = !(unsafe.Sizeof(types.MysqlTime{}) != 16 ||
-	unsafe.Sizeof(types.Time{}) != 20 ||
-	unsafe.Sizeof(types.MyDecimal{}) != 40)
-
-// checkAlignment checks the alignment in current system environment.
-// The alignment is influenced by system, machine and Golang version.
-// Using this function can guarantee the alignment is we want.
-func checkAlignment() bool {
-	return supportedAlignment
-}
-
-var systemEndian tipb.Endian
-
-// setChunkMemoryLayout sets the chunk memory layout for the DAGRequest.
-func setChunkMemoryLayout(dagReq *tipb.DAGRequest) {
-	dagReq.ChunkMemoryLayout = &tipb.ChunkMemoryLayout{Endian: GetSystemEndian()}
-}
-
-// GetSystemEndian gets the system endian.
-func GetSystemEndian() tipb.Endian {
-	return systemEndian
-}
-
-func init() {
-	var i int = 0x0100
-	ptr := unsafe.Pointer(&i)
-	if 0x01 == *(*byte)(ptr) {
-		systemEndian = tipb.Endian_BigEndian
-	} else {
-		systemEndian = tipb.Endian_LittleEndian
-	}
 }
