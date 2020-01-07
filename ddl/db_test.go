@@ -844,65 +844,9 @@ func (s *testDBSuite1) TestAddPrimaryKey1(c *C) {
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, unique key(c1))", "primary")
 }
 
-func (s *testDBSuite2) TestAddPrimaryKey2(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
-			      partition by range (c3) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than (204800),
-			      partition p4 values less than maxvalue)`, "primary")
-}
-
-func (s *testDBSuite3) TestAddPrimaryKey3(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
-			      partition by hash (c3) partitions 4;`, "primary")
-}
-
-func (s *testDBSuite4) TestAddPrimaryKey4(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, key(c1))
-			      partition by range columns (c3) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than (204800),
-			      partition p4 values less than maxvalue)`, "primary")
-}
-
 func (s *testDBSuite1) TestAddIndex1(c *C) {
 	testAddIndex(c, s.store, s.lease, false,
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))", "")
-}
-
-func (s *testDBSuite2) TestAddIndex2(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
-			      partition by range (c1) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than (204800),
-			      partition p4 values less than maxvalue)`, "")
-}
-
-func (s *testDBSuite3) TestAddIndex3(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
-			      partition by hash (c1) partitions 4;`, "")
-}
-
-func (s *testDBSuite4) TestAddIndex4(c *C) {
-	testAddIndex(c, s.store, s.lease, true,
-		`create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))
-			      partition by range columns (c1) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than (204800),
-			      partition p4 values less than maxvalue)`, "")
 }
 
 func testAddIndex(c *C, store kv.Storage, lease time.Duration, testPartition bool, createTableSQL, idxTp string) {
@@ -1059,94 +1003,6 @@ LOOP:
 	}
 	c.Assert(handles, HasLen, 0)
 	tk.MustExec("drop table test_add_index")
-}
-
-// TestCancelAddTableAndDropTablePartition tests cancel ddl job which type is add/drop table partition.
-func (s *testDBSuite1) TestCancelAddTableAndDropTablePartition(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.mustExec(c, "create database if not exists test_partition_table")
-	s.mustExec(c, "use test_partition_table")
-	s.mustExec(c, "drop table if exists t_part")
-	s.mustExec(c, `create table t_part (a int key)
-		partition by range(a) (
-		partition p0 values less than (10),
-		partition p1 values less than (20)
-	);`)
-	defer s.mustExec(c, "drop table t_part;")
-	for i := 0; i < 10; i++ {
-		s.mustExec(c, "insert into t_part values (?)", i)
-	}
-
-	testCases := []struct {
-		action         model.ActionType
-		jobState       model.JobState
-		JobSchemaState model.SchemaState
-		cancelSucc     bool
-	}{
-		{model.ActionAddTablePartition, model.JobStateNone, model.StateNone, true},
-		{model.ActionDropTablePartition, model.JobStateNone, model.StateNone, true},
-		{model.ActionAddTablePartition, model.JobStateRunning, model.StatePublic, false},
-		{model.ActionDropTablePartition, model.JobStateRunning, model.StatePublic, false},
-	}
-	var checkErr error
-	hook := &ddl.TestDDLCallback{}
-	testCase := &testCases[0]
-	var jobID int64
-	hook.OnJobRunBeforeExported = func(job *model.Job) {
-		if job.Type == testCase.action && job.State == testCase.jobState && job.SchemaState == testCase.JobSchemaState {
-			jobIDs := []int64{job.ID}
-			jobID = job.ID
-			hookCtx := mock.NewContext()
-			hookCtx.Store = s.store
-			err := hookCtx.NewTxn(context.Background())
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			txn, err := hookCtx.Txn(true)
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			errs, err := admin.CancelJobs(txn, jobIDs)
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			if errs[0] != nil {
-				checkErr = errors.Trace(errs[0])
-				return
-			}
-			checkErr = txn.Commit(context.Background())
-		}
-		var err error
-		sql := ""
-		for i := range testCases {
-			testCase = &testCases[i]
-			if testCase.action == model.ActionAddTablePartition {
-				sql = `alter table t_part add partition (
-				partition p2 values less than (30)
-				);`
-			} else if testCase.action == model.ActionDropTablePartition {
-				sql = "alter table t_part drop partition p1;"
-			}
-			_, err = s.tk.Exec(sql)
-			if testCase.cancelSucc {
-				c.Assert(checkErr, IsNil)
-				c.Assert(err, NotNil)
-				c.Assert(err.Error(), Equals, "[ddl:12]cancelled DDL job")
-				s.mustExec(c, "insert into t_part values (?)", i)
-			} else {
-				c.Assert(err, IsNil)
-				c.Assert(checkErr, NotNil)
-				c.Assert(checkErr.Error(), Equals, admin.ErrCannotCancelDDLJob.GenWithStackByArgs(jobID).Error())
-				_, err = s.tk.Exec("insert into t_part values (?)", i)
-				c.Assert(err, NotNil)
-			}
-		}
-	}
-	originalHook := s.dom.DDL().GetHook()
-	s.dom.DDL().(ddl.DDLForTest).SetHook(originalHook)
 }
 
 func (s *testDBSuite1) TestDropPrimaryKey(c *C) {
@@ -1743,13 +1599,6 @@ func (s *testDBSuite2) TestDropColumn(c *C) {
 			c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
 		}
 	}
-
-	// Test for drop partition table column.
-	s.tk.MustExec("drop table if exists t1")
-	s.tk.MustExec("create table t1 (a int,b int) partition by hash(a) partitions 4;")
-	_, err := s.tk.Exec("alter table t1 drop column a")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[expression:1054]Unknown column 'a' in 'expression'")
 
 	s.tk.MustExec("drop database drop_col_db")
 }
@@ -3049,16 +2898,6 @@ func (s *testDBSuite4) TestIfNotExists(c *C) {
 	s.mustExec(c, "create index if not exists idx_b on t1 (b)")
 	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1061|index already exist idx_b"))
-
-	// ADD PARTITION
-	s.mustExec(c, "drop table if exists t2")
-	s.mustExec(c, "create table t2 (a int key) partition by range(a) (partition p0 values less than (10), partition p1 values less than (20))")
-	sql = "alter table t2 add partition (partition p2 values less than (30))"
-	s.mustExec(c, sql)
-	s.tk.MustGetErrCode(sql, mysql.ErrSameNamePartition)
-	s.mustExec(c, "alter table t2 add partition if not exists (partition p2 values less than (30))")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1517|Duplicate partition name p2"))
 }
 
 func (s *testDBSuite4) TestIfExists(c *C) {
@@ -3099,16 +2938,6 @@ func (s *testDBSuite4) TestIfExists(c *C) {
 	s.mustExec(c, "alter table t1 drop index if exists idx_c")
 	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1091|index idx_c doesn't exist"))
-
-	// DROP PARTITION
-	s.mustExec(c, "drop table if exists t2")
-	s.mustExec(c, "create table t2 (a int key) partition by range(a) (partition p0 values less than (10), partition p1 values less than (20))")
-	sql = "alter table t2 drop partition p1"
-	s.mustExec(c, sql)
-	s.tk.MustGetErrCode(sql, mysql.ErrDropPartitionNonExistent)
-	s.mustExec(c, "alter table t2 drop partition if exists p1")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1507|Error in list of partitions to p1"))
 }
 
 func (s *testDBSuite5) TestAddIndexForGeneratedColumn(c *C) {
@@ -3283,26 +3112,6 @@ func (s *testDBSuite5) TestDefaultSQLFunction(c *C) {
 	tk.MustExec("drop table t1, t2, t3, t4;")
 }
 
-func (s *testDBSuite4) TestIssue9100(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test_db")
-	tk.MustExec("create table employ (a int, b int) partition by range (b) (partition p0 values less than (1));")
-	_, err := tk.Exec("alter table employ add unique index p_a (a);")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A UNIQUE INDEX must include all columns in the table's partitioning function")
-	_, err = tk.Exec("alter table employ add primary key p_a (a);")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A PRIMARY must include all columns in the table's partitioning function")
-
-	tk.MustExec("create table issue9100t1 (col1 int not null, col2 date not null, col3 int not null, unique key (col1, col2)) partition by range( col1 ) (partition p1 values less than (11))")
-	tk.MustExec("alter table issue9100t1 add unique index p_col1 (col1)")
-	tk.MustExec("alter table issue9100t1 add primary key p_col1 (col1)")
-
-	tk.MustExec("create table issue9100t2 (col1 int not null, col2 date not null, col3 int not null, unique key (col1, col3)) partition by range( col1 + col3 ) (partition p1 values less than (11))")
-	_, err = tk.Exec("alter table issue9100t2 add unique index p_col1 (col1)")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A UNIQUE INDEX must include all columns in the table's partitioning function")
-	_, err = tk.Exec("alter table issue9100t2 add primary key p_col1 (col1)")
-	c.Assert(err.Error(), Equals, "[ddl:1503]A PRIMARY must include all columns in the table's partitioning function")
-}
-
 func (s *testDBSuite1) TestModifyColumnCharset(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test_db")
@@ -3441,20 +3250,6 @@ func (s *testDBSuite2) TestDDLWithInvalidTableInfo(c *C) {
 	);`)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 4 column 88 near \"then (c1 / c0) end))\n\t);\" ")
-
-	tk.MustExec("create table t (a bigint, b int, c int generated always as (b+1)) partition by hash(a) partitions 4;")
-	// Test drop partition column.
-	_, err = tk.Exec("alter table t drop column a;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[expression:1054]Unknown column 'a' in 'expression'")
-	// Test modify column with invalid expression.
-	_, err = tk.Exec("alter table t modify column c int GENERATED ALWAYS AS ((case when (a = 0) then 0when (a > 0) then (b / a) end));")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 97 near \"then (b / a) end));\" ")
-	// Test add column with invalid expression.
-	_, err = tk.Exec("alter table t add column d int GENERATED ALWAYS AS ((case when (a = 0) then 0when (a > 0) then (b / a) end));")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 94 near \"then (b / a) end));\" ")
 }
 
 func init() {

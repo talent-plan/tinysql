@@ -1463,12 +1463,7 @@ func (s *testIntegrationSuite3) TestAlterAlgorithm(c *C) {
 	a int,
 	b varchar(100),
 	c int,
-	INDEX idx_c(c)) PARTITION BY RANGE ( a ) (
-	PARTITION p0 VALUES LESS THAN (6),
-		PARTITION p1 VALUES LESS THAN (11),
-		PARTITION p2 VALUES LESS THAN (16),
-		PARTITION p3 VALUES LESS THAN (21)
-	)`)
+	INDEX idx_c(c))`)
 	s.assertAlterErrorExec(c, "alter table t modify column a bigint, ALGORITHM=INPLACE;")
 	s.tk.MustExec("alter table t modify column a bigint, ALGORITHM=INPLACE, ALGORITHM=INSTANT;")
 	s.tk.MustExec("alter table t modify column a bigint, ALGORITHM=DEFAULT;")
@@ -1494,19 +1489,6 @@ func (s *testIntegrationSuite3) TestAlterAlgorithm(c *C) {
 	s.tk.MustExec("alter table t rename index idx_c1 to idx_c, ALGORITHM=INSTANT")
 	s.tk.MustExec("alter table t rename index idx_c to idx_c1, ALGORITHM=DEFAULT")
 
-	// partition.
-	s.assertAlterWarnExec(c, "alter table t ALGORITHM=COPY, truncate partition p1")
-	s.assertAlterErrorExec(c, "alter table t ALGORITHM=INPLACE, truncate partition p2")
-	s.tk.MustExec("alter table t ALGORITHM=INSTANT, truncate partition p3")
-
-	s.assertAlterWarnExec(c, "alter table t add partition (partition p4 values less than (2002)), ALGORITHM=COPY")
-	s.assertAlterErrorExec(c, "alter table t add partition (partition p5 values less than (3002)), ALGORITHM=INPLACE")
-	s.tk.MustExec("alter table t add partition (partition p6 values less than (4002)), ALGORITHM=INSTANT")
-
-	s.assertAlterWarnExec(c, "alter table t ALGORITHM=COPY, drop partition p4")
-	s.assertAlterErrorExec(c, "alter table t ALGORITHM=INPLACE, drop partition p5")
-	s.tk.MustExec("alter table t ALGORITHM=INSTANT, drop partition p6")
-
 	// Table options
 	s.assertAlterWarnExec(c, "alter table t comment = 'test', ALGORITHM=COPY")
 	s.assertAlterErrorExec(c, "alter table t comment = 'test', ALGORITHM=INPLACE")
@@ -1515,34 +1497,6 @@ func (s *testIntegrationSuite3) TestAlterAlgorithm(c *C) {
 	s.assertAlterWarnExec(c, "alter table t default charset = utf8mb4, ALGORITHM=COPY")
 	s.assertAlterErrorExec(c, "alter table t default charset = utf8mb4, ALGORITHM=INPLACE")
 	s.tk.MustExec("alter table t default charset = utf8mb4, ALGORITHM=INSTANT")
-}
-
-func (s *testIntegrationSuite3) TestAlterTableAddUniqueOnPartionRangeColumn(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test")
-	s.tk.MustExec("drop table if exists t")
-	defer s.tk.MustExec("drop table if exists t")
-
-	s.tk.MustExec(`create table t(
-	a int,
-	b varchar(100),
-	c int,
-	INDEX idx_c(c))
-	PARTITION BY RANGE COLUMNS( a ) (
-		PARTITION p0 VALUES LESS THAN (6),
-		PARTITION p1 VALUES LESS THAN (11),
-		PARTITION p2 VALUES LESS THAN (16),
-		PARTITION p3 VALUES LESS THAN (21)
-	)`)
-	s.tk.MustExec("insert into t values (4, 'xxx', 4)")
-	s.tk.MustExec("insert into t values (4, 'xxx', 9)") // Note the repeated 4
-	s.tk.MustExec("insert into t values (17, 'xxx', 12)")
-	s.tk.MustGetErrCode("alter table t add unique index idx_a(a)", mysql.ErrDupEntry)
-
-	s.tk.MustExec("delete from t where a = 4")
-	s.tk.MustExec("alter table t add unique index idx_a(a)")
-	s.tk.MustExec("alter table t add unique index idx_ac(a, c)")
-	s.tk.MustGetErrCode("alter table t add unique index idx_b(b)", mysql.ErrUniqueKeyNeedAllFieldsInPf)
 }
 
 func (s *testIntegrationSuite5) TestFulltextIndexIgnore(c *C) {

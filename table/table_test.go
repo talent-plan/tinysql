@@ -44,7 +44,5 @@ func (t *testTableSuite) TestErrorCode(c *C) {
 	c.Assert(int(ErrIndexStateCantNone.ToSQLError().Code), Equals, mysql.ErrIndexStateCantNone)
 	c.Assert(int(ErrInvalidRecordKey.ToSQLError().Code), Equals, mysql.ErrInvalidRecordKey)
 	c.Assert(int(ErrTruncatedWrongValueForField.ToSQLError().Code), Equals, mysql.ErrTruncatedWrongValueForField)
-	c.Assert(int(ErrUnknownPartition.ToSQLError().Code), Equals, mysql.ErrUnknownPartition)
-	c.Assert(int(ErrNoPartitionForGivenValue.ToSQLError().Code), Equals, mysql.ErrNoPartitionForGivenValue)
 	c.Assert(int(ErrLockOrActiveTransaction.ToSQLError().Code), Equals, mysql.ErrLockOrActiveTransaction)
 }

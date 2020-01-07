@@ -18,7 +18,6 @@
 package ddl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -45,7 +44,6 @@ import (
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/set"
@@ -1317,27 +1315,6 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 	tbInfo.Collate = tableCollate
 	tbInfo.Charset = tableCharset
 
-	pi, err := buildTablePartitionInfo(ctx, d, s)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if pi != nil {
-		switch pi.Type {
-		case model.PartitionTypeRange:
-			err = checkPartitionByRange(ctx, tbInfo, pi, cols, s)
-		case model.PartitionTypeHash:
-			err = checkPartitionByHash(ctx, pi, s, cols, tbInfo)
-		}
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err = checkRangePartitioningKeysConstraints(ctx, s, tbInfo, newConstraints); err != nil {
-			return nil, errors.Trace(err)
-		}
-		tbInfo.Partition = pi
-	}
-
 	if err = handleTableOptions(s.Options, tbInfo); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1554,160 +1531,6 @@ func buildViewInfo(ctx sessionctx.Context, s *ast.CreateViewStmt) (*model.ViewIn
 		Security: s.Security, SelectStmt: sb.String(), CheckOption: s.CheckOption, Cols: nil}, nil
 }
 
-func checkPartitionByHash(ctx sessionctx.Context, pi *model.PartitionInfo, s *ast.CreateTableStmt, cols []*table.Column, tbInfo *model.TableInfo) error {
-	if err := checkAddPartitionTooManyPartitions(pi.Num); err != nil {
-		return err
-	}
-	if err := checkNoHashPartitions(ctx, pi.Num); err != nil {
-		return err
-	}
-	if err := checkPartitionFuncValid(ctx, tbInfo, s.Partition.Expr); err != nil {
-		return err
-	}
-	return checkPartitionFuncType(ctx, s, cols, tbInfo)
-}
-
-func checkPartitionByRange(ctx sessionctx.Context, tbInfo *model.TableInfo, pi *model.PartitionInfo, cols []*table.Column, s *ast.CreateTableStmt) error {
-	if err := checkPartitionNameUnique(pi); err != nil {
-		return err
-	}
-
-	if err := checkAddPartitionTooManyPartitions(uint64(len(pi.Definitions))); err != nil {
-		return err
-	}
-
-	if err := checkNoRangePartitions(len(pi.Definitions)); err != nil {
-		return err
-	}
-
-	if len(pi.Columns) == 0 {
-		if err := checkCreatePartitionValue(ctx, tbInfo, pi, cols); err != nil {
-			return err
-		}
-
-		// s maybe nil when add partition.
-		if s == nil {
-			return nil
-		}
-
-		if err := checkPartitionFuncValid(ctx, tbInfo, s.Partition.Expr); err != nil {
-			return err
-		}
-		return checkPartitionFuncType(ctx, s, cols, tbInfo)
-	}
-
-	// Check for range columns partition.
-	if err := checkRangeColumnsPartitionType(tbInfo, pi.Columns); err != nil {
-		return err
-	}
-
-	if s != nil {
-		for _, def := range s.Partition.Definitions {
-			exprs := def.Clause.(*ast.PartitionDefinitionClauseLessThan).Exprs
-			if err := checkRangeColumnsTypeAndValuesMatch(ctx, tbInfo, pi.Columns, exprs); err != nil {
-				return err
-			}
-		}
-	}
-
-	return checkRangeColumnsPartitionValue(ctx, tbInfo, pi)
-}
-
-func checkRangeColumnsPartitionType(tbInfo *model.TableInfo, columns []model.CIStr) error {
-	for _, col := range columns {
-		colInfo := getColumnInfoByName(tbInfo, col.L)
-		if colInfo == nil {
-			return errors.Trace(ErrFieldNotFoundPart)
-		}
-		// The permitted data types are shown in the following list:
-		// All integer types
-		// DATE and DATETIME
-		// CHAR, VARCHAR, BINARY, and VARBINARY
-		// See https://dev.mysql.com/doc/mysql-partitioning-excerpt/5.7/en/partitioning-columns.html
-		switch colInfo.FieldType.Tp {
-		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
-		case mysql.TypeDate, mysql.TypeDatetime:
-		case mysql.TypeVarchar, mysql.TypeString:
-		default:
-			return ErrNotAllowedTypeInPartition.GenWithStackByArgs(col.O)
-		}
-	}
-	return nil
-}
-
-func checkRangeColumnsPartitionValue(ctx sessionctx.Context, tbInfo *model.TableInfo, pi *model.PartitionInfo) error {
-	// Range columns partition key supports multiple data types with integer、datetime、string.
-	defs := pi.Definitions
-	if len(defs) < 1 {
-		return ast.ErrPartitionsMustBeDefined.GenWithStackByArgs("RANGE")
-	}
-
-	curr := &defs[0]
-	if len(curr.LessThan) != len(pi.Columns) {
-		return errors.Trace(ast.ErrPartitionColumnList)
-	}
-	var prev *model.PartitionDefinition
-	for i := 1; i < len(defs); i++ {
-		prev, curr = curr, &defs[i]
-		succ, err := checkTwoRangeColumns(ctx, curr, prev, pi, tbInfo)
-		if err != nil {
-			return err
-		}
-		if !succ {
-			return errors.Trace(ErrRangeNotIncreasing)
-		}
-	}
-	return nil
-}
-
-func checkTwoRangeColumns(ctx sessionctx.Context, curr, prev *model.PartitionDefinition, pi *model.PartitionInfo, tbInfo *model.TableInfo) (bool, error) {
-	if len(curr.LessThan) != len(pi.Columns) {
-		return false, errors.Trace(ast.ErrPartitionColumnList)
-	}
-	for i := 0; i < len(pi.Columns); i++ {
-		// Special handling for MAXVALUE.
-		if strings.EqualFold(curr.LessThan[i], partitionMaxValue) {
-			// If current is maxvalue, it certainly >= previous.
-			return true, nil
-		}
-		if strings.EqualFold(prev.LessThan[i], partitionMaxValue) {
-			// Current is not maxvalue, and previous is maxvalue.
-			return false, nil
-		}
-
-		// Current and previous is the same.
-		if strings.EqualFold(curr.LessThan[i], prev.LessThan[i]) {
-			continue
-		}
-
-		// The tuples of column values used to define the partitions are strictly increasing:
-		// PARTITION p0 VALUES LESS THAN (5,10,'ggg')
-		// PARTITION p1 VALUES LESS THAN (10,20,'mmm')
-		// PARTITION p2 VALUES LESS THAN (15,30,'sss')
-		succ, err := parseAndEvalBoolExpr(ctx, fmt.Sprintf("(%s) > (%s)", curr.LessThan[i], prev.LessThan[i]), tbInfo)
-		if err != nil {
-			return false, err
-		}
-
-		if succ {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func parseAndEvalBoolExpr(ctx sessionctx.Context, expr string, tbInfo *model.TableInfo) (bool, error) {
-	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, tbInfo)
-	if err != nil {
-		return false, err
-	}
-	res, _, err1 := e.EvalInt(ctx, chunk.Row{})
-	if err1 != nil {
-		return false, err1
-	}
-	return res > 0, nil
-}
-
 func checkCharsetAndCollation(cs string, co string) error {
 	if !charset.ValidCharsetAndCollation(cs, co) {
 		return ErrUnknownCharacterSet.GenWithStackByArgs(cs)
@@ -1881,10 +1704,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 				return errRunMultiSchemaChanges
 			}
 			err = d.AddColumn(ctx, ident, spec)
-		case ast.AlterTableAddPartitions:
-			err = d.AddTablePartitions(ctx, ident, spec)
-		case ast.AlterTableCoalescePartitions:
-			err = d.CoalescePartitions(ctx, ident, spec)
 		case ast.AlterTableDropColumn:
 			err = d.DropColumn(ctx, ident, spec)
 		case ast.AlterTableDropIndex:
@@ -1893,10 +1712,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 			err = d.dropIndex(ctx, ident, true, model.NewCIStr(mysql.PrimaryKeyName), spec.IfExists)
 		case ast.AlterTableRenameIndex:
 			err = d.RenameIndex(ctx, ident, spec)
-		case ast.AlterTableDropPartition:
-			err = d.DropTablePartition(ctx, ident, spec)
-		case ast.AlterTableTruncatePartition:
-			err = d.TruncateTablePartition(ctx, ident, spec)
 		case ast.AlterTableAddConstraint:
 			constr := spec.Constraint
 			switch spec.Constraint.Tp {
@@ -2161,187 +1976,6 @@ func (d *ddl) AddColumn(ctx sessionctx.Context, ti ast.Ident, spec *ast.AlterTab
 	if infoschema.ErrColumnExists.Equal(err) && spec.IfNotExists {
 		ctx.GetSessionVars().StmtCtx.AppendNote(err)
 		return nil
-	}
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-// AddTablePartitions will add a new partition to the table.
-func (d *ddl) AddTablePartitions(ctx sessionctx.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return errors.Trace(infoschema.ErrDatabaseNotExists.GenWithStackByArgs(schema))
-	}
-	t, err := is.TableByName(ident.Schema, ident.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ident.Schema, ident.Name))
-	}
-
-	meta := t.Meta()
-	pi := meta.GetPartitionInfo()
-	if pi == nil {
-		return errors.Trace(ErrPartitionMgmtOnNonpartitioned)
-	}
-
-	partInfo, err := buildPartitionInfo(ctx, meta, d, spec)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// partInfo contains only the new added partition, we have to combine it with the
-	// old partitions to check all partitions is strictly increasing.
-	tmp := *partInfo
-	tmp.Definitions = append(pi.Definitions, tmp.Definitions...)
-	err = checkPartitionByRange(ctx, meta, &tmp, t.Cols(), nil)
-	if err != nil {
-		if ErrSameNamePartition.Equal(err) && spec.IfNotExists {
-			ctx.GetSessionVars().StmtCtx.AppendNote(err)
-			return nil
-		}
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    meta.ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionAddTablePartition,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{partInfo},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	if ErrSameNamePartition.Equal(err) && spec.IfNotExists {
-		ctx.GetSessionVars().StmtCtx.AppendNote(err)
-		return nil
-	}
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-// CoalescePartitions coalesce partitions can be used with a table that is partitioned by hash or key to reduce the number of partitions by number.
-func (d *ddl) CoalescePartitions(ctx sessionctx.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return errors.Trace(infoschema.ErrDatabaseNotExists.GenWithStackByArgs(schema))
-	}
-	t, err := is.TableByName(ident.Schema, ident.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ident.Schema, ident.Name))
-	}
-
-	meta := t.Meta()
-	if meta.GetPartitionInfo() == nil {
-		return errors.Trace(ErrPartitionMgmtOnNonpartitioned)
-	}
-
-	switch meta.Partition.Type {
-	// We don't support coalesce partitions hash type partition now.
-	case model.PartitionTypeHash:
-		return errors.Trace(ErrUnsupportedCoalescePartition)
-
-	// Key type partition cannot be constructed currently, ignoring it for now.
-	case model.PartitionTypeKey:
-
-	// Coalesce partition can only be used on hash/key partitions.
-	default:
-		return errors.Trace(ErrCoalesceOnlyOnHashPartition)
-	}
-
-	return errors.Trace(err)
-}
-
-func (d *ddl) TruncateTablePartition(ctx sessionctx.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	// TODO: Support truncate multiple partitions
-	if len(spec.PartitionNames) != 1 {
-		return errRunMultiSchemaChanges
-	}
-
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return errors.Trace(infoschema.ErrDatabaseNotExists.GenWithStackByArgs(schema))
-	}
-	t, err := is.TableByName(ident.Schema, ident.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ident.Schema, ident.Name))
-	}
-	meta := t.Meta()
-	if meta.GetPartitionInfo() == nil {
-		return errors.Trace(ErrPartitionMgmtOnNonpartitioned)
-	}
-
-	var pid int64
-	pid, err = tables.FindPartitionByName(meta, spec.PartitionNames[0].L)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    meta.ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionTruncateTablePartition,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{pid},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-func (d *ddl) DropTablePartition(ctx sessionctx.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	// TODO: Support drop multiple partitions
-	if len(spec.PartitionNames) != 1 {
-		return errRunMultiSchemaChanges
-	}
-
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return errors.Trace(infoschema.ErrDatabaseNotExists.GenWithStackByArgs(schema))
-	}
-	t, err := is.TableByName(ident.Schema, ident.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ident.Schema, ident.Name))
-	}
-	meta := t.Meta()
-	if meta.GetPartitionInfo() == nil {
-		return errors.Trace(ErrPartitionMgmtOnNonpartitioned)
-	}
-
-	partName := spec.PartitionNames[0].L
-	err = checkDropTablePartition(meta, partName)
-	if err != nil {
-		if ErrDropPartitionNonExistent.Equal(err) && spec.IfExists {
-			ctx.GetSessionVars().StmtCtx.AppendNote(err)
-			return nil
-		}
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    meta.ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionDropTablePartition,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{partName},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	if err != nil {
-		if ErrDropPartitionNonExistent.Equal(err) && spec.IfExists {
-			ctx.GetSessionVars().StmtCtx.AppendNote(err)
-			return nil
-		}
-		return errors.Trace(err)
 	}
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
@@ -3292,12 +2926,6 @@ func (d *ddl) CreatePrimaryKey(ctx sessionctx.Context, ti ast.Ident, indexName m
 		return err
 	}
 
-	if tblInfo.GetPartitionInfo() != nil {
-		if err := checkPartitionKeysConstraint(tblInfo.GetPartitionInfo(), idxColNames, tblInfo, true); err != nil {
-			return err
-		}
-	}
-
 	// May be truncate comment here, when index comment too long and sql_mode is't strict.
 	if _, err = validateCommentLength(ctx.GetSessionVars(), indexName.String(), indexOption); err != nil {
 		return errors.Trace(err)
@@ -3360,11 +2988,6 @@ func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast.Inde
 	_, err = buildIndexColumns(tblInfo.Columns, idxColNames)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	if unique && tblInfo.GetPartitionInfo() != nil {
-		if err := checkPartitionKeysConstraint(tblInfo.GetPartitionInfo(), idxColNames, tblInfo, false); err != nil {
-			return err
-		}
 	}
 	// May be truncate comment here, when index comment too long and sql_mode is't strict.
 	if _, err = validateCommentLength(ctx.GetSessionVars(), indexName.String(), indexOption); err != nil {
@@ -3630,92 +3253,6 @@ func validateCommentLength(vars *variable.SessionVars, indexName string, indexOp
 		indexOption.Comment = indexOption.Comment[:maxLen]
 	}
 	return indexOption.Comment, nil
-}
-
-func buildPartitionInfo(ctx sessionctx.Context, meta *model.TableInfo, d *ddl, spec *ast.AlterTableSpec) (*model.PartitionInfo, error) {
-	if meta.Partition.Type == model.PartitionTypeRange {
-		if len(spec.PartDefinitions) == 0 {
-			return nil, ast.ErrPartitionsMustBeDefined.GenWithStackByArgs(meta.Partition.Type)
-		}
-	} else {
-		// we don't support ADD PARTITION for all other partition types yet.
-		return nil, errors.Trace(ErrUnsupportedAddPartition)
-	}
-
-	part := &model.PartitionInfo{
-		Type:    meta.Partition.Type,
-		Expr:    meta.Partition.Expr,
-		Columns: meta.Partition.Columns,
-		Enable:  meta.Partition.Enable,
-	}
-
-	genIDs, err := d.genGlobalIDs(len(spec.PartDefinitions))
-	if err != nil {
-		return nil, err
-	}
-	for ith, def := range spec.PartDefinitions {
-		if err := def.Clause.Validate(part.Type, len(part.Columns)); err != nil {
-			return nil, errors.Trace(err)
-		}
-		// For RANGE partition only VALUES LESS THAN should be possible.
-		clause := def.Clause.(*ast.PartitionDefinitionClauseLessThan)
-		if len(part.Columns) > 0 {
-			if err := checkRangeColumnsTypeAndValuesMatch(ctx, meta, part.Columns, clause.Exprs); err != nil {
-				return nil, err
-			}
-		}
-
-		comment, _ := def.Comment()
-		piDef := model.PartitionDefinition{
-			Name:    def.Name,
-			ID:      genIDs[ith],
-			Comment: comment,
-		}
-
-		buf := new(bytes.Buffer)
-		for _, expr := range clause.Exprs {
-			expr.Format(buf)
-			piDef.LessThan = append(piDef.LessThan, buf.String())
-			buf.Reset()
-		}
-		part.Definitions = append(part.Definitions, piDef)
-	}
-	return part, nil
-}
-
-func checkRangeColumnsTypeAndValuesMatch(ctx sessionctx.Context, meta *model.TableInfo, colNames []model.CIStr, exprs []ast.ExprNode) error {
-	// Validate() has already checked len(colNames) = len(exprs)
-	// create table ... partition by range columns (cols)
-	// partition p0 values less than (expr)
-	// check the type of cols[i] and expr is consistent.
-	for i, colExpr := range exprs {
-		if _, ok := colExpr.(*ast.MaxValueExpr); ok {
-			continue
-		}
-
-		colName := colNames[i]
-		colInfo := getColumnInfoByName(meta, colName.L)
-		if colInfo == nil {
-			return errors.Trace(ErrFieldNotFoundPart)
-		}
-		colType := &colInfo.FieldType
-
-		val, err := expression.EvalAstExpr(ctx, colExpr)
-		if err != nil {
-			return err
-		}
-
-		// Check val.ConvertTo(colType) doesn't work, so we need this case by case check.
-		switch colType.Tp {
-		case mysql.TypeDate, mysql.TypeDatetime:
-			switch val.Kind() {
-			case types.KindString, types.KindBytes:
-			default:
-				return ErrWrongTypeColumnValue.GenWithStackByArgs()
-			}
-		}
-	}
-	return nil
 }
 
 // extractCollateFromOption take collates(may multiple) in option into consideration
