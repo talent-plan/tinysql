@@ -117,7 +117,7 @@ var (
 	ErrGeneratedColumnRefAutoInc = terror.ClassDDL.New(mysql.ErrGeneratedColumnRefAutoInc, mysql.MySQLErrName[mysql.ErrGeneratedColumnRefAutoInc])
 	// ErrGeneratedColumnFunctionIsNotAllowed returns for unsupported functions for generated columns.
 	ErrGeneratedColumnFunctionIsNotAllowed = terror.ClassDDL.New(mysql.ErrGeneratedColumnFunctionIsNotAllowed, mysql.MySQLErrName[mysql.ErrGeneratedColumnFunctionIsNotAllowed])
-	errUnsupportedIndexType               = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "index type"))
+	errUnsupportedIndexType                = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "index type"))
 
 	// ErrDupKeyName returns for duplicated key name
 	ErrDupKeyName = terror.ClassDDL.New(mysql.ErrDupKeyName, mysql.MySQLErrName[mysql.ErrDupKeyName])
