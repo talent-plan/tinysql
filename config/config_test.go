@@ -209,24 +209,6 @@ commit-timeout="41s"
 	c.Assert(conf.Log.ToLogConfig(), DeepEquals, logutil.NewLogConfig("info", "text", conf.Log.File, false, func(config *zaplog.Config) { config.DisableErrorVerbose = conf.Log.getDisableErrorStack() }))
 }
 
-func (s *testConfigSuite) TestOOMActionValid(c *C) {
-	c1 := NewConfig()
-	tests := []struct {
-		oomAction string
-		valid     bool
-	}{
-		{"log", true},
-		{"Log", true},
-		{"Cancel", true},
-		{"cANceL", true},
-		{"quit", false},
-	}
-	for _, tt := range tests {
-		c1.OOMAction = tt.oomAction
-		c.Assert(c1.Valid() == nil, Equals, tt.valid)
-	}
-}
-
 func (s *testConfigSuite) TestTxnTotalSizeLimitValid(c *C) {
 	conf := NewConfig()
 	tests := []struct {

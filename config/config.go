@@ -58,8 +58,6 @@ type Config struct {
 	RunDDL           bool   `toml:"run-ddl" json:"run-ddl"`
 	SplitTable       bool   `toml:"split-table" json:"split-table"`
 	TokenLimit       uint   `toml:"token-limit" json:"token-limit"`
-	OOMAction        string `toml:"oom-action" json:"oom-action"`
-	MemQuotaQuery    int64  `toml:"mem-quota-query" json:"mem-quota-query"`
 	EnableStreaming  bool   `toml:"enable-streaming" json:"enable-streaming"`
 	EnableBatchDML   bool   `toml:"enable-batch-dml" json:"enable-batch-dml"`
 	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
@@ -219,13 +217,6 @@ type Performance struct {
 	CrossJoin           bool    `toml:"cross-join" json:"cross-join"`
 }
 
-// PlanCache is the PlanCache section of the config.
-type PlanCache struct {
-	Enabled  bool `toml:"enabled" json:"enabled"`
-	Capacity uint `toml:"capacity" json:"capacity"`
-	Shards   uint `toml:"shards" json:"shards"`
-}
-
 // TiKVClient is the config for tikv client.
 type TiKVClient struct {
 	// GrpcConnectionCount is the max gRPC connections that will be established
@@ -252,8 +243,6 @@ var defaultConf = Config{
 	SplitTable:                   true,
 	Lease:                        "45s",
 	TokenLimit:                   1000,
-	OOMAction:                    "log",
-	MemQuotaQuery:                32 << 30,
 	EnableStreaming:              false,
 	EnableBatchDML:               false,
 	CheckMb4ValueInUTF8:          true,
@@ -370,11 +359,6 @@ func (c *Config) Valid() error {
 	if c.Log.File.MaxSize > MaxLogFileSize {
 		return fmt.Errorf("invalid max log file size=%v which is larger than max=%v", c.Log.File.MaxSize, MaxLogFileSize)
 	}
-	c.OOMAction = strings.ToLower(c.OOMAction)
-	if c.OOMAction != OOMActionLog && c.OOMAction != OOMActionCancel {
-		return fmt.Errorf("unsupported OOMAction %v, TiDB only supports [%v, %v]", c.OOMAction, OOMActionLog, OOMActionCancel)
-	}
-
 	// lower_case_table_names is allowed to be 0, 1, 2
 	if c.LowerCaseTableNames < 0 || c.LowerCaseTableNames > 2 {
 		return fmt.Errorf("lower-case-table-names should be 0 or 1 or 2")
@@ -402,12 +386,3 @@ func init() {
 		CheckTableBeforeDrop = true
 	}
 }
-
-// The following constants represents the valid action configurations for OOMAction.
-// NOTE: Although the values is case insensitive, we should use lower-case
-// strings because the configuration value will be transformed to lower-case
-// string and compared with these constants in the further usage.
-const (
-	OOMActionCancel = "cancel"
-	OOMActionLog    = "log"
-)
