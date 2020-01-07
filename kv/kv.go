@@ -202,11 +202,10 @@ type Client interface {
 
 // ReqTypes.
 const (
-	ReqTypeSelect   = 101
-	ReqTypeIndex    = 102
-	ReqTypeDAG      = 103
-	ReqTypeAnalyze  = 104
-	ReqTypeChecksum = 105
+	ReqTypeSelect  = 101
+	ReqTypeIndex   = 102
+	ReqTypeDAG     = 103
+	ReqTypeAnalyze = 104
 
 	ReqSubTypeBasic      = 0
 	ReqSubTypeDesc       = 10000
@@ -214,7 +213,6 @@ const (
 	ReqSubTypeTopN       = 10002
 	ReqSubTypeSignature  = 10003
 	ReqSubTypeAnalyzeIdx = 10004
-	ReqSubTypeAnalyzeCol = 10005
 )
 
 // StoreType represents the type of a store.
@@ -263,9 +261,6 @@ type Request struct {
 	NotFillCache bool
 	// SyncLog decides whether the WAL(write-ahead log) of this request should be synchronized.
 	SyncLog bool
-	// Streaming indicates using streaming API for this request, result in that one Next()
-	// call would not corresponds to a whole region result.
-	Streaming bool
 	// ReplicaRead is used for reading data from replicas, only follower is supported at this time.
 	ReplicaRead ReplicaReadType
 	// StoreType represents this request is sent to the which type of store.
@@ -277,8 +272,6 @@ type Request struct {
 type ResultSubset interface {
 	// GetData gets the data.
 	GetData() []byte
-	// GetStartKey gets the start key.
-	GetStartKey() Key
 	// MemSize returns how many bytes of memory this result use for tracing memory usage.
 	MemSize() int64
 	// RespTime returns the response time for the request.

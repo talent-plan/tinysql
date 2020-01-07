@@ -1101,31 +1101,25 @@ func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
 	return e
 }
 
-func constructDistExec(sctx sessionctx.Context, plans []plannercore.PhysicalPlan) ([]*tipb.Executor, bool, error) {
-	streaming := true
+func constructDistExec(sctx sessionctx.Context, plans []plannercore.PhysicalPlan) ([]*tipb.Executor, error) {
 	executors := make([]*tipb.Executor, 0, len(plans))
 	for _, p := range plans {
 		execPB, err := p.ToPB(sctx)
 		if err != nil {
-			return nil, false, err
-		}
-		if !plannercore.SupportStreaming(p) {
-			streaming = false
+			return nil, err
 		}
 		executors = append(executors, execPB)
 	}
-	return executors, streaming, nil
+	return executors, nil
 }
 
-func (b *executorBuilder) constructDAGReq(plans []plannercore.PhysicalPlan) (dagReq *tipb.DAGRequest, streaming bool, err error) {
+func (b *executorBuilder) constructDAGReq(plans []plannercore.PhysicalPlan) (dagReq *tipb.DAGRequest, err error) {
 	dagReq = &tipb.DAGRequest{}
 	dagReq.TimeZoneName, dagReq.TimeZoneOffset = timeutil.Zone(b.ctx.GetSessionVars().Location())
 	sc := b.ctx.GetSessionVars().StmtCtx
 	dagReq.Flags = sc.PushDownFlags()
-	dagReq.Executors, streaming, err = constructDistExec(b.ctx, plans)
-
-	distsql.SetEncodeType(b.ctx, dagReq)
-	return dagReq, streaming, err
+	dagReq.Executors, err = constructDistExec(b.ctx, plans)
+	return dagReq, err
 }
 
 func (b *executorBuilder) corColInDistPlan(plans []plannercore.PhysicalPlan) bool {
@@ -1237,7 +1231,7 @@ func (b *executorBuilder) buildIndexLookUpJoin(v *plannercore.PhysicalIndexJoin)
 }
 
 func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableReader) (*TableReaderExecutor, error) {
-	dagReq, streaming, err := b.constructDAGReq(v.TablePlans)
+	dagReq, err := b.constructDAGReq(v.TablePlans)
 	if err != nil {
 		return nil, err
 	}
@@ -1260,7 +1254,6 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		keepOrder:      ts.KeepOrder,
 		desc:           ts.Desc,
 		columns:        ts.Columns,
-		streaming:      streaming,
 		corColInFilter: b.corColInDistPlan(v.TablePlans),
 		corColInAccess: b.corColInAccess(v.TablePlans[0]),
 		plans:          v.TablePlans,
@@ -1292,7 +1285,7 @@ func (b *executorBuilder) buildTableReader(v *plannercore.PhysicalTableReader) *
 }
 
 func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexReader) (*IndexReaderExecutor, error) {
-	dagReq, streaming, err := b.constructDAGReq(v.IndexPlans)
+	dagReq, err := b.constructDAGReq(v.IndexPlans)
 	if err != nil {
 		return nil, err
 	}
@@ -1319,7 +1312,6 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		keepOrder:       is.KeepOrder,
 		desc:            is.Desc,
 		columns:         is.Columns,
-		streaming:       streaming,
 		corColInFilter:  b.corColInDistPlan(v.IndexPlans),
 		corColInAccess:  b.corColInAccess(v.IndexPlans[0]),
 		idxCols:         is.IdxCols,
@@ -1350,11 +1342,11 @@ func (b *executorBuilder) buildIndexReader(v *plannercore.PhysicalIndexReader) *
 }
 
 func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIndexLookUpReader) (*IndexLookUpExecutor, error) {
-	indexReq, indexStreaming, err := b.constructDAGReq(v.IndexPlans)
+	indexReq, err := b.constructDAGReq(v.IndexPlans)
 	if err != nil {
 		return nil, err
 	}
-	tableReq, tableStreaming, err := b.constructDAGReq(v.TablePlans)
+	tableReq, err := b.constructDAGReq(v.TablePlans)
 	if err != nil {
 		return nil, err
 	}
@@ -1385,8 +1377,6 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 		desc:              is.Desc,
 		tableRequest:      tableReq,
 		columns:           ts.Columns,
-		indexStreaming:    indexStreaming,
-		tableStreaming:    tableStreaming,
 		dataReaderBuilder: &dataReaderBuilder{executorBuilder: b},
 		corColInIdxSide:   b.corColInDistPlan(v.IndexPlans),
 		corColInTblSide:   b.corColInDistPlan(v.TablePlans),
@@ -1429,8 +1419,6 @@ func (b *executorBuilder) buildIndexLookUpReader(v *plannercore.PhysicalIndexLoo
 type dataReaderBuilder struct {
 	plannercore.Plan
 	*executorBuilder
-
-	selectResultHook // for testing
 }
 
 type mockPhysicalIndexReader struct {
@@ -1505,7 +1493,6 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 		SetStartTS(startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
@@ -1513,11 +1500,10 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
 	e.resultHandler = &tableResultHandler{}
-	result, err := builder.SelectResult(ctx, builder.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
+	result, err := distsql.Select(ctx, builder.ctx, kvReq, retTypes(e))
 	if err != nil {
 		return nil, err
 	}
-	result.Fetch(ctx)
 	e.resultHandler.open(nil, result)
 	return e, nil
 }

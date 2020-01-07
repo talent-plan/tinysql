@@ -148,8 +148,6 @@ disable-error-stack = false
 func (s *testConfigSuite) TestConfig(c *C) {
 	conf := new(Config)
 	conf.Performance.TxnTotalSizeLimit = 1000
-	conf.TiKVClient.CommitTimeout = "10s"
-	conf.TiKVClient.RegionCacheTTL = 600
 	configFile := "config.toml"
 	_, localFile, _, _ := runtime.Caller(0)
 	configFile = filepath.Join(filepath.Dir(localFile), configFile)
@@ -177,9 +175,6 @@ enable-batch-dml = true
 server-version = "test_version"
 [performance]
 txn-total-size-limit=2000
-[tikv-client]
-commit-timeout="41s"
-region-cache-ttl=6000
 `)
 
 	c.Assert(err, IsNil)
@@ -194,8 +189,6 @@ region-cache-ttl=6000
 	c.Assert(conf.Performance.TxnTotalSizeLimit, Equals, uint64(2000))
 	c.Assert(conf.AlterPrimaryKey, Equals, true)
 
-	c.Assert(conf.TiKVClient.CommitTimeout, Equals, "41s")
-	c.Assert(conf.TiKVClient.RegionCacheTTL, Equals, uint(6000))
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
 	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
 	c.Assert(conf.EnableBatchDML, Equals, true)
@@ -210,24 +203,6 @@ region-cache-ttl=6000
 
 	// Test for log config.
 	c.Assert(conf.Log.ToLogConfig(), DeepEquals, logutil.NewLogConfig("info", "text", conf.Log.File, false, func(config *zaplog.Config) { config.DisableErrorVerbose = conf.Log.getDisableErrorStack() }))
-}
-
-func (s *testConfigSuite) TestOOMActionValid(c *C) {
-	c1 := NewConfig()
-	tests := []struct {
-		oomAction string
-		valid     bool
-	}{
-		{"log", true},
-		{"Log", true},
-		{"Cancel", true},
-		{"cANceL", true},
-		{"quit", false},
-	}
-	for _, tt := range tests {
-		c1.OOMAction = tt.oomAction
-		c.Assert(c1.Valid() == nil, Equals, tt.valid)
-	}
 }
 
 func (s *testConfigSuite) TestTxnTotalSizeLimitValid(c *C) {

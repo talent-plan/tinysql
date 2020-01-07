@@ -232,7 +232,6 @@ func buildDescTableScanDAG(ctx sessionctx.Context, tbl table.PhysicalTable, colu
 	tblScanExec := constructDescTableScanPB(tbl.GetPhysicalID(), pbColumnInfos)
 	dagReq.Executors = append(dagReq.Executors, tblScanExec)
 	dagReq.Executors = append(dagReq.Executors, constructLimitPB(limit))
-	distsql.SetEncodeType(ctx, dagReq)
 	return dagReq, nil
 }
 
@@ -267,12 +266,7 @@ func (d *ddlCtx) buildDescTableScan(ctx context.Context, startTS uint64, tbl tab
 		return nil, errors.Trace(err)
 	}
 
-	result, err := distsql.Select(ctx, sctx, kvReq, getColumnsTypes(columns))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	result.Fetch(ctx)
-	return result, nil
+	return distsql.Select(ctx, sctx, kvReq, getColumnsTypes(columns))
 }
 
 // GetTableMaxRowID gets the last row id of the table partition.

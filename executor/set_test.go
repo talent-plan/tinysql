@@ -425,9 +425,6 @@ func (s *testSuite5) TestValidateSetVar(c *C) {
 	tk.MustExec("set @@tidb_general_log=0;")
 	tk.MustQuery("select @@tidb_general_log;").Check(testkit.Rows("0"))
 
-	tk.MustExec("set @@tidb_enable_streaming=1;")
-	tk.MustQuery("select @@tidb_enable_streaming;").Check(testkit.Rows("1"))
-
 	_, err = tk.Exec("set @@tidb_batch_delete=3;")
 	c.Assert(terror.ErrorEqual(err, variable.ErrWrongValueForVar), IsTrue, Commentf("err %v", err))
 

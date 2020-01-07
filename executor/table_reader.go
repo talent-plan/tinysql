@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/opentracing/opentracing-go"
@@ -23,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/kv"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -35,20 +33,6 @@ import (
 
 // make sure `TableReaderExecutor` implements `Executor`.
 var _ Executor = &TableReaderExecutor{}
-
-// selectResultHook is used to hack distsql.SelectWithRuntimeStats safely for testing.
-type selectResultHook struct {
-	selectResultFunc func(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
-		fieldTypes []*types.FieldType, copPlanIDs []fmt.Stringer) (distsql.SelectResult, error)
-}
-
-func (sr selectResultHook) SelectResult(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
-	fieldTypes []*types.FieldType, copPlanIDs []fmt.Stringer, rootPlanID fmt.Stringer) (distsql.SelectResult, error) {
-	if sr.selectResultFunc == nil {
-		return distsql.SelectWithRuntimeStats(ctx, sctx, kvReq, fieldTypes, copPlanIDs, rootPlanID)
-	}
-	return sr.selectResultFunc(ctx, sctx, kvReq, fieldTypes, copPlanIDs)
-}
 
 // TableReaderExecutor sends DAG request and reads table data from kv layer.
 type TableReaderExecutor struct {
@@ -68,11 +52,8 @@ type TableReaderExecutor struct {
 	resultHandler *tableResultHandler
 	plans         []plannercore.PhysicalPlan
 
-	selectResultHook // for testing
-
 	keepOrder bool
 	desc      bool
-	streaming bool
 	storeType kv.StoreType
 	// corColInFilter tells whether there's correlated column in filter.
 	corColInFilter bool
@@ -95,7 +76,7 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 
 	var err error
 	if e.corColInFilter {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.plans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
 		if err != nil {
 			return err
 		}
@@ -184,7 +165,6 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		SetStoreType(e.storeType).
 		Build()
@@ -192,12 +172,7 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 		return nil, err
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
-	result, err := e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
-	if err != nil {
-		return nil, err
-	}
-	result.Fetch(ctx)
-	return result, nil
+	return distsql.Select(ctx, e.ctx, kvReq, retTypes(e))
 }
 
 // buildVirtualColumnInfo saves virtual column indices and sort them in definition order

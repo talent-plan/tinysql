@@ -15,7 +15,13 @@ package executor
 
 import (
 	"context"
-	"fmt"
+	"go.uber.org/zap"
+	"math"
+	"runtime"
+	"sort"
+	"sync"
+	"sync/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -33,12 +39,6 @@ import (
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
-	"go.uber.org/zap"
-	"math"
-	"runtime"
-	"sort"
-	"sync"
-	"sync/atomic"
 )
 
 var (
@@ -202,15 +202,12 @@ type IndexReaderExecutor struct {
 	columns []*model.ColumnInfo
 	// outputColumns are only required by union scan.
 	outputColumns []*expression.Column
-	streaming     bool
 
 	corColInFilter bool
 	corColInAccess bool
 	idxCols        []*expression.Column
 	colLens        []int
 	plans          []plannercore.PhysicalPlan
-
-	selectResultHook // for testing
 }
 
 // Close clears all resources hold by current object.
@@ -245,7 +242,7 @@ func (e *IndexReaderExecutor) Open(ctx context.Context) error {
 func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) error {
 	var err error
 	if e.corColInFilter {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.plans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
 		if err != nil {
 			return err
 		}
@@ -259,18 +256,13 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.streaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
 		return err
 	}
-	e.result, err = e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
-	if err != nil {
-		return err
-	}
-	e.result.Fetch(ctx)
-	return nil
+	e.result, err = distsql.Select(ctx, e.ctx, kvReq, retTypes(e))
+	return err
 }
 
 // IndexLookUpExecutor implements double read for index scan.
@@ -288,9 +280,7 @@ type IndexLookUpExecutor struct {
 	handleIdx    int
 	tableRequest *tipb.DAGRequest
 	// columns are only required by union scan.
-	columns        []*model.ColumnInfo
-	indexStreaming bool
-	tableStreaming bool
+	columns []*model.ColumnInfo
 	*dataReaderBuilder
 	// All fields above are immutable.
 
@@ -347,14 +337,14 @@ func (e *IndexLookUpExecutor) open(ctx context.Context) error {
 
 	var err error
 	if e.corColInIdxSide {
-		e.dagPB.Executors, _, err = constructDistExec(e.ctx, e.idxPlans)
+		e.dagPB.Executors, err = constructDistExec(e.ctx, e.idxPlans)
 		if err != nil {
 			return err
 		}
 	}
 
 	if e.corColInTblSide {
-		e.tableRequest.Executors, _, err = constructDistExec(e.ctx, e.tblPlans)
+		e.tableRequest.Executors, err = constructDistExec(e.ctx, e.tblPlans)
 		if err != nil {
 			return err
 		}
@@ -382,7 +372,6 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		SetStartTS(e.startTS).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
-		SetStreaming(e.indexStreaming).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
 		Build()
 	if err != nil {
@@ -392,12 +381,10 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 	if e.checkIndexValue != nil {
 		tps = e.idxColTps
 	}
-	// Since the first read only need handle information. So its returned col is only 1.
-	result, err := distsql.SelectWithRuntimeStats(ctx, e.ctx, kvReq, tps, getPhysicalPlanIDs(e.idxPlans), e.id)
+	result, err := distsql.Select(ctx, e.ctx, kvReq, tps)
 	if err != nil {
 		return err
 	}
-	result.Fetch(ctx)
 	worker := &indexWorker{
 		idxLookup:       e,
 		workCh:          workCh,
@@ -461,7 +448,6 @@ func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, handles []in
 		dagPB:          e.tableRequest,
 		startTS:        e.startTS,
 		columns:        e.columns,
-		streaming:      e.tableStreaming,
 		corColInFilter: e.corColInTblSide,
 		plans:          e.tblPlans,
 	}
@@ -883,12 +869,4 @@ func GetLackHandles(expectedHandles []int64, obtainedHandlesMap map[int64]struct
 	}
 
 	return diffHandles
-}
-
-func getPhysicalPlanIDs(plans []plannercore.PhysicalPlan) []fmt.Stringer {
-	planIDs := make([]fmt.Stringer, 0, len(plans))
-	for _, p := range plans {
-		planIDs = append(planIDs, p.ExplainID())
-	}
-	return planIDs
 }

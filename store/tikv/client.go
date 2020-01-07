@@ -16,7 +16,6 @@ package tikv
 
 import (
 	"context"
-	"io"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -24,12 +23,9 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
-	"github.com/pingcap/tidb/util/logutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
@@ -69,17 +65,14 @@ type connArray struct {
 
 	index uint32
 	v     []*grpc.ClientConn
-	// streamTimeout binds with a background goroutine to process coprocessor streaming timeout.
-	streamTimeout chan *tikvrpc.Lease
-	done          chan struct{}
+	done  chan struct{}
 }
 
 func newConnArray(maxSize uint, addr string, idleNotify *uint32) (*connArray, error) {
 	a := &connArray{
-		index:         0,
-		v:             make([]*grpc.ClientConn, maxSize),
-		streamTimeout: make(chan *tikvrpc.Lease, 1024),
-		done:          make(chan struct{}),
+		index: 0,
+		v:     make([]*grpc.ClientConn, maxSize),
+		done:  make(chan struct{}),
 	}
 	if err := a.Init(addr, idleNotify); err != nil {
 		return nil, err
@@ -92,14 +85,11 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 
 	opt := grpc.WithInsecure()
 
-	cfg := config.GetGlobalConfig()
 	var (
 		unaryInterceptor  grpc.UnaryClientInterceptor
 		streamInterceptor grpc.StreamClientInterceptor
 	)
 
-	keepAlive := cfg.TiKVClient.GrpcKeepAliveTime
-	keepAliveTimeout := cfg.TiKVClient.GrpcKeepAliveTimeout
 	for i := range a.v {
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		conn, err := grpc.DialContext(
@@ -121,8 +111,8 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 				MinConnectTimeout: dialTimeout,
 			}),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                time.Duration(keepAlive) * time.Second,
-				Timeout:             time.Duration(keepAliveTimeout) * time.Second,
+				Time:                time.Duration(10) * time.Second,
+				Timeout:             time.Duration(3) * time.Second,
 				PermitWithoutStream: true,
 			}),
 		)
@@ -134,7 +124,6 @@ func (a *connArray) Init(addr string, idleNotify *uint32) error {
 		}
 		a.v[i] = conn
 	}
-	go tikvrpc.CheckStreamTimeoutLoop(a.streamTimeout, a.done)
 
 	return nil
 }
@@ -177,11 +166,6 @@ func newRPCClient() *rpcClient {
 	}
 }
 
-// NewTestRPCClient is for some external tests.
-func NewTestRPCClient() Client {
-	return newRPCClient()
-}
-
 func (c *rpcClient) getConnArray(addr string) (*connArray, error) {
 	c.RLock()
 	if c.isClosed {
@@ -206,8 +190,7 @@ func (c *rpcClient) createConnArray(addr string) (*connArray, error) {
 	array, ok := c.conns[addr]
 	if !ok {
 		var err error
-		connCount := config.GetGlobalConfig().TiKVClient.GrpcConnectionCount
-		array, err = newConnArray(connCount, addr, &c.idleNotify)
+		array, err = newConnArray(4, addr, &c.idleNotify)
 		if err != nil {
 			return nil, err
 		}
@@ -244,43 +227,9 @@ func (c *rpcClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	clientConn := connArray.Get()
 	client := tikvpb.NewTikvClient(clientConn)
 
-	if req.Type != tikvrpc.CmdCopStream {
-		ctx1, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		return tikvrpc.CallRPC(ctx1, client, req)
-	}
-
-	// Coprocessor streaming request.
-	// Use context to support timeout for grpc streaming client.
-	ctx1, cancel := context.WithCancel(ctx)
-	// Should NOT call defer cancel() here because it will cancel further stream.Recv()
-	// We put it in copStream.Lease.Cancel call this cancel at copStream.Close
-	// TODO: add unit test for SendRequest.
-	resp, err := tikvrpc.CallRPC(ctx1, client, req)
-	if err != nil {
-		cancel()
-		return nil, errors.Trace(err)
-	}
-
-	// Put the lease object to the timeout channel, so it would be checked periodically.
-	copStream := resp.Resp.(*tikvrpc.CopStreamResponse)
-	copStream.Timeout = timeout
-	copStream.Lease.Cancel = cancel
-	connArray.streamTimeout <- &copStream.Lease
-
-	// Read the first streaming response to get CopStreamResponse.
-	// This can make error handling much easier, because SendReq() retry on
-	// region error automatically.
-	var first *coprocessor.Response
-	first, err = copStream.Recv()
-	if err != nil {
-		if errors.Cause(err) != io.EOF {
-			return nil, errors.Trace(err)
-		}
-		logutil.BgLogger().Debug("copstream returns nothing for the request.")
-	}
-	copStream.Response = first
-	return resp, nil
+	ctx1, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return tikvrpc.CallRPC(ctx1, client, req)
 }
 
 func (c *rpcClient) Close() error {

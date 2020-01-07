@@ -318,9 +318,6 @@ func setGlobalVars() {
 	variable.SysVars[variable.Port].Value = fmt.Sprintf("%d", cfg.Port)
 	variable.SysVars[variable.Socket].Value = cfg.Socket
 	variable.SysVars[variable.DataDir].Value = cfg.Path
-
-	tikv.CommitMaxBackoff = int(parseDuration(cfg.TiKVClient.CommitTimeout).Seconds() * 1000)
-	tikv.RegionCacheTTLSec = int64(cfg.TiKVClient.RegionCacheTTL)
 }
 
 func setupLog() {

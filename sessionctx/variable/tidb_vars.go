@@ -45,10 +45,6 @@ const (
 	// tidb_opt_write_row_id is used to enable/disable the operations of insert、replace and update to _tidb_rowid.
 	TiDBOptWriteRowID = "tidb_opt_write_row_id"
 
-	// statement, when a table has multiple indices, those indices can be
-	// scanned concurrently, with the cost of higher system performance impact.
-	TiDBChecksumTableConcurrency = "tidb_checksum_table_concurrency"
-
 	// TiDBCurrentTS is used to get the current transaction timestamp.
 	// It is read-only.
 	TiDBCurrentTS = "tidb_current_ts"
@@ -85,12 +81,6 @@ const (
 
 	// tidb_disable_txn_auto_retry disables transaction auto retry.
 	TiDBDisableTxnAutoRetry = "tidb_disable_txn_auto_retry"
-
-	// tidb_enable_streaming enables TiDB to use streaming API for coprocessor requests.
-	TiDBEnableStreaming = "tidb_enable_streaming"
-
-	// tidb_enable_chunk_rpc enables TiDB to use Chunk format for coprocessor requests.
-	TiDBEnableChunkRPC = "tidb_enable_chunk_rpc"
 
 	// tidb_enable_table_partition is used to control table partition feature.
 	// The valid value include auto/on/off:
@@ -289,7 +279,6 @@ const (
 	DefIndexLookupSize               = 20000
 	DefDistSQLScanConcurrency        = 15
 	DefBuildStatsConcurrency         = 4
-	DefChecksumTableConcurrency      = 4
 	DefSkipUTF8Check                 = false
 	DefOptAggPushDown                = false
 	DefOptWriteRowID                 = false

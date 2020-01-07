@@ -15,13 +15,11 @@ package distsql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -29,15 +27,10 @@ import (
 	"github.com/pingcap/tipb/go-tipb"
 )
 
-var (
-	_ SelectResult = (*selectResult)(nil)
-	_ SelectResult = (*streamResult)(nil)
-)
+var _ SelectResult = (*selectResult)(nil)
 
 // SelectResult is an iterator of coprocessor partial results.
 type SelectResult interface {
-	// Fetch fetches partial results from client.
-	Fetch(context.Context)
 	// NextRaw gets the next raw result.
 	NextRaw(context.Context) ([]byte, error)
 	// Next reads the data into chunk.
@@ -54,24 +47,14 @@ type selectResult struct {
 	fieldTypes []*types.FieldType
 	ctx        sessionctx.Context
 
-	selectResp       *tipb.SelectResponse
-	selectRespSize   int // record the selectResp.Size() when it is initialized.
-	respChkIdx       int
-	respChunkDecoder *chunk.Decoder
+	selectResp     *tipb.SelectResponse
+	selectRespSize int // record the selectResp.Size() when it is initialized.
+	respChkIdx     int
 
 	partialCount int64 // number of partial results.
-	encodeType   tipb.EncodeType
-
-	// copPlanIDs contains all copTasks' planIDs,
-	// which help to collect copTasks' runtime stats.
-	copPlanIDs []fmt.Stringer
-	rootPlanID fmt.Stringer
 
 	fetchDuration    time.Duration
 	durationReported bool
-}
-
-func (r *selectResult) Fetch(ctx context.Context) {
 }
 
 func (r *selectResult) fetchResp(ctx context.Context) error {
@@ -127,27 +110,6 @@ func (r *selectResult) Next(ctx context.Context, chk *chunk.Chunk) error {
 			return nil
 		}
 	}
-	// TODO(Shenghui Wu): add metrics
-	switch r.selectResp.GetEncodeType() {
-	case tipb.EncodeType_TypeDefault:
-		return r.readFromDefault(ctx, chk)
-	case tipb.EncodeType_TypeChunk:
-		return r.readFromChunk(ctx, chk)
-	}
-	return errors.Errorf("unsupported encode type:%v", r.encodeType)
-}
-
-// NextRaw returns the next raw partial result.
-func (r *selectResult) NextRaw(ctx context.Context) (data []byte, err error) {
-	resultSubset, err := r.resp.Next(ctx)
-	r.partialCount++
-	if resultSubset != nil && err == nil {
-		data = resultSubset.GetData()
-	}
-	return data, err
-}
-
-func (r *selectResult) readFromDefault(ctx context.Context, chk *chunk.Chunk) error {
 	for !chk.IsFull() {
 		if r.respChkIdx == len(r.selectResp.Chunks) {
 			err := r.fetchResp(ctx)
@@ -166,41 +128,14 @@ func (r *selectResult) readFromDefault(ctx context.Context, chk *chunk.Chunk) er
 	return nil
 }
 
-func (r *selectResult) readFromChunk(ctx context.Context, chk *chunk.Chunk) error {
-	if r.respChunkDecoder == nil {
-		r.respChunkDecoder = chunk.NewDecoder(
-			chunk.NewChunkWithCapacity(r.fieldTypes, 0),
-			r.fieldTypes,
-		)
+// NextRaw returns the next raw partial result.
+func (r *selectResult) NextRaw(ctx context.Context) (data []byte, err error) {
+	resultSubset, err := r.resp.Next(ctx)
+	r.partialCount++
+	if resultSubset != nil && err == nil {
+		data = resultSubset.GetData()
 	}
-
-	for !chk.IsFull() {
-		if r.respChkIdx == len(r.selectResp.Chunks) {
-			err := r.fetchResp(ctx)
-			if err != nil || r.selectResp == nil {
-				return err
-			}
-		}
-
-		if r.respChunkDecoder.IsFinished() {
-			r.respChunkDecoder.Reset(r.selectResp.Chunks[r.respChkIdx].RowsData)
-		}
-		// If the next chunk size is greater than required rows * 0.8, reuse the memory of the next chunk and return
-		// immediately. Otherwise, splice the data to one chunk and wait the next chunk.
-		if r.respChunkDecoder.RemainedRows() > int(float64(chk.RequiredRows())*0.8) {
-			if chk.NumRows() > 0 {
-				return nil
-			}
-			r.respChunkDecoder.ReuseIntermChk(chk)
-			r.respChkIdx++
-			return nil
-		}
-		r.respChunkDecoder.Decode(chk)
-		if r.respChunkDecoder.IsFinished() {
-			r.respChkIdx++
-		}
-	}
-	return nil
+	return data, err
 }
 
 func (r *selectResult) readRowsData(chk *chunk.Chunk) (err error) {

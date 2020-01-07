@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -214,9 +213,6 @@ const rangesPerTask = 25000
 func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv.Request) ([]*copTask, error) {
 	start := time.Now()
 	cmdType := tikvrpc.CmdCop
-	if req.Streaming {
-		cmdType = tikvrpc.CmdCopStream
-	}
 	var tableStart, tableEnd kv.Key
 	if req.StoreType == kv.TiFlash {
 		tableID := tablecodec.DecodeTableID(ranges.at(0).StartKey)
@@ -436,7 +432,6 @@ type copIteratorTaskSender struct {
 
 type copResponse struct {
 	pbResp   *coprocessor.Response
-	startKey kv.Key
 	err      error
 	respSize int64
 	respTime time.Duration
@@ -447,11 +442,6 @@ func (rs *copResponse) GetData() []byte {
 	return rs.pbResp.Data
 }
 
-// GetStartKey implements the kv.ResultSubset GetStartKey interface.
-func (rs *copResponse) GetStartKey() kv.Key {
-	return rs.startKey
-}
-
 // MemSize returns how many bytes of memory this response use
 func (rs *copResponse) MemSize() int64 {
 	if rs.respSize != 0 {
@@ -459,7 +449,6 @@ func (rs *copResponse) MemSize() int64 {
 	}
 
 	// ignore rs.err
-	rs.respSize += int64(cap(rs.startKey))
 	if rs.pbResp != nil {
 		// Using a approximate size since it's hard to get a accurate value.
 		rs.respSize += int64(rs.pbResp.Size())
@@ -702,12 +691,7 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		worker.logTimeCopTask(costTime, task, bo, resp)
 	}
 
-	if task.cmdType == tikvrpc.CmdCopStream {
-		return worker.handleCopStreamResult(bo, rpcCtx, resp.Resp.(*tikvrpc.CopStreamResponse), task, ch, costTime)
-	}
-
-	// Handles the response for non-streaming copTask.
-	return worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: resp.Resp.(*coprocessor.Response)}, task, ch, nil, costTime)
+	return worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: resp.Resp.(*coprocessor.Response)}, task, ch)
 }
 
 type minCommitTSPushed struct {
@@ -776,9 +760,7 @@ func (ch *clientHelper) SendReqCtx(bo *Backoffer, req *tikvrpc.Request, regionID
 }
 
 const (
-	minLogBackoffTime   = 100
-	minLogKVProcessTime = 100
-	minLogKVWaitTime    = 200
+	minLogBackoffTime = 100
 )
 
 func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *copTask, bo *Backoffer, resp *tikvrpc.Response) {
@@ -790,49 +772,9 @@ func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *co
 	logutil.BgLogger().Info(logStr)
 }
 
-func (worker *copIteratorWorker) handleCopStreamResult(bo *Backoffer, rpcCtx *RPCContext, stream *tikvrpc.CopStreamResponse, task *copTask, ch chan<- *copResponse, costTime time.Duration) ([]*copTask, error) {
-	defer stream.Close()
-	var resp *coprocessor.Response
-	var lastRange *coprocessor.KeyRange
-	resp = stream.Response
-	if resp == nil {
-		// streaming request returns io.EOF, so the first Response is nil.
-		return nil, nil
-	}
-	for {
-		remainedTasks, err := worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: resp}, task, ch, lastRange, costTime)
-		if err != nil || len(remainedTasks) != 0 {
-			return remainedTasks, errors.Trace(err)
-		}
-		resp, err = stream.Recv()
-		if err != nil {
-			if errors.Cause(err) == io.EOF {
-				return nil, nil
-			}
-
-			if err1 := bo.Backoff(boTiKVRPC, errors.Errorf("recv stream response error: %v, task: %s", err, task)); err1 != nil {
-				return nil, errors.Trace(err)
-			}
-
-			// No coprocessor.Response for network error, rebuild task based on the last success one.
-			if errors.Cause(err) == context.Canceled {
-				logutil.BgLogger().Info("stream recv timeout", zap.Error(err))
-			} else {
-				logutil.BgLogger().Info("stream unknown error", zap.Error(err))
-			}
-			return worker.buildCopTasksFromRemain(bo, lastRange, task)
-		}
-		if resp.Range != nil {
-			lastRange = resp.Range
-		}
-	}
-}
-
 // handleCopResponse checks coprocessor Response for region split and lock,
 // returns more tasks when that happens, or handles the response if no error.
-// if we're handling streaming coprocessor response, lastRange is the range of last
-// successful response, otherwise it's nil.
-func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCContext, resp *copResponse, task *copTask, ch chan<- *copResponse, lastRange *coprocessor.KeyRange, costTime time.Duration) ([]*copTask, error) {
+func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCContext, resp *copResponse, task *copTask, ch chan<- *copResponse) ([]*copTask, error) {
 	if regionErr := resp.pbResp.GetRegionError(); regionErr != nil {
 		if rpcCtx != nil && task.storeType == kv.TiDB {
 			resp.err = errors.Errorf("error: %v", regionErr)
@@ -857,7 +799,7 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 				return nil, errors.Trace(err)
 			}
 		}
-		return worker.buildCopTasksFromRemain(bo, lastRange, task)
+		return worker.buildCopTasksFromRemain(bo, task)
 	}
 	if otherErr := resp.pbResp.GetOtherError(); otherErr != "" {
 		err := errors.Errorf("other error: %s", otherErr)
@@ -868,38 +810,13 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
-	// When the request is using streaming API, the `Range` is not nil.
-	if resp.pbResp.Range != nil {
-		resp.startKey = resp.pbResp.Range.Start
-	} else if task.ranges != nil && task.ranges.len() > 0 {
-		resp.startKey = task.ranges.at(0).StartKey
-	}
 	worker.sendToRespCh(resp, ch, true)
 	return nil, nil
 }
 
-func (worker *copIteratorWorker) buildCopTasksFromRemain(bo *Backoffer, lastRange *coprocessor.KeyRange, task *copTask) ([]*copTask, error) {
+func (worker *copIteratorWorker) buildCopTasksFromRemain(bo *Backoffer, task *copTask) ([]*copTask, error) {
 	remainedRanges := task.ranges
-	if worker.req.Streaming && lastRange != nil {
-		remainedRanges = worker.calculateRemain(task.ranges, lastRange, worker.req.Desc)
-	}
 	return buildCopTasks(bo, worker.store.regionCache, remainedRanges, worker.req)
-}
-
-// calculateRemain splits the input ranges into two, and take one of them according to desc flag.
-// It's used in streaming API, to calculate which range is consumed and what needs to be retry.
-// For example:
-// ranges: [r1 --> r2) [r3 --> r4)
-// split:      [s1   -->   s2)
-// In normal scan order, all data before s1 is consumed, so the remain ranges should be [s1 --> r2) [r3 --> r4)
-// In reverse scan order, all data after s2 is consumed, so the remain ranges should be [r1 --> r2) [r3 --> s2)
-func (worker *copIteratorWorker) calculateRemain(ranges *copRanges, split *coprocessor.KeyRange, desc bool) *copRanges {
-	if desc {
-		left, _ := ranges.split(split.End)
-		return left
-	}
-	_, right := ranges.split(split.Start)
-	return right
 }
 
 func (it *copIterator) Close() error {

@@ -545,7 +545,6 @@ func NewDomain(store kv.Storage, ddlLease time.Duration, statsLease time.Duratio
 func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.Resource, error)) error {
 	if ebd, ok := do.store.(tikv.EtcdBackend); ok {
 		if addrs := ebd.EtcdAddrs(); addrs != nil {
-			cfg := config.GetGlobalConfig()
 			cli, err := clientv3.New(clientv3.Config{
 				Endpoints:        addrs,
 				AutoSyncInterval: 30 * time.Second,
@@ -553,8 +552,8 @@ func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.R
 				DialOptions: []grpc.DialOption{
 					grpc.WithBackoffMaxDelay(time.Second * 3),
 					grpc.WithKeepaliveParams(keepalive.ClientParameters{
-						Time:                time.Duration(cfg.TiKVClient.GrpcKeepAliveTime) * time.Second,
-						Timeout:             time.Duration(cfg.TiKVClient.GrpcKeepAliveTimeout) * time.Second,
+						Time:                time.Duration(10) * time.Second,
+						Timeout:             time.Duration(3) * time.Second,
 						PermitWithoutStream: true,
 					}),
 				},

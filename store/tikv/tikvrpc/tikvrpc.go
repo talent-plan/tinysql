@@ -16,9 +16,6 @@ package tikvrpc
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/kvproto/pkg/debugpb"
@@ -60,13 +57,10 @@ const (
 	CmdUnsafeDestroyRange
 
 	CmdCop CmdType = 512 + iota
-	CmdCopStream
 
 	CmdMvccGetByKey CmdType = 1024 + iota
 	CmdMvccGetByStartTs
 	CmdSplitRegion
-
-	CmdDebugGetRegionProperties CmdType = 2048 + iota
 
 	CmdEmpty CmdType = 3072 + iota
 )
@@ -115,8 +109,6 @@ func (t CmdType) String() string {
 		return "UnsafeDestroyRange"
 	case CmdCop:
 		return "Cop"
-	case CmdCopStream:
-		return "CopStream"
 	case CmdMvccGetByKey:
 		return "MvccGetByKey"
 	case CmdMvccGetByStartTs:
@@ -308,16 +300,6 @@ type Response struct {
 	Resp interface{}
 }
 
-// CopStreamResponse combinates tikvpb.Tikv_CoprocessorStreamClient and the first Recv() result together.
-// In streaming API, get grpc stream client may not involve any network packet, then region error have
-// to be handled in Recv() function. This struct facilitates the error handling.
-type CopStreamResponse struct {
-	tikvpb.Tikv_CoprocessorStreamClient
-	*coprocessor.Response // The first result of Recv()
-	Timeout               time.Duration
-	Lease                 // Shared by this object and a background goroutine.
-}
-
 // SetContext set the Context field for the given req to the specified ctx.
 func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 	ctx := &req.Context
@@ -369,8 +351,6 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 	case CmdUnsafeDestroyRange:
 		req.UnsafeDestroyRange().Context = ctx
 	case CmdCop:
-		req.Cop().Context = ctx
-	case CmdCopStream:
 		req.Cop().Context = ctx
 	case CmdMvccGetByKey:
 		req.MvccGetByKey().Context = ctx
@@ -480,12 +460,6 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 		p = &coprocessor.Response{
 			RegionError: e,
 		}
-	case CmdCopStream:
-		p = &CopStreamResponse{
-			Response: &coprocessor.Response{
-				RegionError: e,
-			},
-		}
 	case CmdMvccGetByKey:
 		p = &kvrpcpb.MvccGetByKeyResponse{
 			RegionError: e,
@@ -582,12 +556,6 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = client.UnsafeDestroyRange(ctx, req.UnsafeDestroyRange())
 	case CmdCop:
 		resp.Resp, err = client.Coprocessor(ctx, req.Cop())
-	case CmdCopStream:
-		var streamClient tikvpb.Tikv_CoprocessorStreamClient
-		streamClient, err = client.CoprocessorStream(ctx, req.Cop())
-		resp.Resp = &CopStreamResponse{
-			Tikv_CoprocessorStreamClient: streamClient,
-		}
 	case CmdMvccGetByKey:
 		resp.Resp, err = client.MvccGetByKey(ctx, req.MvccGetByKey())
 	case CmdMvccGetByStartTs:
@@ -611,73 +579,5 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 
 // Lease is used to implement grpc stream timeout.
 type Lease struct {
-	Cancel   context.CancelFunc
-	deadline int64 // A time.UnixNano value, if time.Now().UnixNano() > deadline, cancel() would be called.
-}
-
-// Recv overrides the stream client Recv() function.
-func (resp *CopStreamResponse) Recv() (*coprocessor.Response, error) {
-	deadline := time.Now().Add(resp.Timeout).UnixNano()
-	atomic.StoreInt64(&resp.Lease.deadline, deadline)
-
-	ret, err := resp.Tikv_CoprocessorStreamClient.Recv()
-
-	atomic.StoreInt64(&resp.Lease.deadline, 0) // Stop the lease check.
-	return ret, errors.Trace(err)
-}
-
-// Close closes the CopStreamResponse object.
-func (resp *CopStreamResponse) Close() {
-	atomic.StoreInt64(&resp.Lease.deadline, 1)
-	// We also call cancel here because CheckStreamTimeoutLoop
-	// is not guaranteed to cancel all items when it exits.
-	if resp.Lease.Cancel != nil {
-		resp.Lease.Cancel()
-	}
-}
-
-// CheckStreamTimeoutLoop runs periodically to check is there any stream request timeouted.
-// Lease is an object to track stream requests, call this function with "go CheckStreamTimeoutLoop()"
-// It is not guaranteed to call every Lease.Cancel() putting into channel when exits.
-// If grpc-go supports SetDeadline(https://github.com/grpc/grpc-go/issues/2917), we can stop using this method.
-func CheckStreamTimeoutLoop(ch <-chan *Lease, done <-chan struct{}) {
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-	array := make([]*Lease, 0, 1024)
-
-	for {
-		select {
-		case <-done:
-		drainLoop:
-			// Try my best cleaning the channel to make SendRequest which is blocking by it continues.
-			for {
-				select {
-				case <-ch:
-				default:
-					break drainLoop
-				}
-			}
-			return
-		case item := <-ch:
-			array = append(array, item)
-		case now := <-ticker.C:
-			array = keepOnlyActive(array, now.UnixNano())
-		}
-	}
-}
-
-// keepOnlyActive removes completed items, call cancel function for timeout items.
-func keepOnlyActive(array []*Lease, now int64) []*Lease {
-	idx := 0
-	for i := 0; i < len(array); i++ {
-		item := array[i]
-		deadline := atomic.LoadInt64(&item.deadline)
-		if deadline == 0 || deadline > now {
-			array[idx] = array[i]
-			idx++
-		} else {
-			item.Cancel()
-		}
-	}
-	return array[:idx]
+	Cancel context.CancelFunc
 }

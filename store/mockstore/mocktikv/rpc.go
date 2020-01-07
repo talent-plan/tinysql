@@ -617,23 +617,19 @@ func (h *rpcHandler) handleSplitRegion(req *kvrpcpb.SplitRegionRequest) *kvrpcpb
 // RPCClient sends kv RPC calls to mock cluster. RPCClient mocks the behavior of
 // a rpc client at tikv's side.
 type RPCClient struct {
-	Cluster       *Cluster
-	MvccStore     MVCCStore
-	streamTimeout chan *tikvrpc.Lease
-	done          chan struct{}
+	Cluster   *Cluster
+	MvccStore MVCCStore
+	done      chan struct{}
 }
 
 // NewRPCClient creates an RPCClient.
 // Note that close the RPCClient may close the underlying MvccStore.
 func NewRPCClient(cluster *Cluster, mvccStore MVCCStore) *RPCClient {
-	ch := make(chan *tikvrpc.Lease, 1024)
 	done := make(chan struct{})
-	go tikvrpc.CheckStreamTimeoutLoop(ch, done)
 	return &RPCClient{
-		Cluster:       cluster,
-		MvccStore:     mvccStore,
-		streamTimeout: ch,
-		done:          done,
+		Cluster:   cluster,
+		MvccStore: mvccStore,
+		done:      done,
 	}
 }
 
@@ -893,45 +889,10 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			res = handler.handleCopDAGRequest(r)
 		case kv.ReqTypeAnalyze:
 			res = handler.handleCopAnalyzeRequest(r)
-		case kv.ReqTypeChecksum:
-			res = handler.handleCopChecksumRequest(r)
 		default:
 			panic(fmt.Sprintf("unknown coprocessor request type: %v", r.GetTp()))
 		}
 		resp.Resp = res
-	case tikvrpc.CmdCopStream:
-		r := req.Cop()
-		if err := handler.checkRequestContext(reqCtx); err != nil {
-			resp.Resp = &tikvrpc.CopStreamResponse{
-				Tikv_CoprocessorStreamClient: &mockCopStreamErrClient{Error: err},
-				Response: &coprocessor.Response{
-					RegionError: err,
-				},
-			}
-			return resp, nil
-		}
-		handler.rawStartKey = MvccKey(handler.startKey).Raw()
-		handler.rawEndKey = MvccKey(handler.endKey).Raw()
-		ctx1, cancel := context.WithCancel(ctx)
-		copStream, err := handler.handleCopStream(ctx1, r)
-		if err != nil {
-			cancel()
-			return nil, errors.Trace(err)
-		}
-
-		streamResp := &tikvrpc.CopStreamResponse{
-			Tikv_CoprocessorStreamClient: copStream,
-		}
-		streamResp.Lease.Cancel = cancel
-		streamResp.Timeout = timeout
-		c.streamTimeout <- &streamResp.Lease
-
-		first, err := streamResp.Recv()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		streamResp.Response = first
-		resp.Resp = streamResp
 	case tikvrpc.CmdMvccGetByKey:
 		r := req.MvccGetByKey()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {

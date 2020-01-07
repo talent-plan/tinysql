@@ -308,7 +308,6 @@ func (s *testSuite) TestRequestBuilder1(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -383,7 +382,6 @@ func (s *testSuite) TestRequestBuilder2(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -428,7 +426,6 @@ func (s *testSuite) TestRequestBuilder3(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadLeader,
 	}
 	c.Assert(actual, DeepEquals, expect)
@@ -458,7 +455,6 @@ func (s *testSuite) TestRequestBuilder4(c *C) {
 		SetDAGRequest(&tipb.DAGRequest{}).
 		SetDesc(false).
 		SetKeepOrder(false).
-		SetStreaming(true).
 		SetFromSessionVars(variable.NewSessionVars()).
 		Build()
 	c.Assert(err, IsNil)
@@ -472,7 +468,6 @@ func (s *testSuite) TestRequestBuilder4(c *C) {
 		Concurrency:    15,
 		IsolationLevel: 0,
 		Priority:       0,
-		Streaming:      true,
 		NotFillCache:   false,
 		SyncLog:        false,
 		ReplicaRead:    kv.ReplicaReadLeader,
@@ -518,42 +513,7 @@ func (s *testSuite) TestRequestBuilder5(c *C) {
 		Priority:       1,
 		NotFillCache:   true,
 		SyncLog:        false,
-		Streaming:      false,
 	}
-	c.Assert(actual, DeepEquals, expect)
-}
-
-func (s *testSuite) TestRequestBuilder6(c *C) {
-	keyRanges := []kv.KeyRange{
-		{
-			StartKey: kv.Key{0x00, 0x01},
-			EndKey:   kv.Key{0x02, 0x03},
-		},
-	}
-
-	concurrency := 10
-
-	actual, err := (&RequestBuilder{}).SetKeyRanges(keyRanges).
-		SetChecksumRequest(&tipb.ChecksumRequest{}).
-		SetConcurrency(concurrency).
-		Build()
-	c.Assert(err, IsNil)
-
-	expect := &kv.Request{
-		Tp:             105,
-		StartTs:        0x0,
-		Data:           []uint8{0x10, 0x0, 0x18, 0x0},
-		KeyRanges:      keyRanges,
-		KeepOrder:      false,
-		Desc:           false,
-		Concurrency:    concurrency,
-		IsolationLevel: 0,
-		Priority:       0,
-		NotFillCache:   true,
-		SyncLog:        false,
-		Streaming:      false,
-	}
-
 	c.Assert(actual, DeepEquals, expect)
 }
 
@@ -579,7 +539,6 @@ func (s *testSuite) TestRequestBuilder7(c *C) {
 		Priority:       0,
 		NotFillCache:   false,
 		SyncLog:        false,
-		Streaming:      false,
 		ReplicaRead:    kv.ReplicaReadFollower,
 	}
 
