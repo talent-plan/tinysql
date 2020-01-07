@@ -15,7 +15,6 @@ package distsql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
@@ -53,47 +52,15 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 	}, nil
 }
 
-// SelectWithRuntimeStats sends a DAG request, returns SelectResult.
-// The difference from Select is that SelectWithRuntimeStats will set copPlanIDs into selectResult,
-// which can help selectResult to collect runtime stats.
-func SelectWithRuntimeStats(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
-	fieldTypes []*types.FieldType, copPlanIDs []fmt.Stringer, rootPlanID fmt.Stringer) (SelectResult, error) {
-	sr, err := Select(ctx, sctx, kvReq, fieldTypes)
-	if err == nil {
-		if selectResult, ok := sr.(*selectResult); ok {
-			selectResult.copPlanIDs = copPlanIDs
-			selectResult.rootPlanID = rootPlanID
-		}
-	}
-	return sr, err
-}
-
 // Analyze do a analyze request.
-func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.Variables,
-	isRestrict bool) (SelectResult, error) {
+func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.Variables) (SelectResult, error) {
 	resp := client.Send(ctx, kvReq, vars)
 	if resp == nil {
 		return nil, errors.New("client returns nil response")
 	}
 
-	if isRestrict {
-
-	}
 	result := &selectResult{
 		label: "analyze",
-		resp:  resp,
-	}
-	return result, nil
-}
-
-// Checksum sends a checksum request.
-func Checksum(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.Variables) (SelectResult, error) {
-	resp := client.Send(ctx, kvReq, vars)
-	if resp == nil {
-		return nil, errors.New("client returns nil response")
-	}
-	result := &selectResult{
-		label: "checksum",
 		resp:  resp,
 	}
 	return result, nil

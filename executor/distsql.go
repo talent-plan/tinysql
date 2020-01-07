@@ -15,7 +15,13 @@ package executor
 
 import (
 	"context"
-	"fmt"
+	"go.uber.org/zap"
+	"math"
+	"runtime"
+	"sort"
+	"sync"
+	"sync/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -33,12 +39,6 @@ import (
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
-	"go.uber.org/zap"
-	"math"
-	"runtime"
-	"sort"
-	"sync"
-	"sync/atomic"
 )
 
 var (
@@ -208,8 +208,6 @@ type IndexReaderExecutor struct {
 	idxCols        []*expression.Column
 	colLens        []int
 	plans          []plannercore.PhysicalPlan
-
-	selectResultHook // for testing
 }
 
 // Close clears all resources hold by current object.
@@ -263,7 +261,7 @@ func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) 
 	if err != nil {
 		return err
 	}
-	e.result, err = e.SelectResult(ctx, e.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
+	e.result, err = distsql.Select(ctx, e.ctx, kvReq, retTypes(e))
 	return err
 }
 
@@ -383,8 +381,7 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 	if e.checkIndexValue != nil {
 		tps = e.idxColTps
 	}
-	// Since the first read only need handle information. So its returned col is only 1.
-	result, err := distsql.SelectWithRuntimeStats(ctx, e.ctx, kvReq, tps, getPhysicalPlanIDs(e.idxPlans), e.id)
+	result, err := distsql.Select(ctx, e.ctx, kvReq, tps)
 	if err != nil {
 		return err
 	}
@@ -872,12 +869,4 @@ func GetLackHandles(expectedHandles []int64, obtainedHandlesMap map[int64]struct
 	}
 
 	return diffHandles
-}
-
-func getPhysicalPlanIDs(plans []plannercore.PhysicalPlan) []fmt.Stringer {
-	planIDs := make([]fmt.Stringer, 0, len(plans))
-	for _, p := range plans {
-		planIDs = append(planIDs, p.ExplainID())
-	}
-	return planIDs
 }

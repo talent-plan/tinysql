@@ -1419,8 +1419,6 @@ func (b *executorBuilder) buildIndexLookUpReader(v *plannercore.PhysicalIndexLoo
 type dataReaderBuilder struct {
 	plannercore.Plan
 	*executorBuilder
-
-	selectResultHook // for testing
 }
 
 type mockPhysicalIndexReader struct {
@@ -1502,7 +1500,7 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
 	e.resultHandler = &tableResultHandler{}
-	result, err := builder.SelectResult(ctx, builder.ctx, kvReq, retTypes(e), getPhysicalPlanIDs(e.plans), e.id)
+	result, err := distsql.Select(ctx, builder.ctx, kvReq, retTypes(e))
 	if err != nil {
 		return nil, err
 	}

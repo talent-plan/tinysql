@@ -15,7 +15,6 @@ package distsql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -29,11 +28,10 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
-func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []string) (*selectResult, []*types.FieldType) {
+func (s *testSuite) createSelectNormal(batch, totalRows int, c *C) (*selectResult, []*types.FieldType) {
 	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
 		SetDAGRequest(&tipb.DAGRequest{}).
 		SetDesc(false).
@@ -59,16 +57,7 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 
 	// Test Next.
 	var response SelectResult
-	if planIDs == nil {
-		response, err = Select(context.TODO(), s.sctx, request, colTypes)
-	} else {
-		var planIDFuncs []fmt.Stringer
-		for i := range planIDs {
-			idx := i
-			planIDFuncs = append(planIDFuncs, stringutil.StringerStr(planIDs[idx]))
-		}
-		response, err = SelectWithRuntimeStats(context.TODO(), s.sctx, request, colTypes, planIDFuncs, stringutil.StringerStr("root_0"))
-	}
+	response, err = Select(context.TODO(), s.sctx, request, colTypes)
 
 	c.Assert(err, IsNil)
 	result, ok := response.(*selectResult)
@@ -85,35 +74,7 @@ func (s *testSuite) createSelectNormal(batch, totalRows int, c *C, planIDs []str
 }
 
 func (s *testSuite) TestSelectNormal(c *C) {
-	response, colTypes := s.createSelectNormal(1, 2, c, nil)
-
-	// Test Next.
-	chk := chunk.New(colTypes, 32, 32)
-	numAllRows := 0
-	for {
-		err := response.Next(context.TODO(), chk)
-		c.Assert(err, IsNil)
-		numAllRows += chk.NumRows()
-		if chk.NumRows() == 0 {
-			break
-		}
-	}
-	c.Assert(numAllRows, Equals, 2)
-	err := response.Close()
-	c.Assert(err, IsNil)
-}
-
-func (s *testSuite) TestSelectWithRuntimeStats(c *C) {
-	planIDs := []string{"1", "2", "3"}
-	response, colTypes := s.createSelectNormal(1, 2, c, planIDs)
-	if len(response.copPlanIDs) != len(planIDs) {
-		c.Fatal("invalid copPlanIDs")
-	}
-	for i := range planIDs {
-		if response.copPlanIDs[i].String() != planIDs[i] {
-			c.Fatal("invalid copPlanIDs")
-		}
-	}
+	response, colTypes := s.createSelectNormal(1, 2, c)
 
 	// Test Next.
 	chk := chunk.New(colTypes, 32, 32)
@@ -138,33 +99,12 @@ func (s *testSuite) TestAnalyze(c *C) {
 		Build()
 	c.Assert(err, IsNil)
 
-	response, err := Analyze(context.TODO(), s.sctx.GetClient(), request, kv.DefaultVars, true)
+	response, err := Analyze(context.TODO(), s.sctx.GetClient(), request, kv.DefaultVars)
 	c.Assert(err, IsNil)
 
 	result, ok := response.(*selectResult)
 	c.Assert(ok, IsTrue)
 	c.Assert(result.label, Equals, "analyze")
-
-	bytes, err := response.NextRaw(context.TODO())
-	c.Assert(err, IsNil)
-	c.Assert(len(bytes), Equals, 16)
-
-	err = response.Close()
-	c.Assert(err, IsNil)
-}
-
-func (s *testSuite) TestChecksum(c *C) {
-	request, err := (&RequestBuilder{}).SetKeyRanges(nil).
-		SetChecksumRequest(&tipb.ChecksumRequest{}).
-		Build()
-	c.Assert(err, IsNil)
-
-	response, err := Checksum(context.TODO(), s.sctx.GetClient(), request, kv.DefaultVars)
-	c.Assert(err, IsNil)
-
-	result, ok := response.(*selectResult)
-	c.Assert(ok, IsTrue)
-	c.Assert(result.label, Equals, "checksum")
 
 	bytes, err := response.NextRaw(context.TODO())
 	c.Assert(err, IsNil)

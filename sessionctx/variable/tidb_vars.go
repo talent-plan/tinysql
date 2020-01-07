@@ -45,10 +45,6 @@ const (
 	// tidb_opt_write_row_id is used to enable/disable the operations of insert、replace and update to _tidb_rowid.
 	TiDBOptWriteRowID = "tidb_opt_write_row_id"
 
-	// statement, when a table has multiple indices, those indices can be
-	// scanned concurrently, with the cost of higher system performance impact.
-	TiDBChecksumTableConcurrency = "tidb_checksum_table_concurrency"
-
 	// TiDBCurrentTS is used to get the current transaction timestamp.
 	// It is read-only.
 	TiDBCurrentTS = "tidb_current_ts"
@@ -283,7 +279,6 @@ const (
 	DefIndexLookupSize               = 20000
 	DefDistSQLScanConcurrency        = 15
 	DefBuildStatsConcurrency         = 4
-	DefChecksumTableConcurrency      = 4
 	DefSkipUTF8Check                 = false
 	DefOptAggPushDown                = false
 	DefOptWriteRowID                 = false

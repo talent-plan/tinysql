@@ -36,5 +36,4 @@ func (s checkerSuite) TestIsRequestTypeSupported(c *C) {
 	c.Assert(checker(kv.ReqTypeDAG, kv.ReqSubTypeSignature), IsTrue)
 	c.Assert(checker(kv.ReqTypeDAG, kv.ReqSubTypeAnalyzeIdx), IsFalse)
 	c.Assert(checker(kv.ReqTypeAnalyze, 0), IsTrue)
-	c.Assert(checker(kv.ReqTypeChecksum, 0), IsFalse)
 }

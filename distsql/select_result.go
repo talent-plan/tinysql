@@ -15,13 +15,11 @@ package distsql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -54,11 +52,6 @@ type selectResult struct {
 	respChkIdx     int
 
 	partialCount int64 // number of partial results.
-
-	// copPlanIDs contains all copTasks' planIDs,
-	// which help to collect copTasks' runtime stats.
-	copPlanIDs []fmt.Stringer
-	rootPlanID fmt.Stringer
 
 	fetchDuration    time.Duration
 	durationReported bool

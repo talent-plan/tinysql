@@ -889,8 +889,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			res = handler.handleCopDAGRequest(r)
 		case kv.ReqTypeAnalyze:
 			res = handler.handleCopAnalyzeRequest(r)
-		case kv.ReqTypeChecksum:
-			res = handler.handleCopChecksumRequest(r)
 		default:
 			panic(fmt.Sprintf("unknown coprocessor request type: %v", r.GetTp()))
 		}
