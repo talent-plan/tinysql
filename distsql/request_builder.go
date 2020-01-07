@@ -16,7 +16,6 @@ package distsql
 import (
 	"math"
 
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -80,7 +79,6 @@ func (builder *RequestBuilder) SetAnalyzeRequest(ana *tipb.AnalyzeReq) *RequestB
 		builder.Request.Data, builder.err = ana.Marshal()
 		builder.Request.NotFillCache = true
 		builder.Request.IsolationLevel = kv.RC
-		builder.Request.Priority = kv.PriorityLow
 	}
 
 	return builder
@@ -124,25 +122,12 @@ func (builder *RequestBuilder) getIsolationLevel() kv.IsoLevel {
 	return kv.SI
 }
 
-func (builder *RequestBuilder) getKVPriority(sv *variable.SessionVars) int {
-	switch sv.StmtCtx.Priority {
-	case mysql.NoPriority, mysql.DelayedPriority:
-		return kv.PriorityNormal
-	case mysql.LowPriority:
-		return kv.PriorityLow
-	case mysql.HighPriority:
-		return kv.PriorityHigh
-	}
-	return kv.PriorityNormal
-}
-
 // SetFromSessionVars sets the following fields for "kv.Request" from session variables:
 // "Concurrency", "IsolationLevel", "NotFillCache", "ReplicaRead".
 func (builder *RequestBuilder) SetFromSessionVars(sv *variable.SessionVars) *RequestBuilder {
 	builder.Request.Concurrency = sv.DistSQLScanConcurrency
 	builder.Request.IsolationLevel = builder.getIsolationLevel()
 	builder.Request.NotFillCache = sv.StmtCtx.NotFillCache
-	builder.Request.Priority = builder.getKVPriority(sv)
 	builder.Request.ReplicaRead = sv.GetReplicaRead()
 	return builder
 }

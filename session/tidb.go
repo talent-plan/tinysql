@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
@@ -204,7 +203,7 @@ func checkStmtLimit(ctx context.Context, sctx sessionctx.Context, se *session) e
 	var err error
 	sessVars := se.GetSessionVars()
 	history := GetHistory(sctx)
-	if history.Count() > int(config.GetGlobalConfig().Performance.StmtCountLimit) {
+	if history.Count() > 5000 {
 		if !sessVars.BatchCommit {
 			se.RollbackTxn(ctx)
 			return errors.Errorf("statement count %d exceeds the transaction limitation, autocommit = %t",

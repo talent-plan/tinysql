@@ -251,8 +251,6 @@ type Request struct {
 	Concurrency int
 	// IsolationLevel is the isolation level, default is SI.
 	IsolationLevel IsoLevel
-	// Priority is the priority of this KV request, its value may be PriorityNormal/PriorityLow/PriorityHigh.
-	Priority int
 	// KeepOrder is true, if the response should be returned in order.
 	KeepOrder bool
 	// Desc is true, if the request is sent in descending order.

@@ -17,21 +17,16 @@ import (
 	"context"
 	"math"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"go.uber.org/atomic"
 )
 
 // OptimizeAstNode optimizes the query to a physical plan directly.
 var OptimizeAstNode func(ctx context.Context, sctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema) (Plan, types.NameSlice, error)
-
-// AllowCartesianProduct means whether tidb allows cartesian join without equal conditions.
-var AllowCartesianProduct = atomic.NewBool(true)
 
 const (
 	flagPrunColumns uint64 = 1 << iota
@@ -87,9 +82,6 @@ func DoOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (PhysicalPl
 	if err != nil {
 		return nil, err
 	}
-	if !AllowCartesianProduct.Load() && existsCartesianProduct(logic) {
-		return nil, errors.Trace(ErrCartesianProductUnsupported)
-	}
 	physical, err := physicalOptimize(logic)
 	if err != nil {
 		return nil, err
@@ -143,18 +135,6 @@ func physicalOptimize(logic LogicalPlan) (PhysicalPlan, error) {
 
 	err = t.plan().ResolveIndices()
 	return t.plan(), err
-}
-
-func existsCartesianProduct(p LogicalPlan) bool {
-	if join, ok := p.(*LogicalJoin); ok && len(join.EqualConditions) == 0 {
-		return join.JoinType == InnerJoin || join.JoinType == LeftOuterJoin || join.JoinType == RightOuterJoin
-	}
-	for _, child := range p.Children() {
-		if existsCartesianProduct(child) {
-			return true
-		}
-	}
-	return false
 }
 
 func init() {

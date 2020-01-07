@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
@@ -2173,88 +2172,6 @@ func (s *testSessionSuite2) TestStatementErrorInTransaction(c *C) {
 	tk.MustExec("update test set b = 11 where a = 1 and b = 2;")
 	tk.MustExec("rollback")
 	tk.MustQuery("select * from test where a = 1 and b = 11").Check(testkit.Rows())
-}
-
-func (s *testSessionSerialSuite) TestStatementCountLimit(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table stmt_count_limit (id int)")
-	saved := config.GetGlobalConfig().Performance.StmtCountLimit
-	config.GetGlobalConfig().Performance.StmtCountLimit = 3
-	defer func() {
-		config.GetGlobalConfig().Performance.StmtCountLimit = saved
-	}()
-	tk.MustExec("set tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("begin")
-	tk.MustExec("insert into stmt_count_limit values (1)")
-	tk.MustExec("insert into stmt_count_limit values (2)")
-	_, err := tk.Exec("insert into stmt_count_limit values (3)")
-	c.Assert(err, NotNil)
-
-	// begin is counted into history but this one is not.
-	tk.MustExec("SET SESSION autocommit = false")
-	tk.MustExec("insert into stmt_count_limit values (1)")
-	tk.MustExec("insert into stmt_count_limit values (2)")
-	tk.MustExec("insert into stmt_count_limit values (3)")
-	_, err = tk.Exec("insert into stmt_count_limit values (4)")
-	c.Assert(err, NotNil)
-}
-
-func (s *testSessionSerialSuite) TestBatchCommit(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set tidb_batch_commit = 1")
-	tk.MustExec("set tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("create table t (id int)")
-	saved := config.GetGlobalConfig().Performance
-	config.GetGlobalConfig().Performance.StmtCountLimit = 3
-	defer func() {
-		config.GetGlobalConfig().Performance = saved
-	}()
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("SET SESSION autocommit = 1")
-	tk.MustExec("begin")
-	tk.MustExec("insert into t values (1)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows())
-	tk.MustExec("insert into t values (2)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows())
-	tk.MustExec("rollback")
-	tk1.MustQuery("select * from t").Check(testkit.Rows())
-
-	// The above rollback will not make the session in transaction.
-	tk.MustExec("insert into t values (1)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("1"))
-	tk.MustExec("delete from t")
-
-	tk.MustExec("begin")
-	tk.MustExec("insert into t values (5)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows())
-	tk.MustExec("insert into t values (6)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows())
-	tk.MustExec("insert into t values (7)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7"))
-
-	// The session is still in transaction.
-	tk.MustExec("insert into t values (8)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7"))
-	tk.MustExec("insert into t values (9)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7"))
-	tk.MustExec("insert into t values (10)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7"))
-	tk.MustExec("commit")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7", "8", "9", "10"))
-
-	// The above commit will not make the session in transaction.
-	tk.MustExec("insert into t values (11)")
-	tk1.MustQuery("select * from t").Check(testkit.Rows("5", "6", "7", "8", "9", "10", "11"))
-
-	tk.MustExec("delete from t")
-	tk.MustExec("SET SESSION autocommit = 0")
-	tk.MustExec("insert into t values (1)")
-	tk.MustExec("insert into t values (2)")
-	tk.MustExec("insert into t values (3)")
-	tk.MustExec("rollback")
-	tk1.MustExec("insert into t values (4)")
-	tk1.MustExec("insert into t values (5)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("4", "5"))
 }
 
 func (s *testSessionSuite2) TestCastTimeToDate(c *C) {
