@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	field_types "github.com/pingcap/parser/types"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -193,7 +192,6 @@ func CastValue(ctx sessionctx.Context, val types.Datum, col *model.ColumnInfo) (
 	}
 	str := casted.GetString()
 	utf8Charset := col.Charset == mysql.UTF8Charset
-	doMB4CharCheck := utf8Charset && config.GetGlobalConfig().CheckMb4ValueInUTF8
 	for i, w := 0, 0; i < len(str); i += w {
 		runeValue, width := utf8.DecodeRuneInString(str[i:])
 		if runeValue == utf8.RuneError {
@@ -203,7 +201,7 @@ func CastValue(ctx sessionctx.Context, val types.Datum, col *model.ColumnInfo) (
 			}
 			casted, err = handleWrongUtf8Value(ctx, col, &casted, str, i)
 			break
-		} else if width > 3 && doMB4CharCheck {
+		} else if width > 3 && utf8Charset {
 			// Handle non-BMP characters.
 			casted, err = handleWrongUtf8Value(ctx, col, &casted, str, i)
 			break

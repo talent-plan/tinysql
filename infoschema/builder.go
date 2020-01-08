@@ -19,9 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/table"
@@ -193,7 +191,6 @@ func (b *Builder) applyCreateTable(m *meta.Meta, dbInfo *model.DBInfo, tableID i
 	}
 
 	ConvertCharsetCollateToLowerCaseIfNeed(tblInfo)
-	ConvertOldVersionUTF8ToUTF8MB4IfNeed(tblInfo)
 
 	if alloc == nil {
 		schemaID := dbInfo.ID
@@ -229,23 +226,6 @@ func ConvertCharsetCollateToLowerCaseIfNeed(tbInfo *model.TableInfo) {
 	for _, col := range tbInfo.Columns {
 		col.Charset = strings.ToLower(col.Charset)
 		col.Collate = strings.ToLower(col.Collate)
-	}
-}
-
-// ConvertOldVersionUTF8ToUTF8MB4IfNeed convert old version UTF8 to UTF8MB4 if config.TreatOldVersionUTF8AsUTF8MB4 is enable.
-func ConvertOldVersionUTF8ToUTF8MB4IfNeed(tbInfo *model.TableInfo) {
-	if tbInfo.Version >= model.TableInfoVersion2 || !config.GetGlobalConfig().TreatOldVersionUTF8AsUTF8MB4 {
-		return
-	}
-	if tbInfo.Charset == charset.CharsetUTF8 {
-		tbInfo.Charset = charset.CharsetUTF8MB4
-		tbInfo.Collate = charset.CollationUTF8MB4
-	}
-	for _, col := range tbInfo.Columns {
-		if col.Version < model.ColumnInfoVersion2 && col.Charset == charset.CharsetUTF8 {
-			col.Charset = charset.CharsetUTF8MB4
-			col.Collate = charset.CollationUTF8MB4
-		}
 	}
 }
 

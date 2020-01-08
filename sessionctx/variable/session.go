@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -311,15 +310,6 @@ type SessionVars struct {
 	// SkipUTF8Check check on input value.
 	SkipUTF8Check bool
 
-	// BatchInsert indicates if we should split insert data into multiple batches.
-	BatchInsert bool
-
-	// BatchDelete indicates if we should split delete data into multiple batches.
-	BatchDelete bool
-
-	// BatchCommit indicates if we should split the transaction into multiple batches.
-	BatchCommit bool
-
 	// IDAllocator is provided by kvEncoder, if it is provided, we will use it to alloc auto id instead of using
 	// Table.alloc.
 	IDAllocator autoid.Allocator
@@ -497,7 +487,6 @@ func NewSessionVars() *SessionVars {
 		IndexLookupSize:    DefIndexLookupSize,
 		InitChunkSize:      DefInitChunkSize,
 		MaxChunkSize:       DefMaxChunkSize,
-		DMLBatchSize:       DefDMLBatchSize,
 	}
 	return vars
 }
@@ -789,14 +778,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.KVVars.BackOffWeight = tidbOptPositiveInt32(val, kv.DefBackOffWeight)
 	case TiDBConstraintCheckInPlace:
 		s.ConstraintCheckInPlace = TiDBOptOn(val)
-	case TiDBBatchInsert:
-		s.BatchInsert = TiDBOptOn(val)
-	case TiDBBatchDelete:
-		s.BatchDelete = TiDBOptOn(val)
-	case TiDBBatchCommit:
-		s.BatchCommit = TiDBOptOn(val)
-	case TiDBDMLBatchSize:
-		s.DMLBatchSize = tidbOptPositiveInt32(val, DefDMLBatchSize)
 	case TiDBCurrentTS, TiDBConfig:
 		return ErrReadOnly
 	case TiDBMaxChunkSize:
@@ -821,8 +802,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.EnableVectorizedExpression = TiDBOptOn(val)
 	case TiDBOptJoinReorderThreshold:
 		s.TiDBOptJoinReorderThreshold = tidbOptPositiveInt32(val, DefTiDBOptJoinReorderThreshold)
-	case TiDBCheckMb4ValueInUTF8:
-		config.GetGlobalConfig().CheckMb4ValueInUTF8 = TiDBOptOn(val)
 	case TiDBSlowQueryFile:
 		s.SlowQueryFile = val
 	case TiDBWaitSplitRegionFinish:
@@ -938,10 +917,6 @@ type Concurrency struct {
 
 // BatchSize defines batch size values.
 type BatchSize struct {
-	// DMLBatchSize indicates the size of batches for DML.
-	// It will be used when BatchInsert or BatchDelete is on.
-	DMLBatchSize int
-
 	// IndexJoinBatchSize is the batch size of a index lookup join.
 	IndexJoinBatchSize int
 

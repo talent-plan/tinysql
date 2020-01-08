@@ -16,6 +16,9 @@ package executor
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -23,12 +26,8 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
-	"os"
-	"strings"
-
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/chunk"
@@ -103,8 +102,6 @@ func (e *SimpleExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeDropUser(x)
 	case *ast.SetPwdStmt:
 		err = e.executeSetPwd(x)
-	case *ast.KillStmt:
-		err = e.executeKillStmt(x)
 	case *ast.SetRoleStmt:
 		err = e.executeSetRole(x)
 	case *ast.RevokeRoleStmt:
@@ -809,21 +806,6 @@ func (e *SimpleExec) executeSetPwd(s *ast.SetPwdStmt) error {
 	_, _, err = e.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
 	domain.GetDomain(e.ctx).NotifyUpdatePrivilege(e.ctx)
 	return err
-}
-
-func (e *SimpleExec) executeKillStmt(s *ast.KillStmt) error {
-	conf := config.GetGlobalConfig()
-	if s.TiDBExtension || conf.CompatibleKillQuery {
-		sm := e.ctx.GetSessionManager()
-		if sm == nil {
-			return nil
-		}
-		sm.Kill(s.ConnectionID, s.Query)
-	} else {
-		err := errors.New("Invalid operation. Please use 'KILL TIDB [CONNECTION | QUERY] connectionID' instead")
-		e.ctx.GetSessionVars().StmtCtx.AppendWarning(err)
-	}
-	return nil
 }
 
 func (e *SimpleExec) executeFlush(s *ast.FlushStmt) error {

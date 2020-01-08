@@ -50,24 +50,6 @@ const (
 	// tidb_config is a read-only variable that shows the config of the current server.
 	TiDBConfig = "tidb_config"
 
-	// tidb_batch_insert is used to enable/disable auto-split insert data. If set this option on, insert executor will automatically
-	// insert data into multiple batches and use a single txn for each batch. This will be helpful when inserting large data.
-	TiDBBatchInsert = "tidb_batch_insert"
-
-	// tidb_batch_delete is used to enable/disable auto-split delete data. If set this option on, delete executor will automatically
-	// split data into multiple batches and use a single txn for each batch. This will be helpful when deleting large data.
-	TiDBBatchDelete = "tidb_batch_delete"
-
-	// tidb_batch_commit is used to enable/disable auto-split the transaction.
-	// If set this option on, the transaction will be committed when it reaches stmt-count-limit and starts a new transaction.
-	TiDBBatchCommit = "tidb_batch_commit"
-
-	// tidb_dml_batch_size is used to split the insert/delete data into small batches.
-	// It only takes effort when tidb_batch_insert/tidb_batch_delete is on.
-	// Its default value is 20000. When the row size is large, 20k rows could be larger than 100MB.
-	// User could change it to a smaller one to avoid breaking the transaction size limitation.
-	TiDBDMLBatchSize = "tidb_dml_batch_size"
-
 	// tidb_general_log is used to log every query in the server in info level.
 	TiDBGeneralLog = "tidb_general_log"
 
@@ -83,9 +65,6 @@ const (
 	// on: always enable table partition.
 	// off: always disable table partition.
 	TiDBEnableTablePartition = "tidb_enable_table_partition"
-
-	// TiDBCheckMb4ValueInUTF8 is used to control whether to enable the check wrong utf8 value.
-	TiDBCheckMb4ValueInUTF8 = "tidb_check_mb4_value_in_utf8"
 
 	// tidb_skip_isolation_level_check is used to control whether to return error when set unsupported transaction
 	// isolation level.
@@ -285,13 +264,9 @@ const (
 	DefOptDiskFactor                 = 1.5
 	DefOptConcurrencyFactor          = 3.0
 	DefOptInSubqToJoinAndAgg         = true
-	DefBatchInsert                   = false
-	DefBatchDelete                   = false
-	DefBatchCommit                   = false
 	DefCurretTS                      = 0
 	DefInitChunkSize                 = 32
 	DefMaxChunkSize                  = 1024
-	DefDMLBatchSize                  = 20000
 	DefMaxPreparedStmtCount          = -1
 	DefWaitTimeout                   = 0
 	DefTiDBGeneralLog                = 0

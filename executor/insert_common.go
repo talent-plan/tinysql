@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/table"
@@ -196,9 +195,6 @@ func insertRows(ctx context.Context, base insertCommon) (err error) {
 	if err = e.processSetList(); err != nil {
 		return err
 	}
-	sessVars := e.ctx.GetSessionVars()
-	batchInsert := sessVars.BatchInsert && !sessVars.InTxn() && config.GetGlobalConfig().EnableBatchDML
-	batchSize := sessVars.DMLBatchSize
 
 	e.lazyFillAutoID = true
 	evalRowFunc := e.fastEvalRow
@@ -215,20 +211,6 @@ func insertRows(ctx context.Context, base insertCommon) (err error) {
 			return err
 		}
 		rows = append(rows, row)
-		if batchInsert && e.rowCount%uint64(batchSize) == 0 {
-			// Before batch insert, fill the batch allocated autoIDs.
-			rows, err = e.lazyAdjustAutoIncrementDatum(ctx, rows)
-			if err != nil {
-				return err
-			}
-			if err = base.exec(ctx, rows); err != nil {
-				return err
-			}
-			rows = rows[:0]
-			if err = e.doBatchInsert(ctx); err != nil {
-				return err
-			}
-		}
 	}
 	// Fill the batch allocated autoIDs.
 	rows, err = e.lazyAdjustAutoIncrementDatum(ctx, rows)
@@ -378,8 +360,6 @@ func insertRowsFromSelect(ctx context.Context, base insertCommon) error {
 		// If StrictSQLMode is disabled and it is a insert-select statement, it also handle BadNullAsWarning.
 		sessVars.StmtCtx.BadNullAsWarning = true
 	}
-	batchInsert := sessVars.BatchInsert && !sessVars.InTxn() && config.GetGlobalConfig().EnableBatchDML
-	batchSize := sessVars.DMLBatchSize
 
 	for {
 		err := Next(ctx, selectExec, chk)
@@ -398,15 +378,6 @@ func insertRowsFromSelect(ctx context.Context, base insertCommon) error {
 				return err
 			}
 			rows = append(rows, row)
-			if batchInsert && e.rowCount%uint64(batchSize) == 0 {
-				if err = base.exec(ctx, rows); err != nil {
-					return err
-				}
-				rows = rows[:0]
-				if err = e.doBatchInsert(ctx); err != nil {
-					return err
-				}
-			}
 		}
 
 		err = base.exec(ctx, rows)
@@ -415,23 +386,6 @@ func insertRowsFromSelect(ctx context.Context, base insertCommon) error {
 		}
 		rows = rows[:0]
 	}
-	return nil
-}
-
-func (e *InsertValues) doBatchInsert(ctx context.Context) error {
-	sessVars := e.ctx.GetSessionVars()
-	if err := e.ctx.StmtCommit(); err != nil {
-		return err
-	}
-	if err := e.ctx.NewTxn(ctx); err != nil {
-		// We should return a special error for batch insert.
-		return ErrBatchInsertFail.GenWithStack("BatchInsert failed with error: %v", err)
-	}
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	sessVars.GetWriteStmtBufs().BufStore = kv.NewBufferStore(txn, kv.TempTxnMemBufCap)
 	return nil
 }
 

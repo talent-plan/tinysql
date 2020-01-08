@@ -297,18 +297,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec("drop view v")
 }
 
-func (s *testSuiteP2) TestMultiBatch(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t,t0")
-	tk.MustExec("create table t0 (i int)")
-	tk.MustExec("insert into t0 values (1), (1)")
-	tk.MustExec("create table t (i int unique key)")
-	tk.MustExec("set @@tidb_dml_batch_size = 1")
-	tk.MustExec("insert ignore into t select * from t0")
-
-}
-
 func (s *testSuite4) TestInsertAutoInc(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

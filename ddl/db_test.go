@@ -194,24 +194,6 @@ func backgroundExec(s kv.Storage, sql string, done chan error) {
 	done <- errors.Trace(err)
 }
 
-// TestAddPrimaryKeyRollback1 is used to test scenarios that will roll back when a duplicate primary key is encountered.
-func (s *testDBSuite5) TestAddPrimaryKeyRollback1(c *C) {
-	hasNullValsInKey := false
-	idxName := "PRIMARY"
-	addIdxSQL := "alter table t1 add primary key c3_index (c3);"
-	errMsg := "[kv:1062]Duplicate entry '' for key 'PRIMARY'"
-	testAddIndexRollback(c, s.store, s.lease, idxName, addIdxSQL, errMsg, hasNullValsInKey)
-}
-
-// TestAddPrimaryKeyRollback2 is used to test scenarios that will roll back when a null primary key is encountered.
-func (s *testDBSuite1) TestAddPrimaryKeyRollback2(c *C) {
-	hasNullValsInKey := true
-	idxName := "PRIMARY"
-	addIdxSQL := "alter table t1 add primary key c3_index (c3);"
-	errMsg := "[ddl:1138]Invalid use of NULL value"
-	testAddIndexRollback(c, s.store, s.lease, idxName, addIdxSQL, errMsg, hasNullValsInKey)
-}
-
 func (s *testDBSuite2) TestAddUniqueIndexRollback(c *C) {
 	hasNullValsInKey := false
 	idxName := "c3_index"
@@ -294,22 +276,6 @@ LOOP:
 		tk.MustExec("delete from t1 where c1 = ?", i+10)
 	}
 	sessionExec(c, store, addIdxSQL)
-	tk.MustExec("drop table t1")
-}
-
-func (s *testDBSuite5) TestCancelAddPrimaryKey(c *C) {
-	idxName := "primary"
-	addIdxSQL := "alter table t1 add primary key idx_c2 (c2);"
-	testCancelAddIndex(c, s.store, s.dom.DDL(), s.lease, idxName, addIdxSQL, "")
-
-	// Check the column's flag when the "add primary key" failed.
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test_db")
-	ctx := tk.Se.(sessionctx.Context)
-	c.Assert(ctx.NewTxn(context.Background()), IsNil)
-	t := testGetTableByName(c, ctx, "test_db", "t1")
-	col1Flag := t.Cols()[1].Flag
-	c.Assert(!mysql.HasNotNullFlag(col1Flag) && !mysql.HasPreventNullInsertFlag(col1Flag) && mysql.HasUnsignedFlag(col1Flag), IsTrue)
 	tk.MustExec("drop table t1")
 }
 
@@ -458,14 +424,6 @@ func (s *testDBSuite4) TestCancelAddIndex1(c *C) {
 	}
 	s.mustExec(c, "alter table t add index idx_c2(c2)")
 	s.mustExec(c, "alter table t drop index idx_c2")
-}
-
-// TestCancelDropIndex tests cancel ddl job which type is drop primary key.
-func (s *testDBSuite4) TestCancelDropPrimaryKey(c *C) {
-	idxName := "primary"
-	addIdxSQL := "alter table t add primary key idx_c2 (c2);"
-	dropIdxSQL := "alter table t drop primary key;"
-	testCancelDropIndex(c, s.store, s.dom.DDL(), idxName, addIdxSQL, dropIdxSQL)
 }
 
 // TestCancelDropIndex tests cancel ddl job which type is drop index.
@@ -839,10 +797,6 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 	s.tk.MustExec("alter table tidb.test add index idx1 (a, b);")
 
 }
-func (s *testDBSuite1) TestAddPrimaryKey1(c *C) {
-	testAddIndex(c, s.store, s.lease, false,
-		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, unique key(c1))", "primary")
-}
 
 func (s *testDBSuite1) TestAddIndex1(c *C) {
 	testAddIndex(c, s.store, s.lease, false,
@@ -1003,13 +957,6 @@ LOOP:
 	}
 	c.Assert(handles, HasLen, 0)
 	tk.MustExec("drop table test_add_index")
-}
-
-func (s *testDBSuite1) TestDropPrimaryKey(c *C) {
-	idxName := "primary"
-	createSQL := "create table test_drop_index (c1 int, c2 int, c3 int, unique key(c1), primary key(c3))"
-	dropIdxSQL := "alter table test_drop_index drop primary key;"
-	testDropIndex(c, s.store, s.lease, createSQL, dropIdxSQL, idxName)
 }
 
 func (s *testDBSuite2) TestDropIndex(c *C) {
@@ -1210,98 +1157,6 @@ func checkDelRangeDone(c *C, ctx sessionctx.Context, idx table.Index) {
 		}
 	}
 	c.Assert(handles, HasLen, 0, Commentf("take time %v", time.Since(startTime)))
-}
-
-func (s *testDBSuite5) TestAlterPrimaryKey(c *C) {
-	s.tk = testkit.NewTestKitWithInit(c, s.store)
-	s.tk.MustExec("create table test_add_pk(a int, b int unsigned , c varchar(255) default 'abc', d int as (a+b), e int as (a+1) stored, index idx(b))")
-	defer s.tk.MustExec("drop table test_add_pk")
-
-	// for generated columns
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key(d);", mysql.ErrUnsupportedOnGeneratedColumn)
-	// The primary key name is the same as the existing index name.
-	s.tk.MustExec("alter table test_add_pk add primary key idx(e)")
-	s.tk.MustExec("alter table test_add_pk drop primary key")
-
-	// for describing table
-	s.tk.MustExec("create table test_add_pk1(a int, index idx(a))")
-	s.tk.MustQuery("desc test_add_pk1").Check(testutil.RowsWithSep(",", `a,int(11),YES,MUL,<nil>,`))
-	s.tk.MustExec("alter table test_add_pk1 add primary key idx(a)")
-	s.tk.MustQuery("desc test_add_pk1").Check(testutil.RowsWithSep(",", `a,int(11),NO,PRI,<nil>,`))
-	s.tk.MustExec("alter table test_add_pk1 drop primary key")
-	s.tk.MustQuery("desc test_add_pk1").Check(testutil.RowsWithSep(",", `a,int(11),NO,MUL,<nil>,`))
-	s.tk.MustExec("create table test_add_pk2(a int, b int, index idx(a))")
-	s.tk.MustExec("alter table test_add_pk2 add primary key idx(a, b)")
-	s.tk.MustQuery("desc test_add_pk2").Check(testutil.RowsWithSep(",", ""+
-		"a int(11) NO PRI <nil> ]\n"+
-		"[b int(11) NO PRI <nil> "))
-	s.tk.MustQuery("show create table test_add_pk2").Check(testutil.RowsWithSep("|", ""+
-		"test_add_pk2 CREATE TABLE `test_add_pk2` (\n"+
-		"  `a` int(11) NOT NULL,\n"+
-		"  `b` int(11) NOT NULL,\n"+
-		"  KEY `idx` (`a`),\n"+
-		"  PRIMARY KEY (`a`,`b`)\n"+
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("alter table test_add_pk2 drop primary key")
-	s.tk.MustQuery("desc test_add_pk2").Check(testutil.RowsWithSep(",", ""+
-		"a int(11) NO MUL <nil> ]\n"+
-		"[b int(11) NO  <nil> "))
-
-	// Check if the primary key exists before checking the table's pkIsHandle.
-	s.tk.MustGetErrCode("alter table test_add_pk drop primary key", mysql.ErrCantDropFieldOrKey)
-
-	// for the limit of name
-	validName := strings.Repeat("a", mysql.MaxIndexIdentifierLen)
-	invalidName := strings.Repeat("b", mysql.MaxIndexIdentifierLen+1)
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key "+invalidName+"(a)", mysql.ErrTooLongIdent)
-	// for valid name
-	s.tk.MustExec("alter table test_add_pk add primary key " + validName + "(a)")
-	// for multiple primary key
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key (a)", mysql.ErrMultiplePriKey)
-	s.tk.MustExec("alter table test_add_pk drop primary key")
-	// for not existing primary key
-	s.tk.MustGetErrCode("alter table test_add_pk drop primary key", mysql.ErrCantDropFieldOrKey)
-
-	// for too many key parts specified
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key idx_test(f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17);",
-		mysql.ErrTooManyKeyParts)
-
-	// for the limit of comment's length
-	validComment := "'" + strings.Repeat("a", ddl.MaxCommentLength) + "'"
-	invalidComment := "'" + strings.Repeat("b", ddl.MaxCommentLength+1) + "'"
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key(a) comment "+invalidComment, mysql.ErrTooLongIndexComment)
-	// for empty sql_mode
-	r := s.tk.MustQuery("select @@sql_mode")
-	sqlMode := r.Rows()[0][0].(string)
-	s.tk.MustExec("set @@sql_mode=''")
-	s.tk.MustExec("alter table test_add_pk add primary key(a) comment " + invalidComment)
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1688|Comment for index 'PRIMARY' is too long (max = 1024)"))
-	s.tk.MustExec("set @@sql_mode= '" + sqlMode + "'")
-	s.tk.MustExec("alter table test_add_pk drop primary key")
-	// for valid comment
-	s.tk.MustExec("alter table test_add_pk add primary key(a, b, c) comment " + validComment)
-	ctx := s.tk.Se.(sessionctx.Context)
-	c.Assert(ctx.NewTxn(context.Background()), IsNil)
-	t := testGetTableByName(c, ctx, "test", "test_add_pk")
-	col1Flag := t.Cols()[0].Flag
-	col2Flag := t.Cols()[1].Flag
-	col3Flag := t.Cols()[2].Flag
-	c.Assert(mysql.HasNotNullFlag(col1Flag) && !mysql.HasPreventNullInsertFlag(col1Flag), IsTrue)
-	c.Assert(mysql.HasNotNullFlag(col2Flag) && !mysql.HasPreventNullInsertFlag(col2Flag) && mysql.HasUnsignedFlag(col2Flag), IsTrue)
-	c.Assert(mysql.HasNotNullFlag(col3Flag) && !mysql.HasPreventNullInsertFlag(col3Flag) && !mysql.HasNoDefaultValueFlag(col3Flag), IsTrue)
-	s.tk.MustExec("alter table test_add_pk drop primary key")
-
-	// for null values in primary key
-	s.tk.MustExec("drop table test_add_pk")
-	s.tk.MustExec("create table test_add_pk(a int, b int unsigned , c varchar(255) default 'abc', index idx(b))")
-	s.tk.MustExec("insert into test_add_pk set a = 0, b = 0, c = 0")
-	s.tk.MustExec("insert into test_add_pk set a = 1")
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key (b)", mysql.ErrInvalidUseOfNull)
-	s.tk.MustExec("insert into test_add_pk set a = 2, b = 2")
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key (a, b)", mysql.ErrInvalidUseOfNull)
-	s.tk.MustExec("insert into test_add_pk set a = 3, c = 3")
-	s.tk.MustGetErrCode("alter table test_add_pk add primary key (c, b, a)", mysql.ErrInvalidUseOfNull)
 }
 
 func (s *testDBSuite4) TestAddIndexWithDupCols(c *C) {

@@ -330,7 +330,6 @@ func getServerInfo(id string) *ServerInfo {
 	cfg := config.GetGlobalConfig()
 	info := &ServerInfo{
 		ID:         id,
-		IP:         cfg.AdvertiseAddress,
 		Port:       cfg.Port,
 		StatusPort: cfg.Status.StatusPort,
 		Lease:      cfg.Lease,

@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/mysql"
 )
 
 var _ = Suite(&testConfigSuite{})
@@ -55,10 +54,6 @@ unrecognized-option-test = true
 
 	_, err = f.WriteString(`
 token-limit = 0
-alter-primary-key = true
-split-region-max-num=10000
-enable-batch-dml = true
-server-version = "test_version"
 `)
 
 	c.Assert(err, IsNil)
@@ -66,14 +61,7 @@ server-version = "test_version"
 
 	c.Assert(conf.Load(configFile), IsNil)
 
-	c.Assert(conf.ServerVersion, Equals, "test_version")
-	c.Assert(mysql.ServerVersion, Equals, conf.ServerVersion)
-
-	c.Assert(conf.AlterPrimaryKey, Equals, true)
-
 	c.Assert(conf.TokenLimit, Equals, uint(1000))
-	c.Assert(conf.SplitRegionMaxNum, Equals, uint64(10000))
-	c.Assert(conf.EnableBatchDML, Equals, true)
 	c.Assert(f.Close(), IsNil)
 	c.Assert(os.Remove(configFile), IsNil)
 

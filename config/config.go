@@ -19,7 +19,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	zaplog "github.com/pingcap/log"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/atomic"
 )
@@ -51,26 +50,10 @@ type Config struct {
 	Cors             string `toml:"cors" json:"cors"`
 	Store            string `toml:"store" json:"store"`
 	Path             string `toml:"path" json:"path"`
-	Socket           string `toml:"socket" json:"socket"`
 	Lease            string `toml:"lease" json:"lease"`
-	RunDDL           bool   `toml:"run-ddl" json:"run-ddl"`
-	SplitTable       bool   `toml:"split-table" json:"split-table"`
 	TokenLimit       uint   `toml:"token-limit" json:"token-limit"`
-	EnableBatchDML   bool   `toml:"enable-batch-dml" json:"enable-batch-dml"`
-	// Set sys variable lower-case-table-names, ref: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html.
-	// TODO: We actually only support mode 2, which keeps the original case, but the comparison is case-insensitive.
-	LowerCaseTableNames int    `toml:"lower-case-table-names" json:"lower-case-table-names"`
-	ServerVersion       string `toml:"server-version" json:"server-version"`
-	Log                 Log    `toml:"log" json:"log"`
-	Status              Status `toml:"status" json:"status"`
-	CompatibleKillQuery bool   `toml:"compatible-kill-query" json:"compatible-kill-query"`
-	CheckMb4ValueInUTF8 bool   `toml:"check-mb4-value-in-utf8" json:"check-mb4-value-in-utf8"`
-	// AlterPrimaryKey is used to control alter primary key feature.
-	AlterPrimaryKey bool `toml:"alter-primary-key" json:"alter-primary-key"`
-	// TreatOldVersionUTF8AsUTF8MB4 is use to treat old version table/column UTF8 charset as UTF8MB4. This is for compatibility.
-	// Currently not support dynamic modify, because this need to reload all old version schema.
-	TreatOldVersionUTF8AsUTF8MB4 bool   `toml:"treat-old-version-utf8-as-utf8mb4" json:"treat-old-version-utf8-as-utf8mb4"`
-	SplitRegionMaxNum            uint64 `toml:"split-region-max-num" json:"split-region-max-num"`
+	Log              Log    `toml:"log" json:"log"`
+	Status           Status `toml:"status" json:"status"`
 }
 
 // Log is the log section of config.
@@ -104,23 +87,14 @@ type Status struct {
 }
 
 var defaultConf = Config{
-	Host:                         "0.0.0.0",
-	AdvertiseAddress:             "",
-	Port:                         4000,
-	Cors:                         "",
-	Store:                        "mocktikv",
-	Path:                         "/tmp/tidb",
-	RunDDL:                       true,
-	SplitTable:                   true,
-	Lease:                        "45s",
-	TokenLimit:                   1000,
-	EnableBatchDML:               false,
-	CheckMb4ValueInUTF8:          true,
-	AlterPrimaryKey:              false,
-	TreatOldVersionUTF8AsUTF8MB4: true,
-	SplitRegionMaxNum:            1000,
-	LowerCaseTableNames:          2,
-	ServerVersion:                "",
+	Host:             "0.0.0.0",
+	AdvertiseAddress: "",
+	Port:             4000,
+	Cors:             "",
+	Store:            "mocktikv",
+	Path:             "/tmp/tidb",
+	Lease:            "45s",
+	TokenLimit:       1000,
 	Log: Log{
 		Level: "info",
 		File:  logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
@@ -160,9 +134,6 @@ func (c *Config) Load(confFile string) error {
 	if c.TokenLimit == 0 {
 		c.TokenLimit = 1000
 	}
-	if len(c.ServerVersion) > 0 {
-		mysql.ServerVersion = c.ServerVersion
-	}
 	// If any items in confFile file are not mapped into the Config struct, issue
 	// an error and stop the server from starting.
 	undecoded := metaData.Undecoded()
@@ -188,15 +159,8 @@ func (c *Config) Valid() error {
 		}
 		return fmt.Errorf("invalid store=%s, valid storages=%v", c.Store, nameList)
 	}
-	if c.Store == "mocktikv" && !c.RunDDL {
-		return fmt.Errorf("can't disable DDL on mocktikv")
-	}
 	if c.Log.File.MaxSize > MaxLogFileSize {
 		return fmt.Errorf("invalid max log file size=%v which is larger than max=%v", c.Log.File.MaxSize, MaxLogFileSize)
-	}
-	// lower_case_table_names is allowed to be 0, 1, 2
-	if c.LowerCaseTableNames < 0 || c.LowerCaseTableNames > 2 {
-		return fmt.Errorf("lower-case-table-names should be 0 or 1 or 2")
 	}
 	return nil
 }

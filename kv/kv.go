@@ -345,10 +345,3 @@ type Iterator interface {
 	Next() error
 	Close()
 }
-
-// SplittableStore is the kv store which supports split regions.
-type SplittableStore interface {
-	SplitRegions(ctx context.Context, splitKey [][]byte, scatter bool) (regionID []uint64, err error)
-	WaitScatterRegionFinish(regionID uint64, backOff int) error
-	CheckRegionInScattering(regionID uint64) (bool, error)
-}

@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/server"
@@ -77,8 +76,6 @@ var (
 	advertiseAddress = flag.String(nmAdvertiseAddress, "", "tidb server advertise IP")
 	port             = flag.String(nmPort, "4000", "tidb server port")
 	cors             = flag.String(nmCors, "", "tidb server allow cors origin")
-	socket           = flag.String(nmSocket, "", "The socket file to use for connection.")
-	runDDL           = flagBoolean(nmRunDDL, true, "run ddl worker on this tidb-server")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
 	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
 
@@ -255,12 +252,6 @@ func overrideConfig() {
 	if actualFlags[nmStorePath] {
 		cfg.Path = *storePath
 	}
-	if actualFlags[nmSocket] {
-		cfg.Socket = *socket
-	}
-	if actualFlags[nmRunDDL] {
-		cfg.RunDDL = *runDDL
-	}
 	if actualFlags[nmDdlLease] {
 		cfg.Lease = *ddlLease
 	}
@@ -294,15 +285,8 @@ func overrideConfig() {
 func setGlobalVars() {
 	ddlLeaseDuration := parseDuration(cfg.Lease)
 	session.SetSchemaLease(ddlLeaseDuration)
-	ddl.RunWorker = cfg.RunDDL
-	if cfg.SplitTable {
-		atomic.StoreUint32(&ddl.EnableSplitTableRegion, 1)
-	}
-
-	variable.SysVars["lower_case_table_names"].Value = strconv.Itoa(cfg.LowerCaseTableNames)
 
 	variable.SysVars[variable.Port].Value = fmt.Sprintf("%d", cfg.Port)
-	variable.SysVars[variable.Socket].Value = cfg.Socket
 	variable.SysVars[variable.DataDir].Value = cfg.Path
 }
 

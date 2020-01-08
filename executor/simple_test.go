@@ -439,15 +439,6 @@ func (s *testSuite3) TestSetPwd(c *C) {
 
 }
 
-func (s *testSuite3) TestKillStmt(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("kill 1")
-
-	result := tk.MustQuery("show warnings")
-	result.Check(testkit.Rows("Warning 1105 Invalid operation. Please use 'KILL TIDB [CONNECTION | QUERY] connectionID' instead"))
-}
-
 func (s *testSuite3) TestFlushPrivileges(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 

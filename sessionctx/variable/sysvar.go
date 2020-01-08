@@ -14,12 +14,12 @@
 package variable
 
 import (
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	"strconv"
 	"strings"
+
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/kv"
 )
 
 // ScopeFlag is for system variable whether can be changed in global/session dynamically or not.
@@ -647,10 +647,6 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, TiDBIndexLookupJoinConcurrency, strconv.Itoa(DefIndexLookupJoinConcurrency)},
 	{ScopeGlobal | ScopeSession, TiDBIndexSerialScanConcurrency, strconv.Itoa(DefIndexSerialScanConcurrency)},
 	{ScopeGlobal | ScopeSession, TiDBSkipUTF8Check, BoolToIntStr(DefSkipUTF8Check)},
-	{ScopeSession, TiDBBatchInsert, BoolToIntStr(DefBatchInsert)},
-	{ScopeSession, TiDBBatchDelete, BoolToIntStr(DefBatchDelete)},
-	{ScopeSession, TiDBBatchCommit, BoolToIntStr(DefBatchCommit)},
-	{ScopeSession, TiDBDMLBatchSize, strconv.Itoa(DefDMLBatchSize)},
 	{ScopeSession, TiDBCurrentTS, strconv.Itoa(DefCurretTS)},
 	{ScopeGlobal | ScopeSession, TiDBMaxChunkSize, strconv.Itoa(DefMaxChunkSize)},
 	{ScopeGlobal | ScopeSession, TiDBInitChunkSize, strconv.Itoa(DefInitChunkSize)},
@@ -678,7 +674,6 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal, TiDBMaxDeltaSchemaCount, strconv.Itoa(DefTiDBMaxDeltaSchemaCount)},
 	{ScopeSession, TiDBEnableRadixJoin, BoolToIntStr(DefTiDBUseRadixJoin)},
 	{ScopeGlobal | ScopeSession, TiDBOptJoinReorderThreshold, strconv.Itoa(DefTiDBOptJoinReorderThreshold)},
-	{ScopeSession, TiDBCheckMb4ValueInUTF8, BoolToIntStr(config.GetGlobalConfig().CheckMb4ValueInUTF8)},
 	{ScopeSession, TiDBSlowQueryFile, ""},
 	{ScopeGlobal, TiDBScatterRegion, BoolToIntStr(DefTiDBScatterRegion)},
 	{ScopeSession, TiDBWaitSplitRegionFinish, BoolToIntStr(DefTiDBWaitSplitRegionFinish)},
