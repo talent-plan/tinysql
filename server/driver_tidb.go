@@ -24,9 +24,7 @@ import (
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
@@ -52,119 +50,6 @@ func NewTiDBDriver(store kv.Storage) *TiDBDriver {
 type TiDBContext struct {
 	session   session.Session
 	currentDB string
-	stmts     map[int]*TiDBStatement
-}
-
-// TiDBStatement implements PreparedStatement.
-type TiDBStatement struct {
-	id          uint32
-	numParams   int
-	boundParams [][]byte
-	paramsType  []byte
-	ctx         *TiDBContext
-	rs          ResultSet
-	sql         string
-}
-
-// ID implements PreparedStatement ID method.
-func (ts *TiDBStatement) ID() int {
-	return int(ts.id)
-}
-
-// Execute implements PreparedStatement Execute method.
-func (ts *TiDBStatement) Execute(ctx context.Context, args []types.Datum) (rs ResultSet, err error) {
-	tidbRecordset, err := ts.ctx.session.ExecutePreparedStmt(ctx, ts.id, args)
-	if err != nil {
-		return nil, err
-	}
-	if tidbRecordset == nil {
-		return
-	}
-	rs = &tidbResultSet{
-		recordSet:    tidbRecordset,
-		preparedStmt: ts.ctx.GetSessionVars().PreparedStmts[ts.id].(*core.CachedPrepareStmt),
-	}
-	return
-}
-
-// AppendParam implements PreparedStatement AppendParam method.
-func (ts *TiDBStatement) AppendParam(paramID int, data []byte) error {
-	if paramID >= len(ts.boundParams) {
-		return mysql.NewErr(mysql.ErrWrongArguments, "stmt_send_longdata")
-	}
-	// If len(data) is 0, append an empty byte slice to the end to distinguish no data and no parameter.
-	if len(data) == 0 {
-		ts.boundParams[paramID] = []byte{}
-	} else {
-		ts.boundParams[paramID] = append(ts.boundParams[paramID], data...)
-	}
-	return nil
-}
-
-// NumParams implements PreparedStatement NumParams method.
-func (ts *TiDBStatement) NumParams() int {
-	return ts.numParams
-}
-
-// BoundParams implements PreparedStatement BoundParams method.
-func (ts *TiDBStatement) BoundParams() [][]byte {
-	return ts.boundParams
-}
-
-// SetParamsType implements PreparedStatement SetParamsType method.
-func (ts *TiDBStatement) SetParamsType(paramsType []byte) {
-	ts.paramsType = paramsType
-}
-
-// GetParamsType implements PreparedStatement GetParamsType method.
-func (ts *TiDBStatement) GetParamsType() []byte {
-	return ts.paramsType
-}
-
-// StoreResultSet stores ResultSet for stmt fetching
-func (ts *TiDBStatement) StoreResultSet(rs ResultSet) {
-	// refer to https://dev.mysql.com/doc/refman/5.7/en/cursor-restrictions.html
-	// You can have open only a single cursor per prepared statement.
-	// closing previous ResultSet before associating a new ResultSet with this statement
-	// if it exists
-	if ts.rs != nil {
-		terror.Call(ts.rs.Close)
-	}
-	ts.rs = rs
-}
-
-// GetResultSet gets ResultSet associated this statement
-func (ts *TiDBStatement) GetResultSet() ResultSet {
-	return ts.rs
-}
-
-// Reset implements PreparedStatement Reset method.
-func (ts *TiDBStatement) Reset() {
-	for i := range ts.boundParams {
-		ts.boundParams[i] = nil
-	}
-
-	// closing previous ResultSet if it exists
-	if ts.rs != nil {
-		terror.Call(ts.rs.Close)
-		ts.rs = nil
-	}
-}
-
-// Close implements PreparedStatement Close method.
-func (ts *TiDBStatement) Close() error {
-	//TODO close at tidb level
-	err := ts.ctx.session.DropPreparedStmt(ts.id)
-	if err != nil {
-		return err
-	}
-	delete(ts.ctx.stmts, int(ts.id))
-
-	// close ResultSet associated with this statement
-	if ts.rs != nil {
-		terror.Call(ts.rs.Close)
-	}
-	return nil
 }
 
 // OpenCtx implements IDriver.
@@ -183,7 +68,6 @@ func (qd *TiDBDriver) OpenCtx(connID uint64, capability uint32, collation uint8,
 	tc := &TiDBContext{
 		session:   se,
 		currentDB: dbname,
-		stmts:     make(map[int]*TiDBStatement),
 	}
 	return tc, nil
 }
@@ -273,11 +157,6 @@ func (tc *TiDBContext) SetClientCapability(flags uint32) {
 
 // Close implements QueryCtx Close method.
 func (tc *TiDBContext) Close() error {
-	// close PreparedStatement associated with this connection
-	for _, v := range tc.stmts {
-		terror.Call(v.Close)
-	}
-
 	tc.session.Close()
 	return nil
 }
@@ -300,43 +179,6 @@ func (tc *TiDBContext) FieldList(table string) (columns []*ColumnInfo, err error
 	return columns, nil
 }
 
-// GetStatement implements QueryCtx GetStatement method.
-func (tc *TiDBContext) GetStatement(stmtID int) PreparedStatement {
-	tcStmt := tc.stmts[stmtID]
-	if tcStmt != nil {
-		return tcStmt
-	}
-	return nil
-}
-
-// Prepare implements QueryCtx Prepare method.
-func (tc *TiDBContext) Prepare(sql string) (statement PreparedStatement, columns, params []*ColumnInfo, err error) {
-	stmtID, paramCount, fields, err := tc.session.PrepareStmt(sql)
-	if err != nil {
-		return
-	}
-	stmt := &TiDBStatement{
-		sql:         sql,
-		id:          stmtID,
-		numParams:   paramCount,
-		boundParams: make([][]byte, paramCount),
-		ctx:         tc,
-	}
-	statement = stmt
-	columns = make([]*ColumnInfo, len(fields))
-	for i := range fields {
-		columns[i] = convertColumnInfo(fields[i])
-	}
-	params = make([]*ColumnInfo, paramCount)
-	for i := range params {
-		params[i] = &ColumnInfo{
-			Type: mysql.TypeBlob,
-		}
-	}
-	tc.stmts[int(stmtID)] = stmt
-	return
-}
-
 // ShowProcess implements QueryCtx ShowProcess method.
 func (tc *TiDBContext) ShowProcess() *util.ProcessInfo {
 	return tc.session.ShowProcess()
@@ -353,11 +195,10 @@ func (tc *TiDBContext) GetSessionVars() *variable.SessionVars {
 }
 
 type tidbResultSet struct {
-	recordSet    sqlexec.RecordSet
-	columns      []*ColumnInfo
-	rows         []chunk.Row
-	closed       int32
-	preparedStmt *core.CachedPrepareStmt
+	recordSet sqlexec.RecordSet
+	columns   []*ColumnInfo
+	rows      []chunk.Row
+	closed    int32
 }
 
 func (trs *tidbResultSet) NewChunk() *chunk.Chunk {
@@ -399,22 +240,10 @@ func (trs *tidbResultSet) Columns() []*ColumnInfo {
 	if trs.columns != nil {
 		return trs.columns
 	}
-	// for prepare statement, try to get cached columnInfo array
-	if trs.preparedStmt != nil {
-		ps := trs.preparedStmt
-		if colInfos, ok := ps.ColumnInfos.([]*ColumnInfo); ok {
-			trs.columns = colInfos
-		}
-	}
 	if trs.columns == nil {
 		fields := trs.recordSet.Fields()
 		for _, v := range fields {
 			trs.columns = append(trs.columns, convertColumnInfo(v))
-		}
-		if trs.preparedStmt != nil {
-			// if ColumnInfo struct has allocated object,
-			// here maybe we need deep copy ColumnInfo to do caching
-			trs.preparedStmt.ColumnInfos = trs.columns
 		}
 	}
 	return trs.columns

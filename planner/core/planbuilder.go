@@ -317,20 +317,14 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 	switch x := node.(type) {
 	case *ast.AdminStmt:
 		return b.buildAdmin(ctx, x)
-	case *ast.DeallocateStmt:
-		return &Deallocate{Name: x.Name}, nil
 	case *ast.DeleteStmt:
 		return b.buildDelete(ctx, x)
-	case *ast.ExecuteStmt:
-		return b.buildExecute(ctx, x)
 	case *ast.ExplainStmt:
 		return b.buildExplain(ctx, x)
 	case *ast.ExplainForStmt:
 		return b.buildExplainFor(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
-	case *ast.PrepareStmt:
-		return b.buildPrepare(x), nil
 	case *ast.SelectStmt:
 		return b.buildSelect(ctx, x)
 	case *ast.UnionStmt:
@@ -354,22 +348,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildDDL(ctx, x)
 	}
 	return nil, ErrUnsupportedType.GenWithStack("Unsupported type %T", node)
-}
-
-func (b *PlanBuilder) buildExecute(ctx context.Context, v *ast.ExecuteStmt) (Plan, error) {
-	vars := make([]expression.Expression, 0, len(v.UsingVars))
-	for _, expr := range v.UsingVars {
-		newExpr, _, err := b.rewrite(ctx, expr, nil, nil, true)
-		if err != nil {
-			return nil, err
-		}
-		vars = append(vars, newExpr)
-	}
-	exe := &Execute{Name: v.Name, UsingVars: vars, ExecID: v.ExecID}
-	if v.BinaryArgs != nil {
-		exe.PrepareParams = v.BinaryArgs.([]types.Datum)
-	}
-	return exe, nil
 }
 
 func (b *PlanBuilder) buildDo(ctx context.Context, v *ast.DoStmt) (Plan, error) {
@@ -610,22 +588,6 @@ func (b *PlanBuilder) buildSelectLock(src LogicalPlan, lock ast.SelectLockType) 
 	}.Init(b.ctx)
 	selectLock.SetChildren(src)
 	return selectLock
-}
-
-func (b *PlanBuilder) buildPrepare(x *ast.PrepareStmt) Plan {
-	p := &Prepare{
-		Name: x.Name,
-	}
-	if x.SQLVar != nil {
-		if v, ok := b.ctx.GetSessionVars().Users[x.SQLVar.Name]; ok {
-			p.SQLText = v
-		} else {
-			p.SQLText = "NULL"
-		}
-	} else {
-		p.SQLText = x.SQLText
-	}
-	return p
 }
 
 func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, error) {

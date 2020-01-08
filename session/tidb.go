@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -224,8 +223,7 @@ func runStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) 
 		// If it is not a select statement, we record its slow log here,
 		// then it could include the transaction commit time.
 		if rs == nil {
-			pps := types.CloneRow(sessVars.PreparedParams)
-			sessVars.PrevStmt = executor.FormatSQL(s.OriginText(), pps)
+			sessVars.PrevStmt = executor.FormatSQL(s.OriginText())
 		}
 	}()
 
@@ -235,7 +233,7 @@ func runStmt(ctx context.Context, sctx sessionctx.Context, s sqlexec.Statement) 
 	}
 	rs, err = s.Exec(ctx)
 	sessVars.TxnCtx.StatementCount++
-	if !s.IsReadOnly(sessVars) {
+	if !s.IsReadOnly() {
 		// All the history should be added here.
 		if err == nil && sessVars.TxnCtx.CouldRetry {
 			GetHistory(sctx).Add(s, sessVars.StmtCtx)

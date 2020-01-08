@@ -37,7 +37,6 @@ const (
 	flagMaxMinEliminate
 	flagPredicatePushDown
 	flagEliminateOuterJoin
-	flagPartitionProcessor
 	flagPushDownAgg
 	flagPushDownTopN
 	flagJoinReOrder
@@ -52,7 +51,6 @@ var optRuleList = []logicalOptRule{
 	&maxMinEliminator{},
 	&ppdSolver{},
 	&outerJoinEliminator{},
-	&partitionProcessor{},
 	&aggregationPushDownSolver{},
 	&pushDownTopNOptimizer{},
 	&joinReOrderSolver{},

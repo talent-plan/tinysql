@@ -70,11 +70,6 @@ type Session interface {
 	String() string                                               // String is used to debug.
 	CommitTxn(context.Context) error
 	RollbackTxn(context.Context)
-	// PrepareStmt executes prepare statement in binary protocol.
-	PrepareStmt(sql string) (stmtID uint32, paramCount int, fields []*ast.ResultField, err error)
-	// ExecutePreparedStmt executes a prepared statement.
-	ExecutePreparedStmt(ctx context.Context, stmtID uint32, param []types.Datum) (sqlexec.RecordSet, error)
-	DropPreparedStmt(stmtID uint32) error
 	SetClientCapability(uint32) // Set client capability flags.
 	SetConnectionID(uint64)
 	SetCommandValue(byte)
@@ -160,14 +155,7 @@ func (s *session) cleanRetryInfo() {
 	}
 
 	retryInfo := s.sessionVars.RetryInfo
-	defer retryInfo.Clean()
-	if len(retryInfo.DroppedPreparedStmtIDs) == 0 {
-		return
-	}
-
-	for _, stmtID := range retryInfo.DroppedPreparedStmtIDs {
-		s.sessionVars.RemovePreparedStmt(stmtID)
-	}
+	retryInfo.Clean()
 }
 
 func (s *session) Status() uint16 {
@@ -402,9 +390,6 @@ func (s *session) String() string {
 	if sessVars.StmtCtx.LastInsertID > 0 {
 		data["lastInsertID"] = sessVars.StmtCtx.LastInsertID
 	}
-	if len(sessVars.PreparedStmts) > 0 {
-		data["preparedStmtCount"] = len(sessVars.PreparedStmts)
-	}
 	b, err := json.MarshalIndent(data, "", "  ")
 	terror.Log(errors.Trace(err))
 	return string(b)
@@ -468,7 +453,6 @@ func (s *session) retry(ctx context.Context, maxCnt uint) (err error) {
 			st := sr.st
 			s.sessionVars.StmtCtx = sr.stmtCtx
 			s.sessionVars.StmtCtx.ResetForRetry()
-			s.sessionVars.PreparedParams = s.sessionVars.PreparedParams[:0]
 			schemaVersion, err = st.RebuildPlan(ctx)
 			if err != nil {
 				return err
@@ -481,7 +465,7 @@ func (s *session) retry(ctx context.Context, maxCnt uint) (err error) {
 					zap.Int64("schemaVersion", schemaVersion),
 					zap.Uint("retryCnt", retryCnt),
 					zap.Int("queryNum", i),
-					zap.String("sql", sqlForLog(st.OriginText())+sessVars.PreparedParams.String()))
+					zap.String("sql", sqlForLog(st.OriginText())))
 			} else {
 				logutil.Logger(ctx).Warn("retrying",
 					zap.Int64("schemaVersion", schemaVersion),
@@ -935,72 +919,6 @@ func (s *session) rollbackOnError(ctx context.Context) {
 	}
 }
 
-// PrepareStmt is used for executing prepare statement in binary protocol
-func (s *session) PrepareStmt(sql string) (stmtID uint32, paramCount int, fields []*ast.ResultField, err error) {
-	if s.sessionVars.TxnCtx.InfoSchema == nil {
-		// We don't need to create a transaction for prepare statement, just get information schema will do.
-		s.sessionVars.TxnCtx.InfoSchema = domain.GetDomain(s).InfoSchema()
-	}
-	err = s.loadCommonGlobalVariablesIfNeeded()
-	if err != nil {
-		return
-	}
-
-	ctx := context.Background()
-	inTxn := s.GetSessionVars().InTxn()
-	// NewPrepareExec may need startTS to build the executor, for example prepare statement has subquery in int.
-	// So we have to call PrepareTxnCtx here.
-	s.PrepareTxnCtx(ctx)
-	s.PrepareTxnFuture(ctx)
-	prepareExec := executor.NewPrepareExec(s, infoschema.GetInfoSchema(s), sql)
-	err = prepareExec.Next(ctx, nil)
-	if err != nil {
-		return
-	}
-	if !inTxn {
-		// We could start a transaction to build the prepare executor before, we should rollback it here.
-		s.RollbackTxn(ctx)
-	}
-	return prepareExec.ID, prepareExec.ParamCount, prepareExec.Fields, nil
-}
-
-func (s *session) CommonExec(ctx context.Context,
-	stmtID uint32, prepareStmt *plannercore.CachedPrepareStmt, args []types.Datum) (sqlexec.RecordSet, error) {
-	st, err := executor.CompileExecutePreparedStmt(ctx, s, stmtID, args)
-	if err != nil {
-		return nil, err
-	}
-	logQuery(st.OriginText(), s.sessionVars)
-	return runStmt(ctx, s, st)
-}
-
-// ExecutePreparedStmt executes a prepared statement.
-func (s *session) ExecutePreparedStmt(ctx context.Context, stmtID uint32, args []types.Datum) (sqlexec.RecordSet, error) {
-	s.PrepareTxnCtx(ctx)
-	var err error
-	s.sessionVars.StartTime = time.Now()
-	preparedPointer, ok := s.sessionVars.PreparedStmts[stmtID]
-	if !ok {
-		err = plannercore.ErrStmtNotFound
-		logutil.Logger(ctx).Error("prepared statement not found", zap.Uint32("stmtID", stmtID))
-		return nil, err
-	}
-	preparedStmt, ok := preparedPointer.(*plannercore.CachedPrepareStmt)
-	if !ok {
-		return nil, errors.Errorf("invalid CachedPrepareStmt type")
-	}
-	return s.CommonExec(ctx, stmtID, preparedStmt, args)
-}
-
-func (s *session) DropPreparedStmt(stmtID uint32) error {
-	vars := s.sessionVars
-	if _, ok := vars.PreparedStmts[stmtID]; !ok {
-		return plannercore.ErrStmtNotFound
-	}
-	vars.RetryInfo.DroppedPreparedStmtIDs = append(vars.RetryInfo.DroppedPreparedStmtIDs, stmtID)
-	return nil
-}
-
 func (s *session) Txn(active bool) (kv.Transaction, error) {
 	if !s.txn.validOrPending() && active {
 		return &s.txn, kv.ErrInvalidTxn
@@ -1116,9 +1034,6 @@ func (s *session) ClearValue(key fmt.Stringer) {
 func (s *session) Close() {
 	ctx := context.TODO()
 	s.RollbackTxn(ctx)
-	if s.sessionVars != nil {
-		s.sessionVars.WithdrawAllPreparedStmt()
-	}
 }
 
 // GetSessionVars implements the context.Context interface.
@@ -1569,7 +1484,7 @@ func logQuery(query string, vars *variable.SessionVars) {
 			zap.Int64("schemaVersion", vars.TxnCtx.SchemaVersion),
 			zap.Uint64("txnStartTS", vars.TxnCtx.StartTS),
 			zap.String("current_db", vars.CurrentDB),
-			zap.String("sql", query+vars.PreparedParams.String()))
+			zap.String("sql", query))
 	}
 }
 

@@ -597,9 +597,9 @@ func (s *testStateChangeSuiteBase) runTestInSchemaState(c *C, state model.Schema
 	}
 }
 
-func (s *testStateChangeSuiteBase) execQuery(tk *testkit.TestKit, sql string, args ...interface{}) (*testkit.Result, error) {
-	comment := Commentf("sql:%s, args:%v", sql, args)
-	rs, err := tk.Exec(sql, args...)
+func (s *testStateChangeSuiteBase) execQuery(tk *testkit.TestKit, sql string) (*testkit.Result, error) {
+	comment := Commentf("sql:%s", sql)
+	rs, err := tk.Exec(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -614,16 +614,6 @@ func checkResult(result *testkit.Result, expected [][]interface{}) error {
 		return fmt.Errorf("need %v, but got %v", need, got)
 	}
 	return nil
-}
-
-func (s *testStateChangeSuiteBase) CheckResult(tk *testkit.TestKit, sql string, args ...interface{}) (*testkit.Result, error) {
-	comment := Commentf("sql:%s, args:%v", sql, args)
-	rs, err := tk.Exec(sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	result := tk.ResultSetToResult(rs, comment)
-	return result, nil
 }
 
 func (s *testStateChangeSuite) TestShowIndex(c *C) {

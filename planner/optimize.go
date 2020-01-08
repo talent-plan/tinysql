@@ -40,12 +40,6 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 		return nil, nil, err
 	}
 
-	// Handle the execute statement.
-	if execPlan, ok := p.(*plannercore.Execute); ok {
-		err := execPlan.OptimizePreparedPlan(ctx, sctx, is)
-		return p, p.OutputNames(), err
-	}
-
 	names := p.OutputNames()
 
 	// Handle the non-logical plan statement.

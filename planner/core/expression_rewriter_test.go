@@ -123,11 +123,6 @@ func (s *testExpressionRewriterSuite) TestDefaultFunction(c *C) {
 	tk.MustQuery(`select a from t4 where a > (select default(d) from t5 where t4.b = t5.e)`).Check(testkit.Rows("1", "2"))
 	tk.MustQuery(`select a from t4 where a > (select default(a) from t5 where t4.b = t5.e)`).Check(testkit.Rows("2"))
 
-	tk.MustExec("prepare stmt from 'select default(a) from t1';")
-	tk.MustQuery("execute stmt").Check(testkit.Rows("def"))
-	tk.MustExec("alter table t1 modify a varchar(10) default 'DEF'")
-	tk.MustQuery("execute stmt").Check(testkit.Rows("DEF"))
-
 	tk.MustExec("update t1 set c = c + default(c)")
 	tk.MustQuery("select c from t1").Check(testkit.Rows("11"))
 }

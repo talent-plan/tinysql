@@ -735,20 +735,6 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 		return cc.writeOK()
 	case mysql.ComFieldList:
 		return cc.handleFieldList(dataStr)
-	case mysql.ComStmtPrepare:
-		return cc.handleStmtPrepare(dataStr)
-	case mysql.ComStmtExecute:
-		return cc.handleStmtExecute(ctx, data)
-	case mysql.ComStmtFetch:
-		return cc.handleStmtFetch(ctx, data)
-	case mysql.ComStmtClose:
-		return cc.handleStmtClose(data)
-	case mysql.ComStmtSendLongData:
-		return cc.handleStmtSendLongData(data)
-	case mysql.ComStmtReset:
-		return cc.handleStmtReset(data)
-	case mysql.ComSetOption:
-		return cc.handleSetOption(data)
 	case mysql.ComChangeUser:
 		return cc.handleChangeUser(ctx, data)
 	default:
@@ -1172,9 +1158,6 @@ func (cc getLastStmtInConn) String() string {
 		return "ListFields " + string(data)
 	case mysql.ComQuery, mysql.ComStmtPrepare:
 		return queryStrForLog(string(hack.String(data)))
-	case mysql.ComStmtExecute, mysql.ComStmtFetch:
-		stmtID := binary.LittleEndian.Uint32(data[0:4])
-		return queryStrForLog(cc.preparedStmt2String(stmtID))
 	case mysql.ComStmtClose, mysql.ComStmtReset:
 		stmtID := binary.LittleEndian.Uint32(data[0:4])
 		return mysql.Command2Str[cmd] + " " + strconv.Itoa(int(stmtID))

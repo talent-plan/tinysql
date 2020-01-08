@@ -35,8 +35,6 @@ import (
 	"github.com/pingcap/tidb/util/timeutil"
 )
 
-var preparedStmtCount int64
-
 // Error instances.
 var (
 	errCantGetValidID = terror.ClassVariable.New(mysql.ErrCantGetValidID, mysql.MySQLErrName[mysql.ErrCantGetValidID])
@@ -46,10 +44,9 @@ var (
 
 // RetryInfo saves retry information.
 type RetryInfo struct {
-	Retrying               bool
-	DroppedPreparedStmtIDs []uint32
-	currRetryOff           int
-	autoIncrementIDs       []int64
+	Retrying         bool
+	currRetryOff     int
+	autoIncrementIDs []int64
 }
 
 // Clean does some clean work.
@@ -57,9 +54,6 @@ func (r *RetryInfo) Clean() {
 	r.currRetryOff = 0
 	if len(r.autoIncrementIDs) > 0 {
 		r.autoIncrementIDs = r.autoIncrementIDs[:0]
-	}
-	if len(r.DroppedPreparedStmtIDs) > 0 {
-		r.DroppedPreparedStmtIDs = r.DroppedPreparedStmtIDs[:0]
 	}
 }
 
@@ -187,13 +181,6 @@ type SessionVars struct {
 	SysWarningCount int
 	// SysErrorCount is the system variable "error_count", because it is on the hot path, so we extract it from the systems
 	SysErrorCount uint16
-	// PreparedStmts stores prepared statement.
-	PreparedStmts        map[uint32]interface{}
-	PreparedStmtNameToID map[string]uint32
-	// preparedStmtID is id of prepared statement.
-	preparedStmtID uint32
-	// PreparedParams params for prepared statements
-	PreparedParams PreparedParams
 
 	// ActiveRoles stores active roles for current user
 	ActiveRoles []*auth.RoleIdentity
@@ -400,16 +387,6 @@ type SessionVars struct {
 	PlannerSelectBlockAsName []ast.HintTable
 }
 
-// PreparedParams contains the parameters of the current prepared statement when executing it.
-type PreparedParams []types.Datum
-
-func (pps PreparedParams) String() string {
-	if len(pps) == 0 {
-		return ""
-	}
-	return " [arguments: " + types.DatumsToStrNoErr(pps) + "]"
-}
-
 // ConnectionInfo present connection used by audit.
 type ConnectionInfo struct {
 	ConnectionID      uint32
@@ -435,9 +412,6 @@ func NewSessionVars() *SessionVars {
 	vars := &SessionVars{
 		Users:                       make(map[string]string),
 		systems:                     make(map[string]string),
-		PreparedStmts:               make(map[uint32]interface{}),
-		PreparedStmtNameToID:        make(map[string]uint32),
-		PreparedParams:              make([]types.Datum, 0, 10),
 		TxnCtx:                      &TransactionContext{},
 		KVVars:                      kv.NewVariables(),
 		RetryInfo:                   &RetryInfo{},
@@ -590,12 +564,6 @@ func (s *SessionVars) IsAutocommit() bool {
 	return s.GetStatusFlag(mysql.ServerStatusAutocommit)
 }
 
-// GetNextPreparedStmtID generates and returns the next session scope prepared statement id.
-func (s *SessionVars) GetNextPreparedStmtID() uint32 {
-	s.preparedStmtID++
-	return s.preparedStmtID
-}
-
 // Location returns the value of time_zone session variable. If it is nil, then return time.Local.
 func (s *SessionVars) Location() *time.Location {
 	loc := s.TimeZone
@@ -628,44 +596,6 @@ func (s *SessionVars) setDDLReorgPriority(val string) {
 	default:
 		s.DDLReorgPriority = kv.PriorityLow
 	}
-}
-
-// AddPreparedStmt adds prepareStmt to current session and count in global.
-func (s *SessionVars) AddPreparedStmt(stmtID uint32, stmt interface{}) error {
-	if _, exists := s.PreparedStmts[stmtID]; !exists {
-		valStr, _ := s.GetSystemVar(MaxPreparedStmtCount)
-		maxPreparedStmtCount, err := strconv.ParseInt(valStr, 10, 64)
-		if err != nil {
-			maxPreparedStmtCount = DefMaxPreparedStmtCount
-		}
-		newPreparedStmtCount := atomic.AddInt64(&preparedStmtCount, 1)
-		if maxPreparedStmtCount >= 0 && newPreparedStmtCount > maxPreparedStmtCount {
-			atomic.AddInt64(&preparedStmtCount, -1)
-			return ErrMaxPreparedStmtCountReached.GenWithStackByArgs(maxPreparedStmtCount)
-		}
-
-	}
-	s.PreparedStmts[stmtID] = stmt
-	return nil
-}
-
-// RemovePreparedStmt removes preparedStmt from current session and decrease count in global.
-func (s *SessionVars) RemovePreparedStmt(stmtID uint32) {
-	_, exists := s.PreparedStmts[stmtID]
-	if !exists {
-		return
-	}
-	delete(s.PreparedStmts, stmtID)
-	atomic.AddInt64(&preparedStmtCount, -1)
-}
-
-// WithdrawAllPreparedStmt remove all preparedStmt in current session and decrease count in global.
-func (s *SessionVars) WithdrawAllPreparedStmt() {
-	psCount := len(s.PreparedStmts)
-	if psCount == 0 {
-		return
-	}
-	atomic.AddInt64(&preparedStmtCount, -int64(psCount))
 }
 
 // SetSystemVar sets the value of a system variable.

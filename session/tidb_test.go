@@ -131,32 +131,17 @@ func removeStore(c *C, dbPath string) {
 	os.RemoveAll(dbPath)
 }
 
-func exec(se Session, sql string, args ...interface{}) (sqlexec.RecordSet, error) {
+func exec(se Session, sql string) (sqlexec.RecordSet, error) {
 	ctx := context.Background()
-	if len(args) == 0 {
-		rs, err := se.Execute(ctx, sql)
-		if err == nil && len(rs) > 0 {
-			return rs[0], nil
-		}
-		return nil, err
+	rs, err := se.Execute(ctx, sql)
+	if err == nil && len(rs) > 0 {
+		return rs[0], nil
 	}
-	stmtID, _, _, err := se.PrepareStmt(sql)
-	if err != nil {
-		return nil, err
-	}
-	params := make([]types.Datum, len(args))
-	for i := 0; i < len(params); i++ {
-		params[i] = types.NewDatum(args[i])
-	}
-	rs, err := se.ExecutePreparedStmt(ctx, stmtID, params)
-	if err != nil {
-		return nil, err
-	}
-	return rs, nil
+	return nil, err
 }
 
-func mustExecSQL(c *C, se Session, sql string, args ...interface{}) sqlexec.RecordSet {
-	rs, err := exec(se, sql, args...)
+func mustExecSQL(c *C, se Session, sql string) sqlexec.RecordSet {
+	rs, err := exec(se, sql)
 	c.Assert(err, IsNil)
 	return rs
 }

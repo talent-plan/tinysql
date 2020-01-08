@@ -503,46 +503,6 @@ func (s *testPlanSuite) TestIndexJoinUnionScan(c *C) {
 		})
 		c.Assert(core.ToString(p), Equals, output[i].Best, Commentf("for %s", tt))
 	}
-
-	definitions := []model.PartitionDefinition{
-		{
-			ID:       41,
-			Name:     model.NewCIStr("p1"),
-			LessThan: []string{"16"},
-		},
-		{
-			ID:       42,
-			Name:     model.NewCIStr("p2"),
-			LessThan: []string{"32"},
-		},
-	}
-	pis := core.MockPartitionInfoSchema(definitions)
-
-	tests := []struct {
-		sql  string
-		best string
-	}{
-		// Index Join + Union Scan + Union All is not supported now.
-		{
-			sql:  "select /*+ TIDB_INLJ(t2) */ * from t t1, t t2 where t1.a = t2.a",
-			best: "LeftHashJoin{UnionAll{TableReader(Table(t))->UnionScan([])->TableReader(Table(t))->UnionScan([])}->UnionAll{TableReader(Table(t))->UnionScan([])->TableReader(Table(t))->UnionScan([])}}(test.t.a,test.t.a)",
-		},
-	}
-	for i, tt := range tests {
-		comment := Commentf("case:%v sql:%s", i, tt.sql)
-		stmt, err := s.ParseOneStmt(tt.sql, "", "")
-		c.Assert(err, IsNil, comment)
-		err = se.NewTxn(context.Background())
-		c.Assert(err, IsNil)
-		// Make txn not read only.
-		txn, err := se.Txn(true)
-		c.Assert(err, IsNil)
-		txn.Set(kv.Key("AAA"), []byte("BBB"))
-		c.Assert(se.StmtCommit(), IsNil)
-		p, _, err := planner.Optimize(context.TODO(), se, stmt, pis)
-		c.Assert(err, IsNil, comment)
-		c.Assert(core.ToString(p), Equals, tt.best, comment)
-	}
 }
 
 func (s *testPlanSuite) TestDoSubquery(c *C) {

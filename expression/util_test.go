@@ -22,10 +22,8 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/mock"
@@ -112,7 +110,7 @@ func (s *testUtilSuite) TestClone(c *check.C) {
 		&builtinInStringSig{}, &builtinInDecimalSig{}, &builtinInRealSig{}, &builtinInTimeSig{}, &builtinInDurationSig{},
 		&builtinInJSONSig{}, &builtinRowSig{}, &builtinSetVarSig{}, &builtinGetVarSig{}, &builtinLockSig{},
 		&builtinReleaseLockSig{}, &builtinValuesIntSig{}, &builtinValuesRealSig{}, &builtinValuesDecimalSig{}, &builtinValuesStringSig{},
-		&builtinValuesTimeSig{}, &builtinValuesDurationSig{}, &builtinValuesJSONSig{}, &builtinBitCountSig{}, &builtinGetParamStringSig{},
+		&builtinValuesTimeSig{}, &builtinValuesDurationSig{}, &builtinValuesJSONSig{}, &builtinBitCountSig{},
 		&builtinLengthSig{}, &builtinASCIISig{}, &builtinConcatSig{}, &builtinConcatWSSig{}, &builtinLeftSig{},
 		&builtinLeftUTF8Sig{}, &builtinRightSig{}, &builtinRightUTF8Sig{}, &builtinRepeatSig{}, &builtinLowerSig{},
 		&builtinReverseUTF8Sig{}, &builtinReverseSig{}, &builtinSpaceSig{}, &builtinUpperSig{}, &builtinStrcmpSig{},
@@ -179,18 +177,6 @@ func (s *testUtilSuite) TestGetUint64FromConstant(c *check.C) {
 	con.Value = types.NewUintDatum(1)
 	num, _, _ = GetUint64FromConstant(con)
 	c.Assert(num, check.Equals, uint64(1))
-
-	con.DeferredExpr = &Constant{Value: types.NewIntDatum(1)}
-	num, _, _ = GetUint64FromConstant(con)
-	c.Assert(num, check.Equals, uint64(1))
-
-	ctx := mock.NewContext()
-	ctx.GetSessionVars().PreparedParams = []types.Datum{
-		types.NewUintDatum(100),
-	}
-	con.ParamMarker = &ParamMarker{order: 0, ctx: ctx}
-	num, _, _ = GetUint64FromConstant(con)
-	c.Assert(num, check.Equals, uint64(100))
 }
 
 func (s *testUtilSuite) TestSetExprColumnInOperand(c *check.C) {
@@ -413,94 +399,3 @@ func BenchmarkExprFromSchema(b *testing.B) {
 	}
 	b.ReportAllocs()
 }
-
-// MockExpr is mainly for test.
-type MockExpr struct {
-	err error
-	t   *types.FieldType
-	i   interface{}
-}
-
-func (m *MockExpr) VecEvalInt(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalReal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalString(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalDecimal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-func (m *MockExpr) VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return nil
-}
-
-func (m *MockExpr) String() string                          { return "" }
-func (m *MockExpr) MarshalJSON() ([]byte, error)            { return nil, nil }
-func (m *MockExpr) Eval(row chunk.Row) (types.Datum, error) { return types.NewDatum(m.i), m.err }
-func (m *MockExpr) EvalInt(ctx sessionctx.Context, row chunk.Row) (val int64, isNull bool, err error) {
-	if x, ok := m.i.(int64); ok {
-		return int64(x), false, m.err
-	}
-	return 0, m.i == nil, m.err
-}
-func (m *MockExpr) EvalReal(ctx sessionctx.Context, row chunk.Row) (val float64, isNull bool, err error) {
-	if x, ok := m.i.(float64); ok {
-		return float64(x), false, m.err
-	}
-	return 0, m.i == nil, m.err
-}
-func (m *MockExpr) EvalString(ctx sessionctx.Context, row chunk.Row) (val string, isNull bool, err error) {
-	if x, ok := m.i.(string); ok {
-		return string(x), false, m.err
-	}
-	return "", m.i == nil, m.err
-}
-func (m *MockExpr) EvalDecimal(ctx sessionctx.Context, row chunk.Row) (val *types.MyDecimal, isNull bool, err error) {
-	if x, ok := m.i.(*types.MyDecimal); ok {
-		return x, false, m.err
-	}
-	return nil, m.i == nil, m.err
-}
-func (m *MockExpr) EvalTime(ctx sessionctx.Context, row chunk.Row) (val types.Time, isNull bool, err error) {
-	if x, ok := m.i.(types.Time); ok {
-		return x, false, m.err
-	}
-	return types.Time{}, m.i == nil, m.err
-}
-func (m *MockExpr) EvalDuration(ctx sessionctx.Context, row chunk.Row) (val types.Duration, isNull bool, err error) {
-	if x, ok := m.i.(types.Duration); ok {
-		return x, false, m.err
-	}
-	return types.Duration{}, m.i == nil, m.err
-}
-func (m *MockExpr) EvalJSON(ctx sessionctx.Context, row chunk.Row) (val json.BinaryJSON, isNull bool, err error) {
-	if x, ok := m.i.(json.BinaryJSON); ok {
-		return x, false, m.err
-	}
-	return json.BinaryJSON{}, m.i == nil, m.err
-}
-func (m *MockExpr) ReverseEval(sc *stmtctx.StatementContext, res types.Datum, rType types.RoundingType) (val types.Datum, err error) {
-	return types.Datum{}, m.err
-}
-func (m *MockExpr) GetType() *types.FieldType                         { return m.t }
-func (m *MockExpr) Clone() Expression                                 { return nil }
-func (m *MockExpr) Equal(ctx sessionctx.Context, e Expression) bool   { return false }
-func (m *MockExpr) IsCorrelated() bool                                { return false }
-func (m *MockExpr) ConstItem() bool                                   { return false }
-func (m *MockExpr) Decorrelate(schema *Schema) Expression             { return m }
-func (m *MockExpr) ResolveIndices(schema *Schema) (Expression, error) { return m, nil }
-func (m *MockExpr) resolveIndices(schema *Schema) error               { return nil }
-func (m *MockExpr) ExplainInfo() string                               { return "" }
-func (m *MockExpr) ExplainNormalizedInfo() string                     { return "" }
-func (m *MockExpr) HashCode(sc *stmtctx.StatementContext) []byte      { return nil }
-func (m *MockExpr) Vectorized() bool                                  { return false }
-func (m *MockExpr) SupportReverseEval() bool                          { return false }
