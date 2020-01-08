@@ -77,16 +77,15 @@ const defaultCapability = mysql.ClientLongPassword | mysql.ClientLongFlag |
 
 // Server is the MySQL protocol server
 type Server struct {
-	cfg               *config.Config
-	tlsConfig         *tls.Config
-	driver            IDriver
-	listener          net.Listener
-	socket            net.Listener
-	rwlock            sync.RWMutex
-	concurrentLimiter *TokenLimiter
-	clients           map[uint32]*clientConn
-	capability        uint32
-	dom               *domain.Domain
+	cfg        *config.Config
+	tlsConfig  *tls.Config
+	driver     IDriver
+	listener   net.Listener
+	socket     net.Listener
+	rwlock     sync.RWMutex
+	clients    map[uint32]*clientConn
+	capability uint32
+	dom        *domain.Domain
 
 	// stopListenerCh is used when a critical error occurred, we don't want to exit the process, because there may be
 	// a supervisor automatically restart it, then new client connection will be created, but we can't server it.
@@ -101,15 +100,6 @@ func (s *Server) ConnectionCount() int {
 	cnt := len(s.clients)
 	s.rwlock.RUnlock()
 	return cnt
-}
-
-func (s *Server) getToken() *Token {
-	tok := s.concurrentLimiter.Get()
-	return tok
-}
-
-func (s *Server) releaseToken(token *Token) {
-	s.concurrentLimiter.Put(token)
 }
 
 // SetDomain use to set the server domain.
@@ -134,11 +124,10 @@ func (s *Server) newConn(conn net.Conn) *clientConn {
 // NewServer creates a new Server.
 func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 	s := &Server{
-		cfg:               cfg,
-		driver:            driver,
-		concurrentLimiter: NewTokenLimiter(cfg.TokenLimit),
-		clients:           make(map[uint32]*clientConn),
-		stopListenerCh:    make(chan struct{}, 1),
+		cfg:            cfg,
+		driver:         driver,
+		clients:        make(map[uint32]*clientConn),
+		stopListenerCh: make(chan struct{}, 1),
 	}
 	setSystemTimeZoneVariable()
 

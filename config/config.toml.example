@@ -18,9 +18,6 @@ path = "/tmp/tidb"
 # Schema lease duration, very dangerous to change only if you know what you do.
 lease = "45s"
 
-# The limit of concurrent executed sessions.
-token-limit = 1000
-
 [log]
 # Log level: debug, info, warn, error, fatal.
 level = "info"

@@ -44,30 +44,23 @@ import (
 // Flag Names
 const (
 	nmConfig           = "config"
-	nmConfigCheck      = "config-check"
-	nmConfigStrict     = "config-strict"
 	nmStore            = "store"
 	nmStorePath        = "path"
 	nmHost             = "host"
 	nmAdvertiseAddress = "advertise-address"
 	nmPort             = "P"
 	nmCors             = "cors"
-	nmSocket           = "socket"
-	nmRunDDL           = "run-ddl"
 	nmLogLevel         = "L"
 	nmLogFile          = "log-file"
 	nmReportStatus     = "report-status"
 	nmStatusHost       = "status-host"
 	nmStatusPort       = "status"
 
-	nmDdlLease   = "lease"
-	nmTokenLimit = "token-limit"
+	nmDdlLease = "lease"
 )
 
 var (
-	configPath   = flag.String(nmConfig, "", "config file path")
-	configCheck  = flagBoolean(nmConfigCheck, false, "check config file validity and exit")
-	configStrict = flagBoolean(nmConfigStrict, false, "enforce config file validity")
+	configPath = flag.String(nmConfig, "", "config file path")
 
 	// Base
 	store            = flag.String(nmStore, "mocktikv", "registered store name, [tikv, mocktikv]")
@@ -77,7 +70,6 @@ var (
 	port             = flag.String(nmPort, "4000", "tidb server port")
 	cors             = flag.String(nmCors, "", "tidb server allow cors origin")
 	ddlLease         = flag.String(nmDdlLease, "45s", "schema lease duration, very dangerous to change only if you know what you do")
-	tokenLimit       = flag.Int(nmTokenLimit, 1000, "the limit of concurrent executed sessions")
 
 	// Log
 	logLevel = flag.String(nmLogLevel, "info", "log level: info, debug, warn, error, fatal")
@@ -103,14 +95,6 @@ func main() {
 
 	configWarning := loadConfig()
 	overrideConfig()
-	if err := cfg.Valid(); err != nil {
-		fmt.Fprintln(os.Stderr, "invalid config", err)
-		os.Exit(1)
-	}
-	if *configCheck {
-		fmt.Println("config check successful")
-		os.Exit(0)
-	}
 	setGlobalVars()
 	setupLog()
 	// If configStrict had been specified, and there had been an error, the server would already
@@ -173,19 +157,6 @@ func flagBoolean(name string, defaultVal bool, usage string) *bool {
 	return flag.Bool(name, defaultVal, usage)
 }
 
-var deprecatedConfig = map[string]struct{}{
-	"log.rotate": {},
-}
-
-func isDeprecatedConfigItem(items []string) bool {
-	for _, item := range items {
-		if _, ok := deprecatedConfig[item]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 func loadConfig() string {
 	cfg = config.GetGlobalConfig()
 	if *configPath != "" {
@@ -195,26 +166,11 @@ func loadConfig() string {
 		}
 
 		// Unused config item erro turns to warnings.
-		if tmp, ok := err.(*config.ErrConfigValidationFailed); ok {
-			if isDeprecatedConfigItem(tmp.UndecodedItems) {
-				return err.Error()
-			}
-			// This block is to accommodate an interim situation where strict config checking
-			// is not the default behavior of TiDB. The warning message must be deferred until
-			// logging has been set up. After strict config checking is the default behavior,
-			// This should all be removed.
-			if !*configCheck && !*configStrict {
-				return err.Error()
-			}
+		if _, ok := err.(*config.ErrConfigValidationFailed); ok {
+			return err.Error()
 		}
 
 		terror.MustNil(err)
-	} else {
-		// configCheck should have the config file specified.
-		if *configCheck {
-			fmt.Fprintln(os.Stderr, "config check failed", errors.New("no config file specified for config-check"))
-			os.Exit(1)
-		}
 	}
 	return ""
 }
@@ -254,9 +210,6 @@ func overrideConfig() {
 	}
 	if actualFlags[nmDdlLease] {
 		cfg.Lease = *ddlLease
-	}
-	if actualFlags[nmTokenLimit] {
-		cfg.TokenLimit = uint(*tokenLimit)
 	}
 
 	// Log
