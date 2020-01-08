@@ -16,10 +16,6 @@ package server
 
 import (
 	"context"
-	"os"
-	"time"
-
-	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	tmysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/config"
@@ -126,52 +122,6 @@ func (ts *TidbTestSuite) TestResultFieldTableIsNull(c *C) {
 func (ts *TidbTestSuite) TestMultiStatements(c *C) {
 	c.Parallel()
 	runTestMultiStatements(c)
-}
-
-func (ts *TidbTestSuite) TestSocketForwarding(c *C) {
-	cfg := config.NewConfig()
-	cfg.Socket = "/tmp/tidbtest.sock"
-	cfg.Port = 3999
-	os.Remove(cfg.Socket)
-	cfg.Status.ReportStatus = false
-
-	server, err := NewServer(cfg, ts.tidbdrv)
-	c.Assert(err, IsNil)
-	go server.Run()
-	time.Sleep(time.Millisecond * 100)
-	defer server.Close()
-
-	runTestRegression(c, func(config *mysql.Config) {
-		config.User = "root"
-		config.Net = "unix"
-		config.Addr = "/tmp/tidbtest.sock"
-		config.DBName = "test"
-		config.Strict = true
-	}, "SocketRegression")
-}
-
-func (ts *TidbTestSuite) TestSocket(c *C) {
-	cfg := config.NewConfig()
-	cfg.Socket = "/tmp/tidbtest.sock"
-	cfg.Port = 0
-	os.Remove(cfg.Socket)
-	cfg.Host = ""
-	cfg.Status.ReportStatus = false
-
-	server, err := NewServer(cfg, ts.tidbdrv)
-	c.Assert(err, IsNil)
-	go server.Run()
-	time.Sleep(time.Millisecond * 100)
-	defer server.Close()
-
-	runTestRegression(c, func(config *mysql.Config) {
-		config.User = "root"
-		config.Net = "unix"
-		config.Addr = "/tmp/tidbtest.sock"
-		config.DBName = "test"
-		config.Strict = true
-	}, "SocketRegression")
-
 }
 
 func (ts *TidbTestSuite) TestSystemTimeZone(c *C) {

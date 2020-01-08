@@ -121,8 +121,6 @@ func GetSessionOnlySysVars(s *SessionVars, key string) (string, bool, error) {
 			return "", false, err
 		}
 		return string(j), true, nil
-	case TiDBCheckMb4ValueInUTF8:
-		return BoolToIntStr(config.GetGlobalConfig().CheckMb4ValueInUTF8), true, nil
 	}
 	sVal, ok := s.GetSystemVar(key)
 	if ok {
@@ -374,9 +372,9 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 	case TiDBSkipUTF8Check, TiDBOptAggPushDown, TiDBOptInSubqToJoinAndAgg,
-		TiDBBatchInsert, TiDBDisableTxnAutoRetry,
-		TiDBBatchDelete, TiDBBatchCommit, TiDBEnableCascadesPlanner,
-		TiDBCheckMb4ValueInUTF8, TiDBLowResolutionTSO, TiDBEnableNoopFuncs,
+		TiDBDisableTxnAutoRetry,
+		TiDBEnableCascadesPlanner,
+		TiDBLowResolutionTSO, TiDBEnableNoopFuncs,
 		TiDBScatterRegion, TiDBGeneralLog, TiDBConstraintCheckInPlace, TiDBEnableVectorizedExpression:
 		fallthrough
 	case GeneralLog, AvoidTemporalUpgrade, BigTables, CheckProxyUsers, LogBin,
@@ -445,8 +443,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		TiDBHashAggFinalConcurrency,
 		TiDBDistSQLScanConcurrency,
 		TiDBIndexSerialScanConcurrency, TiDBDDLReorgWorkerCount,
-		TiDBBackoffLockFast, TiDBBackOffWeight,
-		TiDBDMLBatchSize:
+		TiDBBackoffLockFast, TiDBBackOffWeight:
 		v, err := strconv.Atoi(value)
 		if err != nil {
 			return value, ErrWrongTypeForVar.GenWithStackByArgs(name)

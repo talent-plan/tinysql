@@ -680,20 +680,6 @@ func (s *testStateChangeSuite) TestParallelAlterModifyColumn(c *C) {
 	s.testControlParallelExecSQL(c, sql, sql, f)
 }
 
-// TODO: This test is not a test that performs two DDLs in parallel.
-// So we should not use the function of testControlParallelExecSQL. We will handle this test in the next PR.
-// func (s *testStateChangeSuite) TestParallelColumnModifyingDefinition(c *C) {
-// 	sql1 := "insert into t(b) values (null);"
-// 	sql2 := "alter table t change b b2 bigint not null;"
-// 	f := func(c *C, err1, err2 error) {
-// 		c.Assert(err1, IsNil)
-// 		if err2 != nil {
-// 			c.Assert(err2.Error(), Equals, "[ddl:1265]Data truncated for column 'b2' at row 1")
-// 		}
-// 	}
-// 	s.testControlParallelExecSQL(c, sql1, sql2, f)
-// }
-
 func (s *testStateChangeSuite) TestParallelAddColumAndSetDefaultValue(c *C) {
 	_, err := s.se.Execute(context.Background(), "use test_db_state")
 	c.Assert(err, IsNil)
@@ -746,16 +732,6 @@ func (s *testStateChangeSuite) TestParallelAlterAddIndex(c *C) {
 	s.testControlParallelExecSQL(c, sql1, sql2, f)
 }
 
-func (s *testStateChangeSuite) TestParallelAddPrimaryKey(c *C) {
-	sql1 := "ALTER TABLE t add primary key index_b(b);"
-	sql2 := "ALTER TABLE t add primary key index_b(c);"
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2.Error(), Equals, "[schema:1068]Multiple primary key defined")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
 func (s *testStateChangeSuite) TestParallelDropColumn(c *C) {
 	sql := "ALTER TABLE t drop COLUMN c ;"
 	f := func(c *C, err1, err2 error) {
@@ -771,20 +747,6 @@ func (s *testStateChangeSuite) TestParallelDropIndex(c *C) {
 	f := func(c *C, err1, err2 error) {
 		c.Assert(err1, IsNil)
 		c.Assert(err2.Error(), Equals, "[autoid:1075]Incorrect table definition; there can be only one auto column and it must be defined as a key")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
-func (s *testStateChangeSuite) TestParallelDropPrimaryKey(c *C) {
-	s.preSQL = "ALTER TABLE t add primary key index_b(c);"
-	defer func() {
-		s.preSQL = ""
-	}()
-	sql1 := "alter table t drop primary key;"
-	sql2 := "alter table t drop primary key;"
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2.Error(), Equals, "[ddl:1091]index PRIMARY doesn't exist")
 	}
 	s.testControlParallelExecSQL(c, sql1, sql2, f)
 }

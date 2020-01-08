@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/infoschema"
@@ -180,12 +179,6 @@ func (do *Domain) fetchSchemasWithTables(schemas []*model.DBInfo, m *meta.Meta, 
 		if err != nil {
 			done <- err
 			return
-		}
-		// If TreatOldVersionUTF8AsUTF8MB4 was enable, need to convert the old version schema UTF8 charset to UTF8MB4.
-		if config.GetGlobalConfig().TreatOldVersionUTF8AsUTF8MB4 {
-			for _, tbInfo := range tables {
-				infoschema.ConvertOldVersionUTF8ToUTF8MB4IfNeed(tbInfo)
-			}
 		}
 		di.Tables = make([]*model.TableInfo, 0, len(tables))
 		for _, tbl := range tables {

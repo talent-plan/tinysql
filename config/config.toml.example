@@ -15,51 +15,11 @@ store = "mocktikv"
 # TiDB storage path.
 path = "/tmp/tidb"
 
-# The socket file to use for connection.
-socket = ""
-
-# Run ddl worker on this tidb-server.
-run-ddl = true
-
 # Schema lease duration, very dangerous to change only if you know what you do.
 lease = "45s"
 
-# When create table, split a separated region for it. It is recommended to
-# turn off this option if there will be a large number of tables created.
-split-table = true
-
 # The limit of concurrent executed sessions.
 token-limit = 1000
-
-# Enable batch commit for the DMLs.
-enable-batch-dml = false
-
-# Set system variable 'lower_case_table_names'
-lower-case-table-names = 2
-
-# Make "kill query" behavior compatible with MySQL. It's not recommend to
-# turn on this option when TiDB server is behind a proxy.
-compatible-kill-query = false
-
-# check mb4 value in utf8 is used to control whether to check the mb4 characters when the charset is utf8.
-check-mb4-value-in-utf8 = true
-
-# treat-old-version-utf8-as-utf8mb4 use for upgrade compatibility. Set to true will treat old version table/column UTF8 charset as UTF8MB4.
-treat-old-version-utf8-as-utf8mb4 = true
-
-# Maximum number of the splitting region, which is used by the split region statement.
-split-region-max-num = 1000
-
-# alter-primary-key is used to control alter primary key feature. Default is false, indicate the alter primary key feature is disabled.
-# If it is true, we can add the primary key by "alter table", but we may not be able to drop the primary key.
-# In order to support "drop primary key" operation , this flag must be true and the table does not have the pkIsHandle flag.
-alter-primary-key = false
-
-# server-version is used to change the version string of TiDB in the following scenarios:
-# 1. the server version returned by builtin-function `VERSION()`.
-# 2. the server version filled in handshake packets of MySQL Connection Protocol, see https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::Handshake for more details.
-# if server-version = "", the default value(original TiDB version string) is used.
-server-version = ""
 
 [log]
 # Log level: debug, info, warn, error, fatal.

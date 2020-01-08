@@ -32,7 +32,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -132,43 +131,6 @@ func (s *Server) newConn(conn net.Conn) *clientConn {
 	return cc
 }
 
-func (s *Server) isUnixSocket() bool {
-	return s.cfg.Socket != ""
-}
-
-func (s *Server) forwardUnixSocketToTCP() {
-	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
-	for {
-		if s.listener == nil {
-			return // server shutdown has started
-		}
-		if uconn, err := s.socket.Accept(); err == nil {
-			logutil.BgLogger().Info("server socket forwarding", zap.String("from", s.cfg.Socket), zap.String("to", addr))
-			go s.handleForwardedConnection(uconn, addr)
-		} else {
-			if s.listener != nil {
-				logutil.BgLogger().Error("server failed to forward", zap.String("from", s.cfg.Socket), zap.String("to", addr), zap.Error(err))
-			}
-		}
-	}
-}
-
-func (s *Server) handleForwardedConnection(uconn net.Conn, addr string) {
-	defer terror.Call(uconn.Close)
-	if tconn, err := net.Dial("tcp", addr); err == nil {
-		go func() {
-			if _, err := io.Copy(uconn, tconn); err != nil {
-				logutil.BgLogger().Warn("copy server to socket failed", zap.Error(err))
-			}
-		}()
-		if _, err := io.Copy(tconn, uconn); err != nil {
-			logutil.BgLogger().Warn("socket forward copy failed", zap.Error(err))
-		}
-	} else {
-		logutil.BgLogger().Warn("socket forward failed: could not connect", zap.String("addr", addr), zap.Error(err))
-	}
-}
-
 // NewServer creates a new Server.
 func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 	s := &Server{
@@ -191,16 +153,6 @@ func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 		addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 		if s.listener, err = net.Listen("tcp", addr); err == nil {
 			logutil.BgLogger().Info("server is running MySQL protocol", zap.String("addr", addr))
-			if cfg.Socket != "" {
-				if s.socket, err = net.Listen("unix", s.cfg.Socket); err == nil {
-					logutil.BgLogger().Info("server redirecting", zap.String("from", s.cfg.Socket), zap.String("to", addr))
-					go s.forwardUnixSocketToTCP()
-				}
-			}
-		}
-	} else if cfg.Socket != "" {
-		if s.listener, err = net.Listen("unix", cfg.Socket); err == nil {
-			logutil.BgLogger().Info("server is running MySQL protocol", zap.String("socket", cfg.Socket))
 		}
 	} else {
 		err = errors.New("Server not configured to listen on either -socket or -host and -port")

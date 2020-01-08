@@ -58,10 +58,6 @@ var (
 	// TableColumnCountLimit is limit of the number of columns in a table.
 	// It's exported for testing.
 	TableColumnCountLimit = uint32(512)
-	// EnableSplitTableRegion is a flag to decide whether to split a new region for
-	// a newly created table. It takes effect only if the Storage supports split
-	// region.
-	EnableSplitTableRegion = uint32(0)
 )
 
 var (
@@ -335,48 +331,44 @@ func (d *ddl) newDeleteRangeManager(mock bool) delRangeManager {
 // start campaigns the owner and starts workers.
 // ctxPool is used for the worker's delRangeManager and creates sessions.
 func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
-	logutil.BgLogger().Info("[ddl] start DDL", zap.String("ID", d.uuid), zap.Bool("runWorker", RunWorker))
+	logutil.BgLogger().Info("[ddl] start DDL", zap.String("ID", d.uuid))
 	d.quitCh = make(chan struct{})
 
-	// If RunWorker is true, we need campaign owner and do DDL job.
-	// Otherwise, we needn't do that.
-	if RunWorker {
-		err := d.ownerManager.CampaignOwner(ctx)
-		terror.Log(errors.Trace(err))
+	err := d.ownerManager.CampaignOwner(ctx)
+	terror.Log(errors.Trace(err))
 
-		d.workers = make(map[workerType]*worker, 2)
-		d.sessPool = newSessionPool(ctxPool)
-		d.delRangeMgr = d.newDeleteRangeManager(ctxPool == nil)
-		d.workers[generalWorker] = newWorker(generalWorker, d.store, d.sessPool, d.delRangeMgr)
-		d.workers[addIdxWorker] = newWorker(addIdxWorker, d.store, d.sessPool, d.delRangeMgr)
-		for _, worker := range d.workers {
-			worker.wg.Add(1)
-			w := worker
-			go tidbutil.WithRecovery(
-				func() { w.start(d.ddlCtx) },
-				func(r interface{}) {
-					if r != nil {
-						logutil.Logger(w.logCtx).Error("[ddl] DDL worker meet panic", zap.String("ID", d.uuid))
-
-					}
-				})
-
-			// When the start function is called, we will send a fake job to let worker
-			// checks owner firstly and try to find whether a job exists and run.
-			asyncNotify(worker.ddlJobCh)
-		}
-
+	d.workers = make(map[workerType]*worker, 2)
+	d.sessPool = newSessionPool(ctxPool)
+	d.delRangeMgr = d.newDeleteRangeManager(ctxPool == nil)
+	d.workers[generalWorker] = newWorker(generalWorker, d.store, d.sessPool, d.delRangeMgr)
+	d.workers[addIdxWorker] = newWorker(addIdxWorker, d.store, d.sessPool, d.delRangeMgr)
+	for _, worker := range d.workers {
+		worker.wg.Add(1)
+		w := worker
 		go tidbutil.WithRecovery(
-			func() { d.schemaSyncer.StartCleanWork() },
+			func() { w.start(d.ddlCtx) },
 			func(r interface{}) {
 				if r != nil {
-					logutil.BgLogger().Error("[ddl] DDL syncer clean worker meet panic",
-						zap.String("ID", d.uuid), zap.Reflect("r", r), zap.Stack("stack trace"))
+					logutil.Logger(w.logCtx).Error("[ddl] DDL worker meet panic", zap.String("ID", d.uuid))
 
 				}
 			})
 
+		// When the start function is called, we will send a fake job to let worker
+		// checks owner firstly and try to find whether a job exists and run.
+		asyncNotify(worker.ddlJobCh)
 	}
+
+	go tidbutil.WithRecovery(
+		func() { d.schemaSyncer.StartCleanWork() },
+		func(r interface{}) {
+			if r != nil {
+				logutil.BgLogger().Error("[ddl] DDL syncer clean worker meet panic",
+					zap.String("ID", d.uuid), zap.Reflect("r", r), zap.Stack("stack trace"))
+
+			}
+		})
+
 }
 
 func (d *ddl) close() {
@@ -473,11 +465,6 @@ func checkJobMaxInterval(job *model.Job) time.Duration {
 }
 
 func (d *ddl) asyncNotifyWorker(jobTp model.ActionType) {
-	// If the workers don't run, we needn't to notify workers.
-	if !RunWorker {
-		return
-	}
-
 	if jobTp == model.ActionAddIndex || jobTp == model.ActionAddPrimaryKey {
 		asyncNotify(d.workers[addIdxWorker].ddlJobCh)
 	} else {

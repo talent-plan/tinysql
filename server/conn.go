@@ -537,10 +537,6 @@ func (cc *clientConn) PeerHost(hasPassword string) (host string, err error) {
 		return cc.peerHost, nil
 	}
 	host = variable.DefHostname
-	if cc.server.isUnixSocket() {
-		cc.peerHost = host
-		return
-	}
 	addr := cc.bufReadConn.RemoteAddr().String()
 	var port string
 	host, port, err = net.SplitHostPort(addr)

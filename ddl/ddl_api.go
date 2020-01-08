@@ -33,10 +33,8 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	field_types "github.com/pingcap/parser/types"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -1116,7 +1114,7 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 			if err != nil {
 				return nil, err
 			}
-			if len(constr.Keys) == 1 && !config.GetGlobalConfig().AlterPrimaryKey {
+			if len(constr.Keys) == 1 {
 				switch lastCol.Tp {
 				case mysql.TypeLong, mysql.TypeLonglong,
 					mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
@@ -1372,32 +1370,6 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 
 	err = d.doDDLJob(ctx, job)
 	if err == nil {
-		// do pre-split and scatter.
-		sp, ok := d.store.(kv.SplittableStore)
-		if ok && atomic.LoadUint32(&EnableSplitTableRegion) != 0 {
-			var (
-				preSplit      func()
-				scatterRegion bool
-			)
-			val, err := variable.GetGlobalSystemVar(ctx.GetSessionVars(), variable.TiDBScatterRegion)
-			if err != nil {
-				logutil.BgLogger().Warn("[ddl] won't scatter region", zap.Error(err))
-			} else {
-				scatterRegion = variable.TiDBOptOn(val)
-			}
-			pi := tbInfo.GetPartitionInfo()
-			if pi != nil {
-				preSplit = func() { splitPartitionTableRegion(sp, pi, scatterRegion) }
-			} else {
-				preSplit = func() { splitTableRegion(sp, tbInfo, scatterRegion) }
-			}
-			if scatterRegion {
-				preSplit()
-			} else {
-				go preSplit()
-			}
-		}
-
 		if tbInfo.AutoIncID > 1 {
 			// Default tableAutoIncID base is 0.
 			// If the first ID is expected to greater than 1, we need to do rebase.
@@ -1726,7 +1698,7 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 				// so we just also ignore the `if not exists` check.
 				err = d.CreateForeignKey(ctx, ident, model.NewCIStr(constr.Name), spec.Constraint.Keys, spec.Constraint.Refer)
 			case ast.ConstraintPrimaryKey:
-				err = d.CreatePrimaryKey(ctx, ident, model.NewCIStr(constr.Name), spec.Constraint.Keys, constr.Option)
+				err = d.CreatePrimaryKey()
 			case ast.ConstraintFulltext:
 				ctx.GetSessionVars().StmtCtx.AppendWarning(ErrTableCantHandleFt)
 			default:
@@ -2892,60 +2864,8 @@ func getAnonymousIndex(t table.Table, colName model.CIStr) model.CIStr {
 	return indexName
 }
 
-func (d *ddl) CreatePrimaryKey(ctx sessionctx.Context, ti ast.Ident, indexName model.CIStr,
-	idxColNames []*ast.IndexPartSpecification, indexOption *ast.IndexOption) error {
-	if !config.GetGlobalConfig().AlterPrimaryKey {
-		return ErrUnsupportedModifyPrimaryKey.GenWithStack("Unsupported add primary key, alter-primary-key is false")
-	}
-
-	schema, t, err := d.getSchemaAndTableByIdent(ctx, ti)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if err = checkTooLongIndex(indexName); err != nil {
-		return ErrTooLongIdent.GenWithStackByArgs(mysql.PrimaryKeyName)
-	}
-
-	indexName = model.NewCIStr(mysql.PrimaryKeyName)
-	if indexInfo := t.Meta().FindIndexByName(indexName.L); indexInfo != nil {
-		return infoschema.ErrMultiplePriKey
-	}
-
-	tblInfo := t.Meta()
-	// Check before the job is put to the queue.
-	// This check is redundant, but useful. If DDL check fail before the job is put
-	// to job queue, the fail path logic is super fast.
-	// After DDL job is put to the queue, and if the check fail, TiDB will run the DDL cancel logic.
-	// The recover step causes DDL wait a few seconds, makes the unit test painfully slow.
-	_, err = buildIndexColumns(tblInfo.Columns, idxColNames)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if _, err = checkPKOnGeneratedColumn(tblInfo, idxColNames); err != nil {
-		return err
-	}
-
-	// May be truncate comment here, when index comment too long and sql_mode is't strict.
-	if _, err = validateCommentLength(ctx.GetSessionVars(), indexName.String(), indexOption); err != nil {
-		return errors.Trace(err)
-	}
-
-	unique := true
-	sqlMode := ctx.GetSessionVars().SQLMode
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    t.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionAddPrimaryKey,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{unique, indexName, idxColNames, indexOption, sqlMode},
-		Priority:   ctx.GetSessionVars().DDLReorgPriority,
-	}
-
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
+func (d *ddl) CreatePrimaryKey() error {
+	return ErrUnsupportedModifyPrimaryKey.GenWithStack("Unsupported add primary key, alter-primary-key is false")
 }
 
 func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast.IndexKeyType, indexName model.CIStr,
@@ -3163,17 +3083,7 @@ func (d *ddl) dropIndex(ctx sessionctx.Context, ti ast.Ident, isPK bool, indexNa
 
 	indexInfo := t.Meta().FindIndexByName(indexName.L)
 	if isPK {
-		if !config.GetGlobalConfig().AlterPrimaryKey {
-			return ErrUnsupportedModifyPrimaryKey.GenWithStack("Unsupported drop primary key when alter-primary-key is false")
-
-		}
-		// If the table's PKIsHandle is true, we can't find the index from the table. So we check the value of PKIsHandle.
-		if indexInfo == nil && !t.Meta().PKIsHandle {
-			return ErrCantDropFieldOrKey.GenWithStack("Can't DROP 'PRIMARY'; check that column/key exists")
-		}
-		if t.Meta().PKIsHandle {
-			return ErrUnsupportedModifyPrimaryKey.GenWithStack("Unsupported drop primary key when the table's pkIsHandle is true")
-		}
+		return ErrUnsupportedModifyPrimaryKey.GenWithStack("Unsupported drop primary key when alter-primary-key is false")
 	}
 	if indexInfo == nil {
 		err = ErrCantDropFieldOrKey.GenWithStack("index %s doesn't exist", indexName)

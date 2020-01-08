@@ -36,8 +36,6 @@ import (
 )
 
 var (
-	// RunWorker indicates if this TiDB server starts DDL worker and can run DDL job.
-	RunWorker = true
 	// ddlWorkerID is used for generating the next DDL worker ID.
 	ddlWorkerID = int32(0)
 	// WaitTimeWhenErrorOccured is waiting interval when processing DDL jobs encounter errors.

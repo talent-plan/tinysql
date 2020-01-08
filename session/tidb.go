@@ -201,20 +201,11 @@ func checkStmtLimit(ctx context.Context, sctx sessionctx.Context, se *session) e
 	// If the user insert, insert, insert ... but never commit, TiDB would OOM.
 	// So we limit the statement count in a transaction here.
 	var err error
-	sessVars := se.GetSessionVars()
 	history := GetHistory(sctx)
 	if history.Count() > 5000 {
-		if !sessVars.BatchCommit {
-			se.RollbackTxn(ctx)
-			return errors.Errorf("statement count %d exceeds the transaction limitation, autocommit = %t",
-				history.Count(), sctx.GetSessionVars().IsAutocommit())
-		}
-		err = se.NewTxn(ctx)
-		// The transaction does not committed yet, we need to keep it in transaction.
-		// The last history could not be "commit"/"rollback" statement.
-		// It means it is impossible to start a new transaction at the end of the transaction.
-		// Because after the server executed "commit"/"rollback" statement, the session is out of the transaction.
-		sessVars.SetStatusFlag(mysql.ServerStatusInTrans, true)
+		se.RollbackTxn(ctx)
+		return errors.Errorf("statement count %d exceeds the transaction limitation, autocommit = %t",
+			history.Count(), sctx.GetSessionVars().IsAutocommit())
 	}
 	return err
 }

@@ -69,7 +69,6 @@ func (s *testVarsutilSuite) TestNewSessionVars(c *C) {
 	c.Assert(vars.HashAggFinalConcurrency, Equals, DefTiDBHashAggFinalConcurrency)
 	c.Assert(vars.DistSQLScanConcurrency, Equals, DefDistSQLScanConcurrency)
 	c.Assert(vars.MaxChunkSize, Equals, DefMaxChunkSize)
-	c.Assert(vars.DMLBatchSize, Equals, DefDMLBatchSize)
 	c.Assert(vars.EnableRadixJoin, Equals, DefTiDBUseRadixJoin)
 	c.Assert(vars.AllowWriteRowID, Equals, DefOptWriteRowID)
 	c.Assert(vars.TiDBOptJoinReorderThreshold, Equals, DefTiDBOptJoinReorderThreshold)
@@ -190,11 +189,6 @@ func (s *testVarsutilSuite) TestVarsutil(c *C) {
 	SetSessionSystemVar(v, TiDBIndexSerialScanConcurrency, types.NewStringDatum("4"))
 	c.Assert(v.IndexSerialScanConcurrency, Equals, 4)
 
-	// Test case for tidb_batch_insert.
-	c.Assert(v.BatchInsert, IsFalse)
-	SetSessionSystemVar(v, TiDBBatchInsert, types.NewStringDatum("1"))
-	c.Assert(v.BatchInsert, IsTrue)
-
 	c.Assert(v.InitChunkSize, Equals, 32)
 	c.Assert(v.MaxChunkSize, Equals, 1024)
 	err = SetSessionSystemVar(v, TiDBMaxChunkSize, types.NewStringDatum("2"))
@@ -239,19 +233,6 @@ func (s *testVarsutilSuite) TestVarsutil(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, "5")
 	c.Assert(v.TiDBOptJoinReorderThreshold, Equals, 5)
-
-	err = SetSessionSystemVar(v, TiDBCheckMb4ValueInUTF8, types.NewStringDatum("1"))
-	c.Assert(err, IsNil)
-	val, err = GetSessionSystemVar(v, TiDBCheckMb4ValueInUTF8)
-	c.Assert(err, IsNil)
-	c.Assert(val, Equals, "1")
-	c.Assert(config.GetGlobalConfig().CheckMb4ValueInUTF8, Equals, true)
-	err = SetSessionSystemVar(v, TiDBCheckMb4ValueInUTF8, types.NewStringDatum("0"))
-	c.Assert(err, IsNil)
-	val, err = GetSessionSystemVar(v, TiDBCheckMb4ValueInUTF8)
-	c.Assert(err, IsNil)
-	c.Assert(val, Equals, "0")
-	c.Assert(config.GetGlobalConfig().CheckMb4ValueInUTF8, Equals, false)
 
 	SetSessionSystemVar(v, TiDBLowResolutionTSO, types.NewStringDatum("1"))
 	val, err = GetSessionSystemVar(v, TiDBLowResolutionTSO)

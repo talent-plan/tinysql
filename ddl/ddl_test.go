@@ -70,9 +70,6 @@ func (d *ddl) generalWorker() *worker {
 // It only starts the original workers.
 func (d *ddl) restartWorkers(ctx context.Context) {
 	d.quitCh = make(chan struct{})
-	if !RunWorker {
-		return
-	}
 
 	err := d.ownerManager.CampaignOwner(ctx)
 	terror.Log(err)
@@ -100,8 +97,6 @@ func TestT(t *testing.T) {
 
 	cfg := config.GetGlobalConfig()
 	newCfg := *cfg
-	// Test for add/drop primary key.
-	newCfg.AlterPrimaryKey = true
 	config.StoreGlobalConfig(&newCfg)
 
 	testleak.BeforeTest()

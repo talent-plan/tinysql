@@ -41,9 +41,6 @@ const testLease = 5 * time.Millisecond
 
 func (s *testDDLSuite) SetUpSuite(c *C) {
 	WaitTimeWhenErrorOccured = 1 * time.Microsecond
-
-	// We hope that this test is serially executed. So put it here.
-	s.testRunWorker(c)
 }
 
 func (s *testDDLSuite) TearDownSuite(c *C) {
@@ -63,36 +60,6 @@ func (s *testDDLSuite) TestCheckOwner(c *C) {
 	testCheckOwner(c, d1, true)
 
 	c.Assert(d1.GetLease(), Equals, testLease)
-}
-
-// testRunWorker tests no job is handled when the value of RunWorker is false.
-func (s *testDDLSuite) testRunWorker(c *C) {
-	store := testCreateStore(c, "test_run_worker")
-	defer store.Close()
-
-	RunWorker = false
-	d := newDDL(
-		context.Background(),
-		WithStore(store),
-		WithLease(testLease),
-	)
-	testCheckOwner(c, d, false)
-	defer d.Stop()
-
-	// Make sure the DDL worker is nil.
-	worker := d.generalWorker()
-	c.Assert(worker, IsNil)
-	// Make sure the DDL job can be done and exit that goroutine.
-	RunWorker = true
-	d1 := newDDL(
-		context.Background(),
-		WithStore(store),
-		WithLease(testLease),
-	)
-	testCheckOwner(c, d1, true)
-	defer d1.Stop()
-	worker = d1.generalWorker()
-	c.Assert(worker, NotNil)
 }
 
 func (s *testDDLSuite) TestSchemaError(c *C) {
