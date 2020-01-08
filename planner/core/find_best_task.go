@@ -23,12 +23,8 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/planner/util"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/set"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -660,156 +656,6 @@ func splitIndexFilterConditions(conditions []expression.Expression, indexColumns
 	return indexConditions, tableConditions
 }
 
-// getMostCorrColFromExprs checks if column in the condition is correlated enough with handle. If the condition
-// contains multiple columns, return nil and get the max correlation, which would be used in the heuristic estimation.
-func getMostCorrColFromExprs(exprs []expression.Expression, histColl *statistics.Table, threshold float64) (*expression.Column, float64) {
-	var cols []*expression.Column
-	cols = expression.ExtractColumnsFromExpressions(cols, exprs, nil)
-	if len(cols) == 0 {
-		return nil, 0
-	}
-	colSet := set.NewInt64Set()
-	var corr float64
-	var corrCol *expression.Column
-	for _, col := range cols {
-		if colSet.Exist(col.UniqueID) {
-			continue
-		}
-		colSet.Insert(col.UniqueID)
-		hist, ok := histColl.Columns[col.ID]
-		if !ok {
-			continue
-		}
-		curCorr := math.Abs(hist.Correlation)
-		if corrCol == nil || corr < curCorr {
-			corrCol = col
-			corr = curCorr
-		}
-	}
-	if len(colSet) == 1 && corr >= threshold {
-		return corrCol, corr
-	}
-	return nil, corr
-}
-
-// getColumnRangeCounts estimates row count for each range respectively.
-func getColumnRangeCounts(sc *stmtctx.StatementContext, colID int64, ranges []*ranger.Range, histColl *statistics.Table, idxID int64) ([]float64, bool) {
-	var err error
-	var count float64
-	rangeCounts := make([]float64, len(ranges))
-	for i, ran := range ranges {
-		if idxID >= 0 {
-			idxHist := histColl.Indices[idxID]
-			if idxHist == nil || idxHist.IsInvalid(histColl.Pseudo) {
-				return nil, false
-			}
-			count, err = histColl.GetRowCountByIndexRanges(sc, idxID, []*ranger.Range{ran})
-		} else {
-			colHist, ok := histColl.Columns[colID]
-			if !ok || colHist.IsInvalid(sc, histColl.Pseudo) {
-				return nil, false
-			}
-			count, err = histColl.GetRowCountByColumnRanges(sc, colID, []*ranger.Range{ran})
-		}
-		if err != nil {
-			return nil, false
-		}
-		rangeCounts[i] = count
-	}
-	return rangeCounts, true
-}
-
-// convertRangeFromExpectedCnt builds new ranges used to estimate row count we need to scan in table scan before finding specified
-// number of tuples which fall into input ranges.
-func convertRangeFromExpectedCnt(ranges []*ranger.Range, rangeCounts []float64, expectedCnt float64, desc bool) ([]*ranger.Range, float64, bool) {
-	var i int
-	var count float64
-	var convertedRanges []*ranger.Range
-	if desc {
-		for i = len(ranges) - 1; i >= 0; i-- {
-			if count+rangeCounts[i] >= expectedCnt {
-				break
-			}
-			count += rangeCounts[i]
-		}
-		if i < 0 {
-			return nil, 0, true
-		}
-		convertedRanges = []*ranger.Range{{LowVal: ranges[i].HighVal, HighVal: []types.Datum{types.MaxValueDatum()}, LowExclude: !ranges[i].HighExclude}}
-	} else {
-		for i = 0; i < len(ranges); i++ {
-			if count+rangeCounts[i] >= expectedCnt {
-				break
-			}
-			count += rangeCounts[i]
-		}
-		if i == len(ranges) {
-			return nil, 0, true
-		}
-		convertedRanges = []*ranger.Range{{LowVal: []types.Datum{{}}, HighVal: ranges[i].LowVal, HighExclude: !ranges[i].LowExclude}}
-	}
-	return convertedRanges, count, false
-}
-
-// crossEstimateRowCount estimates row count of table scan using histogram of another column which is in TableFilters
-// and has high order correlation with handle column. For example, if the query is like:
-// `select * from tbl where a = 1 order by pk limit 1`
-// if order of column `a` is strictly correlated with column `pk`, the row count of table scan should be:
-// `1 + row_count(a < 1 or a is null)`
-func (ds *DataSource) crossEstimateRowCount(path *util.AccessPath, expectedCnt float64, desc bool) (float64, bool, float64) {
-	if ds.statisticTable.Pseudo || len(path.TableFilters) == 0 {
-		return 0, false, 0
-	}
-	col, corr := getMostCorrColFromExprs(path.TableFilters, ds.statisticTable, ds.ctx.GetSessionVars().CorrelationThreshold)
-	// If table scan is not full range scan, we cannot use histogram of other columns for estimation, because
-	// the histogram reflects value distribution in the whole table level.
-	if col == nil || len(path.AccessConds) > 0 {
-		return 0, false, corr
-	}
-	colInfoID := col.ID
-	colID := col.UniqueID
-	colHist := ds.statisticTable.Columns[colInfoID]
-	if colHist.Correlation < 0 {
-		desc = !desc
-	}
-	accessConds, remained := ranger.DetachCondsForColumn(ds.ctx, path.TableFilters, col)
-	if len(accessConds) == 0 {
-		return 0, false, corr
-	}
-	sc := ds.ctx.GetSessionVars().StmtCtx
-	ranges, err := ranger.BuildColumnRange(accessConds, sc, col.RetType, types.UnspecifiedLength)
-	if len(ranges) == 0 || err != nil {
-		return 0, err == nil, corr
-	}
-	idxID, idxExists := ds.stats.HistColl.ColID2IdxID[colID]
-	if !idxExists {
-		idxID = -1
-	}
-	rangeCounts, ok := getColumnRangeCounts(sc, colInfoID, ranges, ds.statisticTable, idxID)
-	if !ok {
-		return 0, false, corr
-	}
-	convertedRanges, count, isFull := convertRangeFromExpectedCnt(ranges, rangeCounts, expectedCnt, desc)
-	if isFull {
-		return path.CountAfterAccess, true, 0
-	}
-	var rangeCount float64
-	if idxExists {
-		rangeCount, err = ds.statisticTable.GetRowCountByIndexRanges(sc, idxID, convertedRanges)
-	} else {
-		rangeCount, err = ds.statisticTable.GetRowCountByColumnRanges(sc, colInfoID, convertedRanges)
-	}
-	if err != nil {
-		return 0, false, corr
-	}
-	scanCount := rangeCount + expectedCnt - count
-	if len(remained) > 0 {
-		scanCount = scanCount / selectionFactor
-	}
-	scanCount = math.Min(scanCount, path.CountAfterAccess)
-	return scanCount, true, 0
-}
-
 // GetPhysicalScan returns PhysicalTableScan for the LogicalTableScan.
 func (s *LogicalTableScan) GetPhysicalScan(schema *expression.Schema, stats *property.StatsInfo) *PhysicalTableScan {
 	ds := s.Source
@@ -913,22 +759,12 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 	}
 	ts.SetSchema(ds.schema.Clone())
 	rowCount := path.CountAfterAccess
-	if prop.ExpectedCnt < ds.stats.RowCount {
-		count, ok, corr := ds.crossEstimateRowCount(path, prop.ExpectedCnt, isMatchProp && prop.Items[0].Desc)
-		if ok {
-			// TODO: actually, before using this count as the estimated row count of table scan, we need additionally
-			// check if count < row_count(first_region | last_region), and use the larger one since we build one copTask
-			// for one region now, so even if it is `limit 1`, we have to scan at least one region in table scan.
-			// Currently, we can use `tikvrpc.CmdDebugGetRegionProperties` interface as `getSampRegionsRowCount()` does
-			// to get the row count in a region, but that result contains MVCC old version rows, so it is not that accurate.
-			// Considering that when this scenario happens, the execution time is close between IndexScan and TableScan,
-			// we do not add this check temporarily.
-			rowCount = count
-		} else if corr < 1 {
-			correlationFactor := math.Pow(1-corr, float64(ds.ctx.GetSessionVars().CorrelationExpFactor))
-			selectivity := ds.stats.RowCount / rowCount
-			rowCount = math.Min(prop.ExpectedCnt/selectivity/correlationFactor, rowCount)
-		}
+	// Only use expectedCnt when it's smaller than the count we calculated.
+	// e.g. IndexScan(count1)->After Filter(count2). The `ds.stats.RowCount` is count2. count1 is the one we need to calculate
+	// If expectedCnt and count2 are both zero and we go into the below `if` block, the count1 will be set to zero though it's shouldn't be.
+	if (isMatchProp || prop.IsEmpty()) && prop.ExpectedCnt < ds.stats.RowCount {
+		selectivity := ds.stats.RowCount / rowCount
+		rowCount = math.Min(prop.ExpectedCnt/selectivity, rowCount)
 	}
 	// We need NDV of columns since it may be used in cost estimation of join. Precisely speaking,
 	// we should track NDV of each histogram bucket, and sum up the NDV of buckets we actually need

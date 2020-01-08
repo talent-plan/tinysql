@@ -267,7 +267,7 @@ func (h *Handle) LoadNeededHistograms() error {
 			HistogramNeededColumns.Delete(col)
 			continue
 		}
-		hg, err := h.histogramFromStorage(col.TableID, c.ID, &c.Info.FieldType, c.NDV, 0, c.LastUpdateVersion, c.NullCount, c.TotColSize, c.Correlation, nil)
+		hg, err := h.histogramFromStorage(col.TableID, c.ID, &c.Info.FieldType, c.NDV, 0, c.LastUpdateVersion, c.NullCount, c.TotColSize, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -325,7 +325,7 @@ func (h *Handle) indexStatsFromStorage(row chunk.Row, table *Table, tableInfo *m
 			continue
 		}
 		if idx == nil || idx.LastUpdateVersion < histVer {
-			hg, err := h.histogramFromStorage(table.PhysicalID, histID, types.NewFieldType(mysql.TypeBlob), distinct, 1, histVer, nullCount, 0, 0, historyStatsExec)
+			hg, err := h.histogramFromStorage(table.PhysicalID, histID, types.NewFieldType(mysql.TypeBlob), distinct, 1, histVer, nullCount, 0, historyStatsExec)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -351,7 +351,6 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *Table, tableInfo *
 	histVer := row.GetUint64(4)
 	nullCount := row.GetInt64(5)
 	totColSize := row.GetInt64(6)
-	correlation := row.GetFloat64(9)
 	col := table.Columns[histID]
 	for _, colInfo := range tableInfo.Columns {
 		if histID != colInfo.ID {
@@ -379,11 +378,10 @@ func (h *Handle) columnStatsFromStorage(row chunk.Row, table *Table, tableInfo *
 				Count:      count + nullCount,
 				IsHandle:   tableInfo.PKIsHandle && mysql.HasPriKeyFlag(colInfo.Flag),
 			}
-			col.Histogram.Correlation = correlation
 			break
 		}
 		if col == nil || col.LastUpdateVersion < histVer || loadAll {
-			hg, err := h.histogramFromStorage(table.PhysicalID, histID, &colInfo.FieldType, distinct, 0, histVer, nullCount, totColSize, correlation, historyStatsExec)
+			hg, err := h.histogramFromStorage(table.PhysicalID, histID, &colInfo.FieldType, distinct, 0, histVer, nullCount, totColSize, historyStatsExec)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -493,8 +491,8 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	if err != nil {
 		return
 	}
-	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_histograms (table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver, flag, correlation) values (%d, %d, %d, %d, %d, %d, X'%X', %d, %d, %d, %f)",
-		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, 0, 0, hg.Correlation))
+	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_histograms (table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver, flag) values (%d, %d, %d, %d, %d, %d, X'%X', %d, %d, %d)",
+		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, 0, 0))
 	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
 	sc := h.mu.ctx.GetSessionVars().StmtCtx
 	for i := range hg.Buckets {
@@ -562,7 +560,7 @@ func execSQLs(ctx context.Context, exec sqlexec.SQLExecutor, sqls []string) erro
 	return nil
 }
 
-func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.FieldType, distinct int64, isIndex int, ver uint64, nullCount int64, totColSize int64, corr float64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *Histogram, err error) {
+func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.FieldType, distinct int64, isIndex int, ver uint64, nullCount int64, totColSize int64, historyStatsExec sqlexec.RestrictedSQLExecutor) (_ *Histogram, err error) {
 	selSQL := fmt.Sprintf("select count, repeats, lower_bound, upper_bound from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d order by bucket_id", tableID, isIndex, colID)
 	var (
 		rows   []chunk.Row
@@ -578,7 +576,6 @@ func (h *Handle) histogramFromStorage(tableID int64, colID int64, tp *types.Fiel
 	}
 	bucketSize := len(rows)
 	hg := NewHistogram(colID, distinct, nullCount, ver, tp, bucketSize, totColSize)
-	hg.Correlation = corr
 	totalCount := int64(0)
 	for i := 0; i < bucketSize; i++ {
 		count := rows[i].GetInt64(0)

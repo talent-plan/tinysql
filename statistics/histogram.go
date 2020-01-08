@@ -61,11 +61,6 @@ type Histogram struct {
 	scalars []scalar
 	// TotColSize is the total column size for the histogram.
 	TotColSize int64
-
-	// Correlation is the statistical correlation between physical row ordering and logical ordering of
-	// the column values. This ranges from -1 to +1, and it is only valid for Column histogram, not for
-	// Index histogram.
-	Correlation float64
 }
 
 // Bucket store the bucket count and repeat.
@@ -188,7 +183,6 @@ func (hg *Histogram) DecodeTo(tp *types.FieldType, timeZone *time.Location) erro
 // ConvertTo converts the histogram bucket values into `Tp`.
 func (hg *Histogram) ConvertTo(sc *stmtctx.StatementContext, tp *types.FieldType) (*Histogram, error) {
 	hist := NewHistogram(hg.ID, hg.NDV, hg.NullCount, hg.LastUpdateVersion, tp, hg.Len(), hg.TotColSize)
-	hist.Correlation = hg.Correlation
 	iter := chunk.NewIterator4Chunk(hg.Bounds)
 	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
 		d := row.GetDatum(0, hg.Tp)
