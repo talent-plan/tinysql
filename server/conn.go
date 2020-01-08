@@ -685,14 +685,11 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	cc.lastPacket = data
 	cmd := data[0]
 	data = data[1:]
-	token := cc.server.getToken()
 	defer func() {
 		// if handleChangeUser failed, cc.ctx may be nil
 		if cc.ctx != nil {
 			cc.ctx.SetProcessInfo("", t, mysql.ComSleep, 0)
 		}
-
-		cc.server.releaseToken(token)
 		span.Finish()
 	}()
 

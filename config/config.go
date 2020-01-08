@@ -25,7 +25,6 @@ import (
 
 // Config number limitations
 const (
-	MaxLogFileSize = 4096 // MB
 	// DefTxnTotalSizeLimit is the default value of TxnTxnTotalSizeLimit.
 	DefTxnTotalSizeLimit = 1024 * 1024 * 1024
 )
@@ -51,7 +50,6 @@ type Config struct {
 	Store            string `toml:"store" json:"store"`
 	Path             string `toml:"path" json:"path"`
 	Lease            string `toml:"lease" json:"lease"`
-	TokenLimit       uint   `toml:"token-limit" json:"token-limit"`
 	Log              Log    `toml:"log" json:"log"`
 	Status           Status `toml:"status" json:"status"`
 }
@@ -94,7 +92,6 @@ var defaultConf = Config{
 	Store:            "mocktikv",
 	Path:             "/tmp/tidb",
 	Lease:            "45s",
-	TokenLimit:       1000,
 	Log: Log{
 		Level: "info",
 		File:  logutil.NewFileLogConfig(logutil.DefaultLogMaxSize),
@@ -131,9 +128,6 @@ func StoreGlobalConfig(config *Config) {
 // Load loads config options from a toml file.
 func (c *Config) Load(confFile string) error {
 	metaData, err := toml.DecodeFile(confFile, c)
-	if c.TokenLimit == 0 {
-		c.TokenLimit = 1000
-	}
 	// If any items in confFile file are not mapped into the Config struct, issue
 	// an error and stop the server from starting.
 	undecoded := metaData.Undecoded()
@@ -146,23 +140,6 @@ func (c *Config) Load(confFile string) error {
 	}
 
 	return err
-}
-
-// Valid checks if this config is valid.
-func (c *Config) Valid() error {
-	if _, ok := ValidStorage[c.Store]; !ok {
-		nameList := make([]string, 0, len(ValidStorage))
-		for k, v := range ValidStorage {
-			if v {
-				nameList = append(nameList, k)
-			}
-		}
-		return fmt.Errorf("invalid store=%s, valid storages=%v", c.Store, nameList)
-	}
-	if c.Log.File.MaxSize > MaxLogFileSize {
-		return fmt.Errorf("invalid max log file size=%v which is larger than max=%v", c.Log.File.MaxSize, MaxLogFileSize)
-	}
-	return nil
 }
 
 // ToLogConfig converts *Log to *logutil.LogConfig.
