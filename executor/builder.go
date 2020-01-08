@@ -77,20 +77,14 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return nil
 	case *plannercore.DDL:
 		return b.buildDDL(v)
-	case *plannercore.Deallocate:
-		return b.buildDeallocate(v)
 	case *plannercore.Delete:
 		return b.buildDelete(v)
-	case *plannercore.Execute:
-		return b.buildExecute(v)
 	case *plannercore.Explain:
 		return b.buildExplain(v)
 	case *plannercore.Insert:
 		return b.buildInsert(v)
 	case *plannercore.PhysicalLimit:
 		return b.buildLimit(v)
-	case *plannercore.Prepare:
-		return b.buildPrepare(v)
 	case *plannercore.PhysicalLock:
 		return b.buildSelectLock(v)
 	case *plannercore.CancelDDLJobs:
@@ -235,16 +229,6 @@ func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQuerie
 	return e
 }
 
-func (b *executorBuilder) buildDeallocate(v *plannercore.Deallocate) Executor {
-	base := newBaseExecutor(b.ctx, nil, v.ExplainID())
-	base.initCap = chunk.ZeroCapacity
-	e := &DeallocateExec{
-		baseExecutor: base,
-		Name:         v.Name,
-	}
-	return e
-}
-
 func (b *executorBuilder) buildSelectLock(v *plannercore.PhysicalLock) Executor {
 	b.isSelectForUpdate = true
 	// Build 'select for update' using the 'for update' ts.
@@ -281,31 +265,6 @@ func (b *executorBuilder) buildLimit(v *plannercore.PhysicalLimit) Executor {
 		baseExecutor: base,
 		begin:        v.Offset,
 		end:          v.Offset + v.Count,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildPrepare(v *plannercore.Prepare) Executor {
-	base := newBaseExecutor(b.ctx, v.Schema(), v.ExplainID())
-	base.initCap = chunk.ZeroCapacity
-	return &PrepareExec{
-		baseExecutor: base,
-		is:           b.is,
-		name:         v.Name,
-		sqlText:      v.SQLText,
-	}
-}
-
-func (b *executorBuilder) buildExecute(v *plannercore.Execute) Executor {
-	e := &ExecuteExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		is:           b.is,
-		name:         v.Name,
-		usingVars:    v.UsingVars,
-		id:           v.ExecID,
-		stmt:         v.Stmt,
-		plan:         v.Plan,
-		outputNames:  v.OutputNames(),
 	}
 	return e
 }

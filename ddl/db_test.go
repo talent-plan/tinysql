@@ -227,12 +227,12 @@ func testAddIndexRollback(c *C, store kv.Storage, lease time.Duration,
 	// add some null rows
 	if hasNullValsInKey {
 		for i := count - 10; i < count; i++ {
-			tk.MustExec("insert into t1 values (?, ?, null)", i+10, i)
+			tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, null)", i+10, i))
 		}
 	} else {
 		// add some duplicate rows
 		for i := count - 10; i < count; i++ {
-			tk.MustExec("insert into t1 values (?, ?, ?)", i+10, i, i)
+			tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
 		}
 	}
 
@@ -257,8 +257,8 @@ LOOP:
 			// delete some rows, and add some data
 			for i := count; i < count+step; i++ {
 				n := rand.Intn(count)
-				tk.MustExec("delete from t1 where c1 = ?", n)
-				tk.MustExec("insert into t1 values (?, ?, ?)", i+10, i, i)
+				tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", n))
+				tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
 			}
 			count += step
 			times++
@@ -273,7 +273,7 @@ LOOP:
 
 	// delete duplicated/null rows, then add index
 	for i := base - 10; i < base; i++ {
-		tk.MustExec("delete from t1 where c1 = ?", i+10)
+		tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", i+10))
 	}
 	sessionExec(c, store, addIdxSQL)
 	tk.MustExec("drop table t1")
@@ -301,13 +301,13 @@ func testCancelAddIndex(c *C, store kv.Storage, d ddl.DDL, lease time.Duration, 
 	if len(sqlModeSQL) != 0 {
 		// Insert some null values.
 		tk.MustExec(sqlModeSQL)
-		tk.MustExec("insert into t1 set c1 = ?", 0)
-		tk.MustExec("insert into t1 set c2 = ?", 1)
-		tk.MustExec("insert into t1 set c3 = ?", 2)
+		tk.MustExec("insert into t1 set c1 = 0")
+		tk.MustExec("insert into t1 set c2 = 1")
+		tk.MustExec("insert into t1 set c3 = 2")
 		start = 3
 	}
 	for i := start; i < count; i++ {
-		tk.MustExec("insert into t1 values (?, ?, ?)", i, i, i)
+		tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i, i, i))
 	}
 
 	var c3IdxInfo *model.IndexInfo
@@ -346,8 +346,8 @@ LOOP:
 			// delete some rows, and add some data
 			for i := count; i < count+step; i++ {
 				n := rand.Intn(count)
-				tk.MustExec("delete from t1 where c1 = ?", n)
-				tk.MustExec("insert into t1 values (?, ?, ?)", i+10, i, i)
+				tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", n))
+				tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
 			}
 			count += step
 			times++
@@ -373,7 +373,7 @@ func (s *testDBSuite4) TestCancelAddIndex1(c *C) {
 	defer s.mustExec(c, "drop table t;")
 
 	for i := 0; i < 50; i++ {
-		s.mustExec(c, "insert into t values (?, ?)", i, i)
+		s.mustExec(c, fmt.Sprintf("insert into t values (%d, %d)", i, i))
 	}
 
 	var checkErr error
@@ -442,7 +442,7 @@ func testCancelDropIndex(c *C, store kv.Storage, d ddl.DDL, idxName, addIdxSQL, 
 	tk.MustExec("create table t(c1 int, c2 int)")
 	defer tk.MustExec("drop table t;")
 	for i := 0; i < 5; i++ {
-		tk.MustExec("insert into t values (?, ?)", i, i)
+		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
 	}
 	testCases := []struct {
 		needAddIndex   bool
@@ -578,7 +578,7 @@ func (s *testDBSuite1) TestCancelRenameIndex(c *C) {
 	s.mustExec(c, "create table t(c1 int, c2 int)")
 	defer s.mustExec(c, "drop table t;")
 	for i := 0; i < 100; i++ {
-		s.mustExec(c, "insert into t values (?, ?)", i, i)
+		s.mustExec(c, fmt.Sprintf("insert into t values (%d, %d)", i, i))
 	}
 	s.mustExec(c, "alter table t add index idx_c2(c2)")
 	var checkErr error
@@ -709,12 +709,12 @@ func (s *testDBSuite2) TestCancelDropTableAndSchema(c *C) {
 			c.Assert(checkErr, IsNil)
 			c.Assert(err, NotNil)
 			c.Assert(err.Error(), Equals, "[ddl:8214]Cancelled DDL job")
-			s.mustExec(c, "insert into t values (?, ?)", i, i)
+			s.mustExec(c, fmt.Sprintf("insert into t values (%d, %d)", i, i))
 		} else {
 			c.Assert(err, IsNil)
 			c.Assert(checkErr, NotNil)
 			c.Assert(checkErr.Error(), Equals, admin.ErrCannotCancelDDLJob.GenWithStackByArgs(jobID).Error())
-			_, err = s.tk.Exec("insert into t values (?, ?)", i, i)
+			_, err = s.tk.Exec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
 			c.Assert(err, NotNil)
 		}
 	}
@@ -977,7 +977,7 @@ func testDropIndex(c *C, store kv.Storage, lease time.Duration, createSQL, dropI
 	num := 100
 	//  add some rows
 	for i := 0; i < num; i++ {
-		tk.MustExec("insert into test_drop_index values (?, ?, ?)", i, i, i)
+		tk.MustExec(fmt.Sprintf("insert into test_drop_index values (%d, %d, %d)", i, i, i))
 	}
 	ctx := tk.Se.(sessionctx.Context)
 	t := testGetTableByName(c, ctx, "test_db", "test_drop_index")
@@ -1007,8 +1007,8 @@ LOOP:
 			// delete some rows, and add some data
 			for i := num; i < num+step; i++ {
 				n := rand.Intn(num)
-				tk.MustExec("update test_drop_index set c2 = 1 where c1 = ?", n)
-				tk.MustExec("insert into test_drop_index values (?, ?, ?)", i, i, i)
+				tk.MustExec(fmt.Sprintf("update test_drop_index set c2 = 1 where c1 = %d", n))
+				tk.MustExec(fmt.Sprintf("insert into test_drop_index values (%d, %d, %d)", i, i, i))
 			}
 			num += step
 		}
@@ -1261,12 +1261,12 @@ LOOP:
 			for i := num; i < num+step; i++ {
 				n := rand.Intn(num)
 				s.tk.MustExec("begin")
-				s.tk.MustExec("delete from t2 where c1 = ?", n)
+				s.tk.MustExec(fmt.Sprintf("delete from t2 where c1 = %d", n))
 				s.tk.MustExec("commit")
 
 				// Make sure that statement of insert and show use the same infoSchema.
 				s.tk.MustExec("begin")
-				_, err := s.tk.Exec("insert into t2 values (?, ?, ?)", i, i, i)
+				_, err := s.tk.Exec(fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
 				if err != nil {
 					// if err is failed, the column number must be 4 now.
 					values := s.showColumns(c, "t2")
@@ -1280,7 +1280,7 @@ LOOP:
 
 	// add data, here c4 must exist
 	for i := num; i < num+step; i++ {
-		s.tk.MustExec("insert into t2 values (?, ?, ?, ?)", i, i, i, i)
+		s.tk.MustExec(fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
 	}
 
 	rows := s.mustQuery(c, "select count(c4) from t2")
@@ -1294,7 +1294,7 @@ LOOP:
 	matchRows(c, rows, [][]interface{}{{count - int64(step)}})
 
 	for i := num; i < num+step; i++ {
-		rows = s.mustQuery(c, "select c4 from t2 where c4 = ?", i)
+		rows = s.mustQuery(c, fmt.Sprintf("select c4 from t2 where c4 = %d", i))
 		matchRows(c, rows, [][]interface{}{{i}})
 	}
 
@@ -1329,7 +1329,7 @@ LOOP:
 	// for modifying columns after adding columns
 	s.tk.MustExec("alter table t2 modify c4 int default 11")
 	for i := num + step; i < num+step+10; i++ {
-		s.mustExec(c, "insert into t2 values (?, ?, ?, ?)", i, i, i, i)
+		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
 	}
 	rows = s.mustQuery(c, "select count(c4) from t2 where c4 = -1")
 	matchRows(c, rows, [][]interface{}{{count - int64(step)}})
@@ -1374,7 +1374,7 @@ func (s *testDBSuite) testDropColumn(c *C) {
 	num := 100
 	// add some rows
 	for i := 0; i < num; i++ {
-		s.mustExec(c, "insert into t2 values (?, ?, ?, ?)", i, i, i, i)
+		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
 	}
 
 	// get c4 column id
@@ -1396,7 +1396,7 @@ LOOP:
 			for i := num; i < num+step; i++ {
 				// Make sure that statement of insert and show use the same infoSchema.
 				s.tk.MustExec("begin")
-				_, err := s.tk.Exec("insert into t2 values (?, ?, ?)", i, i, i)
+				_, err := s.tk.Exec(fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
 				if err != nil {
 					// If executing is failed, the column number must be 4 now.
 					values := s.showColumns(c, "t2")
@@ -1410,7 +1410,7 @@ LOOP:
 
 	// add data, here c4 must not exist
 	for i := num; i < num+step; i++ {
-		s.mustExec(c, "insert into t2 values (?, ?, ?)", i, i, i)
+		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
 	}
 
 	rows := s.mustQuery(c, "select count(*) from t2")
@@ -1527,12 +1527,12 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 	s.tk.MustExec("drop table t3")
 }
 
-func (s *testDBSuite) mustExec(c *C, query string, args ...interface{}) {
-	s.tk.MustExec(query, args...)
+func (s *testDBSuite) mustExec(c *C, query string) {
+	s.tk.MustExec(query)
 }
 
-func (s *testDBSuite) mustQuery(c *C, query string, args ...interface{}) [][]interface{} {
-	r := s.tk.MustQuery(query, args...)
+func (s *testDBSuite) mustQuery(c *C, query string) [][]interface{} {
+	r := s.tk.MustQuery(query)
 	return r.Rows()
 }
 
@@ -2801,7 +2801,7 @@ func (s *testDBSuite5) TestAddIndexForGeneratedColumn(c *C) {
 	s.tk.MustExec("create table t(y year NOT NULL DEFAULT '2155')")
 	defer s.mustExec(c, "drop table t;")
 	for i := 0; i < 50; i++ {
-		s.mustExec(c, "insert into t values (?)", i)
+		s.mustExec(c, fmt.Sprintf("insert into t values (%d)", i))
 	}
 	s.tk.MustExec("insert into t values()")
 	s.tk.MustExec("ALTER TABLE t ADD COLUMN y1 year as (y + 2)")

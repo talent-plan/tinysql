@@ -37,8 +37,6 @@ func TestT(t *testing.T) {
 	TestingT(t)
 }
 
-var regression = true
-
 var defaultDSNConfig = mysql.Config{
 	User:   "root",
 	Net:    "tcp",
@@ -110,141 +108,23 @@ type DBTest struct {
 	db *sql.DB
 }
 
-func (dbt *DBTest) mustPrepare(query string) *sql.Stmt {
-	stmt, err := dbt.db.Prepare(query)
-	dbt.Assert(err, IsNil, Commentf("Prepare %s", query))
-	return stmt
-}
-
-func (dbt *DBTest) mustExecPrepared(stmt *sql.Stmt, args ...interface{}) sql.Result {
-	res, err := stmt.Exec(args...)
-	dbt.Assert(err, IsNil, Commentf("Execute prepared with args: %s", args))
-	return res
-}
-
-func (dbt *DBTest) mustQueryPrepared(stmt *sql.Stmt, args ...interface{}) *sql.Rows {
-	rows, err := stmt.Query(args...)
-	dbt.Assert(err, IsNil, Commentf("Query prepared with args: %s", args))
-	return rows
-}
-
-func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) {
-	res, err := dbt.db.Exec(query, args...)
+func (dbt *DBTest) mustExec(query string) (res sql.Result) {
+	res, err := dbt.db.Exec(query)
 	dbt.Assert(err, IsNil, Commentf("Exec %s", query))
 	return res
 }
 
-func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *sql.Rows) {
-	rows, err := dbt.db.Query(query, args...)
+func (dbt *DBTest) mustQuery(query string) (rows *sql.Rows) {
+	rows, err := dbt.db.Query(query)
 	dbt.Assert(err, IsNil, Commentf("Query %s", query))
 	return rows
-}
-
-func (dbt *DBTest) mustQueryRows(query string, args ...interface{}) {
-	rows := dbt.mustQuery(query, args...)
-	dbt.Assert(rows.Next(), IsTrue)
-	rows.Close()
-}
-
-func runTestRegression(c *C, overrider configOverrider, dbName string) {
-	runTestsOnNewDB(c, overrider, dbName, func(dbt *DBTest) {
-		// Create Table
-		dbt.mustExec("CREATE TABLE test (val TINYINT)")
-
-		// Test for unexpected data
-		var out bool
-		rows := dbt.mustQuery("SELECT * FROM test")
-		dbt.Assert(rows.Next(), IsFalse, Commentf("unexpected data in empty table"))
-
-		// Create Data
-		res := dbt.mustExec("INSERT INTO test VALUES (1)")
-		//		res := dbt.mustExec("INSERT INTO test VALUES (?)", 1)
-		count, err := res.RowsAffected()
-		dbt.Assert(err, IsNil)
-		dbt.Check(count, Equals, int64(1))
-		id, err := res.LastInsertId()
-		dbt.Assert(err, IsNil)
-		dbt.Check(id, Equals, int64(0))
-
-		// Read
-		rows = dbt.mustQuery("SELECT val FROM test")
-		if rows.Next() {
-			rows.Scan(&out)
-			dbt.Check(out, IsTrue)
-			dbt.Check(rows.Next(), IsFalse, Commentf("unexpected data"))
-		} else {
-			dbt.Error("no data")
-		}
-		rows.Close()
-
-		// Update
-		res = dbt.mustExec("UPDATE test SET val = 0 WHERE val = ?", 1)
-		count, err = res.RowsAffected()
-		dbt.Assert(err, IsNil)
-		dbt.Check(count, Equals, int64(1))
-
-		// Check Update
-		rows = dbt.mustQuery("SELECT val FROM test")
-		if rows.Next() {
-			rows.Scan(&out)
-			dbt.Check(out, IsFalse)
-			dbt.Check(rows.Next(), IsFalse, Commentf("unexpected data"))
-		} else {
-			dbt.Error("no data")
-		}
-		rows.Close()
-
-		// Delete
-		res = dbt.mustExec("DELETE FROM test WHERE val = 0")
-		//		res = dbt.mustExec("DELETE FROM test WHERE val = ?", 0)
-		count, err = res.RowsAffected()
-		dbt.Assert(err, IsNil)
-		dbt.Check(count, Equals, int64(1))
-
-		// Check for unexpected rows
-		res = dbt.mustExec("DELETE FROM test")
-		count, err = res.RowsAffected()
-		dbt.Assert(err, IsNil)
-		dbt.Check(count, Equals, int64(0))
-
-		dbt.mustQueryRows("SELECT 1")
-
-		var b = make([]byte, 0)
-		if err := dbt.db.QueryRow("SELECT ?", b).Scan(&b); err != nil {
-			dbt.Fatal(err)
-		}
-		if b == nil {
-			dbt.Error("nil echo from non-nil input")
-		}
-	})
-}
-
-func runTestPrepareResultFieldType(t *C) {
-	var param int64 = 83
-	runTests(t, nil, func(dbt *DBTest) {
-		stmt, err := dbt.db.Prepare(`SELECT ?`)
-		if err != nil {
-			dbt.Fatal(err)
-		}
-		defer stmt.Close()
-		row := stmt.QueryRow(param)
-		var result int64
-		err = row.Scan(&result)
-		if err != nil {
-			dbt.Fatal(err)
-		}
-		switch {
-		case result != param:
-			dbt.Fatal("Unexpected result value")
-		}
-	})
 }
 
 func runTestSpecialType(t *C) {
 	runTestsOnNewDB(t, nil, "SpecialType", func(dbt *DBTest) {
 		dbt.mustExec("create table test (a decimal(10, 5), b datetime, c time, d bit(8))")
 		dbt.mustExec("insert test values (1.4, '2012-12-21 12:12:12', '4:23:34', b'1000')")
-		rows := dbt.mustQuery("select * from test where a > ?", 0)
+		rows := dbt.mustQuery("select * from test where a > 0")
 		t.Assert(rows.Next(), IsTrue)
 		var outA float64
 		var outB, outC string
@@ -290,44 +170,6 @@ func runTestClientWithCollation(t *C) {
 		err = rows.Scan(&name, &charset)
 		t.Assert(err, IsNil)
 		t.Assert(charset, Equals, "utf8mb4")
-	})
-}
-
-func runTestPreparedString(t *C) {
-	runTestsOnNewDB(t, nil, "PreparedString", func(dbt *DBTest) {
-		dbt.mustExec("create table test (a char(10), b char(10))")
-		dbt.mustExec("insert test values (?, ?)", "abcdeabcde", "abcde")
-		rows := dbt.mustQuery("select * from test where 1 = ?", 1)
-		t.Assert(rows.Next(), IsTrue)
-		var outA, outB string
-		err := rows.Scan(&outA, &outB)
-		t.Assert(err, IsNil)
-		t.Assert(outA, Equals, "abcdeabcde")
-		t.Assert(outB, Equals, "abcde")
-	})
-}
-
-// runTestPreparedTimestamp does not really cover binary timestamp format, because MySQL driver in golang
-// does not use this format. MySQL driver in golang will convert the timestamp to a string.
-// This case guarantees it could work.
-func runTestPreparedTimestamp(t *C) {
-	runTestsOnNewDB(t, nil, "prepared_timestamp", func(dbt *DBTest) {
-		dbt.mustExec("create table test (a timestamp, b time)")
-		dbt.mustExec("set time_zone='+00:00'")
-		insertStmt := dbt.mustPrepare("insert test values (?, ?)")
-		defer insertStmt.Close()
-		vts := time.Unix(1, 1)
-		vt := time.Unix(-1, 1)
-		dbt.mustExecPrepared(insertStmt, vts, vt)
-		selectStmt := dbt.mustPrepare("select * from test where a = ? and b = ?")
-		defer selectStmt.Close()
-		rows := dbt.mustQueryPrepared(selectStmt, vts, vt)
-		t.Assert(rows.Next(), IsTrue)
-		var outA, outB string
-		err := rows.Scan(&outA, &outB)
-		t.Assert(err, IsNil)
-		t.Assert(outA, Equals, "1970-01-01 00:00:01")
-		t.Assert(outB, Equals, "23:59:59")
 	})
 }
 

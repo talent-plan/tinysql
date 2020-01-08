@@ -20,7 +20,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -2799,25 +2798,6 @@ func (s *testSuite) TestContainDotColumn(c *C) {
 	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWrongTableName))
 }
 
-func (s *testSuite) TestIncorrectLimitArg(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec(`use test;`)
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(a bigint);`)
-	tk.MustExec(`prepare stmt1 from 'select * from t limit ?';`)
-	tk.MustExec(`prepare stmt2 from 'select * from t limit ?, ?';`)
-	tk.MustExec(`set @a = -1;`)
-	tk.MustExec(`set @b =  1;`)
-
-	var err error
-	_, err = tk.Se.Execute(context.TODO(), `execute stmt1 using @a;`)
-	c.Assert(err.Error(), Equals, `[planner:1210]Incorrect arguments to LIMIT`)
-
-	_, err = tk.Se.Execute(context.TODO(), `execute stmt2 using @b, @a;`)
-	c.Assert(err.Error(), Equals, `[planner:1210]Incorrect arguments to LIMIT`)
-}
-
 func (s *testSuite) TestLimit(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec(`use test;`)
@@ -2902,56 +2882,6 @@ func (s *testSuite3) TestForSelectScopeInUnion(c *C) {
 
 	_, err = tk1.Exec("commit")
 	c.Assert(err, IsNil)
-}
-
-func (s *testSuite3) TestUnsignedDecimalOverflow(c *C) {
-	tests := []struct {
-		input  interface{}
-		hasErr bool
-		err    string
-	}{{
-		-1,
-		true,
-		"Out of range value for column",
-	}, {
-		"-1.1e-1",
-		true,
-		"Out of range value for column",
-	}, {
-		-1.1,
-		true,
-		"Out of range value for column",
-	}, {
-		-0,
-		false,
-		"",
-	},
-	}
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a decimal(10,2) unsigned)")
-	for _, t := range tests {
-		res, err := tk.Exec("insert into t values (?)", t.input)
-		if res != nil {
-			defer res.Close()
-		}
-		if t.hasErr {
-			c.Assert(err, NotNil)
-			c.Assert(strings.Contains(err.Error(), t.err), IsTrue)
-		} else {
-			c.Assert(err, IsNil)
-		}
-		if res != nil {
-			res.Close()
-		}
-	}
-
-	tk.MustExec("set sql_mode=''")
-	tk.MustExec("delete from t")
-	tk.MustExec("insert into t values (?)", -1)
-	r := tk.MustQuery("select a from t limit 1")
-	r.Check(testkit.Rows("0.00"))
 }
 
 func (s *testSuite3) TestIndexJoinTableDualPanic(c *C) {
@@ -3095,40 +3025,6 @@ func (s *testSuite3) TestMaxOneRow(c *C) {
 
 	err = rs.Close()
 	c.Assert(err, IsNil)
-}
-
-func (s *testSuite3) TestCurrentTimestampValueSelection(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t,t1")
-
-	tk.MustExec("create table t (id int, t0 timestamp null default current_timestamp, t1 timestamp(1) null default current_timestamp(1), t2 timestamp(2) null default current_timestamp(2) on update current_timestamp(2))")
-	tk.MustExec("insert into t (id) values (1)")
-	rs := tk.MustQuery("select t0, t1, t2 from t where id = 1")
-	t0 := rs.Rows()[0][0].(string)
-	t1 := rs.Rows()[0][1].(string)
-	t2 := rs.Rows()[0][2].(string)
-	c.Assert(len(strings.Split(t0, ".")), Equals, 1)
-	c.Assert(len(strings.Split(t1, ".")[1]), Equals, 1)
-	c.Assert(len(strings.Split(t2, ".")[1]), Equals, 2)
-	tk.MustQuery("select id from t where t0 = ?", t0).Check(testkit.Rows("1"))
-	tk.MustQuery("select id from t where t1 = ?", t1).Check(testkit.Rows("1"))
-	tk.MustQuery("select id from t where t2 = ?", t2).Check(testkit.Rows("1"))
-	time.Sleep(time.Second)
-	tk.MustExec("update t set t0 = now() where id = 1")
-	rs = tk.MustQuery("select t2 from t where id = 1")
-	newT2 := rs.Rows()[0][0].(string)
-	c.Assert(newT2 != t2, IsTrue)
-
-	tk.MustExec("create table t1 (id int, a timestamp, b timestamp(2), c timestamp(3))")
-	tk.MustExec("insert into t1 (id, a, b, c) values (1, current_timestamp(2), current_timestamp, current_timestamp(3))")
-	rs = tk.MustQuery("select a, b, c from t1 where id = 1")
-	a := rs.Rows()[0][0].(string)
-	b := rs.Rows()[0][1].(string)
-	d := rs.Rows()[0][2].(string)
-	c.Assert(len(strings.Split(a, ".")), Equals, 1)
-	c.Assert(strings.Split(b, ".")[1], Equals, "00")
-	c.Assert(len(strings.Split(d, ".")[1]), Equals, 3)
 }
 
 func (s *testSuite3) TestRowID(c *C) {

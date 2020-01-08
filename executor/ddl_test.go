@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/ddl"
 	ddlutil "github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
@@ -172,86 +171,6 @@ func (s *testSuite6) TestCreateTable(c *C) {
 	tk.MustExec("insert into create_auto_increment_test (name) values ('aa')")
 	r = tk.MustQuery("select * from create_auto_increment_test;")
 	r.Check(testkit.Rows("1000 aa"))
-}
-
-func (s *testSuite6) TestCreateView(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	//create an source table
-	tk.MustExec("CREATE TABLE source_table (id INT NOT NULL DEFAULT 1, name varchar(255), PRIMARY KEY(id));")
-	//test create a exist view
-	tk.MustExec("CREATE VIEW view_t AS select id , name from source_table")
-	defer tk.MustExec("DROP VIEW IF EXISTS view_t")
-	_, err := tk.Exec("CREATE VIEW view_t AS select id , name from source_table")
-	c.Assert(err.Error(), Equals, "[schema:1050]Table 'test.view_t' already exists")
-	//create view on nonexistent table
-	_, err = tk.Exec("create view v1 (c,d) as select a,b from t1")
-	c.Assert(err.Error(), Equals, "[schema:1146]Table 'test.t1' doesn't exist")
-	//simple view
-	tk.MustExec("create table t1 (a int ,b int)")
-	tk.MustExec("insert into t1 values (1,2), (1,3), (2,4), (2,5), (3,10)")
-	//view with colList and SelectFieldExpr
-	tk.MustExec("create view v1 (c) as select b+1 from t1")
-	//view with SelectFieldExpr
-	tk.MustExec("create view v2 as select b+1 from t1")
-	//view with SelectFieldExpr and AsName
-	tk.MustExec("create view v3 as select b+1 as c from t1")
-	//view with colList , SelectField and AsName
-	tk.MustExec("create view v4 (c) as select b+1 as d from t1")
-	//view with select wild card
-	tk.MustExec("create view v5 as select * from t1")
-	tk.MustExec("create view v6 (c,d) as select * from t1")
-	_, err = tk.Exec("create view v7 (c,d,e) as select * from t1")
-	c.Assert(err.Error(), Equals, ddl.ErrViewWrongList.Error())
-	//drop multiple views in a statement
-	tk.MustExec("drop view v1,v2,v3,v4,v5,v6")
-	//view with variable
-	tk.MustExec("create view v1 (c,d) as select a,b+@@global.max_user_connections from t1")
-	_, err = tk.Exec("create view v1 (c,d) as select a,b from t1 where a = @@global.max_user_connections")
-	c.Assert(err.Error(), Equals, "[schema:1050]Table 'test.v1' already exists")
-	tk.MustExec("drop view v1")
-	//view with different col counts
-	_, err = tk.Exec("create view v1 (c,d,e) as select a,b from t1 ")
-	c.Assert(err.Error(), Equals, ddl.ErrViewWrongList.Error())
-	_, err = tk.Exec("create view v1 (c) as select a,b from t1 ")
-	c.Assert(err.Error(), Equals, ddl.ErrViewWrongList.Error())
-	//view with or_replace flag
-	tk.MustExec("drop view if exists v1")
-	tk.MustExec("create view v1 (c,d) as select a,b from t1")
-	tk.MustExec("create or replace view v1 (c,d) as select a,b from t1 ")
-	tk.MustExec("create table if not exists t1 (a int ,b int)")
-	_, err = tk.Exec("create or replace view t1 as select * from t1")
-	c.Assert(err.Error(), Equals, ddl.ErrWrongObject.GenWithStackByArgs("test", "t1", "VIEW").Error())
-	// create view using prepare
-	tk.MustExec(`prepare stmt from "create view v10 (x) as select 1";`)
-	tk.MustExec("execute stmt")
-
-	// create view on union
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("drop view if exists v")
-	_, err = tk.Exec("create view v as select * from t1 union select * from t2")
-	c.Assert(terror.ErrorEqual(err, infoschema.ErrTableNotExists), IsTrue)
-	tk.MustExec("create table t1(a int, b int)")
-	tk.MustExec("create table t2(a int, b int)")
-	tk.MustExec("insert into t1 values(1,2), (1,1), (1,2)")
-	tk.MustExec("insert into t2 values(1,1),(1,3)")
-	tk.MustExec("create definer='root'@'localhost' view v as select * from t1 union select * from t2")
-	tk.MustQuery("select * from v").Sort().Check(testkit.Rows("1 1", "1 2", "1 3"))
-	tk.MustExec("alter table t1 drop column a")
-	_, err = tk.Exec("select * from v")
-	c.Assert(terror.ErrorEqual(err, plannercore.ErrViewInvalid), IsTrue)
-	tk.MustExec("alter table t1 add column a int")
-	tk.MustQuery("select * from v").Sort().Check(testkit.Rows("1 1", "1 3", "<nil> 1", "<nil> 2"))
-	tk.MustExec("alter table t1 drop column a")
-	tk.MustExec("alter table t2 drop column b")
-	_, err = tk.Exec("select * from v")
-	c.Assert(terror.ErrorEqual(err, plannercore.ErrViewInvalid), IsTrue)
-	tk.MustExec("drop view v")
-
-	tk.MustExec("create view v as (select * from t1)")
-	tk.MustExec("drop view v")
-	tk.MustExec("create view v as (select * from t1 union select * from t2)")
-	tk.MustExec("drop view v")
 }
 
 func (s *testSuite6) TestCreateDropDatabase(c *C) {

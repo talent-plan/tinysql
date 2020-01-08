@@ -68,30 +68,9 @@ func (ts *TidbTestSuite) TearDownSuite(c *C) {
 	}
 }
 
-func (ts *TidbTestSuite) TestRegression(c *C) {
-	if regression {
-		c.Parallel()
-		runTestRegression(c, nil, "Regression")
-	}
-}
-
-func (ts *TidbTestSuite) TestUint64(c *C) {
-	runTestPrepareResultFieldType(c)
-}
-
 func (ts *TidbTestSuite) TestSpecialType(c *C) {
 	c.Parallel()
 	runTestSpecialType(c)
-}
-
-func (ts *TidbTestSuite) TestPreparedString(c *C) {
-	c.Parallel()
-	runTestPreparedString(c)
-}
-
-func (ts *TidbTestSuite) TestPreparedTimestamp(c *C) {
-	c.Parallel()
-	runTestPreparedTimestamp(c)
 }
 
 func (ts *TidbTestSuite) TestConcurrentUpdate(c *C) {

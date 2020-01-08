@@ -17,7 +17,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -30,26 +29,6 @@ func (s *testEvaluatorSuite) TestNewValuesFunc(c *C) {
 	c.Assert(res.RetType.Tp, Equals, mysql.TypeLonglong)
 	_, ok := res.Function.(*builtinValuesIntSig)
 	c.Assert(ok, IsTrue)
-}
-
-func (s *testEvaluatorSuite) TestEvaluateExprWithNull(c *C) {
-	tblInfo := newTestTableBuilder("").add("col0", mysql.TypeLonglong).add("col1", mysql.TypeLonglong).build()
-	schema := tableInfoToSchemaForTest(tblInfo)
-	col0 := schema.Columns[0]
-	col1 := schema.Columns[1]
-	schema.Columns = schema.Columns[:1]
-	innerIfNull, err := newFunctionForTest(s.ctx, ast.Ifnull, col1, One.Clone())
-	c.Assert(err, IsNil)
-	outerIfNull, err := newFunctionForTest(s.ctx, ast.Ifnull, col0, innerIfNull)
-	c.Assert(err, IsNil)
-
-	res := EvaluateExprWithNull(s.ctx, schema, outerIfNull)
-	c.Assert(res.String(), Equals, "ifnull(Column#1, 1)")
-
-	schema.Columns = append(schema.Columns, col1)
-	// ifnull(null, ifnull(null, 1))
-	res = EvaluateExprWithNull(s.ctx, schema, outerIfNull)
-	c.Assert(res.Equal(s.ctx, One), IsTrue)
 }
 
 func (s *testEvaluatorSuite) TestConstant(c *C) {
@@ -78,17 +57,6 @@ func (s *testEvaluatorSuite) TestIsBinaryLiteral(c *C) {
 	c.Assert(IsBinaryLiteral(con), IsTrue)
 	con.Value = types.NewIntDatum(1)
 	c.Assert(IsBinaryLiteral(con), IsFalse)
-}
-
-func (s *testEvaluatorSuite) TestConstItem(c *C) {
-	sf := newFunction(ast.Rand)
-	c.Assert(sf.ConstItem(), Equals, false)
-	sf = newFunction(ast.UUID)
-	c.Assert(sf.ConstItem(), Equals, false)
-	sf = newFunction(ast.GetParam, One)
-	c.Assert(sf.ConstItem(), Equals, false)
-	sf = newFunction(ast.Abs, One)
-	c.Assert(sf.ConstItem(), Equals, true)
 }
 
 type testTableBuilder struct {
@@ -127,17 +95,4 @@ func (builder *testTableBuilder) build() *model.TableInfo {
 		})
 	}
 	return ti
-}
-
-func tableInfoToSchemaForTest(tableInfo *model.TableInfo) *Schema {
-	columns := tableInfo.Columns
-	schema := NewSchema(make([]*Column, 0, len(columns))...)
-	for i, col := range columns {
-		schema.Append(&Column{
-			UniqueID: int64(i),
-			ID:       col.ID,
-			RetType:  &col.FieldType,
-		})
-	}
-	return schema
 }

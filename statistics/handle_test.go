@@ -14,6 +14,7 @@
 package statistics_test
 
 import (
+	"fmt"
 	"time"
 	"unsafe"
 
@@ -102,7 +103,7 @@ func (s *testStatsSuite) TestStatsStoreAndLoad(c *C) {
 	testKit.MustExec("create table t (c1 int, c2 int)")
 	recordCount := 1000
 	for i := 0; i < recordCount; i++ {
-		testKit.MustExec("insert into t values (?, ?)", i, i+1)
+		testKit.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i+1))
 	}
 	testKit.MustExec("create index idx_t on t(c2)")
 	do := s.do
@@ -212,83 +213,6 @@ func (s *testStatsSuite) TestDurationToTS(c *C) {
 		ts := statistics.DurationToTS(t)
 		c.Assert(oracle.ExtractPhysical(ts)*int64(time.Millisecond), Equals, int64(t))
 	}
-}
-
-func (s *testStatsSuite) TestVersion(c *C) {
-	defer cleanEnv(c, s.store, s.do)
-	testKit := testkit.NewTestKit(c, s.store)
-	testKit.MustExec("use test")
-	testKit.MustExec("create table t1 (c1 int, c2 int)")
-	testKit.MustExec("analyze table t1")
-	do := s.do
-	is := do.InfoSchema()
-	tbl1, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t1"))
-	c.Assert(err, IsNil)
-	tableInfo1 := tbl1.Meta()
-	h := statistics.NewHandle(testKit.Se, time.Millisecond)
-	unit := oracle.ComposeTS(1, 0)
-	testKit.MustExec("update mysql.stats_meta set version = ? where table_id = ?", 2*unit, tableInfo1.ID)
-
-	c.Assert(h.Update(is), IsNil)
-	c.Assert(h.LastUpdateVersion(), Equals, 2*unit)
-	statsTbl1 := h.GetTableStats(tableInfo1)
-	c.Assert(statsTbl1.Pseudo, IsFalse)
-
-	testKit.MustExec("create table t2 (c1 int, c2 int)")
-	testKit.MustExec("analyze table t2")
-	is = do.InfoSchema()
-	tbl2, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t2"))
-	c.Assert(err, IsNil)
-	tableInfo2 := tbl2.Meta()
-	// A smaller version write, and we can still read it.
-	testKit.MustExec("update mysql.stats_meta set version = ? where table_id = ?", unit, tableInfo2.ID)
-	c.Assert(h.Update(is), IsNil)
-	c.Assert(h.LastUpdateVersion(), Equals, 2*unit)
-	statsTbl2 := h.GetTableStats(tableInfo2)
-	c.Assert(statsTbl2.Pseudo, IsFalse)
-
-	testKit.MustExec("insert t1 values(1,2)")
-	testKit.MustExec("analyze table t1")
-	offset := 3 * unit
-	testKit.MustExec("update mysql.stats_meta set version = ? where table_id = ?", offset+4, tableInfo1.ID)
-	c.Assert(h.Update(is), IsNil)
-	c.Assert(h.LastUpdateVersion(), Equals, offset+uint64(4))
-	statsTbl1 = h.GetTableStats(tableInfo1)
-	c.Assert(statsTbl1.Count, Equals, int64(1))
-
-	testKit.MustExec("insert t2 values(1,2)")
-	testKit.MustExec("analyze table t2")
-	// A smaller version write, and we can still read it.
-	testKit.MustExec("update mysql.stats_meta set version = ? where table_id = ?", offset+3, tableInfo2.ID)
-	c.Assert(h.Update(is), IsNil)
-	c.Assert(h.LastUpdateVersion(), Equals, offset+uint64(4))
-	statsTbl2 = h.GetTableStats(tableInfo2)
-	c.Assert(statsTbl2.Count, Equals, int64(1))
-
-	testKit.MustExec("insert t2 values(1,2)")
-	testKit.MustExec("analyze table t2")
-	// A smaller version write, and we cannot read it. Because at this time, lastThree Version is 4.
-	testKit.MustExec("update mysql.stats_meta set version = 1 where table_id = ?", tableInfo2.ID)
-	c.Assert(h.Update(is), IsNil)
-	c.Assert(h.LastUpdateVersion(), Equals, offset+uint64(4))
-	statsTbl2 = h.GetTableStats(tableInfo2)
-	c.Assert(statsTbl2.Count, Equals, int64(1))
-
-	// We add an index and analyze it, but DDL doesn't load.
-	testKit.MustExec("alter table t2 add column c3 int")
-	testKit.MustExec("analyze table t2")
-	// load it with old schema.
-	c.Assert(h.Update(is), IsNil)
-	statsTbl2 = h.GetTableStats(tableInfo2)
-	c.Assert(statsTbl2.Pseudo, IsFalse)
-	c.Assert(statsTbl2.Columns[int64(3)], IsNil)
-	// Next time DDL updated.
-	is = do.InfoSchema()
-	c.Assert(h.Update(is), IsNil)
-	statsTbl2 = h.GetTableStats(tableInfo2)
-	c.Assert(statsTbl2.Pseudo, IsFalse)
-	// We can read it without analyze again! Thanks for PrevLastVersion.
-	c.Assert(statsTbl2.Columns[int64(3)], NotNil)
 }
 
 func (s *testStatsSuite) TestLoadStats(c *C) {

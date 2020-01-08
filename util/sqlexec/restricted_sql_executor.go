@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/chunk"
 )
 
@@ -70,11 +69,8 @@ type Statement interface {
 	// Exec executes SQL and gets a Recordset.
 	Exec(ctx context.Context) (RecordSet, error)
 
-	// IsPrepared returns whether this statement is prepared statement.
-	IsPrepared() bool
-
 	// IsReadOnly returns if the statement is read only. For example: SelectStmt without lock.
-	IsReadOnly(vars *variable.SessionVars) bool
+	IsReadOnly() bool
 
 	// RebuildPlan rebuilds the plan of the statement.
 	RebuildPlan(ctx context.Context) (schemaVersion int64, err error)

@@ -310,11 +310,6 @@ func SubstituteCorCol2Constant(expr Expression) (Expression, error) {
 		return newSf, nil
 	case *CorrelatedColumn:
 		return &Constant{Value: *x.Data, RetType: x.GetType()}, nil
-	case *Constant:
-		if x.DeferredExpr != nil {
-			newExpr := FoldConstant(x)
-			return &Constant{Value: newExpr.(*Constant).Value, RetType: x.GetType()}, nil
-		}
 	}
 	return expr, nil
 }
@@ -722,10 +717,6 @@ func IsMutableEffectsExpr(expr Expression) bool {
 			}
 		}
 	case *Column:
-	case *Constant:
-		if x.DeferredExpr != nil {
-			return IsMutableEffectsExpr(x.DeferredExpr)
-		}
 	}
 	return false
 }
@@ -754,16 +745,6 @@ func GetUint64FromConstant(expr Expression) (uint64, bool, bool) {
 		return 0, false, false
 	}
 	dt := con.Value
-	if con.ParamMarker != nil {
-		dt = con.ParamMarker.GetUserVar()
-	} else if con.DeferredExpr != nil {
-		var err error
-		dt, err = con.DeferredExpr.Eval(chunk.Row{})
-		if err != nil {
-			logutil.BgLogger().Warn("eval deferred expr failed", zap.Error(err))
-			return 0, false, false
-		}
-	}
 	switch dt.Kind() {
 	case types.KindNull:
 		return 0, true, true

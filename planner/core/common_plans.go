@@ -15,7 +15,6 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,14 +24,11 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	driver "github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tidb/util/chunk"
 )
 
 // ShowDDL is for showing DDL information.
@@ -58,110 +54,6 @@ type CancelDDLJobs struct {
 	baseSchemaProducer
 
 	JobIDs []int64
-}
-
-// Prepare represents prepare plan.
-type Prepare struct {
-	baseSchemaProducer
-
-	Name    string
-	SQLText string
-}
-
-// Execute represents prepare plan.
-type Execute struct {
-	baseSchemaProducer
-
-	Name          string
-	UsingVars     []expression.Expression
-	PrepareParams []types.Datum
-	ExecID        uint32
-	Stmt          ast.StmtNode
-	StmtType      string
-	Plan          Plan
-}
-
-// OptimizePreparedPlan optimizes the prepared statement.
-func (e *Execute) OptimizePreparedPlan(ctx context.Context, sctx sessionctx.Context, is infoschema.InfoSchema) error {
-	vars := sctx.GetSessionVars()
-	if e.Name != "" {
-		e.ExecID = vars.PreparedStmtNameToID[e.Name]
-	}
-	preparedPointer, ok := vars.PreparedStmts[e.ExecID]
-	if !ok {
-		return errors.Trace(ErrStmtNotFound)
-	}
-	preparedObj, ok := preparedPointer.(*CachedPrepareStmt)
-	if !ok {
-		return errors.Errorf("invalid CachedPrepareStmt type")
-	}
-	prepared := preparedObj.PreparedAst
-	vars.StmtCtx.StmtType = prepared.StmtType
-
-	paramLen := len(e.PrepareParams)
-	if paramLen > 0 {
-		// for binary protocol execute, argument is placed in vars.PrepareParams
-		if len(prepared.Params) != paramLen {
-			return errors.Trace(ErrWrongParamCount)
-		}
-		vars.PreparedParams = e.PrepareParams
-		for i, val := range vars.PreparedParams {
-			param := prepared.Params[i].(*driver.ParamMarkerExpr)
-			param.Datum = val
-			param.InExecute = true
-		}
-	} else {
-		// for `execute stmt using @a, @b, @c`, using value in e.UsingVars
-		if len(prepared.Params) != len(e.UsingVars) {
-			return errors.Trace(ErrWrongParamCount)
-		}
-
-		for i, usingVar := range e.UsingVars {
-			val, err := usingVar.Eval(chunk.Row{})
-			if err != nil {
-				return err
-			}
-			param := prepared.Params[i].(*driver.ParamMarkerExpr)
-			param.Datum = val
-			param.InExecute = true
-			vars.PreparedParams = append(vars.PreparedParams, val)
-		}
-	}
-
-	if prepared.SchemaVersion != is.SchemaMetaVersion() {
-		preparedObj.Executor = nil
-		// If the schema version has changed we need to preprocess it again,
-		// if this time it failed, the real reason for the error is schema changed.
-		err := Preprocess(sctx, prepared.Stmt, is, InPrepare)
-		if err != nil {
-			return ErrSchemaChanged.GenWithStack("Schema change caused error: %s", err.Error())
-		}
-		prepared.SchemaVersion = is.SchemaMetaVersion()
-	}
-	err := e.getPhysicalPlan(ctx, sctx, is, preparedObj)
-	if err != nil {
-		return err
-	}
-	e.Stmt = prepared.Stmt
-	return nil
-}
-
-func (e *Execute) getPhysicalPlan(ctx context.Context, sctx sessionctx.Context, is infoschema.InfoSchema, preparedStmt *CachedPrepareStmt) error {
-	prepared := preparedStmt.PreparedAst
-	p, names, err := OptimizeAstNode(ctx, sctx, prepared.Stmt, is)
-	if err != nil {
-		return err
-	}
-	e.names = names
-	e.Plan = p
-	return err
-}
-
-// Deallocate represents deallocate plan.
-type Deallocate struct {
-	baseSchemaProducer
-
-	Name string
 }
 
 // Set represents a plan for set stmt.
@@ -396,10 +288,6 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, indent string, isLast
 	case *Delete:
 		if x.SelectPlan != nil {
 			err = e.explainPlanInRowFormat(x.SelectPlan, "root", childIndent, true)
-		}
-	case *Execute:
-		if x.Plan != nil {
-			err = e.explainPlanInRowFormat(x.Plan, "root", childIndent, true)
 		}
 	}
 	return

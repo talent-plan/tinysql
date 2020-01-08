@@ -273,7 +273,7 @@ func (s *testSerialSuite) TestCancelAddIndexPanic(c *C) {
 	tk.MustExec("create table t(c1 int, c2 int)")
 	defer tk.MustExec("drop table t;")
 	for i := 0; i < 5; i++ {
-		tk.MustExec("insert into t values (?, ?)", i, i)
+		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d)", i, i))
 	}
 	var checkErr error
 	oldReorgWaitTimeout := ddl.ReorgWaitTimeout

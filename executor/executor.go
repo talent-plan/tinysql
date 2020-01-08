@@ -1177,12 +1177,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 		StmtHints: stmtHints,
 		TimeZone:  vars.Location(),
 	}
-	if execStmt, ok := s.(*ast.ExecuteStmt); ok {
-		s, err = getPreparedStmt(execStmt, vars)
-		if err != nil {
-			return
-		}
-	}
 	if explainStmt, ok := s.(*ast.ExplainStmt); ok {
 		sc.InExplainStmt = true
 		sc.CastStrToIntStrict = true
@@ -1257,7 +1251,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 		sc.IgnoreZeroInDate = true
 		sc.AllowInvalidDate = vars.SQLMode.HasAllowInvalidDatesMode()
 	}
-	vars.PreparedParams = vars.PreparedParams[:0]
 	if vars.StmtCtx.LastInsertID > 0 {
 		sc.PrevLastInsertID = vars.StmtCtx.LastInsertID
 	} else {

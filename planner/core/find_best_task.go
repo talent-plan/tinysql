@@ -193,7 +193,7 @@ func (p *LogicalMemTable) findBestTask(prop *property.PhysicalProperty) (t task,
 // tryToGetDualTask will check if the push down predicate has false constant. If so, it will return table dual.
 func (ds *DataSource) tryToGetDualTask() (task, error) {
 	for _, cond := range ds.pushedDownConds {
-		if con, ok := cond.(*expression.Constant); ok && con.DeferredExpr == nil && con.ParamMarker == nil {
+		if _, ok := cond.(*expression.Constant); ok {
 			result, _, err := expression.EvalBool(ds.ctx, []expression.Expression{cond}, chunk.Row{})
 			if err != nil {
 				return nil, err

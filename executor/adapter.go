@@ -16,7 +16,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -137,8 +136,7 @@ func (a *recordSet) NewChunk() *chunk.Chunk {
 func (a *recordSet) Close() error {
 	err := a.executor.Close()
 	sessVars := a.stmt.Ctx.GetSessionVars()
-	pps := types.CloneRow(sessVars.PreparedParams)
-	sessVars.PrevStmt = FormatSQL(a.stmt.OriginText(), pps)
+	sessVars.PrevStmt = FormatSQL(a.stmt.OriginText())
 	return err
 }
 
@@ -156,15 +154,11 @@ type ExecStmt struct {
 	Ctx sessionctx.Context
 
 	// LowerPriority represents whether to lower the execution priority of a query.
-	LowerPriority bool
-	// Cacheable represents whether the physical plan can be cached.
-	Cacheable         bool
-	isPreparedStmt    bool
+	LowerPriority     bool
 	isSelectForUpdate bool
 
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
-	PsStmt      *plannercore.CachedPrepareStmt
 }
 
 // OriginText returns original statement as a string.
@@ -172,23 +166,8 @@ func (a *ExecStmt) OriginText() string {
 	return a.Text
 }
 
-// IsPrepared returns true if stmt is a prepare statement.
-func (a *ExecStmt) IsPrepared() bool {
-	return a.isPreparedStmt
-}
-
 // IsReadOnly returns true if a statement is read only.
-// If current StmtNode is an ExecuteStmt, we can get its prepared stmt,
-// then using ast.IsReadOnly function to determine a statement is read only or not.
-func (a *ExecStmt) IsReadOnly(vars *variable.SessionVars) bool {
-	if execStmt, ok := a.StmtNode.(*ast.ExecuteStmt); ok {
-		s, err := getPreparedStmt(execStmt, vars)
-		if err != nil {
-			logutil.BgLogger().Error("getPreparedStmt failed", zap.Error(err))
-			return false
-		}
-		return ast.IsReadOnly(s)
-	}
+func (a *ExecStmt) IsReadOnly() bool {
 	return ast.IsReadOnly(a.StmtNode)
 }
 
@@ -363,21 +342,6 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 // buildExecutor build a executor from plan, prepared statement may need additional procedure.
 func (a *ExecStmt) buildExecutor() (Executor, error) {
 	ctx := a.Ctx
-	if _, ok := a.Plan.(*plannercore.Execute); !ok {
-		// Do not sync transaction for Execute statement, because the real optimization work is done in
-		// "ExecuteExec.Build".
-		useMaxTS, err := plannercore.IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx, a.Plan)
-		if err != nil {
-			return nil, err
-		}
-		if useMaxTS {
-			logutil.BgLogger().Debug("init txnStartTS with MaxUint64", zap.Uint64("conn", ctx.GetSessionVars().ConnectionID), zap.String("text", a.Text))
-			err = ctx.InitTxnWithStartTS(math.MaxUint64)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	b := newExecutorBuilder(ctx, a.InfoSchema)
 	e := b.build(a.Plan)
@@ -385,17 +349,6 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 		return nil, errors.Trace(b.err)
 	}
 
-	// ExecuteExec is not a real Executor, we only use it to build another Executor from a prepared statement.
-	if executorExec, ok := e.(*ExecuteExec); ok {
-		err := executorExec.Build(b)
-		if err != nil {
-			return nil, err
-		}
-		a.OutputNames = executorExec.outputNames
-		a.isPreparedStmt = true
-		a.Plan = executorExec.plan
-		e = executorExec.stmtExec
-	}
 	a.isSelectForUpdate = b.isSelectForUpdate
 	return e, nil
 }
@@ -404,12 +357,12 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 var QueryReplacer = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
 
 // FormatSQL is used to format the original SQL, e.g. truncating long SQL, appending prepared arguments.
-func FormatSQL(sql string, pps variable.PreparedParams) stringutil.StringerFunc {
+func FormatSQL(sql string) stringutil.StringerFunc {
 	return func() string {
 		length := len(sql)
 		if uint64(length) > logutil.DefaultQueryLogMaxLen {
 			sql = fmt.Sprintf("%.*q(len:%d)", logutil.DefaultQueryLogMaxLen, sql, length)
 		}
-		return QueryReplacer.Replace(sql) + pps.String()
+		return QueryReplacer.Replace(sql)
 	}
 }

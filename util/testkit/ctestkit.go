@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/sqlexec"
 )
@@ -86,34 +85,15 @@ func (tk *CTestKit) CloseSession(ctx context.Context) {
 }
 
 // Exec executes a sql statement.
-func (tk *CTestKit) Exec(ctx context.Context, sql string, args ...interface{}) (sqlexec.RecordSet, error) {
+func (tk *CTestKit) Exec(ctx context.Context, sql string) (sqlexec.RecordSet, error) {
 	var err error
 	tk.c.Assert(getSession(ctx), check.NotNil)
-	if len(args) == 0 {
-		var rss []sqlexec.RecordSet
-		rss, err = getSession(ctx).Execute(ctx, sql)
-		if err == nil && len(rss) > 0 {
-			return rss[0], nil
-		}
-		return nil, err
+	var rss []sqlexec.RecordSet
+	rss, err = getSession(ctx).Execute(ctx, sql)
+	if err == nil && len(rss) > 0 {
+		return rss[0], nil
 	}
-	stmtID, _, _, err := getSession(ctx).PrepareStmt(sql)
-	if err != nil {
-		return nil, err
-	}
-	params := make([]types.Datum, len(args))
-	for i := 0; i < len(params); i++ {
-		params[i] = types.NewDatum(args[i])
-	}
-	rs, err := getSession(ctx).ExecutePreparedStmt(ctx, stmtID, params)
-	if err != nil {
-		return nil, err
-	}
-	err = getSession(ctx).DropPreparedStmt(stmtID)
-	if err != nil {
-		return nil, err
-	}
-	return rs, nil
+	return nil, err
 }
 
 // CheckExecResult checks the affected rows and the insert id after executing MustExec.
@@ -124,9 +104,9 @@ func (tk *CTestKit) CheckExecResult(ctx context.Context, affectedRows, insertID 
 }
 
 // MustExec executes a sql statement and asserts nil error.
-func (tk *CTestKit) MustExec(ctx context.Context, sql string, args ...interface{}) {
-	res, err := tk.Exec(ctx, sql, args...)
-	tk.c.Assert(err, check.IsNil, check.Commentf("sql:%s, %v, error stack %v", sql, args, errors.ErrorStack(err)))
+func (tk *CTestKit) MustExec(ctx context.Context, sql string) {
+	res, err := tk.Exec(ctx, sql)
+	tk.c.Assert(err, check.IsNil, check.Commentf("sql:%s, error stack %v", sql, errors.ErrorStack(err)))
 	if res != nil {
 		tk.c.Assert(res.Close(), check.IsNil)
 	}
@@ -134,9 +114,9 @@ func (tk *CTestKit) MustExec(ctx context.Context, sql string, args ...interface{
 
 // MustQuery query the statements and returns result rows.
 // If expected result is set it asserts the query result equals expected result.
-func (tk *CTestKit) MustQuery(ctx context.Context, sql string, args ...interface{}) *Result {
-	comment := check.Commentf("sql:%s, args:%v", sql, args)
-	rs, err := tk.Exec(ctx, sql, args...)
+func (tk *CTestKit) MustQuery(ctx context.Context, sql string) *Result {
+	comment := check.Commentf("sql:%s", sql)
+	rs, err := tk.Exec(ctx, sql)
 	tk.c.Assert(errors.ErrorStack(err), check.Equals, "", comment)
 	tk.c.Assert(rs, check.NotNil, comment)
 	return tk.resultSetToResult(ctx, rs, comment)

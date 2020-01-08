@@ -41,68 +41,6 @@ func (s *testBootstrapSuite) SetUpSuite(c *C) {
 	s.dbNameBootstrap = "test_main_db_bootstrap"
 }
 
-func (s *testBootstrapSuite) TestBootstrap(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom := newStoreWithBootstrap(c, s.dbName)
-	defer store.Close()
-	defer dom.Close()
-	se := newSession(c, store, s.dbName)
-	mustExecSQL(c, se, "USE mysql;")
-	r := mustExecSQL(c, se, `select * from user;`)
-	c.Assert(r, NotNil)
-	ctx := context.Background()
-	req := r.NewChunk()
-	err := r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	c.Assert(req.NumRows() == 0, IsFalse)
-	datums := statistics.RowToDatums(req.GetRow(0), r.Fields())
-	match(c, datums, []byte(`%`), []byte("root"), []byte(""), "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "N", "Y")
-
-	c.Assert(se.Auth(&auth.UserIdentity{Username: "root", Hostname: "anyhost"}, []byte(""), []byte("")), IsTrue)
-	mustExecSQL(c, se, "USE test;")
-	// Check privilege tables.
-	mustExecSQL(c, se, "SELECT * from mysql.db;")
-	mustExecSQL(c, se, "SELECT * from mysql.tables_priv;")
-	mustExecSQL(c, se, "SELECT * from mysql.columns_priv;")
-	// Check privilege tables.
-	r = mustExecSQL(c, se, "SELECT COUNT(*) from mysql.global_variables;")
-	c.Assert(r, NotNil)
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	c.Assert(req.GetRow(0).GetInt64(0), Equals, globalVarsCount())
-
-	// Check a storage operations are default autocommit after the second start.
-	mustExecSQL(c, se, "USE test;")
-	mustExecSQL(c, se, "drop table if exists t")
-	mustExecSQL(c, se, "create table t (id int)")
-	unsetStoreBootstrapped(store.UUID())
-	se.Close()
-	se, err = CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	mustExecSQL(c, se, "USE test;")
-	mustExecSQL(c, se, "insert t values (?)", 3)
-	se, err = CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	mustExecSQL(c, se, "USE test;")
-	r = mustExecSQL(c, se, "select * from t")
-	c.Assert(r, NotNil)
-
-	req = r.NewChunk()
-	err = r.Next(ctx, req)
-	c.Assert(err, IsNil)
-	datums = statistics.RowToDatums(req.GetRow(0), r.Fields())
-	match(c, datums, 3)
-	mustExecSQL(c, se, "drop table if exists t")
-	se.Close()
-
-	// Try to do bootstrap dml jobs on an already bootstraped TiDB system will not cause fatal.
-	// For https://github.com/pingcap/tidb/issues/1096
-	se, err = CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	doDMLWorks(se)
-}
-
 func globalVarsCount() int64 {
 	var count int64
 	for _, v := range variable.SysVars {

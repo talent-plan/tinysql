@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -34,11 +33,6 @@ import (
 
 // PreprocessOpt presents optional parameters to `Preprocess` method.
 type PreprocessOpt func(*preprocessor)
-
-// InPrepare is a PreprocessOpt that indicates preprocess is executing under prepare statement.
-func InPrepare(p *preprocessor) {
-	p.flag |= inPrepare
-}
 
 // InTxnRetry is a PreprocessOpt that indicates preprocess is executing under transaction retry.
 func InTxnRetry(p *preprocessor) {
@@ -58,10 +52,8 @@ func Preprocess(ctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema,
 type preprocessorFlag uint8
 
 const (
-	// inPrepare is set when visiting in prepare statement.
-	inPrepare preprocessorFlag = 1 << iota
 	// inTxnRetry is set when visiting in transaction retry.
-	inTxnRetry
+	inTxnRetry preprocessorFlag = 1 << iota
 	// inCreateOrDropTable is set when visiting create/drop table statement.
 	inCreateOrDropTable
 	// parentIsJoin is set when visiting node's parent is join.
@@ -136,11 +128,6 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		p.flag &= ^inCreateOrDropTable
 	case *ast.DropTableStmt, *ast.AlterTableStmt, *ast.RenameTableStmt:
 		p.flag &= ^inCreateOrDropTable
-	case *driver.ParamMarkerExpr:
-		if p.flag&inPrepare == 0 {
-			p.err = parser.ErrSyntax.GenWithStack("syntax error, unexpected '?'")
-			return
-		}
 	case *ast.ExplainStmt:
 		if _, ok := x.Stmt.(*ast.ShowStmt); ok {
 			break

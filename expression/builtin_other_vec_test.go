@@ -29,12 +29,6 @@ var vecBuiltinOtherCases = map[string][]vecExprBenchCase{
 		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETString}},
 	},
 	ast.BitCount: {{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}}},
-	ast.GetParam: {
-		{
-			retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt},
-			geners: []dataGenerator{&rangeInt64Gener{0, 10}},
-		},
-	},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltinOtherFunc(c *C) {

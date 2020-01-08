@@ -35,7 +35,6 @@ var (
 	_ functionClass = &releaseLockFunctionClass{}
 	_ functionClass = &valuesFunctionClass{}
 	_ functionClass = &bitCountFunctionClass{}
-	_ functionClass = &getParamFunctionClass{}
 )
 
 var (
@@ -60,7 +59,6 @@ var (
 	_ builtinFunc = &builtinValuesDurationSig{}
 	_ builtinFunc = &builtinValuesJSONSig{}
 	_ builtinFunc = &builtinBitCountSig{}
-	_ builtinFunc = &builtinGetParamStringSig{}
 )
 
 type inFunctionClass struct {
@@ -763,46 +761,4 @@ func (b *builtinBitCountSig) evalInt(row chunk.Row) (int64, bool, error) {
 		return 0, true, err
 	}
 	return bitCount(n), false, nil
-}
-
-// getParamFunctionClass for plan cache of prepared statements
-type getParamFunctionClass struct {
-	baseFunctionClass
-}
-
-// getFunction gets function
-// TODO: more typed functions will be added when typed parameters are supported.
-func (c *getParamFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETString, types.ETInt)
-	bf.tp.Flen = mysql.MaxFieldVarCharLength
-	sig := &builtinGetParamStringSig{bf}
-	return sig, nil
-}
-
-type builtinGetParamStringSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinGetParamStringSig) Clone() builtinFunc {
-	newSig := &builtinGetParamStringSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinGetParamStringSig) evalString(row chunk.Row) (string, bool, error) {
-	sessionVars := b.ctx.GetSessionVars()
-	idx, isNull, err := b.args[0].EvalInt(b.ctx, row)
-	if isNull || err != nil {
-		return "", isNull, err
-	}
-	v := sessionVars.PreparedParams[idx]
-
-	str, err := v.ToString()
-	if err != nil {
-		return "", true, nil
-	}
-	return str, false, nil
 }
