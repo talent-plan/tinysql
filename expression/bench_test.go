@@ -275,18 +275,6 @@ func (g *selectStringGener) gen() interface{} {
 	return g.candidates[rand.Intn(len(g.candidates))]
 }
 
-type constJSONGener struct {
-	jsonStr string
-}
-
-func (g *constJSONGener) gen() interface{} {
-	j := new(json.BinaryJSON)
-	if err := j.UnmarshalJSON([]byte(g.jsonStr)); err != nil {
-		panic(err)
-	}
-	return *j
-}
-
 type decimalJSONGener struct {
 	nullRation float64
 }

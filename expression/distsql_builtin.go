@@ -523,57 +523,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinCaseWhenJSONSig{base}
 	case tipb.ScalarFuncSig_LikeSig:
 		f = &builtinLikeSig{base}
-	case tipb.ScalarFuncSig_JsonExtractSig:
-		f = &builtinJSONExtractSig{base}
-	case tipb.ScalarFuncSig_JsonUnquoteSig:
-		f = &builtinJSONUnquoteSig{base}
-	case tipb.ScalarFuncSig_JsonTypeSig:
-		f = &builtinJSONTypeSig{base}
-	case tipb.ScalarFuncSig_JsonSetSig:
-		f = &builtinJSONSetSig{base}
-	case tipb.ScalarFuncSig_JsonInsertSig:
-		f = &builtinJSONInsertSig{base}
-	case tipb.ScalarFuncSig_JsonReplaceSig:
-		f = &builtinJSONReplaceSig{base}
-	case tipb.ScalarFuncSig_JsonRemoveSig:
-		f = &builtinJSONRemoveSig{base}
-	case tipb.ScalarFuncSig_JsonMergeSig:
-		f = &builtinJSONMergeSig{base}
-	case tipb.ScalarFuncSig_JsonObjectSig:
-		f = &builtinJSONObjectSig{base}
-	case tipb.ScalarFuncSig_JsonArraySig:
-		f = &builtinJSONArraySig{base}
-	case tipb.ScalarFuncSig_JsonValidJsonSig:
-		f = &builtinJSONValidJSONSig{base}
-	case tipb.ScalarFuncSig_JsonContainsSig:
-		f = &builtinJSONContainsSig{base}
-	case tipb.ScalarFuncSig_JsonArrayAppendSig:
-		f = &builtinJSONArrayAppendSig{base}
-	case tipb.ScalarFuncSig_JsonArrayInsertSig:
-		f = &builtinJSONArrayInsertSig{base}
-	//case tipb.ScalarFuncSig_JsonMergePatchSig:
-	case tipb.ScalarFuncSig_JsonMergePreserveSig:
-		f = &builtinJSONMergeSig{base}
-	case tipb.ScalarFuncSig_JsonContainsPathSig:
-		f = &builtinJSONContainsPathSig{base}
-	//case tipb.ScalarFuncSig_JsonPrettySig:
-	case tipb.ScalarFuncSig_JsonQuoteSig:
-		f = &builtinJSONQuoteSig{base}
-	case tipb.ScalarFuncSig_JsonSearchSig:
-		f = &builtinJSONSearchSig{base}
-	//case tipb.ScalarFuncSig_JsonStorageSizeSig:
-	case tipb.ScalarFuncSig_JsonDepthSig:
-		f = &builtinJSONDepthSig{base}
-	case tipb.ScalarFuncSig_JsonKeysSig:
-		f = &builtinJSONKeysSig{base}
-	case tipb.ScalarFuncSig_JsonLengthSig:
-		f = &builtinJSONLengthSig{base}
-	case tipb.ScalarFuncSig_JsonKeys2ArgsSig:
-		f = &builtinJSONKeys2ArgsSig{base}
-	case tipb.ScalarFuncSig_JsonValidStringSig:
-		f = &builtinJSONValidStringSig{base}
-	case tipb.ScalarFuncSig_JsonValidOthersSig:
-		f = &builtinJSONValidOthersSig{base}
 	case tipb.ScalarFuncSig_DateFormatSig:
 		f = &builtinDateFormatSig{base}
 	//case tipb.ScalarFuncSig_DateLiteral:
