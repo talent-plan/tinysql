@@ -1644,13 +1644,6 @@ func (s *testSchemaSerialSuite) TestSchemaCheckerSQL(c *C) {
 	tk1.MustExec(`alter table t add index idx2(c);`)
 	tk.MustExec(`insert into t1 values(4, 4);`)
 	tk.MustExec(`commit;`)
-
-	// Test for "select for update".
-	tk.MustExec(`begin;`)
-	tk1.MustExec(`alter table t add index idx3(c);`)
-	tk.MustQuery(`select * from t for update`)
-	_, err = tk.Exec(`commit;`)
-	c.Assert(terror.ErrorEqual(err, domain.ErrInfoSchemaChanged), IsTrue, Commentf("err %v", err))
 }
 
 func (s *testSchemaSuite) TestCommitWhenSchemaChanged(c *C) {

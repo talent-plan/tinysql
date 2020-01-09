@@ -71,8 +71,6 @@ const (
 	TypeExists = "Exists"
 	// TypeDual is the type of TableDual.
 	TypeDual = "TableDual"
-	// TypeLock is the type of SelectLock.
-	TypeLock = "SelectLock"
 	// TypeInsert is the type of Insert
 	TypeInsert = "Insert"
 	// TypeUpdate is the type of Update.
@@ -300,20 +298,6 @@ func (p PhysicalShowDDLJobs) Init(ctx sessionctx.Context) *PhysicalShowDDLJobs {
 	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeShowDDLJobs, &p, 0)
 	// Just use pseudo stats to avoid panic.
 	p.stats = &property.StatsInfo{RowCount: 1}
-	return &p
-}
-
-// Init initializes LogicalLock.
-func (p LogicalLock) Init(ctx sessionctx.Context) *LogicalLock {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeLock, &p, 0)
-	return &p
-}
-
-// Init initializes PhysicalLock.
-func (p PhysicalLock) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalLock {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeLock, &p, 0)
-	p.childrenReqProps = props
-	p.stats = stats
 	return &p
 }
 

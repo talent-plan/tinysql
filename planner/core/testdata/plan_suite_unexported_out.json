@@ -27,7 +27,6 @@
   {
     "Name": "TestPlanBuilder",
     "Cases": [
-      "DataScan(t)->Lock->Projection",
       "TableReader(Table(t)->Limit)->Limit->Update",
       "TableReader(Table(t)->Limit)->Limit->Delete",
       "*core.Explain",

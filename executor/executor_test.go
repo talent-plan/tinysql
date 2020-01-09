@@ -2169,81 +2169,6 @@ func (s *testSuite) TestTiDBCurrentTS(c *C) {
 	c.Assert(terror.ErrorEqual(err, variable.ErrReadOnly), IsTrue, Commentf("err %v", err))
 }
 
-func (s *testSuite) TestSelectForUpdate(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("use test")
-	tk2 := testkit.NewTestKit(c, s.store)
-	tk2.MustExec("use test")
-
-	tk.MustExec("drop table if exists t, t1")
-
-	txn, err := tk.Se.Txn(true)
-	c.Assert(kv.ErrInvalidTxn.Equal(err), IsTrue)
-	c.Assert(txn.Valid(), IsFalse)
-	tk.MustExec("create table t (c1 int, c2 int, c3 int)")
-	tk.MustExec("insert t values (11, 2, 3)")
-	tk.MustExec("insert t values (12, 2, 3)")
-	tk.MustExec("insert t values (13, 2, 3)")
-
-	tk.MustExec("create table t1 (c1 int)")
-	tk.MustExec("insert t1 values (11)")
-
-	// conflict
-	tk1.MustExec("begin")
-	tk1.MustQuery("select * from t where c1=11 for update")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=211 where c1=11")
-	tk2.MustExec("commit")
-
-	_, err = tk1.Exec("commit")
-	c.Assert(err, NotNil)
-
-	// no conflict for subquery.
-	tk1.MustExec("begin")
-	tk1.MustQuery("select * from t where exists(select null from t1 where t1.c1=t.c1) for update")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=211 where c1=12")
-	tk2.MustExec("commit")
-
-	tk1.MustExec("commit")
-
-	// not conflict
-	tk1.MustExec("begin")
-	tk1.MustQuery("select * from t where c1=11 for update")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=22 where c1=12")
-	tk2.MustExec("commit")
-
-	tk1.MustExec("commit")
-
-	// not conflict, auto commit
-	tk1.MustExec("set @@autocommit=1;")
-	tk1.MustQuery("select * from t where c1=11 for update")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=211 where c1=11")
-	tk2.MustExec("commit")
-
-	tk1.MustExec("commit")
-
-	// conflict
-	tk1.MustExec("begin")
-	tk1.MustQuery("select * from (select * from t for update) t join t1 for update")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t1 set c1 = 13")
-	tk2.MustExec("commit")
-
-	_, err = tk1.Exec("commit")
-	c.Assert(err, NotNil)
-
-}
-
 func (s *testSuite) TestEmptyEnum(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -2798,38 +2723,6 @@ func (s *testSuite3) TestYearTypeDeleteIndex(c *C) {
 	tk.MustExec("delete from t;")
 }
 
-func (s *testSuite3) TestForSelectScopeInUnion(c *C) {
-	// A union B for update, the "for update" option belongs to union statement, so
-	// it should works on both A and B.
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk2 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("use test")
-	tk1.MustExec("drop table if exists t")
-	tk1.MustExec("create table t(a int)")
-	tk1.MustExec("insert into t values (1)")
-
-	tk1.MustExec("begin")
-	// 'For update' would act on the second select.
-	tk1.MustQuery("select 1 as a union select a from t for update")
-
-	tk2.MustExec("use test")
-	tk2.MustExec("update t set a = a + 1")
-
-	// As tk1 use select 'for update', it should detect conflict and fail.
-	_, err := tk1.Exec("commit")
-	c.Assert(err, NotNil)
-
-	tk1.MustExec("begin")
-	// 'For update' would be ignored if 'order by' or 'limit' exists.
-	tk1.MustQuery("select 1 as a union select a from t limit 5 for update")
-	tk1.MustQuery("select 1 as a union select a from t order by a for update")
-
-	tk2.MustExec("update t set a = a + 1")
-
-	_, err = tk1.Exec("commit")
-	c.Assert(err, IsNil)
-}
-
 func (s *testSuite3) TestIndexJoinTableDualPanic(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -2971,28 +2864,6 @@ func (s *testSuite3) TestMaxOneRow(c *C) {
 
 	err = rs.Close()
 	c.Assert(err, IsNil)
-}
-
-func (s *testSuite3) TestRowID(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec(`use test`)
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t(a varchar(10), b varchar(10), c varchar(1), index idx(a, b, c));`)
-	tk.MustExec(`insert into t values('a', 'b', 'c');`)
-	tk.MustExec(`insert into t values('a', 'b', 'c');`)
-	tk.MustQuery(`select b, _tidb_rowid from t use index(idx) where a = 'a';`).Check(testkit.Rows(
-		`b 1`,
-		`b 2`,
-	))
-	tk.MustExec(`begin;`)
-	tk.MustExec(`select * from t for update`)
-	tk.MustQuery(`select distinct b from t use index(idx) where a = 'a';`).Check(testkit.Rows(`b`))
-	tk.MustExec(`commit;`)
-
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t(a varchar(5) primary key)`)
-	tk.MustExec(`insert into t values('a')`)
-	tk.MustQuery("select *, _tidb_rowid from t use index(`primary`) where _tidb_rowid=1").Check(testkit.Rows("a 1"))
 }
 
 func (s *testSuite3) TestDoSubquery(c *C) {

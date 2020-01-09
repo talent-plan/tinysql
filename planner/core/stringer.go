@@ -106,8 +106,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		str = "MaxOneRow"
 	case *LogicalLimit, *PhysicalLimit:
 		str = "Limit"
-	case *PhysicalLock, *LogicalLock:
-		str = "Lock"
 	case *ShowDDL:
 		str = "ShowDDL"
 	case *LogicalShow, *PhysicalShow:

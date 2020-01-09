@@ -51,8 +51,6 @@ const (
 	OperandSort
 	// OperandTopN is the operand for LogicalTopN.
 	OperandTopN
-	// OperandLock is the operand for LogicalLock.
-	OperandLock
 	// OperandLimit is the operand for LogicalLimit.
 	OperandLimit
 	// OperandTiKVSingleGather is the operand for TiKVSingleGather.
@@ -94,8 +92,6 @@ func GetOperand(p plannercore.LogicalPlan) Operand {
 		return OperandSort
 	case *plannercore.LogicalTopN:
 		return OperandTopN
-	case *plannercore.LogicalLock:
-		return OperandLock
 	case *plannercore.LogicalLimit:
 		return OperandLimit
 	case *plannercore.TiKVSingleGather:

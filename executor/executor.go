@@ -36,9 +36,7 @@ import (
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
@@ -57,7 +55,6 @@ var (
 	_ Executor = &MergeJoinExec{}
 	_ Executor = &ProjectionExec{}
 	_ Executor = &SelectionExec{}
-	_ Executor = &SelectLockExec{}
 	_ Executor = &ShowNextRowIDExec{}
 	_ Executor = &ShowDDLExec{}
 	_ Executor = &ShowDDLJobsExec{}
@@ -459,77 +456,6 @@ func getTableName(is infoschema.InfoSchema, id int64) string {
 	}
 
 	return tableName
-}
-
-// SelectLockExec represents a select lock executor.
-// It is built from the "SELECT .. FOR UPDATE" or the "SELECT .. LOCK IN SHARE MODE" statement.
-// For "SELECT .. FOR UPDATE" statement, it locks every row key from source Executor.
-// After the execution, the keys are buffered in transaction, and will be sent to KV
-// when doing commit. If there is any key already locked by another transaction,
-// the transaction will rollback and retry.
-type SelectLockExec struct {
-	baseExecutor
-
-	Lock ast.SelectLockType
-	keys []kv.Key
-
-	tblID2Handle map[int64][]*expression.Column
-}
-
-// Open implements the Executor Open interface.
-func (e *SelectLockExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-
-	txnCtx := e.ctx.GetSessionVars().TxnCtx
-	for id := range e.tblID2Handle {
-		// This operation is only for schema validator check.
-		txnCtx.UpdateDeltaForTable(id, 0, 0, map[int64]int64{})
-	}
-	return nil
-}
-
-// Next implements the Executor Next interface.
-func (e *SelectLockExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.GrowAndReset(e.maxChunkSize)
-	err := Next(ctx, e.children[0], req)
-	if err != nil {
-		return err
-	}
-	// If there's no handle or it's not a `SELECT FOR UPDATE` statement.
-	if len(e.tblID2Handle) == 0 || (e.Lock != ast.SelectLockForUpdate && e.Lock != ast.SelectLockForUpdateNoWait) {
-		return nil
-	}
-	if req.NumRows() != 0 {
-		iter := chunk.NewIterator4Chunk(req)
-		for id, cols := range e.tblID2Handle {
-			for _, col := range cols {
-				for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-					e.keys = append(e.keys, tablecodec.EncodeRowKeyWithHandle(id, row.GetInt64(col.Index)))
-				}
-			}
-		}
-		return nil
-	}
-	return doLockKeys(ctx, e.ctx, newLockCtx(e.ctx.GetSessionVars()), e.keys...)
-}
-
-func newLockCtx(seVars *variable.SessionVars) *kv.LockCtx {
-	return &kv.LockCtx{
-		Killed:      &seVars.Killed,
-		ForUpdateTS: seVars.TxnCtx.GetForUpdateTS(),
-	}
-}
-
-func doLockKeys(ctx context.Context, se sessionctx.Context, lockCtx *kv.LockCtx, keys ...kv.Key) error {
-	se.GetSessionVars().TxnCtx.ForUpdate = true
-	// Lock keys only once when finished fetching all results.
-	txn, err := se.Txn(true)
-	if err != nil {
-		return err
-	}
-	return txn.LockKeys(ctx, lockCtx, keys...)
 }
 
 // LimitExec represents limit executor

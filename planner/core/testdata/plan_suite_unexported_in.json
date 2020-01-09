@@ -27,7 +27,6 @@
   {
     "name": "TestPlanBuilder",
     "cases": [
-      "select * from t for update",
       "update t set t.a = t.a * 1.5 where t.a >= 1000 order by t.a desc limit 10",
       "delete from t where t.a >= 1000 order by t.a desc limit 10",
       "explain select * from t union all select * from t limit 1, 1",

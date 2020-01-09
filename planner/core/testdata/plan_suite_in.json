@@ -222,9 +222,6 @@
   {
     "name": "TestDAGPlanBuilderBasePhysicalPlan",
     "cases": [
-      // Test for update.
-      // TODO: This is not reasonable. Mysql do like this because the limit of InnoDB, should TiDB keep consistency with MySQL?
-      "select * from t order by b limit 1 for update",
       // Test complex update.
       "update t set a = 5 where b < 1 order by d limit 1",
       // Test simple update.

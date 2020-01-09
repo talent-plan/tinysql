@@ -2189,9 +2189,6 @@ func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p L
 		}
 	}
 
-	if sel.LockTp != ast.SelectLockNone {
-		p = b.buildSelectLock(p, sel.LockTp)
-	}
 	b.handleHelper.popMap()
 	b.handleHelper.pushMap(nil)
 

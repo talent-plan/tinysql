@@ -45,7 +45,6 @@ var (
 	_ LogicalPlan = &LogicalIndexScan{}
 	_ LogicalPlan = &LogicalUnionAll{}
 	_ LogicalPlan = &LogicalSort{}
-	_ LogicalPlan = &LogicalLock{}
 	_ LogicalPlan = &LogicalLimit{}
 )
 
@@ -802,14 +801,6 @@ type LogicalLimit struct {
 
 	Offset uint64
 	Count  uint64
-}
-
-// LogicalLock represents a select lock plan.
-type LogicalLock struct {
-	baseLogicalPlan
-
-	Lock         ast.SelectLockType
-	tblID2Handle map[int64][]*expression.Column
 }
 
 // extractCorColumnsBySchema only extracts the correlated columns that match the specified schema.

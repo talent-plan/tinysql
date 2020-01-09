@@ -14,7 +14,6 @@
 package core
 
 import (
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
@@ -35,7 +34,6 @@ var (
 	_ PhysicalPlan = &PhysicalUnionAll{}
 	_ PhysicalPlan = &PhysicalSort{}
 	_ PhysicalPlan = &NominalSort{}
-	_ PhysicalPlan = &PhysicalLock{}
 	_ PhysicalPlan = &PhysicalLimit{}
 	_ PhysicalPlan = &PhysicalIndexScan{}
 	_ PhysicalPlan = &PhysicalTableScan{}
@@ -335,15 +333,6 @@ type PhysicalMergeJoin struct {
 	basePhysicalJoin
 
 	CompareFuncs []expression.CompareFunc
-}
-
-// PhysicalLock is the physical operator of lock, which is used for `select ... for update` clause.
-type PhysicalLock struct {
-	basePhysicalPlan
-
-	Lock ast.SelectLockType
-
-	TblID2Handle map[int64][]*expression.Column
 }
 
 // PhysicalLimit is the physical operator of Limit.

@@ -154,8 +154,7 @@ type ExecStmt struct {
 	Ctx sessionctx.Context
 
 	// LowerPriority represents whether to lower the execution priority of a query.
-	LowerPriority     bool
-	isSelectForUpdate bool
+	LowerPriority bool
 
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
@@ -349,7 +348,6 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 		return nil, errors.Trace(b.err)
 	}
 
-	a.isSelectForUpdate = b.isSelectForUpdate
 	return e, nil
 }
 

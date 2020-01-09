@@ -330,18 +330,6 @@ func (la *LogicalApply) PruneColumns(parentUsedCols []*expression.Column) error 
 	return nil
 }
 
-// PruneColumns implements LogicalPlan interface.
-func (p *LogicalLock) PruneColumns(parentUsedCols []*expression.Column) error {
-	if p.Lock != ast.SelectLockForUpdate && p.Lock != ast.SelectLockForUpdateNoWait {
-		return p.baseLogicalPlan.PruneColumns(parentUsedCols)
-	}
-
-	for _, cols := range p.tblID2Handle {
-		parentUsedCols = append(parentUsedCols, cols...)
-	}
-	return p.children[0].PruneColumns(parentUsedCols)
-}
-
 func (*columnPruner) name() string {
 	return "column_prune"
 }

@@ -51,8 +51,7 @@ type executorBuilder struct {
 	is      infoschema.InfoSchema
 	startTS uint64 // cached when the first time getStartTS() is called
 	// err is set when there is error happened during Executor building process.
-	err               error
-	isSelectForUpdate bool
+	err error
 }
 
 func newExecutorBuilder(ctx sessionctx.Context, is infoschema.InfoSchema) *executorBuilder {
@@ -83,8 +82,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildInsert(v)
 	case *plannercore.PhysicalLimit:
 		return b.buildLimit(v)
-	case *plannercore.PhysicalLock:
-		return b.buildSelectLock(v)
 	case *plannercore.CancelDDLJobs:
 		return b.buildCancelDDLJobs(v)
 	case *plannercore.ShowNextRowID:
@@ -223,30 +220,6 @@ func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQuerie
 	e := &ShowDDLJobQueriesExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		jobIDs:       v.JobIDs,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildSelectLock(v *plannercore.PhysicalLock) Executor {
-	b.isSelectForUpdate = true
-	// Build 'select for update' using the 'for update' ts.
-	b.startTS = b.ctx.GetSessionVars().TxnCtx.GetForUpdateTS()
-
-	src := b.build(v.Children()[0])
-	if b.err != nil {
-		return nil
-	}
-	if !b.ctx.GetSessionVars().InTxn() {
-		// Locking of rows for update using SELECT FOR UPDATE only applies when autocommit
-		// is disabled (either by beginning transaction with START TRANSACTION or by setting
-		// autocommit to 0. If autocommit is enabled, the rows matching the specification are not locked.
-		// See https://dev.mysql.com/doc/refman/5.7/en/innodb-locking-reads.html
-		return src
-	}
-	e := &SelectLockExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), src),
-		Lock:         v.Lock,
-		tblID2Handle: v.TblID2Handle,
 	}
 	return e
 }

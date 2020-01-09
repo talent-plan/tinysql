@@ -593,11 +593,6 @@
     "Name": "TestDAGPlanBuilderBasePhysicalPlan",
     "Cases": [
       {
-        "SQL": "select * from t order by b limit 1 for update",
-        "Best": "TableReader(Table(t))->Lock->TopN([test.t.b],0,1)",
-        "Hints": "USE_INDEX(@`sel_1` `test`.`t` )"
-      },
-      {
         "SQL": "update t set a = 5 where b < 1 order by d limit 1",
         "Best": "TableReader(Table(t)->Sel([lt(test.t.b, 1)])->TopN([test.t.d],0,1))->TopN([test.t.d],0,1)->Update",
         "Hints": "USE_INDEX(@`upd_1` `test`.`t` )"

@@ -26,11 +26,6 @@ import (
 )
 
 // ExplainInfo implements Plan interface.
-func (p *PhysicalLock) ExplainInfo() string {
-	return p.Lock.String()
-}
-
-// ExplainInfo implements Plan interface.
 func (p *PhysicalIndexScan) ExplainInfo() string {
 	return p.explainInfo(false)
 }

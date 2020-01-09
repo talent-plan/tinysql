@@ -31,7 +31,6 @@ func (s *testMemoSuite) TestGetOperand(c *C) {
 	c.Assert(GetOperand(&plannercore.LogicalUnionAll{}), Equals, OperandUnionAll)
 	c.Assert(GetOperand(&plannercore.LogicalSort{}), Equals, OperandSort)
 	c.Assert(GetOperand(&plannercore.LogicalTopN{}), Equals, OperandTopN)
-	c.Assert(GetOperand(&plannercore.LogicalLock{}), Equals, OperandLock)
 	c.Assert(GetOperand(&plannercore.LogicalLimit{}), Equals, OperandLimit)
 }
 
