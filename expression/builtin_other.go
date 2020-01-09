@@ -31,14 +31,11 @@ var (
 	_ functionClass = &rowFunctionClass{}
 	_ functionClass = &setVarFunctionClass{}
 	_ functionClass = &getVarFunctionClass{}
-	_ functionClass = &lockFunctionClass{}
-	_ functionClass = &releaseLockFunctionClass{}
 	_ functionClass = &valuesFunctionClass{}
 	_ functionClass = &bitCountFunctionClass{}
 )
 
 var (
-	_ builtinFunc = &builtinSleepSig{}
 	_ builtinFunc = &builtinInIntSig{}
 	_ builtinFunc = &builtinInStringSig{}
 	_ builtinFunc = &builtinInDecimalSig{}
@@ -49,8 +46,6 @@ var (
 	_ builtinFunc = &builtinRowSig{}
 	_ builtinFunc = &builtinSetVarSig{}
 	_ builtinFunc = &builtinGetVarSig{}
-	_ builtinFunc = &builtinLockSig{}
-	_ builtinFunc = &builtinReleaseLockSig{}
 	_ builtinFunc = &builtinValuesIntSig{}
 	_ builtinFunc = &builtinValuesRealSig{}
 	_ builtinFunc = &builtinValuesDecimalSig{}

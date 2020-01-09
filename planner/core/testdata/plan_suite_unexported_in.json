@@ -40,7 +40,6 @@
       "explain format=\"dot\" select * from t order by a",
       "insert into t select * from t",
       "show columns from t where `Key` = 'pri' like 't*'",
-      "do sleep(5)",
       "select substr(\"abc\", 1)",
       "select * from t t1, t t2 where 1 = 0",
       "select * from t t1 join t t2 using(a)",

@@ -112,22 +112,6 @@ func (s *testEvaluatorSuite) TestIsNullFunc(c *C) {
 	c.Assert(v.GetInt64(), Equals, int64(1))
 }
 
-func (s *testEvaluatorSuite) TestLock(c *C) {
-	lock := funcs[ast.GetLock]
-	f, err := lock.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(nil, 1)))
-	c.Assert(err, IsNil)
-	v, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(v.GetInt64(), Equals, int64(1))
-
-	releaseLock := funcs[ast.ReleaseLock]
-	f, err = releaseLock.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(1)))
-	c.Assert(err, IsNil)
-	v, err = evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(v.GetInt64(), Equals, int64(1))
-}
-
 // newFunctionForTest creates a new ScalarFunction using funcName and arguments,
 // it is different from expression.NewFunction which needs an additional retType argument.
 func newFunctionForTest(ctx sessionctx.Context, funcName string, args ...Expression) (Expression, error) {

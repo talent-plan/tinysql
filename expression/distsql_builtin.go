@@ -535,50 +535,8 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinVersionSig{base}
 	case tipb.ScalarFuncSig_RowCount:
 		f = &builtinRowCountSig{base}
-	case tipb.ScalarFuncSig_Sleep:
-		f = &builtinSleepSig{base}
-	case tipb.ScalarFuncSig_Lock:
-		f = &builtinLockSig{base}
-	case tipb.ScalarFuncSig_ReleaseLock:
-		f = &builtinReleaseLockSig{base}
-	case tipb.ScalarFuncSig_DecimalAnyValue:
-		f = &builtinDecimalAnyValueSig{base}
-	case tipb.ScalarFuncSig_DurationAnyValue:
-		f = &builtinDurationAnyValueSig{base}
-	case tipb.ScalarFuncSig_IntAnyValue:
-		f = &builtinIntAnyValueSig{base}
-	case tipb.ScalarFuncSig_JSONAnyValue:
-		f = &builtinJSONAnyValueSig{base}
-	case tipb.ScalarFuncSig_RealAnyValue:
-		f = &builtinRealAnyValueSig{base}
-	case tipb.ScalarFuncSig_StringAnyValue:
-		f = &builtinStringAnyValueSig{base}
-	case tipb.ScalarFuncSig_TimeAnyValue:
-		f = &builtinTimeAnyValueSig{base}
-	case tipb.ScalarFuncSig_InetAton:
-		f = &builtinInetAtonSig{base}
-	case tipb.ScalarFuncSig_InetNtoa:
-		f = &builtinInetNtoaSig{base}
-	case tipb.ScalarFuncSig_Inet6Aton:
-		f = &builtinInet6AtonSig{base}
-	case tipb.ScalarFuncSig_Inet6Ntoa:
-		f = &builtinInet6NtoaSig{base}
-	case tipb.ScalarFuncSig_IsIPv4:
-		f = &builtinIsIPv4Sig{base}
-	case tipb.ScalarFuncSig_IsIPv4Compat:
-		f = &builtinIsIPv4CompatSig{base}
-	case tipb.ScalarFuncSig_IsIPv4Mapped:
-		f = &builtinIsIPv4MappedSig{base}
-	case tipb.ScalarFuncSig_IsIPv6:
-		f = &builtinIsIPv6Sig{base}
-	case tipb.ScalarFuncSig_UUID:
-		f = &builtinUUIDSig{base}
 	case tipb.ScalarFuncSig_LikeSig:
 		f = &builtinLikeSig{base}
-	//case tipb.ScalarFuncSig_RegexpSig:
-	//	f = &builtinRegexpSig{base}
-	//case tipb.ScalarFuncSig_RegexpUTF8Sig:
-	//	f = &builtinRegexpUTF8Sig{base}
 	case tipb.ScalarFuncSig_JsonExtractSig:
 		f = &builtinJSONExtractSig{base}
 	case tipb.ScalarFuncSig_JsonUnquoteSig:

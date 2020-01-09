@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
 )
@@ -131,88 +130,6 @@ func (s *testIntegrationSuite) TestFuncLpadAndRpad(c *C) {
 	result.Check(testkit.Rows("<nil> <nil>"))
 	result = tk.MustQuery(`SELECT LPAD("中文", -5, "字符"), LPAD("中文", 10, "");`)
 	result.Check(testkit.Rows("<nil> <nil>"))
-}
-
-func (s *testIntegrationSuite) TestMiscellaneousBuiltin(c *C) {
-	ctx := context.Background()
-	defer s.cleanEnv(c)
-
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// for uuid
-	r := tk.MustQuery("select uuid(), uuid(), uuid(), uuid(), uuid(), uuid();")
-	for _, it := range r.Rows() {
-		for _, item := range it {
-			uuid, ok := item.(string)
-			c.Assert(ok, Equals, true)
-			list := strings.Split(uuid, "-")
-			c.Assert(len(list), Equals, 5)
-			c.Assert(len(list[0]), Equals, 8)
-			c.Assert(len(list[1]), Equals, 4)
-			c.Assert(len(list[2]), Equals, 4)
-			c.Assert(len(list[3]), Equals, 4)
-			c.Assert(len(list[4]), Equals, 12)
-		}
-	}
-	tk.MustQuery("select sleep(1);").Check(testkit.Rows("0"))
-	tk.MustQuery("select sleep(0);").Check(testkit.Rows("0"))
-	tk.MustQuery("select sleep('a');").Check(testkit.Rows("0"))
-	tk.MustQuery("show warnings;").Check(testkit.Rows("Warning 1292 Truncated incorrect FLOAT value: 'a'"))
-	rs, err := tk.Exec("select sleep(-1);")
-	c.Assert(err, IsNil)
-	c.Assert(rs, NotNil)
-	_, err = session.GetRows4Test(ctx, tk.Se, rs)
-	c.Assert(err, NotNil)
-	c.Assert(rs.Close(), IsNil)
-
-	tk.MustQuery("SELECT INET_ATON('10.0.5.9');").Check(testkit.Rows("167773449"))
-	tk.MustQuery("SELECT INET_NTOA(167773449);").Check(testkit.Rows("10.0.5.9"))
-	tk.MustQuery("SELECT HEX(INET6_ATON('fdfe::5a55:caff:fefa:9089'));").Check(testkit.Rows("FDFE0000000000005A55CAFFFEFA9089"))
-	tk.MustQuery("SELECT HEX(INET6_ATON('10.0.5.9'));").Check(testkit.Rows("0A000509"))
-	tk.MustQuery("SELECT INET6_NTOA(INET6_ATON('fdfe::5a55:caff:fefa:9089'));").Check(testkit.Rows("fdfe::5a55:caff:fefa:9089"))
-	tk.MustQuery("SELECT INET6_NTOA(INET6_ATON('10.0.5.9'));").Check(testkit.Rows("10.0.5.9"))
-	tk.MustQuery("SELECT INET6_NTOA(UNHEX('FDFE0000000000005A55CAFFFEFA9089'));").Check(testkit.Rows("fdfe::5a55:caff:fefa:9089"))
-	tk.MustQuery("SELECT INET6_NTOA(UNHEX('0A000509'));").Check(testkit.Rows("10.0.5.9"))
-
-	tk.MustQuery(`SELECT IS_IPV4('10.0.5.9'), IS_IPV4('10.0.5.256');`).Check(testkit.Rows("1 0"))
-	tk.MustQuery(`SELECT IS_IPV4_COMPAT(INET6_ATON('::10.0.5.9'));`).Check(testkit.Rows("1"))
-	tk.MustQuery(`SELECT IS_IPV4_COMPAT(INET6_ATON('::ffff:10.0.5.9'));`).Check(testkit.Rows("0"))
-	tk.MustQuery(`SELECT
-	  IS_IPV4_COMPAT(INET6_ATON('::192.168.0.1')),
-	  IS_IPV4_COMPAT(INET6_ATON('::c0a8:0001')),
-	  IS_IPV4_COMPAT(INET6_ATON('::c0a8:1'));`).Check(testkit.Rows("1 1 1"))
-	tk.MustQuery(`SELECT IS_IPV4_MAPPED(INET6_ATON('::10.0.5.9'));`).Check(testkit.Rows("0"))
-	tk.MustQuery(`SELECT IS_IPV4_MAPPED(INET6_ATON('::ffff:10.0.5.9'));`).Check(testkit.Rows("1"))
-	tk.MustQuery(`SELECT
-	  IS_IPV4_MAPPED(INET6_ATON('::ffff:192.168.0.1')),
-	  IS_IPV4_MAPPED(INET6_ATON('::ffff:c0a8:0001')),
-	  IS_IPV4_MAPPED(INET6_ATON('::ffff:c0a8:1'));`).Check(testkit.Rows("1 1 1"))
-	tk.MustQuery(`SELECT IS_IPV6('10.0.5.9'), IS_IPV6('::1');`).Check(testkit.Rows("0 1"))
-
-	tk.MustExec("drop table if exists t1;")
-	tk.MustExec(`create table t1(
-        a int,
-        b int not null,
-        c int not null default 0,
-        d int default 0,
-        unique key(b,c),
-        unique key(b,d)
-);`)
-	tk.MustExec("insert into t1 (a,b) values(1,10),(1,20),(2,30),(2,40);")
-	tk.MustQuery("select any_value(a), sum(b) from t1;").Check(testkit.Rows("1 100"))
-	tk.MustQuery("select a,any_value(b),sum(c) from t1 group by a order by a;").Check(testkit.Rows("1 10 0", "2 30 0"))
-
-	// for locks
-	tk.MustExec(`set tidb_enable_noop_functions=1;`)
-	result := tk.MustQuery(`SELECT GET_LOCK('test_lock1', 10);`)
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery(`SELECT GET_LOCK('test_lock2', 10);`)
-	result.Check(testkit.Rows("1"))
-
-	result = tk.MustQuery(`SELECT RELEASE_LOCK('test_lock2');`)
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery(`SELECT RELEASE_LOCK('test_lock1');`)
-	result.Check(testkit.Rows("1"))
 }
 
 func (s *testIntegrationSuite) TestConvertToBit(c *C) {
@@ -4316,46 +4233,6 @@ func (s *testIntegrationSuite) TestValuesFloat32(c *C) {
 	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 0.01`))
 	tk.MustExec(`insert into t values (1, 0.02) on duplicate key update j = values (j);`)
 	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 0.02`))
-}
-
-func (s *testIntegrationSuite) TestFuncNameConst(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	tk.MustExec("USE test;")
-	tk.MustExec("DROP TABLE IF EXISTS t;")
-	tk.MustExec("CREATE TABLE t(a CHAR(20), b VARCHAR(20), c BIGINT);")
-	tk.MustExec("INSERT INTO t (b, c) values('hello', 1);")
-
-	r := tk.MustQuery("SELECT name_const('test_int', 1), name_const('test_float', 3.1415);")
-	r.Check(testkit.Rows("1 3.1415"))
-	r = tk.MustQuery("SELECT name_const('test_string', 'hello'), name_const('test_nil', null);")
-	r.Check(testkit.Rows("hello <nil>"))
-	r = tk.MustQuery("SELECT name_const('test_string', 1) + c FROM t;")
-	r.Check(testkit.Rows("2"))
-	r = tk.MustQuery("SELECT concat('hello', name_const('test_string', 'world')) FROM t;")
-	r.Check(testkit.Rows("helloworld"))
-	r = tk.MustQuery("SELECT NAME_CONST('come', -1);")
-	r.Check(testkit.Rows("-1"))
-	r = tk.MustQuery("SELECT NAME_CONST('come', -1.0);")
-	r.Check(testkit.Rows("-1.0"))
-	err := tk.ExecToErr(`select name_const(a,b) from t;`)
-	c.Assert(err.Error(), Equals, "[planner:1210]Incorrect arguments to NAME_CONST")
-	err = tk.ExecToErr(`select name_const(a,"hello") from t;`)
-	c.Assert(err.Error(), Equals, "[planner:1210]Incorrect arguments to NAME_CONST")
-	err = tk.ExecToErr(`select name_const("hello", b) from t;`)
-	c.Assert(err.Error(), Equals, "[planner:1210]Incorrect arguments to NAME_CONST")
-	err = tk.ExecToErr(`select name_const("hello", 1+1) from t;`)
-	c.Assert(err.Error(), Equals, "[planner:1210]Incorrect arguments to NAME_CONST")
-	err = tk.ExecToErr(`select name_const(concat('a', 'b'), 555) from t;`)
-	c.Assert(err.Error(), Equals, "[planner:1210]Incorrect arguments to NAME_CONST")
-	err = tk.ExecToErr(`select name_const(555) from t;`)
-	c.Assert(err.Error(), Equals, "[expression:1582]Incorrect parameter count in the call to native function 'name_const'")
-
-	var rs sqlexec.RecordSet
-	rs, err = tk.Exec(`select name_const("hello", 1);`)
-	c.Assert(err, IsNil)
-	c.Assert(len(rs.Fields()), Equals, 1)
-	c.Assert(rs.Fields()[0].Column.Name.L, Equals, "hello")
 }
 
 func (s *testIntegrationSuite) TestValuesEnum(c *C) {
