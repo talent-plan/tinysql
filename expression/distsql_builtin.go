@@ -521,20 +521,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinCaseWhenDurationSig{base}
 	case tipb.ScalarFuncSig_CaseWhenJson:
 		f = &builtinCaseWhenJSONSig{base}
-	case tipb.ScalarFuncSig_Database:
-		f = &builtinDatabaseSig{base}
-	case tipb.ScalarFuncSig_FoundRows:
-		f = &builtinFoundRowsSig{base}
-	case tipb.ScalarFuncSig_ConnectionID:
-		f = &builtinConnectionIDSig{base}
-	case tipb.ScalarFuncSig_LastInsertID:
-		f = &builtinLastInsertIDSig{base}
-	case tipb.ScalarFuncSig_LastInsertIDWithID:
-		f = &builtinLastInsertIDWithIDSig{base}
-	case tipb.ScalarFuncSig_Version:
-		f = &builtinVersionSig{base}
-	case tipb.ScalarFuncSig_RowCount:
-		f = &builtinRowCountSig{base}
 	case tipb.ScalarFuncSig_LikeSig:
 		f = &builtinLikeSig{base}
 	case tipb.ScalarFuncSig_JsonExtractSig:

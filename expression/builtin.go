@@ -589,21 +589,6 @@ var funcs = map[string]functionClass{
 	ast.CharacterLength: &charLengthFunctionClass{baseFunctionClass{ast.CharacterLength, 1, 1}},
 	ast.FindInSet:       &findInSetFunctionClass{baseFunctionClass{ast.FindInSet, 2, 2}},
 
-	// information functions
-	ast.ConnectionID: &connectionIDFunctionClass{baseFunctionClass{ast.ConnectionID, 0, 0}},
-	ast.Database:     &databaseFunctionClass{baseFunctionClass{ast.Database, 0, 0}},
-	// This function is a synonym for DATABASE().
-	// See http://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_schema
-	ast.Schema:       &databaseFunctionClass{baseFunctionClass{ast.Schema, 0, 0}},
-	ast.FoundRows:    &foundRowsFunctionClass{baseFunctionClass{ast.FoundRows, 0, 0}},
-	ast.LastInsertId: &lastInsertIDFunctionClass{baseFunctionClass{ast.LastInsertId, 0, 1}},
-	ast.Version:      &versionFunctionClass{baseFunctionClass{ast.Version, 0, 0}},
-	ast.Benchmark:    &benchmarkFunctionClass{baseFunctionClass{ast.Benchmark, 2, 2}},
-	ast.Charset:      &charsetFunctionClass{baseFunctionClass{ast.Charset, 1, 1}},
-	ast.Coercibility: &coercibilityFunctionClass{baseFunctionClass{ast.Coercibility, 1, 1}},
-	ast.Collation:    &collationFunctionClass{baseFunctionClass{ast.Collation, 1, 1}},
-	ast.RowCount:     &rowCountFunctionClass{baseFunctionClass{ast.RowCount, 0, 0}},
-
 	// control functions
 	ast.If:     &ifFunctionClass{baseFunctionClass{ast.If, 3, 3}},
 	ast.Ifnull: &ifNullFunctionClass{baseFunctionClass{ast.Ifnull, 2, 2}},
@@ -669,10 +654,7 @@ var funcs = map[string]functionClass{
 	ast.JSONKeys:          &jsonKeysFunctionClass{baseFunctionClass{ast.JSONKeys, 1, 2}},
 	ast.JSONLength:        &jsonLengthFunctionClass{baseFunctionClass{ast.JSONLength, 1, 2}},
 
-	// TiDB internal function.
-	ast.TiDBDecodeKey:  &tidbDecodeKeyFunctionClass{baseFunctionClass{ast.TiDBDecodeKey, 1, 1}},
-	ast.TiDBIsDDLOwner: &tidbIsDDLOwnerFunctionClass{baseFunctionClass{ast.TiDBIsDDLOwner, 0, 0}},
-	ast.TiDBParseTso:   &tidbParseTsoFunctionClass{baseFunctionClass{ast.TiDBParseTso, 1, 1}},
+	ast.TiDBParseTso: &tidbParseTsoFunctionClass{baseFunctionClass{ast.TiDBParseTso, 1, 1}},
 }
 
 // IsFunctionSupported check if given function name is a builtin sql function.

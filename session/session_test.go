@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
@@ -671,138 +670,6 @@ func (s *testSessionSuite) TestSession(c *C) {
 	tk.Se.Close()
 }
 
-func (s *testSessionSuite) TestLastInsertID(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	// insert
-	tk.MustExec("create table t (c1 int not null auto_increment, c2 int, PRIMARY KEY (c1))")
-	tk.MustExec("insert into t set c2 = 11")
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("1"))
-
-	tk.MustExec("insert into t (c2) values (22), (33), (44)")
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("2"))
-
-	tk.MustExec("insert into t (c1, c2) values (10, 55)")
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("2"))
-
-	// replace
-	tk.MustExec("replace t (c2) values(66)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 11", "2 22", "3 33", "4 44", "10 55", "11 66"))
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("11"))
-
-	// update
-	tk.MustExec("update t set c1=last_insert_id(c1 + 100)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("101 11", "102 22", "103 33", "104 44", "110 55", "111 66"))
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("111"))
-	tk.MustExec("insert into t (c2) values (77)")
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("112"))
-
-	// drop
-	tk.MustExec("drop table t")
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows("112"))
-
-	tk.MustExec("create table t (c2 int, c3 int, c1 int not null auto_increment, PRIMARY KEY (c1))")
-	tk.MustExec("insert into t set c2 = 30")
-}
-
-func (s *testSessionSuite) TestAutoIncrementID(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id BIGINT PRIMARY KEY AUTO_INCREMENT NOT NULL)")
-	tk.MustExec("insert t values ()")
-	tk.MustExec("insert t values ()")
-	tk.MustExec("insert t values ()")
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (id BIGINT PRIMARY KEY AUTO_INCREMENT NOT NULL)")
-	tk.MustExec("insert t values ()")
-	lastID := tk.Se.LastInsertID()
-	c.Assert(lastID, Less, uint64(4))
-	tk.MustExec("insert t () values ()")
-	c.Assert(tk.Se.LastInsertID(), Greater, lastID)
-	lastID = tk.Se.LastInsertID()
-	tk.MustExec("insert t values (100)")
-	c.Assert(tk.Se.LastInsertID(), Equals, uint64(100))
-
-	// If the auto_increment column value is given, it uses the value of the latest row.
-	tk.MustExec("insert t values (120), (112)")
-	c.Assert(tk.Se.LastInsertID(), Equals, uint64(112))
-
-	// The last_insert_id function only use last auto-generated id.
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows(fmt.Sprint(lastID)))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (i tinyint unsigned not null auto_increment, primary key (i));")
-	tk.MustExec("insert into t set i = 254;")
-	tk.MustExec("insert t values ()")
-
-	// The last insert ID doesn't care about primary key, it is set even if its a normal index column.
-	tk.MustExec("create table autoid (id int auto_increment, index (id))")
-	tk.MustExec("insert autoid values ()")
-	c.Assert(tk.Se.LastInsertID(), Greater, uint64(0))
-	tk.MustExec("insert autoid values (100)")
-	c.Assert(tk.Se.LastInsertID(), Equals, uint64(100))
-
-	tk.MustQuery("select last_insert_id(20)").Check(testkit.Rows(fmt.Sprint(20)))
-	tk.MustQuery("select last_insert_id()").Check(testkit.Rows(fmt.Sprint(20)))
-
-	// Corner cases for unsigned bigint auto_increment Columns.
-	tk.MustExec("drop table if exists autoid")
-	tk.MustExec("create table autoid(`auto_inc_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,UNIQUE KEY `auto_inc_id` (`auto_inc_id`))")
-	tk.MustExec("insert into autoid values(9223372036854775808);")
-	tk.MustExec("insert into autoid values();")
-	tk.MustExec("insert into autoid values();")
-	tk.MustQuery("select * from autoid").Check(testkit.Rows("9223372036854775808", "9223372036854775810", "9223372036854775812"))
-	// In TiDB : _tidb_rowid will also consume the autoID when the auto_increment column is not the primary key.
-	// Using the MaxUint64 and MaxInt64 as the autoID upper limit like MySQL will cause _tidb_rowid allocation fail here.
-	_, err := tk.Exec("insert into autoid values(18446744073709551614)")
-	c.Assert(terror.ErrorEqual(err, autoid.ErrAutoincReadFailed), IsTrue)
-	_, err = tk.Exec("insert into autoid values()")
-	c.Assert(terror.ErrorEqual(err, autoid.ErrAutoincReadFailed), IsTrue)
-	// FixMe: MySQL works fine with the this sql.
-	_, err = tk.Exec("insert into autoid values(18446744073709551615)")
-	c.Assert(terror.ErrorEqual(err, autoid.ErrAutoincReadFailed), IsTrue)
-
-	tk.MustExec("drop table if exists autoid")
-	tk.MustExec("create table autoid(`auto_inc_id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,UNIQUE KEY `auto_inc_id` (`auto_inc_id`))")
-	tk.MustExec("insert into autoid values()")
-	tk.MustQuery("select * from autoid").Check(testkit.Rows("1"))
-	tk.MustExec("insert into autoid values(5000)")
-	tk.MustQuery("select * from autoid").Check(testkit.Rows("1", "5000"))
-	_, err = tk.Exec("update autoid set auto_inc_id = 8000")
-	c.Assert(terror.ErrorEqual(err, kv.ErrKeyExists), IsTrue)
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("1", "5000"))
-	tk.MustExec("update autoid set auto_inc_id = 9000 where auto_inc_id=1")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("9000", "5000"))
-	tk.MustExec("insert into autoid values()")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("9000", "5000", "9001"))
-
-	// Corner cases for signed bigint auto_increment Columns.
-	tk.MustExec("drop table if exists autoid")
-	tk.MustExec("create table autoid(`auto_inc_id` bigint(20) NOT NULL AUTO_INCREMENT,UNIQUE KEY `auto_inc_id` (`auto_inc_id`))")
-	// In TiDB : _tidb_rowid will also consume the autoID when the auto_increment column is not the primary key.
-	// Using the MaxUint64 and MaxInt64 as autoID upper limit like MySQL will cause insert fail if the values is
-	// 9223372036854775806. Because _tidb_rowid will be allocated 9223372036854775807 at same time.
-	tk.MustExec("insert into autoid values(9223372036854775805);")
-	tk.MustQuery("select auto_inc_id, _tidb_rowid from autoid use index()").Check(testkit.Rows("9223372036854775805 9223372036854775806"))
-	_, err = tk.Exec("insert into autoid values();")
-	c.Assert(terror.ErrorEqual(err, autoid.ErrAutoincReadFailed), IsTrue)
-	tk.MustQuery("select auto_inc_id, _tidb_rowid from autoid use index()").Check(testkit.Rows("9223372036854775805 9223372036854775806"))
-	tk.MustQuery("select auto_inc_id, _tidb_rowid from autoid use index(auto_inc_id)").Check(testkit.Rows("9223372036854775805 9223372036854775806"))
-
-	tk.MustExec("drop table if exists autoid")
-	tk.MustExec("create table autoid(`auto_inc_id` bigint(20) NOT NULL AUTO_INCREMENT,UNIQUE KEY `auto_inc_id` (`auto_inc_id`))")
-	tk.MustExec("insert into autoid values()")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("1"))
-	tk.MustExec("insert into autoid values(5000)")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("1", "5000"))
-	_, err = tk.Exec("update autoid set auto_inc_id = 8000")
-	c.Assert(terror.ErrorEqual(err, kv.ErrKeyExists), IsTrue)
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("1", "5000"))
-	tk.MustExec("update autoid set auto_inc_id = 9000 where auto_inc_id=1")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("9000", "5000"))
-	tk.MustExec("insert into autoid values()")
-	tk.MustQuery("select * from autoid use index()").Check(testkit.Rows("9000", "5000", "9001"))
-}
-
 func (s *testSessionSuite) TestAutoIncrementWithRetry(c *C) {
 	// test for https://github.com/pingcap/tidb/issues/827
 
@@ -1288,37 +1155,6 @@ func (s *testSessionSuite2) TestDelete(c *C) {
 	tk.MustExec("insert into t (F1) values ('1'), ('2');")
 	tk.MustExec("delete test1.t from test1.t inner join test.t where test1.t.F1 > test.t.F1")
 	tk1.MustQuery("select * from t;").Check(testkit.Rows("1"))
-}
-
-func (s *testSessionSuite2) TestResetCtx(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("create table t (i int auto_increment not null key);")
-	tk.MustExec("insert into t values (1);")
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("begin;")
-	tk.MustExec("insert into t values (10);")
-	tk.MustExec("update t set i = i + row_count();")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("2", "11"))
-
-	tk1.MustExec("update t set i = 0 where i = 1;")
-	tk1.MustQuery("select * from t;").Check(testkit.Rows("0"))
-
-	tk.MustExec("commit;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("1", "11"))
-
-	tk.MustExec("delete from t where i = 11;")
-	tk.MustExec("begin;")
-	tk.MustExec("insert into t values ();")
-	tk.MustExec("update t set i = i + last_insert_id() + 1;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("14", "25"))
-
-	tk1.MustExec("update t set i = 0 where i = 1;")
-	tk1.MustQuery("select * from t;").Check(testkit.Rows("0"))
-
-	tk.MustExec("commit;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("13", "25"))
 }
 
 func (s *testSessionSuite2) TestUnique(c *C) {

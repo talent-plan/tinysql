@@ -17,7 +17,6 @@ import (
 	"context"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
@@ -123,49 +122,4 @@ func (s *testPlanBuilderSuite) TestRewriterPool(c *C) {
 	c.Assert(cleanRewriter.disableFoldCounter, Equals, 0)
 	c.Assert(len(cleanRewriter.ctxStack), Equals, 0)
 	builder.rewriterCounter--
-}
-
-func (s *testPlanBuilderSuite) TestDisableFold(c *C) {
-	// Functions like BENCHMARK() shall not be folded into result 0,
-	// but normal outer function with constant args should be folded.
-	// Types of expression and first layer of args will be validated.
-	cases := []struct {
-		SQL      string
-		Expected expression.Expression
-		Args     []expression.Expression
-	}{
-		{`select sin(length("abc"))`, &expression.Constant{}, nil},
-		{`select benchmark(3, sin(123))`, &expression.ScalarFunction{}, []expression.Expression{
-			&expression.Constant{},
-			&expression.ScalarFunction{},
-		}},
-		{`select pow(length("abc"), benchmark(3, sin(123)))`, &expression.ScalarFunction{}, []expression.Expression{
-			&expression.Constant{},
-			&expression.ScalarFunction{},
-		}},
-	}
-
-	ctx := MockContext()
-	for _, t := range cases {
-		st, err := parser.New().ParseOneStmt(t.SQL, "", "")
-		c.Assert(err, IsNil)
-		stmt := st.(*ast.SelectStmt)
-		expr := stmt.Fields.Fields[0].Expr
-
-		builder := NewPlanBuilder(ctx, nil, &BlockHintProcessor{})
-		builder.rewriterCounter++
-		rewriter := builder.getExpressionRewriter(context.TODO(), nil)
-		c.Assert(rewriter, NotNil)
-		c.Assert(rewriter.disableFoldCounter, Equals, 0)
-		rewritenExpression, _, err := builder.rewriteExprNode(rewriter, expr, true)
-		c.Assert(err, IsNil)
-		c.Assert(rewriter.disableFoldCounter, Equals, 0) // Make sure the counter is reduced to 0 in the end.
-		builder.rewriterCounter--
-
-		c.Assert(rewritenExpression, FitsTypeOf, t.Expected)
-		for i, expectedArg := range t.Args {
-			rewritenArg := expression.GetFuncArg(rewritenExpression, i)
-			c.Assert(rewritenArg, FitsTypeOf, expectedArg)
-		}
-	}
 }
