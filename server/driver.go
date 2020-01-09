@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
@@ -77,9 +76,6 @@ type QueryCtx interface {
 
 	// Close closes the QueryCtx.
 	Close() error
-
-	// Auth verifies user's authentication.
-	Auth(user *auth.UserIdentity, auth []byte, salt []byte) bool
 
 	// ShowProcess shows the information about the session.
 	ShowProcess() *util.ProcessInfo

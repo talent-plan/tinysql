@@ -713,16 +713,6 @@ func (p *preprocessor) resolveShowStmt(node *ast.ShowStmt) {
 	} else if node.Table != nil && node.Table.Schema.L == "" {
 		node.Table.Schema = model.NewCIStr(node.DBName)
 	}
-	if node.User != nil && node.User.CurrentUser {
-		// Fill the Username and Hostname with the current user.
-		currentUser := p.ctx.GetSessionVars().User
-		if currentUser != nil {
-			node.User.Username = currentUser.Username
-			node.User.Hostname = currentUser.Hostname
-			node.User.AuthUsername = currentUser.AuthUsername
-			node.User.AuthHostname = currentUser.AuthHostname
-		}
-	}
 }
 
 func (p *preprocessor) resolveCreateTableStmt(node *ast.CreateTableStmt) {

@@ -14,13 +14,11 @@
 package ddl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
@@ -88,43 +86,6 @@ func testTableInfoWithPartition(c *C, d *ddl, name string, num int) *model.Table
 	return tblInfo
 }
 
-// testViewInfo creates a test view with num int columns.
-func testViewInfo(c *C, d *ddl, name string, num int) *model.TableInfo {
-	tblInfo := &model.TableInfo{
-		Name: model.NewCIStr(name),
-	}
-	genIDs, err := d.genGlobalIDs(1)
-	c.Assert(err, IsNil)
-	tblInfo.ID = genIDs[0]
-
-	cols := make([]*model.ColumnInfo, num)
-	viewCols := make([]model.CIStr, num)
-
-	var stmtBuffer bytes.Buffer
-	stmtBuffer.WriteString("SELECT ")
-	for i := range cols {
-		col := &model.ColumnInfo{
-			Name:   model.NewCIStr(fmt.Sprintf("c%d", i+1)),
-			Offset: i,
-			State:  model.StatePublic,
-		}
-
-		col.ID = allocateColumnID(tblInfo)
-		cols[i] = col
-		viewCols[i] = col.Name
-		stmtBuffer.WriteString(cols[i].Name.L + ",")
-	}
-	stmtBuffer.WriteString("1 FROM t")
-
-	view := model.ViewInfo{Cols: viewCols, Security: model.SecurityDefiner, Algorithm: model.AlgorithmMerge,
-		SelectStmt: stmtBuffer.String(), CheckOption: model.CheckOptionCascaded, Definer: &auth.UserIdentity{CurrentUser: true}}
-
-	tblInfo.View = &view
-	tblInfo.Columns = cols
-
-	return tblInfo
-}
-
 func testCreateTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo) *model.Job {
 	job := &model.Job{
 		SchemaID:   dbInfo.ID,
@@ -133,26 +94,6 @@ func testCreateTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo,
 		BinlogInfo: &model.HistoryInfo{},
 		Args:       []interface{}{tblInfo},
 	}
-	err := d.doDDLJob(ctx, job)
-	c.Assert(err, IsNil)
-
-	v := getSchemaVer(c, ctx)
-	tblInfo.State = model.StatePublic
-	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
-	tblInfo.State = model.StateNone
-	return job
-}
-
-func testCreateView(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo) *model.Job {
-	job := &model.Job{
-		SchemaID:   dbInfo.ID,
-		TableID:    tblInfo.ID,
-		Type:       model.ActionCreateView,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{tblInfo, false, 0},
-	}
-
-	c.Assert(tblInfo.IsView(), IsTrue)
 	err := d.doDDLJob(ctx, job)
 	c.Assert(err, IsNil)
 

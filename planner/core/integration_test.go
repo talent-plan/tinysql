@@ -15,11 +15,9 @@ package core_test
 
 import (
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
 )
@@ -258,13 +256,4 @@ func (s *testIntegrationSuite) TestNoneAccessPathsFoundByIsolationRead(c *C) {
 	_, err = tk.Exec("select * from t")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[planner:1815]Internal : Can not find access path matching 'tidb_isolation_read_engines'(value: 'tiflash'). Available values are 'tikv'.")
-}
-
-func (s *testIntegrationSuite) TestErrNoDB(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create user test")
-	_, err := tk.Exec("grant select on test1111 to test@'%'")
-	c.Assert(errors.Cause(err), Equals, core.ErrNoDB)
-	tk.MustExec("use test")
-	tk.MustExec("grant select on test1111 to test@'%'")
 }

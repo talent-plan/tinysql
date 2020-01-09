@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -658,6 +657,7 @@ func (p *sessionPool) Put(resource pools.Resource) {
 		resource.Close()
 	}
 }
+
 func (p *sessionPool) Close() {
 	p.mu.Lock()
 	if p.mu.closed {
@@ -681,47 +681,6 @@ func (do *Domain) SysSessionPool() *sessionPool {
 // GetEtcdClient returns the etcd client.
 func (do *Domain) GetEtcdClient() *clientv3.Client {
 	return do.etcdClient
-}
-
-// LoadPrivilegeLoop create a goroutine loads privilege tables in a loop, it
-// should be called only once in BootstrapSession.
-func (do *Domain) LoadPrivilegeLoop(ctx sessionctx.Context) error {
-	ctx.GetSessionVars().InRestrictedSQL = true
-
-	var watchCh clientv3.WatchChan
-	duration := 5 * time.Minute
-	if do.etcdClient != nil {
-		watchCh = do.etcdClient.Watch(context.Background(), privilegeKey)
-		duration = 10 * time.Minute
-	}
-
-	do.wg.Add(1)
-	go func() {
-		defer do.wg.Done()
-		defer recoverInDomain("loadPrivilegeInLoop", false)
-		var count int
-		for {
-			ok := true
-			select {
-			case <-do.exit:
-				return
-			case _, ok = <-watchCh:
-			case <-time.After(duration):
-			}
-			if !ok {
-				logutil.BgLogger().Error("load privilege loop watch channel closed")
-				watchCh = do.etcdClient.Watch(context.Background(), privilegeKey)
-				count++
-				if count > 10 {
-					time.Sleep(time.Duration(count) * time.Second)
-				}
-				continue
-			}
-
-			count = 0
-		}
-	}()
-	return nil
 }
 
 // StatsHandle returns the statistic handle.
@@ -776,25 +735,6 @@ func (do *Domain) loadStatsWorker() {
 		case <-do.exit:
 			return
 		}
-	}
-}
-
-const privilegeKey = "/tidb/privilege"
-
-// NotifyUpdatePrivilege updates privilege key in etcd, TiDB client that watches
-// the key will get notification.
-func (do *Domain) NotifyUpdatePrivilege(ctx sessionctx.Context) {
-	if do.etcdClient != nil {
-		row := do.etcdClient.KV
-		_, err := row.Put(context.Background(), privilegeKey, "")
-		if err != nil {
-			logutil.BgLogger().Warn("notify update privilege failed", zap.Error(err))
-		}
-	}
-	// update locally
-	_, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(`FLUSH PRIVILEGES`)
-	if err != nil {
-		logutil.BgLogger().Error("unable to update privileges", zap.Error(err))
 	}
 }
 

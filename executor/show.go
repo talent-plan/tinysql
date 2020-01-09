@@ -24,7 +24,6 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -50,12 +49,10 @@ type ShowExec struct {
 
 	Tp        ast.ShowStmtType // Databases/Tables/Columns/....
 	DBName    model.CIStr
-	Table     *ast.TableName       // Used for showing columns.
-	Column    *ast.ColumnName      // Used for `desc table column`.
-	IndexName model.CIStr          // Used for show table regions.
-	Flag      int                  // Some flag parsed from sql, such as FULL.
-	Roles     []*auth.RoleIdentity // Used for show grants.
-	User      *auth.UserIdentity   // Used by show grants, show create user.
+	Table     *ast.TableName  // Used for showing columns.
+	Column    *ast.ColumnName // Used for `desc table column`.
+	IndexName model.CIStr     // Used for show table regions.
+	Flag      int             // Some flag parsed from sql, such as FULL.
 
 	is infoschema.InfoSchema
 
@@ -108,8 +105,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowColumns(ctx)
 	case ast.ShowCreateTable:
 		return e.fetchShowCreateTable()
-	case ast.ShowCreateUser:
-		return e.fetchShowCreateUser()
 	case ast.ShowCreateView:
 		return e.fetchShowCreateView()
 	case ast.ShowCreateDatabase:
@@ -118,8 +113,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowDatabases()
 	case ast.ShowEngines:
 		return e.fetchShowEngines()
-	case ast.ShowGrants:
-		return e.fetchShowGrants()
 	case ast.ShowIndex:
 		return e.fetchShowIndex()
 	case ast.ShowProcedureStatus:
@@ -148,8 +141,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		// empty result
 	case ast.ShowMasterStatus:
 		return e.fetchShowMasterStatus()
-	case ast.ShowPrivileges:
-		return e.fetchShowPrivileges()
 	case ast.ShowBuiltins:
 		return e.fetchShowBuiltins()
 	}
@@ -852,76 +843,6 @@ func (e *ShowExec) fetchShowCollation() error {
 			1,
 		})
 	}
-	return nil
-}
-
-// fetchShowCreateUser composes show create create user result.
-func (e *ShowExec) fetchShowCreateUser() error {
-	userName, hostName := e.User.Username, e.User.Hostname
-	sessVars := e.ctx.GetSessionVars()
-	if e.User.CurrentUser {
-		userName = sessVars.User.AuthUsername
-		hostName = sessVars.User.AuthHostname
-	}
-
-	sql := fmt.Sprintf(`SELECT * FROM %s.%s WHERE User='%s' AND Host='%s';`,
-		mysql.SystemDB, mysql.UserTable, userName, hostName)
-	rows, _, err := e.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if len(rows) == 0 {
-		return ErrCannotUser.GenWithStackByArgs("SHOW CREATE USER",
-			fmt.Sprintf("'%s'@'%s'", e.User.Username, e.User.Hostname))
-	}
-	showStr := fmt.Sprintf("CREATE USER '%s'@'%s' IDENTIFIED WITH 'mysql_native_password' AS '%s' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK",
-		e.User.Username, e.User.Hostname, "")
-	e.appendRow([]interface{}{showStr})
-	return nil
-}
-
-func (e *ShowExec) fetchShowGrants() error {
-	for _, r := range e.Roles {
-		if r.Hostname == "" {
-			r.Hostname = "%"
-		}
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowPrivileges() error {
-	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
-	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
-	e.appendRow([]interface{}{"Alter routine", "Functions,Procedures", "To alter or drop stored functions/procedures"})
-	e.appendRow([]interface{}{"Create", "Databases,Tables,Indexes", "To create new databases and tables"})
-	e.appendRow([]interface{}{"Create routine", "Databases", "To use CREATE FUNCTION/PROCEDURE"})
-	e.appendRow([]interface{}{"Create temporary tables", "Databases", "To use CREATE TEMPORARY TABLE"})
-	e.appendRow([]interface{}{"Create view", "Tables", "To create new views"})
-	e.appendRow([]interface{}{"Create user", "Server Admin", "To create new users"})
-	e.appendRow([]interface{}{"Delete", "Tables", "To delete existing rows"})
-	e.appendRow([]interface{}{"Drop", "Databases,Tables", "To drop databases, tables, and views"})
-	e.appendRow([]interface{}{"Event", "Server Admin", "To create, alter, drop and execute events"})
-	e.appendRow([]interface{}{"Execute", "Functions,Procedures", "To execute stored routines"})
-	e.appendRow([]interface{}{"File", "File access on server", "To read and write files on the server"})
-	e.appendRow([]interface{}{"Grant option", "Databases,Tables,Functions,Procedures", "To give to other users those privileges you possess"})
-	e.appendRow([]interface{}{"Index", "Tables", "To create or drop indexes"})
-	e.appendRow([]interface{}{"Insert", "Tables", "To insert data into tables"})
-	e.appendRow([]interface{}{"Lock tables", "Databases", "To use LOCK TABLES (together with SELECT privilege)"})
-	e.appendRow([]interface{}{"Process", "Server Admin", "To view the plain text of currently executing queries"})
-	e.appendRow([]interface{}{"Proxy", "Server Admin", "To make proxy user possible"})
-	e.appendRow([]interface{}{"References", "Databases,Tables", "To have references on tables"})
-	e.appendRow([]interface{}{"Reload", "Server Admin", "To reload or refresh tables, logs and privileges"})
-	e.appendRow([]interface{}{"Replication client", "Server Admin", "To ask where the slave or master servers are"})
-	e.appendRow([]interface{}{"Replication slave", "Server Admin", "To read binary log events from the master"})
-	e.appendRow([]interface{}{"Select", "Tables", "To retrieve rows from table"})
-	e.appendRow([]interface{}{"Show databases", "Server Admin", "To see all databases with SHOW DATABASES"})
-	e.appendRow([]interface{}{"Show view", "Tables", "To see views with SHOW CREATE VIEW"})
-	e.appendRow([]interface{}{"Shutdown", "Server Admin", "To shut down the server"})
-	e.appendRow([]interface{}{"Super", "Server Admin", "To use KILL thread, SET GLOBAL, CHANGE MASTER, etc."})
-	e.appendRow([]interface{}{"Trigger", "Tables", "To use triggers"})
-	e.appendRow([]interface{}{"Create tablespace", "Server Admin", "To create/alter/drop tablespaces"})
-	e.appendRow([]interface{}{"Update", "Tables", "To update existing rows"})
-	e.appendRow([]interface{}{"Usage", "Server Admin", "No privileges - allow connect only"})
 	return nil
 }
 

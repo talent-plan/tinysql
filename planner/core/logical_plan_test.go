@@ -50,7 +50,7 @@ type testPlanSuite struct {
 }
 
 func (s *testPlanSuite) SetUpSuite(c *C) {
-	s.is = infoschema.MockInfoSchema([]*model.TableInfo{MockSignedTable(), MockUnsignedTable(), MockView()})
+	s.is = infoschema.MockInfoSchema([]*model.TableInfo{MockSignedTable(), MockUnsignedTable()})
 	s.ctx = MockContext()
 	s.Parser = parser.New()
 
@@ -920,34 +920,6 @@ func (s *testPlanSuite) TestOuterJoinEliminator(c *C) {
 			output[i] = planString
 		})
 		c.Assert(planString, Equals, output[i], comment)
-	}
-}
-
-func (s *testPlanSuite) TestSelectView(c *C) {
-	defer func() {
-		testleak.AfterTest(c)()
-	}()
-	tests := []struct {
-		sql  string
-		best string
-	}{
-		{
-			sql:  "select * from v",
-			best: "DataScan(t)->Projection",
-		},
-	}
-	ctx := context.TODO()
-	for i, tt := range tests {
-		comment := Commentf("case:%v sql:%s", i, tt.sql)
-		stmt, err := s.ParseOneStmt(tt.sql, "", "")
-		c.Assert(err, IsNil, comment)
-		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
-		p, err := builder.Build(ctx, stmt)
-		c.Assert(err, IsNil)
-		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
-		c.Assert(err, IsNil)
-		c.Assert(ToString(p), Equals, tt.best, comment)
 	}
 }
 

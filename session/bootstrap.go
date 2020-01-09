@@ -19,7 +19,6 @@ package session
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"runtime/debug"
 	"strconv"
@@ -27,14 +26,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
@@ -647,42 +644,6 @@ func upgradeToVer11(s Session) {
 }
 
 func upgradeToVer12(s Session) {
-	ctx := context.Background()
-	_, err := s.Execute(ctx, "BEGIN")
-	terror.MustNil(err)
-	sql := "SELECT HIGH_PRIORITY user, host, password FROM mysql.user WHERE password != ''"
-	rs, err := s.Execute(ctx, sql)
-	terror.MustNil(err)
-	r := rs[0]
-	sqls := make([]string, 0, 1)
-	defer terror.Call(r.Close)
-	req := r.NewChunk()
-	it := chunk.NewIterator4Chunk(req)
-	err = r.Next(ctx, req)
-	for err == nil && req.NumRows() != 0 {
-		for row := it.Begin(); row != it.End(); row = it.Next() {
-			user := row.GetString(0)
-			host := row.GetString(1)
-			pass := row.GetString(2)
-			var newPass string
-			newPass, err = oldPasswordUpgrade(pass)
-			terror.MustNil(err)
-			updateSQL := fmt.Sprintf(`UPDATE HIGH_PRIORITY mysql.user set password = "%s" where user="%s" and host="%s"`, newPass, user, host)
-			sqls = append(sqls, updateSQL)
-		}
-		err = r.Next(ctx, req)
-	}
-	terror.MustNil(err)
-
-	for _, sql := range sqls {
-		mustExecute(s, sql)
-	}
-
-	sql = fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES ("%s", "%d", "TiDB bootstrap version.") ON DUPLICATE KEY UPDATE VARIABLE_VALUE="%d"`,
-		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, version12, version12)
-	mustExecute(s, sql)
-
-	mustExecute(s, "COMMIT")
 }
 
 func upgradeToVer13(s Session) {
@@ -963,16 +924,4 @@ func mustExecute(s Session, sql string) {
 		debug.PrintStack()
 		logutil.BgLogger().Fatal("mustExecute error", zap.Error(err))
 	}
-}
-
-// oldPasswordUpgrade upgrade password to MySQL compatible format
-func oldPasswordUpgrade(pass string) (string, error) {
-	hash1, err := hex.DecodeString(pass)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	hash2 := auth.Sha1Hash(hash1)
-	newpass := fmt.Sprintf("*%X", hash2)
-	return newpass, nil
 }

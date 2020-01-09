@@ -27,7 +27,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -1088,15 +1087,6 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 			ctx := mock.NewContext()
 			err := ctx.GetSessionVars().SetSystemVar(variable.BlockEncryptionMode, testCase.aesModes)
 			c.Assert(err, IsNil)
-			if funcName == ast.CurrentUser || funcName == ast.User {
-				ctx.GetSessionVars().User = &auth.UserIdentity{
-					Username:     "tidb",
-					Hostname:     "localhost",
-					CurrentUser:  true,
-					AuthHostname: "localhost",
-					AuthUsername: "tidb",
-				}
-			}
 			baseFunc, fts, input, output := genVecBuiltinFuncBenchCase(ctx, funcName, testCase)
 			baseFuncName := fmt.Sprintf("%v", reflect.TypeOf(baseFunc))
 			tmp := strings.Split(baseFuncName, ".")
@@ -1290,15 +1280,6 @@ func benchmarkVectorizedBuiltinFunc(b *testing.B, vecExprCases vecExprBenchCases
 			err := ctx.GetSessionVars().SetSystemVar(variable.BlockEncryptionMode, testCase.aesModes)
 			if err != nil {
 				panic(err)
-			}
-			if funcName == ast.CurrentUser || funcName == ast.User {
-				ctx.GetSessionVars().User = &auth.UserIdentity{
-					Username:     "tidb",
-					Hostname:     "localhost",
-					CurrentUser:  true,
-					AuthHostname: "localhost",
-					AuthUsername: "tidb",
-				}
 			}
 			baseFunc, _, input, output := genVecBuiltinFuncBenchCase(ctx, funcName, testCase)
 			baseFuncName := fmt.Sprintf("%v", reflect.TypeOf(baseFunc))
