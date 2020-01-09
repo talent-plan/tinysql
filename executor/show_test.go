@@ -14,46 +14,12 @@
 package executor_test
 
 import (
-	"context"
-	"fmt"
-
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/auth"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/executor"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
 )
-
-func (s *testSuite5) TestShowDatabasesInfoSchemaFirst(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery("show databases").Sort().Check(testkit.Rows("INFORMATION_SCHEMA", "mysql", "test"))
-	tk.MustExec(`create user 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-
-	tk.MustExec(`create database AAAA`)
-	tk.MustExec(`create database BBBB`)
-	tk.MustExec(`grant select on AAAA.* to 'show'@'%'`)
-	tk.MustExec(`grant select on BBBB.* to 'show'@'%'`)
-	tk.MustExec(`flush privileges`)
-
-	tk1 := testkit.NewTestKit(c, s.store)
-	se, err := session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	c.Assert(se.Auth(&auth.UserIdentity{Username: "show", Hostname: "%"}, nil, nil), IsTrue)
-	tk1.Se = se
-	tk1.MustQuery("show databases").Sort().Check(testkit.Rows("AAAA", "BBBB", "INFORMATION_SCHEMA", "mysql", "test"))
-
-	tk.MustExec(`drop user 'show'@'%'`)
-	tk.MustExec(`drop database AAAA`)
-	tk.MustExec(`drop database BBBB`)
-}
 
 func (s *testSuite5) TestShowWarnings(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
@@ -105,150 +71,6 @@ func (s *testSuite5) TestIssue3641(c *C) {
 	c.Assert(err.Error(), Equals, plannercore.ErrNoDB.Error())
 }
 
-func (s *testSuite5) TestIssue11165(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("CREATE ROLE 'r_manager';")
-	tk.MustExec("CREATE USER 'manager'@'localhost';")
-	tk.MustExec("GRANT 'r_manager' TO 'manager'@'localhost';")
-
-	c.Assert(tk.Se.Auth(&auth.UserIdentity{Username: "manager", Hostname: "localhost", AuthUsername: "manager", AuthHostname: "localhost"}, nil, nil), IsTrue)
-	tk.MustExec("SET DEFAULT ROLE ALL TO 'manager'@'localhost';")
-	tk.MustExec("SET DEFAULT ROLE NONE TO 'manager'@'localhost';")
-	tk.MustExec("SET DEFAULT ROLE 'r_manager' TO 'manager'@'localhost';")
-}
-
-// TestShow2 is moved from session_test
-func (s *testSuite5) TestShow2(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	tk.MustExec("set global autocommit=0")
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustQuery("show global variables where variable_name = 'autocommit'").Check(testkit.Rows("autocommit 0"))
-	tk.MustExec("set global autocommit = 1")
-	tk2 := testkit.NewTestKit(c, s.store)
-	// TODO: In MySQL, the result is "autocommit ON".
-	tk2.MustQuery("show global variables where variable_name = 'autocommit'").Check(testkit.Rows("autocommit 1"))
-
-	// TODO: Specifying the charset for national char/varchar should not be supported.
-	tk.MustExec("drop table if exists test_full_column")
-	tk.MustExec(`create table test_full_column(
-					c_int int,
-					c_float float,
-					c_bit bit,
-					c_bool bool,
-					c_char char(1) charset ascii collate ascii_bin,
-					c_nchar national char(1) charset ascii collate ascii_bin,
-					c_binary binary,
-					c_varchar varchar(1) charset ascii collate ascii_bin,
-					c_varchar_default varchar(20) charset ascii collate ascii_bin default 'cUrrent_tImestamp',
-					c_nvarchar national varchar(1) charset ascii collate ascii_bin,
-					c_varbinary varbinary(1),
-					c_year year,
-					c_date date,
-					c_time time,
-					c_datetime datetime,
-					c_datetime_default datetime default current_timestamp,
-					c_datetime_default_2 datetime(2) default current_timestamp(2),
-					c_timestamp timestamp,
-					c_timestamp_default timestamp default current_timestamp,
-					c_timestamp_default_3 timestamp(3) default current_timestamp(3),
-					c_timestamp_default_4 timestamp(3) default current_timestamp(3) on update current_timestamp(3),
-					c_blob blob,
-					c_tinyblob tinyblob,
-					c_mediumblob mediumblob,
-					c_longblob longblob,
-					c_text text charset ascii collate ascii_bin,
-					c_tinytext tinytext charset ascii collate ascii_bin,
-					c_mediumtext mediumtext charset ascii collate ascii_bin,
-					c_longtext longtext charset ascii collate ascii_bin,
-					c_json json,
-					c_enum enum('1') charset ascii collate ascii_bin,
-					c_set set('1') charset ascii collate ascii_bin
-				);`)
-
-	tk.MustQuery(`show full columns from test_full_column`).Check(testkit.Rows(
-		"" +
-			"c_int int(11) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_float float <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_bit bit(1) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_bool tinyint(1) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_char char(1) ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_nchar char(1) ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_binary binary(1) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_varchar varchar(1) ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_varchar_default varchar(20) ascii_bin YES  cUrrent_tImestamp  select,insert,update,references ]\n" +
-			"[c_nvarchar varchar(1) ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_varbinary varbinary(1) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_year year(4) <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_date date <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_time time <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_datetime datetime <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_datetime_default datetime <nil> YES  CURRENT_TIMESTAMP  select,insert,update,references ]\n" +
-			"[c_datetime_default_2 datetime(2) <nil> YES  CURRENT_TIMESTAMP(2)  select,insert,update,references ]\n" +
-			"[c_timestamp timestamp <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_timestamp_default timestamp <nil> YES  CURRENT_TIMESTAMP  select,insert,update,references ]\n" +
-			"[c_timestamp_default_3 timestamp(3) <nil> YES  CURRENT_TIMESTAMP(3)  select,insert,update,references ]\n" +
-			"[c_timestamp_default_4 timestamp(3) <nil> YES  CURRENT_TIMESTAMP(3) DEFAULT_GENERATED on update CURRENT_TIMESTAMP(3) select,insert,update,references ]\n" +
-			"[c_blob blob <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_tinyblob tinyblob <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_mediumblob mediumblob <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_longblob longblob <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_text text ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_tinytext tinytext ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_mediumtext mediumtext ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_longtext longtext ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_json json <nil> YES  <nil>  select,insert,update,references ]\n" +
-			"[c_enum enum('1') ascii_bin YES  <nil>  select,insert,update,references ]\n" +
-			"[c_set set('1') ascii_bin YES  <nil>  select,insert,update,references "))
-
-	tk.MustExec("drop table if exists test_full_column")
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec(`create table if not exists t (c int) comment '注释'`)
-	tk.MustExec("create or replace definer='root'@'localhost' view v as select * from t")
-	tk.MustQuery(`show columns from t`).Check(testutil.RowsWithSep(",", "c,int(11),YES,,<nil>,"))
-	tk.MustQuery(`describe t`).Check(testutil.RowsWithSep(",", "c,int(11),YES,,<nil>,"))
-	tk.MustQuery(`show columns from v`).Check(testutil.RowsWithSep(",", "c,int(11),YES,,<nil>,"))
-	tk.MustQuery(`describe v`).Check(testutil.RowsWithSep(",", "c,int(11),YES,,<nil>,"))
-	tk.MustQuery("show collation where Charset = 'utf8' and Collation = 'utf8_bin'").Check(testutil.RowsWithSep(",", "utf8_bin,utf8,83,Yes,Yes,1"))
-	tk.MustQuery("show tables").Check(testkit.Rows("t", "v"))
-	tk.MustQuery("show full tables").Check(testkit.Rows("t BASE TABLE", "v VIEW"))
-	ctx := tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	tblInfo, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	createTime := model.TSConvert2Time(tblInfo.Meta().UpdateTS).Format("2006-01-02 15:04:05")
-
-	// The Hostname is the actual host
-	tk.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: "192.168.0.1", AuthUsername: "root", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-
-	r := tk.MustQuery("show table status from test like 't'")
-	r.Check(testkit.Rows(fmt.Sprintf("t InnoDB 10 Compact 0 0 0 0 0 0 <nil> %s <nil> <nil> utf8mb4_bin   注释", createTime)))
-
-	tk.MustQuery("show databases like 'test'").Check(testkit.Rows("test"))
-}
-
-func (s *testSuite5) TestShowCreateUser(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	// Create a new user.
-	tk.MustExec(`CREATE USER 'test_show_create_user'@'%' IDENTIFIED BY 'root';`)
-	tk.MustQuery("show create user 'test_show_create_user'@'%'").
-		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'%' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
-
-	tk.MustExec(`CREATE USER 'test_show_create_user'@'localhost' IDENTIFIED BY 'test';`)
-	tk.MustQuery("show create user 'test_show_create_user'@'localhost';").
-		Check(testkit.Rows(`CREATE USER 'test_show_create_user'@'localhost' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK`))
-
-	// Case: the user exists but the host portion doesn't match
-	err := tk.QueryToErr("show create user 'test_show_create_user'@'asdf';")
-	c.Assert(err.Error(), Equals, executor.ErrCannotUser.GenWithStackByArgs("SHOW CREATE USER", "'test_show_create_user'@'asdf'").Error())
-
-	// Case: a user that doesn't exist
-	err = tk.QueryToErr("show create user 'aaa'@'localhost';")
-	c.Assert(err.Error(), Equals, executor.ErrCannotUser.GenWithStackByArgs("SHOW CREATE USER", "'aaa'@'localhost'").Error())
-}
-
 func (s *testSuite5) TestCollation(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -262,34 +84,6 @@ func (s *testSuite5) TestCollation(c *C) {
 	c.Assert(fields[3].Column.Tp, Equals, mysql.TypeVarchar)
 	c.Assert(fields[4].Column.Tp, Equals, mysql.TypeVarchar)
 	c.Assert(fields[5].Column.Tp, Equals, mysql.TypeLonglong)
-}
-
-func (s *testSuite5) TestShowTableStatus(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(a bigint);`)
-
-	tk.Se.Auth(&auth.UserIdentity{Username: "root", Hostname: "192.168.0.1", AuthUsername: "root", AuthHostname: "%"}, nil, []byte("012345678901234567890"))
-
-	// It's not easy to test the result contents because every time the test runs, "Create_time" changed.
-	tk.MustExec("show table status;")
-	rs, err := tk.Exec("show table status;")
-	c.Assert(errors.ErrorStack(err), Equals, "")
-	c.Assert(rs, NotNil)
-	rows, err := session.GetRows4Test(context.Background(), tk.Se, rs)
-	c.Assert(errors.ErrorStack(err), Equals, "")
-	err = rs.Close()
-	c.Assert(errors.ErrorStack(err), Equals, "")
-
-	for i := range rows {
-		row := rows[i]
-		c.Assert(row.GetString(0), Equals, "t")
-		c.Assert(row.GetString(1), Equals, "InnoDB")
-		c.Assert(row.GetInt64(2), Equals, int64(10))
-		c.Assert(row.GetString(3), Equals, "Compact")
-	}
 }
 
 func (s *testSuite5) TestShowOpenTables(c *C) {

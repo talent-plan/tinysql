@@ -16,7 +16,6 @@ package executor
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -41,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -277,21 +275,11 @@ func (b *executorBuilder) buildShow(v *plannercore.PhysicalShow) Executor {
 		Table:        v.Table,
 		Column:       v.Column,
 		IndexName:    v.IndexName,
-		User:         v.User,
-		Roles:        v.Roles,
 		IfNotExists:  v.IfNotExists,
 		Flag:         v.Flag,
 		Full:         v.Full,
 		GlobalScope:  v.GlobalScope,
 		is:           b.is,
-	}
-	if e.Tp == ast.ShowGrants && e.User == nil {
-		// The input is a "show grants" statement, fulfill the user and roles field.
-		// Note: "show grants" result are different from "show grants for current_user",
-		// The former determine privileges with roles, while the later doesn't.
-		vars := e.ctx.GetSessionVars()
-		e.User = vars.User
-		e.Roles = vars.ActiveRoles
 	}
 	if e.Tp == ast.ShowMasterStatus {
 		// show master status need start ts.
@@ -303,12 +291,6 @@ func (b *executorBuilder) buildShow(v *plannercore.PhysicalShow) Executor {
 }
 
 func (b *executorBuilder) buildSimple(v *plannercore.Simple) Executor {
-	switch s := v.Statement.(type) {
-	case *ast.GrantStmt:
-		return b.buildGrant(s)
-	case *ast.RevokeStmt:
-		return b.buildRevoke(s)
-	}
 	base := newBaseExecutor(b.ctx, v.Schema(), v.ExplainID())
 	base.initCap = chunk.ZeroCapacity
 	e := &SimpleExec{
@@ -375,37 +357,6 @@ func (b *executorBuilder) buildReplace(vals *InsertValues) Executor {
 		InsertValues: vals,
 	}
 	return replaceExec
-}
-
-var (
-	grantStmtLabel  fmt.Stringer = stringutil.StringerStr("GrantStmt")
-	revokeStmtLabel fmt.Stringer = stringutil.StringerStr("RevokeStmt")
-)
-
-func (b *executorBuilder) buildGrant(grant *ast.GrantStmt) Executor {
-	e := &GrantExec{
-		baseExecutor: newBaseExecutor(b.ctx, nil, grantStmtLabel),
-		Privs:        grant.Privs,
-		ObjectType:   grant.ObjectType,
-		Level:        grant.Level,
-		Users:        grant.Users,
-		WithGrant:    grant.WithGrant,
-		is:           b.is,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildRevoke(revoke *ast.RevokeStmt) Executor {
-	e := &RevokeExec{
-		baseExecutor: newBaseExecutor(b.ctx, nil, revokeStmtLabel),
-		ctx:          b.ctx,
-		Privs:        revoke.Privs,
-		ObjectType:   revoke.ObjectType,
-		Level:        revoke.Level,
-		Users:        revoke.Users,
-		is:           b.is,
-	}
-	return e
 }
 
 func (b *executorBuilder) buildDDL(v *plannercore.DDL) Executor {

@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -63,50 +62,6 @@ func (s *testEvaluatorSuite) TestFoundRows(c *C) {
 	d, err := evalBuiltinFunc(f, chunk.Row{})
 	c.Assert(err, IsNil)
 	c.Assert(d.GetUint64(), Equals, uint64(2))
-}
-
-func (s *testEvaluatorSuite) TestUser(c *C) {
-	ctx := mock.NewContext()
-	sessionVars := ctx.GetSessionVars()
-	sessionVars.User = &auth.UserIdentity{Username: "root", Hostname: "localhost"}
-
-	fc := funcs[ast.User]
-	f, err := fc.getFunction(ctx, nil)
-	c.Assert(err, IsNil)
-	d, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(d.GetString(), Equals, "root@localhost")
-	c.Assert(f.Clone().PbCode(), Equals, f.PbCode())
-}
-
-func (s *testEvaluatorSuite) TestCurrentUser(c *C) {
-	ctx := mock.NewContext()
-	sessionVars := ctx.GetSessionVars()
-	sessionVars.User = &auth.UserIdentity{Username: "root", Hostname: "localhost", AuthUsername: "root", AuthHostname: "localhost"}
-
-	fc := funcs[ast.CurrentUser]
-	f, err := fc.getFunction(ctx, nil)
-	c.Assert(err, IsNil)
-	d, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(d.GetString(), Equals, "root@localhost")
-	c.Assert(f.Clone().PbCode(), Equals, f.PbCode())
-}
-
-func (s *testEvaluatorSuite) TestCurrentRole(c *C) {
-	ctx := mock.NewContext()
-	sessionVars := ctx.GetSessionVars()
-	sessionVars.ActiveRoles = make([]*auth.RoleIdentity, 0, 10)
-	sessionVars.ActiveRoles = append(sessionVars.ActiveRoles, &auth.RoleIdentity{Username: "r_1", Hostname: "%"})
-	sessionVars.ActiveRoles = append(sessionVars.ActiveRoles, &auth.RoleIdentity{Username: "r_2", Hostname: "localhost"})
-
-	fc := funcs[ast.CurrentRole]
-	f, err := fc.getFunction(ctx, nil)
-	c.Assert(err, IsNil)
-	d, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(d.GetString(), Equals, "`r_1`@`%`,`r_2`@`localhost`")
-	c.Assert(f.Clone().PbCode(), Equals, f.PbCode())
 }
 
 func (s *testEvaluatorSuite) TestConnectionID(c *C) {

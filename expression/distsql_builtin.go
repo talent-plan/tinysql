@@ -525,10 +525,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinDatabaseSig{base}
 	case tipb.ScalarFuncSig_FoundRows:
 		f = &builtinFoundRowsSig{base}
-	case tipb.ScalarFuncSig_CurrentUser:
-		f = &builtinCurrentUserSig{base}
-	case tipb.ScalarFuncSig_User:
-		f = &builtinUserSig{base}
 	case tipb.ScalarFuncSig_ConnectionID:
 		f = &builtinConnectionIDSig{base}
 	case tipb.ScalarFuncSig_LastInsertID:

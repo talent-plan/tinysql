@@ -339,10 +339,7 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildSet(ctx, x)
 	case *ast.AnalyzeTableStmt:
 		return b.buildAnalyze(x)
-	case *ast.FlushStmt, *ast.UseStmt,
-		*ast.BeginStmt, *ast.CommitStmt, *ast.RollbackStmt, *ast.CreateUserStmt, *ast.SetPwdStmt,
-		*ast.GrantStmt, *ast.DropUserStmt, *ast.AlterUserStmt, *ast.RevokeStmt, *ast.KillStmt, *ast.DropStatsStmt,
-		*ast.GrantRoleStmt, *ast.RevokeRoleStmt, *ast.SetRoleStmt, *ast.SetDefaultRoleStmt, *ast.ShutdownStmt:
+	case *ast.UseStmt, *ast.BeginStmt, *ast.CommitStmt, *ast.RollbackStmt:
 		return b.buildSimple(node.(ast.StmtNode))
 	case ast.DDLNode:
 		return b.buildDDL(ctx, x)
@@ -979,8 +976,6 @@ func (b *PlanBuilder) buildShow(ctx context.Context, show *ast.ShowStmt) (Plan, 
 			IndexName:   show.IndexName,
 			Flag:        show.Flag,
 			Full:        show.Full,
-			User:        show.User,
-			Roles:       show.Roles,
 			IfNotExists: show.IfNotExists,
 			GlobalScope: show.GlobalScope,
 		},
@@ -1043,24 +1038,6 @@ func (b *PlanBuilder) buildSimple(node ast.StmtNode) (Plan, error) {
 	p := &Simple{Statement: node}
 
 	switch raw := node.(type) {
-	case *ast.GrantStmt:
-		if b.ctx.GetSessionVars().CurrentDB == "" && raw.Level.DBName == "" {
-			if raw.Level.Level == ast.GrantLevelTable {
-				return nil, ErrNoDB
-			}
-		}
-	case *ast.KillStmt:
-		// If you have the SUPER privilege, you can kill all threads and statements.
-		// Otherwise, you can kill only your own threads and statements.
-		sm := b.ctx.GetSessionManager()
-		if sm != nil {
-			if pi, ok := sm.GetProcessInfo(raw.ConnectionID); ok {
-				loginUser := b.ctx.GetSessionVars().User
-				if pi.User != loginUser.Username {
-
-				}
-			}
-		}
 	case *ast.UseStmt:
 		if raw.DBName == "" {
 			return nil, ErrNoDB
@@ -1511,9 +1488,6 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 		}
 		if len(v.Cols) != schema.Len() {
 			return nil, ddl.ErrViewWrongList
-		}
-		if v.Definer.CurrentUser && b.ctx.GetSessionVars().User != nil {
-			v.Definer = b.ctx.GetSessionVars().User
 		}
 	}
 	p := &DDL{Statement: node}

@@ -51,7 +51,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/executor"
@@ -482,7 +481,7 @@ func (cc *clientConn) readOptionalSSLRequestAndHandshakeResponse(ctx context.Con
 	cc.collation = resp.Collation
 	cc.attrs = resp.Attrs
 
-	err = cc.openSessionAndDoAuth(resp.Auth)
+	err = cc.openSessionAndDoAuth()
 	return err
 }
 
@@ -500,7 +499,7 @@ func (cc *clientConn) SessionStatusToString() string {
 	)
 }
 
-func (cc *clientConn) openSessionAndDoAuth(authData []byte) error {
+func (cc *clientConn) openSessionAndDoAuth() error {
 	var tlsStatePtr *tls.ConnectionState
 	if cc.tlsConn != nil {
 		tlsState := cc.tlsConn.ConnectionState()
@@ -510,17 +509,6 @@ func (cc *clientConn) openSessionAndDoAuth(authData []byte) error {
 	cc.ctx, err = cc.server.driver.OpenCtx(uint64(cc.connectionID), cc.capability, cc.collation, cc.dbname, tlsStatePtr)
 	if err != nil {
 		return err
-	}
-	hasPassword := "YES"
-	if len(authData) == 0 {
-		hasPassword = "NO"
-	}
-	host, err := cc.PeerHost(hasPassword)
-	if err != nil {
-		return err
-	}
-	if !cc.ctx.Auth(&auth.UserIdentity{Username: cc.user, Hostname: host}, authData, cc.salt) {
-		return errAccessDenied.GenWithStackByArgs(cc.user, host, hasPassword)
 	}
 	if cc.dbname != "" {
 		err = cc.useDB(context.Background(), cc.dbname)
@@ -702,7 +690,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	dataStr := string(hack.String(data))
 	switch cmd {
 	case mysql.ComPing, mysql.ComStmtClose, mysql.ComStmtSendLongData, mysql.ComStmtReset,
-		mysql.ComSetOption, mysql.ComChangeUser:
+		mysql.ComSetOption:
 		cc.ctx.SetProcessInfo("", t, cmd, 0)
 	case mysql.ComInitDB:
 		cc.ctx.SetProcessInfo("use "+dataStr, t, cmd, 0)
@@ -735,8 +723,6 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 		return cc.writeOK()
 	case mysql.ComFieldList:
 		return cc.handleFieldList(dataStr)
-	case mysql.ComChangeUser:
-		return cc.handleChangeUser(ctx, data)
 	default:
 		return mysql.NewErrf(mysql.ErrUnknown, "command %d not supported now", cmd)
 	}
@@ -1111,33 +1097,6 @@ func (cc *clientConn) upgradeToTLS(tlsConfig *tls.Config) error {
 	cc.setConn(tlsConn)
 	cc.tlsConn = tlsConn
 	return nil
-}
-
-func (cc *clientConn) handleChangeUser(ctx context.Context, data []byte) error {
-	user, data := parseNullTermString(data)
-	cc.user = string(hack.String(user))
-	if len(data) < 1 {
-		return mysql.ErrMalformPacket
-	}
-	passLen := int(data[0])
-	data = data[1:]
-	if passLen > len(data) {
-		return mysql.ErrMalformPacket
-	}
-	pass := data[:passLen]
-	data = data[passLen:]
-	dbName, _ := parseNullTermString(data)
-	cc.dbname = string(hack.String(dbName))
-	err := cc.ctx.Close()
-	if err != nil {
-		logutil.Logger(ctx).Debug("close old context failed", zap.Error(err))
-	}
-	err = cc.openSessionAndDoAuth(pass)
-	if err != nil {
-		return err
-	}
-
-	return cc.writeOK()
 }
 
 var _ fmt.Stringer = getLastStmtInConn{}

@@ -2066,15 +2066,6 @@ func (s *testSessionSuite2) TestSetTransactionIsolationOneShot(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *testSessionSuite2) TestDBUserNameLength(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table if not exists t (a int)")
-	// Test user name length can be longer than 16.
-	tk.MustExec(`CREATE USER 'abcddfjakldfjaldddds'@'%' identified by ''`)
-	tk.MustExec(`grant all privileges on test.* to 'abcddfjakldfjaldddds'@'%'`)
-	tk.MustExec(`grant all privileges on test.t to 'abcddfjakldfjaldddds'@'%'`)
-}
-
 func (s *testSessionSuite2) TestKVVars(c *C) {
 	c.Skip("there is no backoff here in the large txn, so this test is stale")
 	tk := testkit.NewTestKitWithInit(c, s.store)

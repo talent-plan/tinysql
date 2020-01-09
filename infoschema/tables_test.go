@@ -21,9 +21,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/domain/infosync"
@@ -59,82 +57,6 @@ func (s *testTableSuite) TearDownSuite(c *C) {
 	s.dom.Close()
 	s.store.Close()
 	testleak.AfterTest(c)()
-}
-
-func (s *testTableSuite) TestInfoschemaFieldValue(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists numschema, timeschema")
-	tk.MustExec("create table numschema(i int(2), f float(4,2), d decimal(4,3))")
-	tk.MustExec("create table timeschema(d date, dt datetime(3), ts timestamp(3), t time(4), y year(4))")
-	tk.MustExec("create table strschema(c char(3), c2 varchar(3), b blob(3), t text(3))")
-	tk.MustExec("create table floatschema(a float, b double(7, 3))")
-
-	tk.MustQuery("select CHARACTER_MAXIMUM_LENGTH,CHARACTER_OCTET_LENGTH,NUMERIC_PRECISION,NUMERIC_SCALE,DATETIME_PRECISION from information_schema.COLUMNS where table_name='numschema'").
-		Check(testkit.Rows("<nil> <nil> 2 0 <nil>", "<nil> <nil> 4 2 <nil>", "<nil> <nil> 4 3 <nil>")) // FIXME: for mysql first one will be "<nil> <nil> 10 0 <nil>"
-	tk.MustQuery("select CHARACTER_MAXIMUM_LENGTH,CHARACTER_OCTET_LENGTH,NUMERIC_PRECISION,NUMERIC_SCALE,DATETIME_PRECISION from information_schema.COLUMNS where table_name='timeschema'").
-		Check(testkit.Rows("<nil> <nil> <nil> <nil> <nil>", "<nil> <nil> <nil> <nil> 3", "<nil> <nil> <nil> <nil> 3", "<nil> <nil> <nil> <nil> 4", "<nil> <nil> <nil> <nil> <nil>"))
-	tk.MustQuery("select CHARACTER_MAXIMUM_LENGTH,CHARACTER_OCTET_LENGTH,NUMERIC_PRECISION,NUMERIC_SCALE,DATETIME_PRECISION from information_schema.COLUMNS where table_name='strschema'").
-		Check(testkit.Rows("3 3 <nil> <nil> <nil>", "3 3 <nil> <nil> <nil>", "3 3 <nil> <nil> <nil>", "3 3 <nil> <nil> <nil>")) // FIXME: for mysql last two will be "255 255 <nil> <nil> <nil>", "255 255 <nil> <nil> <nil>"
-	tk.MustQuery("select NUMERIC_SCALE from information_schema.COLUMNS where table_name='floatschema'").
-		Check(testkit.Rows("<nil>", "3"))
-
-	// Test for auto increment ID.
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c int auto_increment primary key, d int)")
-	tk.MustQuery("select auto_increment from information_schema.tables where table_name='t'").Check(
-		testkit.Rows("1"))
-	tk.MustExec("insert into t(c, d) values(1, 1)")
-	tk.MustQuery("select auto_increment from information_schema.tables where table_name='t'").Check(
-		testkit.Rows("2"))
-
-	tk.MustQuery("show create table t").Check(
-		testkit.Rows("" +
-			"t CREATE TABLE `t` (\n" +
-			"  `c` int(11) NOT NULL AUTO_INCREMENT,\n" +
-			"  `d` int(11) DEFAULT NULL,\n" +
-			"  PRIMARY KEY (`c`)\n" +
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=30002"))
-
-	// Test auto_increment for table without auto_increment column
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (d int)")
-	tk.MustQuery("select auto_increment from information_schema.tables where table_name='t'").Check(
-		testkit.Rows("<nil>"))
-
-	tk.MustExec("create user xxx")
-	tk.MustExec("flush privileges")
-
-	// Test for length of enum and set
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t ( s set('a','bc','def','ghij') default NULL, e1 enum('a', 'ab', 'cdef'), s2 SET('1','2','3','4','1585','ONE','TWO','Y','N','THREE'))")
-	tk.MustQuery("select column_name, character_maximum_length from information_schema.columns where table_schema=Database() and table_name = 't' and column_name = 's'").Check(
-		testkit.Rows("s 13"))
-	tk.MustQuery("select column_name, character_maximum_length from information_schema.columns where table_schema=Database() and table_name = 't' and column_name = 's2'").Check(
-		testkit.Rows("s2 30"))
-	tk.MustQuery("select column_name, character_maximum_length from information_schema.columns where table_schema=Database() and table_name = 't' and column_name = 'e1'").Check(
-		testkit.Rows("e1 4"))
-
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("use test")
-	c.Assert(tk1.Se.Auth(&auth.UserIdentity{
-		Username: "xxx",
-		Hostname: "127.0.0.1",
-	}, nil, nil), IsTrue)
-
-	tk1.MustQuery("select distinct(table_schema) from information_schema.tables").Sort().Check(testkit.Rows("INFORMATION_SCHEMA", "mysql", "test"))
-
-	// Fix issue 9836
-	sm := &mockSessionManager{make(map[uint64]*util.ProcessInfo, 1)}
-	sm.processInfoMap[1] = &util.ProcessInfo{
-		ID:      1,
-		User:    "root",
-		Host:    "127.0.0.1",
-		Command: mysql.ComQuery,
-		StmtCtx: tk.Se.GetSessionVars().StmtCtx,
-	}
-	tk.Se.SetSessionManager(sm)
-	tk.MustQuery("SELECT user,host,command FROM information_schema.processlist;").Check(testkit.Rows("root 127.0.0.1 Query"))
 }
 
 func (s *testTableSuite) TestCharacterSetCollations(c *C) {

@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -78,7 +77,6 @@ type Session interface {
 	SetCollation(coID int) error
 	SetSessionManager(util.SessionManager)
 	Close()
-	Auth(user *auth.UserIdentity, auth []byte, salt []byte) bool
 	ShowProcess() *util.ProcessInfo
 	// PrePareTxnCtx is exported for test.
 	PrepareTxnCtx(context.Context)
@@ -375,7 +373,7 @@ func (s *session) String() string {
 	sessVars := s.sessionVars
 	data := map[string]interface{}{
 		"id":         sessVars.ConnectionID,
-		"user":       sessVars.User,
+		"user":       "",
 		"currDBName": sessVars.CurrentDB,
 		"status":     sessVars.Status,
 		"strictMode": sessVars.StrictSQLMode,
@@ -794,10 +792,6 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 		StatsInfo:        plannercore.GetStatsInfo,
 		MaxExecutionTime: maxExecutionTime,
 	}
-	if s.sessionVars.User != nil {
-		pi.User = s.sessionVars.User.Username
-		pi.Host = s.sessionVars.User.Hostname
-	}
 	s.processInfo.Store(&pi)
 }
 
@@ -808,7 +802,6 @@ func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode 
 	} else {
 		s.ClearValue(sessionctx.LastExecuteDDL)
 	}
-	logStmt(stmtNode, s.sessionVars)
 	recordSet, err := runStmt(ctx, s, stmt)
 	if err != nil {
 		if !kv.ErrKeyExists.Equal(err) {
@@ -1041,10 +1034,6 @@ func (s *session) GetSessionVars() *variable.SessionVars {
 	return s.sessionVars
 }
 
-func (s *session) Auth(user *auth.UserIdentity, authentication []byte, salt []byte) bool {
-	return true
-}
-
 // CreateSession4Test creates a new session environment for test.
 func CreateSession4Test(store kv.Storage) (Session, error) {
 	s, err := CreateSession(store)
@@ -1108,11 +1097,6 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 
 	timeutil.SetSystemTZ(tz)
 	dom := domain.GetDomain(se)
-
-	err = dom.LoadPrivilegeLoop(se)
-	if err != nil {
-		return nil, err
-	}
 
 	se1, err := createSession(store)
 	if err != nil {
@@ -1445,47 +1429,6 @@ func (s *session) ShowProcess() *util.ProcessInfo {
 		pi = tmp.(*util.ProcessInfo)
 	}
 	return pi
-}
-
-// logStmt logs some crucial SQL including: CREATE USER/GRANT PRIVILEGE/CHANGE PASSWORD/DDL etc and normal SQL
-// if variable.ProcessGeneralLog is set.
-func logStmt(node ast.StmtNode, vars *variable.SessionVars) {
-	switch stmt := node.(type) {
-	case *ast.CreateUserStmt, *ast.DropUserStmt, *ast.AlterUserStmt, *ast.SetPwdStmt, *ast.GrantStmt,
-		*ast.RevokeStmt, *ast.AlterTableStmt, *ast.CreateDatabaseStmt, *ast.CreateIndexStmt, *ast.CreateTableStmt,
-		*ast.DropDatabaseStmt, *ast.DropIndexStmt, *ast.DropTableStmt, *ast.RenameTableStmt, *ast.TruncateTableStmt:
-		user := vars.User
-		schemaVersion := vars.TxnCtx.SchemaVersion
-		if ss, ok := node.(ast.SensitiveStmtNode); ok {
-			logutil.BgLogger().Info("CRUCIAL OPERATION",
-				zap.Uint64("conn", vars.ConnectionID),
-				zap.Int64("schemaVersion", schemaVersion),
-				zap.String("secure text", ss.SecureText()),
-				zap.Stringer("user", user))
-		} else {
-			logutil.BgLogger().Info("CRUCIAL OPERATION",
-				zap.Uint64("conn", vars.ConnectionID),
-				zap.Int64("schemaVersion", schemaVersion),
-				zap.String("cur_db", vars.CurrentDB),
-				zap.String("sql", stmt.Text()),
-				zap.Stringer("user", user))
-		}
-	default:
-		logQuery(node.Text(), vars)
-	}
-}
-
-func logQuery(query string, vars *variable.SessionVars) {
-	if atomic.LoadUint32(&variable.ProcessGeneralLog) != 0 && !vars.InRestrictedSQL {
-		query = executor.QueryReplacer.Replace(query)
-		logutil.BgLogger().Info("GENERAL_LOG",
-			zap.Uint64("conn", vars.ConnectionID),
-			zap.Stringer("user", vars.User),
-			zap.Int64("schemaVersion", vars.TxnCtx.SchemaVersion),
-			zap.Uint64("txnStartTS", vars.TxnCtx.StartTS),
-			zap.String("current_db", vars.CurrentDB),
-			zap.String("sql", query))
-	}
 }
 
 type multiQueryNoDelayRecordSet struct {

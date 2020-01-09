@@ -24,7 +24,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -2723,27 +2722,6 @@ func (s *testIntegrationSuite) TestInfoBuiltin(c *C) {
 	result.Check(testkit.Rows("<nil>"))
 	tk.MustExec("create database test")
 	tk.MustExec("use test")
-
-	// for current_user
-	sessionVars := tk.Se.GetSessionVars()
-	originUser := sessionVars.User
-	sessionVars.User = &auth.UserIdentity{Username: "root", Hostname: "localhost", AuthUsername: "root", AuthHostname: "127.0.%%"}
-	result = tk.MustQuery("select current_user()")
-	result.Check(testkit.Rows("root@127.0.%%"))
-	sessionVars.User = originUser
-
-	// for user
-	sessionVars.User = &auth.UserIdentity{Username: "root", Hostname: "localhost", AuthUsername: "root", AuthHostname: "127.0.%%"}
-	result = tk.MustQuery("select user()")
-	result.Check(testkit.Rows("root@localhost"))
-	sessionVars.User = originUser
-
-	// for connection_id
-	originConnectionID := sessionVars.ConnectionID
-	sessionVars.ConnectionID = uint64(1)
-	result = tk.MustQuery("select connection_id()")
-	result.Check(testkit.Rows("1"))
-	sessionVars.ConnectionID = originConnectionID
 
 	// for version
 	result = tk.MustQuery("select version()")

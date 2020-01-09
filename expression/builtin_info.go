@@ -20,7 +20,6 @@ package expression
 import (
 	"encoding/hex"
 	"fmt"
-	"sort"
 	"strconv"
 
 	"github.com/pingcap/errors"
@@ -36,9 +35,6 @@ import (
 var (
 	_ functionClass = &databaseFunctionClass{}
 	_ functionClass = &foundRowsFunctionClass{}
-	_ functionClass = &currentUserFunctionClass{}
-	_ functionClass = &currentRoleFunctionClass{}
-	_ functionClass = &userFunctionClass{}
 	_ functionClass = &connectionIDFunctionClass{}
 	_ functionClass = &lastInsertIDFunctionClass{}
 	_ functionClass = &versionFunctionClass{}
@@ -54,8 +50,6 @@ var (
 var (
 	_ builtinFunc = &builtinDatabaseSig{}
 	_ builtinFunc = &builtinFoundRowsSig{}
-	_ builtinFunc = &builtinCurrentUserSig{}
-	_ builtinFunc = &builtinUserSig{}
 	_ builtinFunc = &builtinConnectionIDSig{}
 	_ builtinFunc = &builtinLastInsertIDSig{}
 	_ builtinFunc = &builtinLastInsertIDWithIDSig{}
@@ -128,124 +122,6 @@ func (b *builtinFoundRowsSig) evalInt(row chunk.Row) (int64, bool, error) {
 		return 0, true, errors.Errorf("Missing session variable when eval builtin")
 	}
 	return int64(data.LastFoundRows), false, nil
-}
-
-type currentUserFunctionClass struct {
-	baseFunctionClass
-}
-
-func (c *currentUserFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETString)
-	bf.tp.Flen = 64
-	sig := &builtinCurrentUserSig{bf}
-	return sig, nil
-}
-
-type builtinCurrentUserSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinCurrentUserSig) Clone() builtinFunc {
-	newSig := &builtinCurrentUserSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalString evals a builtinCurrentUserSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_current-user
-func (b *builtinCurrentUserSig) evalString(row chunk.Row) (string, bool, error) {
-	data := b.ctx.GetSessionVars()
-	if data == nil || data.User == nil {
-		return "", true, errors.Errorf("Missing session variable when eval builtin")
-	}
-	return data.User.AuthIdentityString(), false, nil
-}
-
-type currentRoleFunctionClass struct {
-	baseFunctionClass
-}
-
-func (c *currentRoleFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETString)
-	bf.tp.Flen = 64
-	sig := &builtinCurrentRoleSig{bf}
-	return sig, nil
-}
-
-type builtinCurrentRoleSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinCurrentRoleSig) Clone() builtinFunc {
-	newSig := &builtinCurrentRoleSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalString evals a builtinCurrentUserSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_current-user
-func (b *builtinCurrentRoleSig) evalString(row chunk.Row) (string, bool, error) {
-	data := b.ctx.GetSessionVars()
-	if data == nil || data.ActiveRoles == nil {
-		return "", true, errors.Errorf("Missing session variable when eval builtin")
-	}
-	if len(data.ActiveRoles) == 0 {
-		return "", false, nil
-	}
-	res := ""
-	sortedRes := make([]string, 0, 10)
-	for _, r := range data.ActiveRoles {
-		sortedRes = append(sortedRes, r.String())
-	}
-	sort.Strings(sortedRes)
-	for i, r := range sortedRes {
-		res += r
-		if i != len(data.ActiveRoles)-1 {
-			res += ","
-		}
-	}
-	return res, false, nil
-}
-
-type userFunctionClass struct {
-	baseFunctionClass
-}
-
-func (c *userFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETString)
-	bf.tp.Flen = 64
-	sig := &builtinUserSig{bf}
-	return sig, nil
-}
-
-type builtinUserSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinUserSig) Clone() builtinFunc {
-	newSig := &builtinUserSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalString evals a builtinUserSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_user
-func (b *builtinUserSig) evalString(row chunk.Row) (string, bool, error) {
-	data := b.ctx.GetSessionVars()
-	if data == nil || data.User == nil {
-		return "", true, errors.Errorf("Missing session variable when eval builtin")
-	}
-
-	return data.User.String(), false, nil
 }
 
 type connectionIDFunctionClass struct {

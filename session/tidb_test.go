@@ -14,23 +14,17 @@
 package session
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/testleak"
 )
 
@@ -114,45 +108,8 @@ func newStoreWithBootstrap(c *C, dbPath string) (kv.Storage, *domain.Domain) {
 	return store, dom
 }
 
-var testConnID uint64
-
-func newSession(c *C, store kv.Storage, dbName string) Session {
-	se, err := CreateSession4Test(store)
-	id := atomic.AddUint64(&testConnID, 1)
-	se.SetConnectionID(id)
-	c.Assert(err, IsNil)
-	se.Auth(&auth.UserIdentity{Username: "root", Hostname: `%`}, nil, []byte("012345678901234567890"))
-	mustExecSQL(c, se, "create database if not exists "+dbName)
-	mustExecSQL(c, se, "use "+dbName)
-	return se
-}
-
 func removeStore(c *C, dbPath string) {
 	os.RemoveAll(dbPath)
-}
-
-func exec(se Session, sql string) (sqlexec.RecordSet, error) {
-	ctx := context.Background()
-	rs, err := se.Execute(ctx, sql)
-	if err == nil && len(rs) > 0 {
-		return rs[0], nil
-	}
-	return nil, err
-}
-
-func mustExecSQL(c *C, se Session, sql string) sqlexec.RecordSet {
-	rs, err := exec(se, sql)
-	c.Assert(err, IsNil)
-	return rs
-}
-
-func match(c *C, row []types.Datum, expected ...interface{}) {
-	c.Assert(len(row), Equals, len(expected))
-	for i := range row {
-		got := fmt.Sprintf("%v", row[i].GetValue())
-		need := fmt.Sprintf("%v", expected[i])
-		c.Assert(got, Equals, need)
-	}
 }
 
 func (s *testMainSuite) TestKeysNeedLock(c *C) {

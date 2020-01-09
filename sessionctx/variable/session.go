@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
@@ -182,9 +181,6 @@ type SessionVars struct {
 	// SysErrorCount is the system variable "error_count", because it is on the hot path, so we extract it from the systems
 	SysErrorCount uint16
 
-	// ActiveRoles stores active roles for current user
-	ActiveRoles []*auth.RoleIdentity
-
 	RetryInfo *RetryInfo
 	//  TxnCtx Should be reset on transaction finished.
 	TxnCtx *TransactionContext
@@ -218,9 +214,6 @@ type SessionVars struct {
 
 	// PlanColumnID is the unique id for column when building plan.
 	PlanColumnID int64
-
-	// User is the user identity with which the session login.
-	User *auth.UserIdentity
 
 	// CurrentDB is the default database of this session.
 	CurrentDB string
@@ -415,7 +408,6 @@ func NewSessionVars() *SessionVars {
 		TxnCtx:                      &TransactionContext{},
 		KVVars:                      kv.NewVariables(),
 		RetryInfo:                   &RetryInfo{},
-		ActiveRoles:                 make([]*auth.RoleIdentity, 0, 10),
 		StrictSQLMode:               true,
 		Status:                      mysql.ServerStatusAutocommit,
 		StmtCtx:                     new(stmtctx.StatementContext),

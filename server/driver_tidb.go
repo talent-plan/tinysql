@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
@@ -159,11 +158,6 @@ func (tc *TiDBContext) SetClientCapability(flags uint32) {
 func (tc *TiDBContext) Close() error {
 	tc.session.Close()
 	return nil
-}
-
-// Auth implements QueryCtx Auth method.
-func (tc *TiDBContext) Auth(user *auth.UserIdentity, auth []byte, salt []byte) bool {
-	return tc.session.Auth(user, auth, salt)
 }
 
 // FieldList implements QueryCtx FieldList method.
