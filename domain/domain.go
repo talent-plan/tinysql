@@ -728,10 +728,6 @@ func (do *Domain) loadStatsWorker() {
 			if err != nil {
 				logutil.BgLogger().Debug("update stats info failed", zap.Error(err))
 			}
-			err = statsHandle.LoadNeededHistograms()
-			if err != nil {
-				logutil.BgLogger().Debug("load histograms failed", zap.Error(err))
-			}
 		case <-do.exit:
 			return
 		}

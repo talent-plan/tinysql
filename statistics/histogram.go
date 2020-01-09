@@ -524,19 +524,10 @@ func (c *Column) String() string {
 	return c.Histogram.ToString(0)
 }
 
-// HistogramNeededColumns stores the columns whose Histograms need to be loaded from physical kv layer.
-// Currently, we only load index/pk's Histogram from kv automatically. Columns' are loaded by needs.
-var HistogramNeededColumns = neededColumnMap{cols: map[tableColumnID]struct{}{}}
-
-// IsInvalid checks if this column is invalid. If this column has histogram but not loaded yet, then we mark it
-// as need histogram.
+// IsInvalid checks if this column is invalid.
 func (c *Column) IsInvalid(sc *stmtctx.StatementContext, collPseudo bool) bool {
 	if collPseudo {
 		return true
-	}
-	if c.NDV > 0 && c.Len() == 0 && sc != nil {
-		sc.SetHistogramsNotLoad()
-		HistogramNeededColumns.insert(tableColumnID{TableID: c.PhysicalID, ColumnID: c.Info.ID})
 	}
 	return c.TotalRowCount() == 0 || (c.NDV > 0 && c.Len() == 0)
 }

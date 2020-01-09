@@ -15,11 +15,6 @@ package statistics
 
 import (
 	"fmt"
-	"math"
-	"sort"
-	"strings"
-	"sync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -31,6 +26,9 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/ranger"
+	"math"
+	"sort"
+	"strings"
 )
 
 const (
@@ -140,38 +138,6 @@ func (t *Table) ColumnByName(colName string) *Column {
 		}
 	}
 	return nil
-}
-
-type tableColumnID struct {
-	TableID  int64
-	ColumnID int64
-}
-
-type neededColumnMap struct {
-	m    sync.Mutex
-	cols map[tableColumnID]struct{}
-}
-
-func (n *neededColumnMap) AllCols() []tableColumnID {
-	n.m.Lock()
-	keys := make([]tableColumnID, 0, len(n.cols))
-	for key := range n.cols {
-		keys = append(keys, key)
-	}
-	n.m.Unlock()
-	return keys
-}
-
-func (n *neededColumnMap) insert(col tableColumnID) {
-	n.m.Lock()
-	n.cols[col] = struct{}{}
-	n.m.Unlock()
-}
-
-func (n *neededColumnMap) Delete(col tableColumnID) {
-	n.m.Lock()
-	delete(n.cols, col)
-	n.m.Unlock()
 }
 
 // RatioOfPseudoEstimate means if modifyCount / statsTblCount is greater than this ratio, we think the stats is invalid

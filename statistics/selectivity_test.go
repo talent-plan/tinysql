@@ -467,7 +467,6 @@ func (s *testStatsSuite) TestColumnIndexNullEstimation(c *C) {
 	testKit.MustExec("drop table if exists t")
 	testKit.MustExec("create table t(a int, b int, c int, index idx_b(b), index idx_c_a(c, a))")
 	testKit.MustExec("insert into t values(1,null,1),(2,null,2),(3,3,3),(4,null,4),(null,null,null);")
-	h := s.do.StatsHandle()
 	testKit.MustExec("analyze table t")
 	var (
 		input  []string
@@ -480,9 +479,6 @@ func (s *testStatsSuite) TestColumnIndexNullEstimation(c *C) {
 		})
 		testKit.MustQuery(input[i]).Check(testkit.Rows(output[i]...))
 	}
-	// Make sure column stats has been loaded.
-	testKit.MustExec(`explain select * from t where a is null`)
-	c.Assert(h.LoadNeededHistograms(), IsNil)
 	for i := 5; i < len(input); i++ {
 		s.testData.OnRecord(func() {
 			output[i] = s.testData.ConvertRowsToStrings(testKit.MustQuery(input[i]).Rows())
