@@ -343,25 +343,6 @@ func (s *testEvaluatorSuite) TestArithmeticalFunc2Pb(c *C) {
 	}
 }
 
-func (s *testEvaluatorSuite) TestDateFunc2Pb(c *C) {
-	sc := new(stmtctx.StatementContext)
-	client := new(mock.Client)
-	dg := new(dataGen4Expr2PbTest)
-	fc, err := NewFunction(
-		mock.NewContext(),
-		ast.DateFormat,
-		types.NewFieldType(mysql.TypeUnspecified),
-		dg.genColumn(mysql.TypeDatetime, 1),
-		dg.genColumn(mysql.TypeString, 2))
-	c.Assert(err, IsNil)
-	funcs := []Expression{fc}
-	pbExprs := ExpressionsToPBList(sc, funcs, client)
-	c.Assert(pbExprs[0], NotNil)
-	js, err := json.Marshal(pbExprs[0])
-	c.Assert(err, IsNil)
-	c.Assert(string(js), Equals, "{\"tp\":10000,\"children\":[{\"tp\":201,\"val\":\"gAAAAAAAAAE=\",\"sig\":0,\"field_type\":{\"tp\":12,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAI=\",\"sig\":0,\"field_type\":{\"tp\":254,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}}],\"sig\":6001,\"field_type\":{\"tp\":253,\"flag\":0,\"flen\":0,\"decimal\":-1,\"collate\":46,\"charset\":\"utf8mb4\"}}")
-}
-
 func (s *testEvaluatorSuite) TestLogicalFunc2Pb(c *C) {
 	var logicalFuncs = make([]Expression, 0)
 	sc := new(stmtctx.StatementContext)

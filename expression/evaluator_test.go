@@ -436,51 +436,6 @@ func (s *testEvaluatorSuite) TestBinopNumeric(c *C) {
 	s.ctx.GetSessionVars().StmtCtx.DividedByZeroAsWarning = oldDividedByZeroAsWarning
 }
 
-func (s *testEvaluatorSuite) TestExtract(c *C) {
-	str := "2011-11-11 10:10:10.123456"
-	tbl := []struct {
-		Unit   string
-		Expect int64
-	}{
-		{"MICROSECOND", 123456},
-		{"SECOND", 10},
-		{"MINUTE", 10},
-		{"HOUR", 10},
-		{"DAY", 11},
-		{"WEEK", 45},
-		{"MONTH", 11},
-		{"QUARTER", 4},
-		{"YEAR", 2011},
-		{"SECOND_MICROSECOND", 10123456},
-		{"MINUTE_MICROSECOND", 1010123456},
-		{"MINUTE_SECOND", 1010},
-		{"HOUR_MICROSECOND", 101010123456},
-		{"HOUR_SECOND", 101010},
-		{"HOUR_MINUTE", 1010},
-		{"DAY_MICROSECOND", 11101010123456},
-		{"DAY_SECOND", 11101010},
-		{"DAY_MINUTE", 111010},
-		{"DAY_HOUR", 1110},
-		{"YEAR_MONTH", 201111},
-	}
-	for _, t := range tbl {
-		fc := funcs[ast.Extract]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.Unit, str)))
-		c.Assert(err, IsNil)
-		v, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(v, testutil.DatumEquals, types.NewDatum(t.Expect))
-	}
-
-	// Test nil
-	fc := funcs[ast.Extract]
-	f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums("SECOND", nil)))
-	c.Assert(err, IsNil)
-	v, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(v.Kind(), Equals, types.KindNull)
-}
-
 func (s *testEvaluatorSuite) TestLike(c *C) {
 	tests := []struct {
 		input   string

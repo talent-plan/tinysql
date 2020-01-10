@@ -15,15 +15,12 @@ package expression
 
 import (
 	"strconv"
-	"strings"
-	"time"
 	"unicode"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/opcode"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/parser_driver"
@@ -312,22 +309,6 @@ func SubstituteCorCol2Constant(expr Expression) (Expression, error) {
 		return &Constant{Value: *x.Data, RetType: x.GetType()}, nil
 	}
 	return expr, nil
-}
-
-// timeZone2Duration converts timezone whose format should satisfy the regular condition
-// `(^(+|-)(0?[0-9]|1[0-2]):[0-5]?\d$)|(^+13:00$)` to time.Duration.
-func timeZone2Duration(tz string) time.Duration {
-	sign := 1
-	if strings.HasPrefix(tz, "-") {
-		sign = -1
-	}
-
-	i := strings.Index(tz, ":")
-	h, err := strconv.Atoi(tz[1:i])
-	terror.Log(err)
-	m, err := strconv.Atoi(tz[i+1:])
-	terror.Log(err)
-	return time.Duration(sign) * (time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
 }
 
 var oppositeOp = map[string]string{

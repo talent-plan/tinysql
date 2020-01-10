@@ -316,8 +316,6 @@ var typesMap = []TypeContext{
 	TypeReal,
 	TypeDecimal,
 	TypeString,
-	TypeDatetime,
-	TypeDuration,
 	TypeJSON,
 }
 

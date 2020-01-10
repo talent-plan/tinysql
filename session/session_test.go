@@ -1814,32 +1814,6 @@ func (s *testSessionSuite2) TestStatementErrorInTransaction(c *C) {
 	tk.MustQuery("select * from test where a = 1 and b = 11").Check(testkit.Rows())
 }
 
-func (s *testSessionSuite2) TestCastTimeToDate(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set time_zone = '-8:00'")
-	date := time.Now().In(time.FixedZone("", -8*int(time.Hour/time.Second)))
-	tk.MustQuery("select cast(time('12:23:34') as date)").Check(testkit.Rows(date.Format("2006-01-02")))
-
-	tk.MustExec("set time_zone = '+08:00'")
-	date = time.Now().In(time.FixedZone("", 8*int(time.Hour/time.Second)))
-	tk.MustQuery("select cast(time('12:23:34') as date)").Check(testkit.Rows(date.Format("2006-01-02")))
-}
-
-func (s *testSessionSuite) TestSetGlobalTZ(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set time_zone = '+08:00'")
-	tk.MustQuery("show variables like 'time_zone'").Check(testkit.Rows("time_zone +08:00"))
-
-	tk.MustExec("set global time_zone = '+00:00'")
-
-	tk.MustQuery("show variables like 'time_zone'").Check(testkit.Rows("time_zone +08:00"))
-
-	// Disable global variable cache, so load global session variable take effect immediate.
-	s.dom.GetGlobalVarsCache().Disable()
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustQuery("show variables like 'time_zone'").Check(testkit.Rows("time_zone +00:00"))
-}
-
 func (s *testSessionSuite2) TestRollbackOnCompileError(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("create table t (a int)")

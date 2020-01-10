@@ -45,26 +45,6 @@ func newLonglong(value int64) *Constant {
 	}
 }
 
-func newDate(year, month, day int) *Constant {
-	return newTimeConst(year, month, day, 0, 0, 0, mysql.TypeDate)
-}
-
-func newTimestamp(yy, mm, dd, hh, min, ss int) *Constant {
-	return newTimeConst(yy, mm, dd, hh, min, ss, mysql.TypeTimestamp)
-}
-
-func newTimeConst(yy, mm, dd, hh, min, ss int, tp uint8) *Constant {
-	var tmp types.Datum
-	tmp.SetMysqlTime(types.Time{
-		Time: types.FromDate(yy, mm, dd, 0, 0, 0, 0),
-		Type: tp,
-	})
-	return &Constant{
-		Value:   tmp,
-		RetType: types.NewFieldType(tp),
-	}
-}
-
 func newFunction(funcName string, args ...Expression) Expression {
 	typeLong := types.NewFieldType(mysql.TypeLonglong)
 	return NewFunctionInternal(mock.NewContext(), funcName, typeLong, args...)
@@ -193,100 +173,6 @@ func (*testExpressionSuite) TestConstantPropagation(c *C) {
 			sort.Strings(result)
 			c.Assert(strings.Join(result, ", "), Equals, tt.result, Commentf("different for expr %s", tt.conditions))
 		}
-	}
-}
-
-func (*testExpressionSuite) TestConstraintPropagation(c *C) {
-	col1 := newColumnWithType(1, types.NewFieldType(mysql.TypeDate))
-	col2 := newColumnWithType(2, types.NewFieldType(mysql.TypeTimestamp))
-	tests := []struct {
-		solver     constraintSolver
-		conditions []Expression
-		result     string
-	}{
-		// Don't propagate this any more, because it makes the code more complex but not
-		// useful for partition pruning.
-		// {
-		// 	solver: newConstraintSolver(ruleColumnGTConst),
-		// 	conditions: []Expression{
-		// 		newFunction(ast.GT, newColumn(0), newLonglong(5)),
-		// 		newFunction(ast.GT, newColumn(0), newLonglong(7)),
-		// 	},
-		// 	result: "gt(Column#0, 7)",
-		// },
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			conditions: []Expression{
-				newFunction(ast.GT, newColumn(0), newLonglong(5)),
-				newFunction(ast.LT, newColumn(0), newLonglong(5)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			conditions: []Expression{
-				newFunction(ast.GT, newColumn(0), newLonglong(7)),
-				newFunction(ast.LT, newColumn(0), newLonglong(5)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			// col1 > '2018-12-11' and to_days(col1) < 5 => false
-			conditions: []Expression{
-				newFunction(ast.GT, col1, newDate(2018, 12, 11)),
-				newFunction(ast.LT, newFunction(ast.ToDays, col1), newLonglong(5)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			conditions: []Expression{
-				newFunction(ast.LT, newColumn(0), newLonglong(5)),
-				newFunction(ast.GT, newColumn(0), newLonglong(5)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			conditions: []Expression{
-				newFunction(ast.LT, newColumn(0), newLonglong(5)),
-				newFunction(ast.GT, newColumn(0), newLonglong(7)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			// col1 < '2018-12-11' and to_days(col1) > 737999 => false
-			conditions: []Expression{
-				newFunction(ast.LT, col1, newDate(2018, 12, 11)),
-				newFunction(ast.GT, newFunction(ast.ToDays, col1), newLonglong(737999)),
-			},
-			result: "0",
-		},
-		{
-			solver: newConstraintSolver(ruleColumnOPConst),
-			// col2 > unixtimestamp('2008-05-01 00:00:00') and unixtimestamp(col2) < unixtimestamp('2008-04-01 00:00:00') => false
-			conditions: []Expression{
-				newFunction(ast.GT, col2, newTimestamp(2008, 5, 1, 0, 0, 0)),
-				newFunction(ast.LT, newFunction(ast.UnixTimestamp, col2), newLonglong(1206979200)),
-			},
-			result: "0",
-		},
-	}
-	for _, tt := range tests {
-		ctx := mock.NewContext()
-		conds := make([]Expression, 0, len(tt.conditions))
-		for _, cd := range tt.conditions {
-			conds = append(conds, FoldConstant(cd))
-		}
-		newConds := tt.solver.Solve(ctx, conds)
-		var result []string
-		for _, v := range newConds {
-			result = append(result, v.String())
-		}
-		sort.Strings(result)
-		c.Assert(strings.Join(result, ", "), Equals, tt.result, Commentf("different for expr %s", tt.conditions))
 	}
 }
 

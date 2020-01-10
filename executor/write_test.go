@@ -181,17 +181,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	r = tk.MustQuery("select length(c) from t;")
 	r.Check(testkit.Rows("1"))
 
-	// issue 3509
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(c int)")
-	tk.MustExec("set @origin_time_zone = @@time_zone")
-	tk.MustExec("set @@time_zone = '+08:00'")
-	_, err = tk.Exec("insert into t value(Unix_timestamp('2002-10-27 01:00'))")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery("select * from t;")
-	r.Check(testkit.Rows("1035651600"))
-	tk.MustExec("set @@time_zone = @origin_time_zone")
-
 	// issue 3832
 	tk.MustExec("create table t1 (b char(0));")
 	_, err = tk.Exec(`insert into t1 values ("");`)
@@ -208,19 +197,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec("INSERT INTO t VALUES (1.000000);")
 	r = tk.MustQuery("SHOW WARNINGS;")
 	r.Check(testkit.Rows())
-
-	// issue 4653
-	tk.MustExec("DROP TABLE IF EXISTS t;")
-	tk.MustExec("CREATE TABLE t(a datetime);")
-	_, err = tk.Exec("INSERT INTO t VALUES('2017-00-00')")
-	c.Assert(err, NotNil)
-	tk.MustExec("set sql_mode = ''")
-	tk.MustExec("INSERT INTO t VALUES('2017-00-00')")
-	r = tk.MustQuery("SELECT * FROM t;")
-	r.Check(testkit.Rows("2017-00-00 00:00:00"))
-	tk.MustExec("set sql_mode = 'strict_all_tables';")
-	r = tk.MustQuery("SELECT * FROM t;")
-	r.Check(testkit.Rows("2017-00-00 00:00:00"))
 
 	// test auto_increment with unsigned.
 	tk.MustExec("drop table if exists test")
@@ -1225,14 +1201,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	r.Check(testkit.Rows("Warning 1062 Duplicate entry '1' for key 'I_uniq'"))
 	tk.MustQuery("select * from t").Check(testkit.Rows("1", "2"))
 
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(id integer auto_increment, t1 datetime, t2 datetime, primary key (id))")
-	tk.MustExec("insert into t(t1, t2) values('2000-10-01 01:01:01', '2017-01-01 10:10:10')")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 2000-10-01 01:01:01 2017-01-01 10:10:10"))
-	tk.MustExec("update t set t1 = '2017-10-01 10:10:11', t2 = date_add(t1, INTERVAL 10 MINUTE) where id = 1")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 2017-10-01 10:10:11 2017-10-01 10:20:11"))
-
 	// for issue #5132
 	tk.MustExec("CREATE TABLE `tt1` (" +
 		"`a` int(11) NOT NULL," +
@@ -1249,21 +1217,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	r = tk.MustQuery("select * from tt1;")
 	r.Check(testkit.Rows("1 a a", "5 d b"))
-
-	// Automatic Updating for TIMESTAMP
-	tk.MustExec("CREATE TABLE `tsup` (" +
-		"`a` int," +
-		"`ts` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
-		"KEY `idx` (`ts`)" +
-		");")
-	tk.MustExec("insert into tsup values(1, '0000-00-00 00:00:00');")
-	tk.MustExec("update tsup set a=5;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	r1 := tk.MustQuery("select ts from tsup use index (idx);")
-	r2 := tk.MustQuery("select ts from tsup;")
-	r1.Check(r2.Rows())
-	tk.MustExec("update tsup set ts='2019-01-01';")
-	tk.MustQuery("select ts from tsup;").Check(testkit.Rows("2019-01-01 00:00:00"))
 
 	// issue 5532
 	tk.MustExec("create table decimals (a decimal(20, 0) not null)")
@@ -1312,17 +1265,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.MustExec("insert into t values (0.0);")
 	_, err = tk.Exec("update t set c1 = 2.0;")
 	c.Assert(types.ErrWarnDataOutOfRange.Equal(err), IsTrue)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a datetime not null, b datetime)")
-	tk.MustExec("insert into t value('1999-12-12', '1999-12-13')")
-	tk.MustExec(" set @orig_sql_mode=@@sql_mode; set @@sql_mode='';")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1999-12-12 00:00:00 1999-12-13 00:00:00"))
-	tk.MustExec("update t set a = ''")
-	tk.MustQuery("select * from t").Check(testkit.Rows("0000-00-00 00:00:00 1999-12-13 00:00:00"))
-	tk.MustExec("update t set b = ''")
-	tk.MustQuery("select * from t").Check(testkit.Rows("0000-00-00 00:00:00 0000-00-00 00:00:00"))
-	tk.MustExec("set @@sql_mode=@orig_sql_mode;")
 
 	tk.MustExec("create view v as select * from t")
 	_, err = tk.Exec("update v set a = '2000-11-11'")

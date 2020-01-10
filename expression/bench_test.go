@@ -337,30 +337,6 @@ func (g *rangeDurationGener) gen() interface{} {
 		Duration: time.Duration(tu * 1000)}
 }
 
-type timeFormatGener struct {
-	nullRation float64
-}
-
-func (g *timeFormatGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-	switch rand.Uint32() % 4 {
-	case 0:
-		return "%H %i %S"
-	case 1:
-		return "%l %i %s"
-	case 2:
-		return "%p %i %s"
-	case 3:
-		return "%I %i %S %f"
-	case 4:
-		return "%T"
-	default:
-		return nil
-	}
-}
-
 // rangeRealGener is used to generate float64 items in [begin, end].
 type rangeRealGener struct {
 	begin float64
@@ -468,29 +444,6 @@ func (g *randHexStrGener) gen() interface{} {
 	return string(buf)
 }
 
-// dateTimeGener is used to generate a dataTime
-type dateTimeGener struct {
-	Fsp   int
-	Year  int
-	Month int
-	Day   int
-}
-
-func (g *dateTimeGener) gen() interface{} {
-	if g.Year == 0 {
-		g.Year = 1970 + rand.Intn(100)
-	}
-	if g.Month == 0 {
-		g.Month = rand.Intn(10) + 1
-	}
-	if g.Day == 0 {
-		g.Day = rand.Intn(20) + 1
-	}
-	gt := types.FromDate(g.Year, g.Month, g.Day, rand.Intn(12), rand.Intn(60), rand.Intn(60), rand.Intn(1000000))
-	t := types.Time{Time: gt, Type: mysql.TypeDatetime}
-	return t
-}
-
 // dateTimeStrGener is used to generate strings which are dataTime format
 type dateTimeStrGener struct {
 	Fsp   int
@@ -564,24 +517,6 @@ func (g *timeStrGener) gen() interface{} {
 	return fmt.Sprintf("%d:%d:%d", hour, minute, second)
 }
 
-type dateTimeIntGener struct {
-	dateTimeGener
-	nullRation float64
-}
-
-func (g *dateTimeIntGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-
-	t := g.dateTimeGener.gen().(types.Time)
-	num, err := t.ToNumber().ToInt()
-	if err != nil {
-		panic(err)
-	}
-	return num
-}
-
 // constStrGener always returns the given string
 type constStrGener struct {
 	s string
@@ -608,54 +543,6 @@ type randDurDecimal struct{}
 func (g *randDurDecimal) gen() interface{} {
 	d := new(types.MyDecimal)
 	return d.FromFloat64(float64(rand.Intn(types.TimeMaxHour)*10000 + rand.Intn(60)*100 + rand.Intn(60)))
-}
-
-// locationGener is used to generate location for the built-in function GetFormat.
-type locationGener struct {
-	nullRation float64
-}
-
-func (g *locationGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-	switch rand.Uint32() % 5 {
-	case 0:
-		return usaLocation
-	case 1:
-		return jisLocation
-	case 2:
-		return isoLocation
-	case 3:
-		return eurLocation
-	case 4:
-		return internalLocation
-	default:
-		return nil
-	}
-}
-
-// formatGener is used to generate a format for the built-in function GetFormat.
-type formatGener struct {
-	nullRation float64
-}
-
-func (g *formatGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-	switch rand.Uint32() % 4 {
-	case 0:
-		return dateFormat
-	case 1:
-		return datetimeFormat
-	case 2:
-		return timestampFormat
-	case 3:
-		return timeFormat
-	default:
-		return nil
-	}
 }
 
 type vecExprBenchCase struct {

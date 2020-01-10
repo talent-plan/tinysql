@@ -790,11 +790,6 @@ func (s *testSuiteJoin3) TestSubquery(c *C) {
 	result = tk.MustQuery("select (select id from s where s.id = t.id order by s.id) from t")
 	result.Check(testkit.Rows("2", "2"))
 
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(dt datetime)")
-	result = tk.MustQuery("select (select 1 from t where DATE_FORMAT(o.dt,'%Y-%m')) from t o")
-	result.Check(testkit.Rows())
-
 	tk.MustExec("drop table if exists t1, t2")
 	tk.MustExec("create table t1(f1 int, f2 int)")
 	tk.MustExec("create table t2(fa int, fb int)")

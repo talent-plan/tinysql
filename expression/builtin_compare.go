@@ -195,13 +195,6 @@ func (c *coalesceFunctionClass) getFunction(ctx sessionctx.Context, args []Expre
 	case types.ETDatetime, types.ETTimestamp:
 		sig = &builtinCoalesceTimeSig{bf}
 		sig.setPbCode(tipb.ScalarFuncSig_CoalesceTime)
-	case types.ETDuration:
-		bf.tp.Decimal, err = getExpressionFsp(ctx, args[0])
-		if err != nil {
-			return nil, err
-		}
-		sig = &builtinCoalesceDurationSig{bf}
-		sig.setPbCode(tipb.ScalarFuncSig_CoalesceDuration)
 	case types.ETJson:
 		sig = &builtinCoalesceJSONSig{bf}
 		sig.setPbCode(tipb.ScalarFuncSig_CoalesceJson)

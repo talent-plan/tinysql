@@ -2795,46 +2795,6 @@ func (s *testDBSuite4) TestIfExists(c *C) {
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1091|index idx_c doesn't exist"))
 }
 
-func (s *testDBSuite5) TestAddIndexForGeneratedColumn(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test_db")
-	s.tk.MustExec("create table t(y year NOT NULL DEFAULT '2155')")
-	defer s.mustExec(c, "drop table t;")
-	for i := 0; i < 50; i++ {
-		s.mustExec(c, fmt.Sprintf("insert into t values (%d)", i))
-	}
-	s.tk.MustExec("insert into t values()")
-	s.tk.MustExec("ALTER TABLE t ADD COLUMN y1 year as (y + 2)")
-	_, err := s.tk.Exec("ALTER TABLE t ADD INDEX idx_y(y1)")
-	c.Assert(err.Error(), Equals, "[ddl:8202]Cannot decode index value, because cannot convert datum from unsigned bigint to type year.")
-
-	t := s.testGetTable(c, "t")
-	for _, idx := range t.Indices() {
-		c.Assert(strings.EqualFold(idx.Meta().Name.L, "idx_c2"), IsFalse)
-	}
-	// NOTE: this test case contains a bug, it should be uncommented after the bug is fixed.
-	// TODO: Fix bug https://github.com/pingcap/tidb/issues/12181
-	//s.mustExec(c, "delete from t where y = 2155")
-	//s.mustExec(c, "alter table t add index idx_y(y1)")
-	//s.mustExec(c, "alter table t drop index idx_y")
-
-	// Fix issue 9311.
-	s.tk.MustExec("create table gcai_table (id int primary key);")
-	s.tk.MustExec("insert into gcai_table values(1);")
-	s.tk.MustExec("ALTER TABLE gcai_table ADD COLUMN d date DEFAULT '9999-12-31';")
-	s.tk.MustExec("ALTER TABLE gcai_table ADD COLUMN d1 date as (DATE_SUB(d, INTERVAL 31 DAY));")
-	s.tk.MustExec("ALTER TABLE gcai_table ADD INDEX idx(d1);")
-	s.tk.MustQuery("select * from gcai_table").Check(testkit.Rows("1 9999-12-31 9999-11-30"))
-	s.tk.MustQuery("select d1 from gcai_table use index(idx)").Check(testkit.Rows("9999-11-30"))
-
-	// The column is PKIsHandle in generated column expression.
-	s.tk.MustExec("ALTER TABLE gcai_table ADD COLUMN id1 int as (id+5);")
-	s.tk.MustExec("ALTER TABLE gcai_table ADD INDEX idx1(id1);")
-	s.tk.MustQuery("select * from gcai_table").Check(testkit.Rows("1 9999-12-31 9999-11-30 6"))
-	s.tk.MustQuery("select id1 from gcai_table use index(idx1)").Check(testkit.Rows("6"))
-
-}
-
 func (s *testDBSuite5) TestModifyGeneratedColumn(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test;")

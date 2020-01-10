@@ -162,49 +162,6 @@ func (s *testEvaluatorSuite) TestCompare(c *C) {
 	c.Assert(args[1].GetType().Tp, Equals, mysql.TypeDatetime)
 }
 
-func (s *testEvaluatorSuite) TestCoalesce(c *C) {
-	cases := []struct {
-		args     []interface{}
-		expected interface{}
-		isNil    bool
-		getErr   bool
-	}{
-		{[]interface{}{nil}, nil, true, false},
-		{[]interface{}{nil, nil}, nil, true, false},
-		{[]interface{}{nil, nil, nil}, nil, true, false},
-		{[]interface{}{nil, 1}, int64(1), false, false},
-		{[]interface{}{nil, 1.1}, float64(1.1), false, false},
-		{[]interface{}{1, 1.1}, float64(1), false, false},
-		{[]interface{}{nil, types.NewDecFromFloatForTest(123.456)}, types.NewDecFromFloatForTest(123.456), false, false},
-		{[]interface{}{1, types.NewDecFromFloatForTest(123.456)}, types.NewDecFromInt(1), false, false},
-		{[]interface{}{nil, duration}, duration, false, false},
-		{[]interface{}{nil, tm, nil}, tm, false, false},
-		{[]interface{}{nil, dt, nil}, dt, false, false},
-		{[]interface{}{tm, dt}, tm, false, false},
-	}
-
-	for _, t := range cases {
-		f, err := newFunctionForTest(s.ctx, ast.Coalesce, s.primitiveValsToConstants(t.args)...)
-		c.Assert(err, IsNil)
-
-		d, err := f.Eval(chunk.Row{})
-
-		if t.getErr {
-			c.Assert(err, NotNil)
-		} else {
-			c.Assert(err, IsNil)
-			if t.isNil {
-				c.Assert(d.Kind(), Equals, types.KindNull)
-			} else {
-				c.Assert(d.GetValue(), DeepEquals, t.expected)
-			}
-		}
-	}
-
-	_, err := funcs[ast.Length].getFunction(s.ctx, []Expression{Zero})
-	c.Assert(err, IsNil)
-}
-
 func (s *testEvaluatorSuite) TestIntervalFunc(c *C) {
 	sc := s.ctx.GetSessionVars().StmtCtx
 	origin := sc.IgnoreTruncate
