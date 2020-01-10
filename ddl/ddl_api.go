@@ -1414,95 +1414,6 @@ func (d *ddl) RecoverTable(ctx sessionctx.Context, tbInfo *model.TableInfo, sche
 	return errors.Trace(err)
 }
 
-func (d *ddl) CreateView(ctx sessionctx.Context, s *ast.CreateViewStmt) (err error) {
-	ident := ast.Ident{Name: s.ViewName.Name, Schema: s.ViewName.Schema}
-	is := d.GetInfoSchemaWithInterceptor(ctx)
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(ident.Schema)
-	}
-	oldView, err := is.TableByName(ident.Schema, ident.Name)
-	if err == nil && !s.OrReplace {
-		return infoschema.ErrTableExists.GenWithStackByArgs(ident)
-	}
-
-	var oldViewTblID int64
-	if oldView != nil {
-		if !oldView.Meta().IsView() {
-			return ErrWrongObject.GenWithStackByArgs(ident.Schema, ident.Name, "VIEW")
-		}
-		oldViewTblID = oldView.Meta().ID
-	}
-
-	if err = checkTooLongTable(ident.Name); err != nil {
-		return err
-	}
-	viewInfo, err := buildViewInfo(ctx, s)
-	if err != nil {
-		return err
-	}
-
-	cols := make([]*table.Column, len(s.Cols))
-	colObjects := make([]interface{}, 0, len(s.Cols))
-
-	for i, v := range s.Cols {
-		cols[i] = table.ToColumn(&model.ColumnInfo{
-			Name:   v,
-			ID:     int64(i),
-			Offset: i,
-			State:  model.StatePublic,
-		})
-		colObjects = append(colObjects, v)
-	}
-
-	if err = checkTooLongColumn(colObjects); err != nil {
-		return err
-	}
-	if err = checkDuplicateColumn(colObjects); err != nil {
-		return err
-	}
-
-	tbInfo, err := buildTableInfo(ctx, d, ident.Name, cols, nil)
-	if err != nil {
-		return err
-	}
-	tbInfo.View = viewInfo
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    tbInfo.ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionCreateView,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{tbInfo, s.OrReplace, oldViewTblID},
-	}
-	if v, ok := ctx.GetSessionVars().GetSystemVar("character_set_client"); ok {
-		tbInfo.Charset = v
-	}
-	if v, ok := ctx.GetSessionVars().GetSystemVar("collation_connection"); ok {
-		tbInfo.Collate = v
-	}
-	err = checkCharsetAndCollation(tbInfo.Charset, tbInfo.Collate)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = d.doDDLJob(ctx, job)
-
-	return d.callHookOnChanged(err)
-}
-
-func buildViewInfo(ctx sessionctx.Context, s *ast.CreateViewStmt) (*model.ViewInfo, error) {
-	// Always Use `format.RestoreNameBackQuotes` to restore `SELECT` statement despite the `ANSI_QUOTES` SQL Mode is enabled or not.
-	restoreFlag := format.RestoreStringSingleQuotes | format.RestoreKeyWordUppercase | format.RestoreNameBackQuotes
-	var sb strings.Builder
-	if err := s.Select.Restore(format.NewRestoreCtx(restoreFlag, &sb)); err != nil {
-		return nil, err
-	}
-
-	return &model.ViewInfo{Definer: s.Definer, Algorithm: s.Algorithm,
-		Security: s.Security, SelectStmt: sb.String(), CheckOption: s.CheckOption, Cols: nil}, nil
-}
-
 func checkCharsetAndCollation(cs string, co string) error {
 	if !charset.ValidCharsetAndCollation(cs, co) {
 		return ErrUnknownCharacterSet.GenWithStackByArgs(cs)
@@ -1661,11 +1572,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 	validSpecs, err := resolveAlterTableSpec(ctx, specs)
 	if err != nil {
 		return errors.Trace(err)
-	}
-
-	is := d.infoHandle.Get()
-	if is.TableIsView(ident.Schema, ident.Name) {
-		return ErrWrongObject.GenWithStackByArgs(ident.Schema, ident.Name, "BASE TABLE")
 	}
 
 	for _, spec := range validSpecs {
@@ -2731,39 +2637,11 @@ func (d *ddl) DropTable(ctx sessionctx.Context, ti ast.Ident) (err error) {
 		return errors.Trace(err)
 	}
 
-	if tb.Meta().IsView() {
-		return infoschema.ErrTableNotExists.GenWithStackByArgs(ti.Schema, ti.Name)
-	}
-
 	job := &model.Job{
 		SchemaID:   schema.ID,
 		TableID:    tb.Meta().ID,
 		SchemaName: schema.Name.L,
 		Type:       model.ActionDropTable,
-		BinlogInfo: &model.HistoryInfo{},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-// DropView will proceed even if some view in the list does not exists.
-func (d *ddl) DropView(ctx sessionctx.Context, ti ast.Ident) (err error) {
-	schema, tb, err := d.getSchemaAndTableByIdent(ctx, ti)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if !tb.Meta().IsView() {
-		return ErrWrongObject.GenWithStackByArgs(ti.Schema, ti.Name, "VIEW")
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    tb.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionDropView,
 		BinlogInfo: &model.HistoryInfo{},
 	}
 

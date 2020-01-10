@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta/autoid"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -105,8 +104,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowColumns(ctx)
 	case ast.ShowCreateTable:
 		return e.fetchShowCreateTable()
-	case ast.ShowCreateView:
-		return e.fetchShowCreateView()
 	case ast.ShowCreateDatabase:
 		return e.fetchShowCreateDatabase()
 	case ast.ShowDatabases:
@@ -215,11 +212,7 @@ func (e *ShowExec) fetchShowTables() error {
 	var tableTypes = make(map[string]string)
 	for _, v := range e.is.SchemaTables(e.DBName) {
 		tableNames = append(tableNames, v.Meta().Name.O)
-		if v.Meta().IsView() {
-			tableTypes[v.Meta().Name.O] = "VIEW"
-		} else {
-			tableTypes[v.Meta().Name.O] = "BASE TABLE"
-		}
+		tableTypes[v.Meta().Name.O] = "BASE TABLE"
 	}
 	sort.Strings(tableNames)
 	for _, v := range tableNames {
@@ -266,23 +259,6 @@ func (e *ShowExec) fetchShowColumns(ctx context.Context) error {
 	}
 
 	cols := tb.Cols()
-	if tb.Meta().IsView() {
-		// Because view's undertable's column could change or recreate, so view's column type may change overtime.
-		// To avoid this situation we need to generate a logical plan and extract current column types from Schema.
-		planBuilder := plannercore.NewPlanBuilder(e.ctx, e.is, &plannercore.BlockHintProcessor{})
-		viewLogicalPlan, err := planBuilder.BuildDataSourceFromView(ctx, e.DBName, tb.Meta())
-		if err != nil {
-			return err
-		}
-		viewSchema := viewLogicalPlan.Schema()
-		viewOutputNames := viewLogicalPlan.OutputNames()
-		for _, col := range cols {
-			idx := expression.FindFieldNameIdxByColName(viewOutputNames, col.Name.L)
-			if idx >= 0 {
-				col.FieldType = *viewSchema.Columns[idx].GetType()
-			}
-		}
-	}
 	for _, col := range cols {
 		if e.Column != nil && e.Column.Name.L != col.Name.L {
 			continue
@@ -519,11 +495,6 @@ func escape(cis model.CIStr, sqlMode mysql.SQLMode) string {
 
 // ConstructResultOfShowCreateTable constructs the result for show create table.
 func ConstructResultOfShowCreateTable(ctx sessionctx.Context, tableInfo *model.TableInfo, allocator autoid.Allocator, buf *bytes.Buffer) (err error) {
-	if tableInfo.IsView() {
-		fetchShowCreateTable4View(ctx, tableInfo, buf)
-		return nil
-	}
-
 	tblCharset := tableInfo.Charset
 	if len(tblCharset) == 0 {
 		tblCharset = mysql.DefaultCharset
@@ -710,57 +681,15 @@ func (e *ShowExec) fetchShowCreateTable() error {
 		return errors.Trace(err)
 	}
 
-	tableInfo := tb.Meta()
 	allocator := tb.Allocator(e.ctx)
 	var buf bytes.Buffer
 	// TODO: let the result more like MySQL.
 	if err = ConstructResultOfShowCreateTable(e.ctx, tb.Meta(), allocator, &buf); err != nil {
 		return err
 	}
-	if tableInfo.IsView() {
-		e.appendRow([]interface{}{tableInfo.Name.O, buf.String(), tableInfo.Charset, tableInfo.Collate})
-		return nil
-	}
 
 	e.appendRow([]interface{}{tb.Meta().Name.O, buf.String()})
 	return nil
-}
-
-func (e *ShowExec) fetchShowCreateView() error {
-	db, ok := e.is.SchemaByName(e.DBName)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(e.DBName.O)
-	}
-
-	tb, err := e.getTable()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if !tb.Meta().IsView() {
-		return ErrWrongObject.GenWithStackByArgs(db.Name.O, tb.Meta().Name.O, "VIEW")
-	}
-
-	var buf bytes.Buffer
-	fetchShowCreateTable4View(e.ctx, tb.Meta(), &buf)
-	e.appendRow([]interface{}{tb.Meta().Name.O, buf.String(), tb.Meta().Charset, tb.Meta().Collate})
-	return nil
-}
-
-func fetchShowCreateTable4View(ctx sessionctx.Context, tb *model.TableInfo, buf *bytes.Buffer) {
-	sqlMode := ctx.GetSessionVars().SQLMode
-
-	fmt.Fprintf(buf, "CREATE ALGORITHM=%s ", tb.View.Algorithm.String())
-	fmt.Fprintf(buf, "DEFINER=%s@%s ", escape(model.NewCIStr(tb.View.Definer.Username), sqlMode), escape(model.NewCIStr(tb.View.Definer.Hostname), sqlMode))
-	fmt.Fprintf(buf, "SQL SECURITY %s ", tb.View.Security.String())
-	fmt.Fprintf(buf, "VIEW %s (", escape(tb.Name, sqlMode))
-	for i, col := range tb.Columns {
-		fmt.Fprintf(buf, "%s", escape(col.Name, sqlMode))
-		if i < len(tb.Columns)-1 {
-			fmt.Fprintf(buf, ", ")
-		}
-	}
-	fmt.Fprintf(buf, ") AS %s", tb.View.SelectStmt)
 }
 
 func appendPartitionInfo(partitionInfo *model.PartitionInfo, buf *bytes.Buffer) {

@@ -264,13 +264,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec("delete from t")
 	tk.MustExec("insert into t (b) values(default(a))")
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 1"))
-
-	tk.MustExec("create view v as select * from t")
-	_, err = tk.Exec("insert into v values(1,2)")
-	c.Assert(err.Error(), Equals, "insert into view v is not supported now.")
-	_, err = tk.Exec("replace into v values(1,2)")
-	c.Assert(err.Error(), Equals, "replace into view v is not supported now.")
-	tk.MustExec("drop view v")
 }
 
 func (s *testSuite4) TestInsertAutoInc(c *C) {
@@ -1266,11 +1259,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	_, err = tk.Exec("update t set c1 = 2.0;")
 	c.Assert(types.ErrWarnDataOutOfRange.Equal(err), IsTrue)
 
-	tk.MustExec("create view v as select * from t")
-	_, err = tk.Exec("update v set a = '2000-11-11'")
-	c.Assert(err.Error(), Equals, "update view v is not supported now.")
-	tk.MustExec("drop view v")
-
 	tk.MustExec("drop table if exists t1, t2")
 	tk.MustExec("create table t1(a int, b int, c int, d int, e int, index idx(a))")
 	tk.MustExec("create table t2(a int, b int, c int)")
@@ -1459,11 +1447,6 @@ func (s *testSuite) TestDelete(c *C) {
 
 	tk.MustExec(`delete from delete_test ;`)
 	tk.CheckExecResult(1, 0)
-
-	tk.MustExec("create view v as select * from delete_test")
-	_, err = tk.Exec("delete from v where name = 'aaa'")
-	c.Assert(err.Error(), Equals, "delete view v is not supported now.")
-	tk.MustExec("drop view v")
 }
 
 func (s *testSuite4) TestPartitionedTableDelete(c *C) {

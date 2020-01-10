@@ -96,9 +96,7 @@ func (s *testSessionSuiteBase) TearDownTest(c *C) {
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
 		tableType := tb[1]
-		if tableType == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else if tableType == "BASE TABLE" {
+		if tableType == "BASE TABLE" {
 			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 		} else {
 			panic(fmt.Sprintf("Unexpected table '%s' with type '%s'.", tableName, tableType))

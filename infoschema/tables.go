@@ -59,7 +59,6 @@ const (
 	tableTablePrivileges                    = "TABLE_PRIVILEGES"
 	tableColumnPrivileges                   = "COLUMN_PRIVILEGES"
 	tableEngines                            = "ENGINES"
-	tableViews                              = "VIEWS"
 	tableRoutines                           = "ROUTINES"
 	tableParameters                         = "PARAMETERS"
 	tableEvents                             = "EVENTS"
@@ -99,7 +98,6 @@ var tableIDMap = map[string]int64{
 	tableTablePrivileges:                    autoid.InformationSchemaDBID + 20,
 	tableColumnPrivileges:                   autoid.InformationSchemaDBID + 21,
 	tableEngines:                            autoid.InformationSchemaDBID + 22,
-	tableViews:                              autoid.InformationSchemaDBID + 23,
 	tableRoutines:                           autoid.InformationSchemaDBID + 24,
 	tableParameters:                         autoid.InformationSchemaDBID + 25,
 	tableEvents:                             autoid.InformationSchemaDBID + 26,
@@ -427,19 +425,6 @@ var tableEnginesCols = []columnInfo{
 	{"TRANSACTIONS", mysql.TypeVarchar, 3, 0, nil, nil},
 	{"XA", mysql.TypeVarchar, 3, 0, nil, nil},
 	{"SAVEPOINTS", mysql.TypeVarchar, 3, 0, nil, nil},
-}
-
-var tableViewsCols = []columnInfo{
-	{"TABLE_CATALOG", mysql.TypeVarchar, 512, mysql.NotNullFlag, nil, nil},
-	{"TABLE_SCHEMA", mysql.TypeVarchar, 64, mysql.NotNullFlag, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, mysql.NotNullFlag, nil, nil},
-	{"VIEW_DEFINITION", mysql.TypeLongBlob, 0, mysql.NotNullFlag, nil, nil},
-	{"CHECK_OPTION", mysql.TypeVarchar, 8, mysql.NotNullFlag, nil, nil},
-	{"IS_UPDATABLE", mysql.TypeVarchar, 3, mysql.NotNullFlag, nil, nil},
-	{"DEFINER", mysql.TypeVarchar, 77, mysql.NotNullFlag, nil, nil},
-	{"SECURITY_TYPE", mysql.TypeVarchar, 7, mysql.NotNullFlag, nil, nil},
-	{"CHARACTER_SET_CLIENT", mysql.TypeVarchar, 32, mysql.NotNullFlag, nil, nil},
-	{"COLLATION_CONNECTION", mysql.TypeVarchar, 32, mysql.NotNullFlag, nil, nil},
 }
 
 var tableRoutinesCols = []columnInfo{
@@ -914,40 +899,6 @@ func getAutoIncrementID(ctx sessionctx.Context, schema *model.DBInfo, tblInfo *m
 	return tbl.Allocator(ctx).Base() + 1, nil
 }
 
-func dataForViews(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Datum, error) {
-	var rows [][]types.Datum
-	for _, schema := range schemas {
-		for _, table := range schema.Tables {
-			if !table.IsView() {
-				continue
-			}
-			collation := table.Collate
-			charset := table.Charset
-			if collation == "" {
-				collation = mysql.DefaultCollationName
-			}
-			if charset == "" {
-				charset = mysql.DefaultCharset
-			}
-
-			record := types.MakeDatums(
-				catalogVal,                      // TABLE_CATALOG
-				schema.Name.O,                   // TABLE_SCHEMA
-				table.Name.O,                    // TABLE_NAME
-				table.View.SelectStmt,           // VIEW_DEFINITION
-				table.View.CheckOption.String(), // CHECK_OPTION
-				"NO",                            // IS_UPDATABLE
-				table.View.Definer.String(),     // DEFINER
-				table.View.Security.String(),    // SECURITY_TYPE
-				charset,                         // CHARACTER_SET_CLIENT
-				collation,                       // COLLATION_CONNECTION
-			)
-			rows = append(rows, record)
-		}
-	}
-	return rows, nil
-}
-
 func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Datum, error) {
 	tableRowsMap, colLengthMap, err := tableStatsCache.get(ctx)
 	if err != nil {
@@ -969,91 +920,62 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 
 			createOptions := ""
 
-			if !table.IsView() {
-				if table.GetPartitionInfo() != nil {
-					createOptions = "partitioned"
-				}
-				var autoIncID interface{}
-				hasAutoIncID, _ := HasAutoIncrementColumn(table)
-				if hasAutoIncID {
-					autoIncID, err = getAutoIncrementID(ctx, schema, table)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				var rowCount, dataLength, indexLength uint64
-				if table.GetPartitionInfo() == nil {
-					rowCount = tableRowsMap[table.ID]
-					dataLength, indexLength = getDataAndIndexLength(table, table.ID, rowCount, colLengthMap)
-				} else {
-					for _, pi := range table.GetPartitionInfo().Definitions {
-						rowCount += tableRowsMap[pi.ID]
-						parDataLen, parIndexLen := getDataAndIndexLength(table, pi.ID, tableRowsMap[pi.ID], colLengthMap)
-						dataLength += parDataLen
-						indexLength += parIndexLen
-					}
-				}
-				avgRowLength := uint64(0)
-				if rowCount != 0 {
-					avgRowLength = dataLength / rowCount
-				}
-
-				shardingInfo := GetShardingInfo(schema, table)
-				record := types.MakeDatums(
-					catalogVal,    // TABLE_CATALOG
-					schema.Name.O, // TABLE_SCHEMA
-					table.Name.O,  // TABLE_NAME
-					"BASE TABLE",  // TABLE_TYPE
-					"InnoDB",      // ENGINE
-					uint64(10),    // VERSION
-					"Compact",     // ROW_FORMAT
-					rowCount,      // TABLE_ROWS
-					avgRowLength,  // AVG_ROW_LENGTH
-					dataLength,    // DATA_LENGTH
-					uint64(0),     // MAX_DATA_LENGTH
-					indexLength,   // INDEX_LENGTH
-					uint64(0),     // DATA_FREE
-					autoIncID,     // AUTO_INCREMENT
-					createTime,    // CREATE_TIME
-					nil,           // UPDATE_TIME
-					nil,           // CHECK_TIME
-					collation,     // TABLE_COLLATION
-					nil,           // CHECKSUM
-					createOptions, // CREATE_OPTIONS
-					table.Comment, // TABLE_COMMENT
-					table.ID,      // TIDB_TABLE_ID
-					shardingInfo,  // TIDB_ROW_ID_SHARDING_INFO
-				)
-				rows = append(rows, record)
-			} else {
-				record := types.MakeDatums(
-					catalogVal,    // TABLE_CATALOG
-					schema.Name.O, // TABLE_SCHEMA
-					table.Name.O,  // TABLE_NAME
-					"VIEW",        // TABLE_TYPE
-					nil,           // ENGINE
-					nil,           // VERSION
-					nil,           // ROW_FORMAT
-					nil,           // TABLE_ROWS
-					nil,           // AVG_ROW_LENGTH
-					nil,           // DATA_LENGTH
-					nil,           // MAX_DATA_LENGTH
-					nil,           // INDEX_LENGTH
-					nil,           // DATA_FREE
-					nil,           // AUTO_INCREMENT
-					createTime,    // CREATE_TIME
-					nil,           // UPDATE_TIME
-					nil,           // CHECK_TIME
-					nil,           // TABLE_COLLATION
-					nil,           // CHECKSUM
-					nil,           // CREATE_OPTIONS
-					"VIEW",        // TABLE_COMMENT
-					table.ID,      // TIDB_TABLE_ID
-					nil,           // TIDB_ROW_ID_SHARDING_INFO
-				)
-				rows = append(rows, record)
+			if table.GetPartitionInfo() != nil {
+				createOptions = "partitioned"
 			}
+			var autoIncID interface{}
+			hasAutoIncID, _ := HasAutoIncrementColumn(table)
+			if hasAutoIncID {
+				autoIncID, err = getAutoIncrementID(ctx, schema, table)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			var rowCount, dataLength, indexLength uint64
+			if table.GetPartitionInfo() == nil {
+				rowCount = tableRowsMap[table.ID]
+				dataLength, indexLength = getDataAndIndexLength(table, table.ID, rowCount, colLengthMap)
+			} else {
+				for _, pi := range table.GetPartitionInfo().Definitions {
+					rowCount += tableRowsMap[pi.ID]
+					parDataLen, parIndexLen := getDataAndIndexLength(table, pi.ID, tableRowsMap[pi.ID], colLengthMap)
+					dataLength += parDataLen
+					indexLength += parIndexLen
+				}
+			}
+			avgRowLength := uint64(0)
+			if rowCount != 0 {
+				avgRowLength = dataLength / rowCount
+			}
+
+			shardingInfo := GetShardingInfo(schema, table)
+			record := types.MakeDatums(
+				catalogVal,    // TABLE_CATALOG
+				schema.Name.O, // TABLE_SCHEMA
+				table.Name.O,  // TABLE_NAME
+				"BASE TABLE",  // TABLE_TYPE
+				"InnoDB",      // ENGINE
+				uint64(10),    // VERSION
+				"Compact",     // ROW_FORMAT
+				rowCount,      // TABLE_ROWS
+				avgRowLength,  // AVG_ROW_LENGTH
+				dataLength,    // DATA_LENGTH
+				uint64(0),     // MAX_DATA_LENGTH
+				indexLength,   // INDEX_LENGTH
+				uint64(0),     // DATA_FREE
+				autoIncID,     // AUTO_INCREMENT
+				createTime,    // CREATE_TIME
+				nil,           // UPDATE_TIME
+				nil,           // CHECK_TIME
+				collation,     // TABLE_COLLATION
+				nil,           // CHECKSUM
+				createOptions, // CREATE_OPTIONS
+				table.Comment, // TABLE_COMMENT
+				table.ID,      // TIDB_TABLE_ID
+				shardingInfo,  // TIDB_ROW_ID_SHARDING_INFO
+			)
+			rows = append(rows, record)
 		}
 	}
 	return rows, nil
@@ -1067,7 +989,7 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 // The returned nil indicates that sharding information is not suitable for the table(for example, when the table is a View).
 // This function is exported for unit test.
 func GetShardingInfo(dbInfo *model.DBInfo, tableInfo *model.TableInfo) interface{} {
-	if dbInfo == nil || tableInfo == nil || tableInfo.IsView() || util.IsMemOrSysDB(dbInfo.Name.L) {
+	if dbInfo == nil || tableInfo == nil || util.IsMemOrSysDB(dbInfo.Name.L) {
 		return nil
 	}
 	shardingInfo := "NOT_SHARDED"
@@ -1559,7 +1481,6 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableTablePrivileges:                    tableTablePrivilegesCols,
 	tableColumnPrivileges:                   tableColumnPrivilegesCols,
 	tableEngines:                            tableEnginesCols,
-	tableViews:                              tableViewsCols,
 	tableRoutines:                           tableRoutinesCols,
 	tableParameters:                         tableParametersCols,
 	tableEvents:                             tableEventsCols,
@@ -1643,8 +1564,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForUserPrivileges(ctx)
 	case tableEngines:
 		fullRows = dataForEngines()
-	case tableViews:
-		fullRows, err = dataForViews(ctx, dbs)
 	case tableRoutines:
 	// TODO: Fill the following tables.
 	case tableSchemaPrivileges:

@@ -175,11 +175,6 @@ func (s *testAnalyzeSuite) TestAnalyze(c *C) {
 	testKit.MustExec("create table t3 (a int, b int)")
 	testKit.MustExec("create index a on t3 (a)")
 
-	testKit.MustExec("create view v as select * from t")
-	_, err = testKit.Exec("analyze table v")
-	c.Assert(err.Error(), Equals, "analyze v is not supported now.")
-	testKit.MustExec("drop view v")
-
 	var input, output []string
 	s.testData.GetTestCases(c, &input, &output)
 

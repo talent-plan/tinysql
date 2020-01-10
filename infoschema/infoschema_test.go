@@ -160,7 +160,6 @@ func (*testSuite) TestT(c *C) {
 
 	c.Assert(is.TableExists(dbName, tbName), IsTrue)
 	c.Assert(is.TableExists(dbName, noexist), IsFalse)
-	c.Assert(is.TableIsView(dbName, tbName), IsFalse)
 
 	tb, ok := is.TableByID(tbID)
 	c.Assert(ok, IsTrue)
@@ -303,7 +302,6 @@ func (*testSuite) TestInfoTables(c *C) {
 		"TRIGGERS",
 		"USER_PRIVILEGES",
 		"ENGINES",
-		"VIEWS",
 		"ROUTINES",
 		"SCHEMA_PRIVILEGES",
 		"COLUMN_PRIVILEGES",

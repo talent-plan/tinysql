@@ -59,7 +59,6 @@ func (s testErrorSuite) TestError(c *C) {
 		ErrSpecificAccessDenied,
 		ErrViewNoExplain,
 		ErrWrongValueCountOnRow,
-		ErrViewInvalid,
 		ErrNoSuchThread,
 		ErrUnknownColumn,
 		ErrCartesianProductUnsupported,

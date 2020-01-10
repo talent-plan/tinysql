@@ -254,7 +254,7 @@ func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) 
 		ver, err = rollingbackDropColumn(t, job)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = rollingbackDropIndex(t, job)
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable:
 		err = rollingbackDropTableOrView(t, job)
 	case model.ActionDropSchema:
 		err = rollingbackDropSchema(t, job)

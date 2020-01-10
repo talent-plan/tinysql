@@ -188,28 +188,6 @@ func (s *testSuite6) TestCreateDropTable(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *testSuite6) TestCreateDropView(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create or replace view drop_test as select 1,2")
-
-	_, err := tk.Exec("drop table drop_test")
-	c.Assert(err.Error(), Equals, "[schema:1051]Unknown table 'test.drop_test'")
-
-	_, err = tk.Exec("drop view if exists drop_test")
-	c.Assert(err, IsNil)
-
-	_, err = tk.Exec("drop view mysql.gc_delete_range")
-	c.Assert(err.Error(), Equals, "Drop tidb system table 'mysql.gc_delete_range' is forbidden")
-
-	_, err = tk.Exec("drop view drop_test")
-	c.Assert(err.Error(), Equals, "[schema:1051]Unknown table 'test.drop_test'")
-
-	tk.MustExec("create table t_v(a int)")
-	_, err = tk.Exec("drop view t_v")
-	c.Assert(err.Error(), Equals, "[ddl:1347]'test.t_v' is not VIEW")
-}
-
 func (s *testSuite6) TestCreateDropIndex(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -238,10 +216,6 @@ func (s *testSuite6) TestAlterTableAddColumn(c *C) {
 	r.Close()
 	tk.MustExec("alter table alter_test add column c3 varchar(50) default 'CURRENT_TIMESTAMP'")
 	tk.MustQuery("select c3 from alter_test").Check(testkit.Rows("CURRENT_TIMESTAMP"))
-	tk.MustExec("create or replace view alter_view as select c1,c2 from alter_test")
-	_, err = tk.Exec("alter table alter_view add column c4 varchar(50)")
-	c.Assert(err.Error(), Equals, ddl.ErrWrongObject.GenWithStackByArgs("test", "alter_view", "BASE TABLE").Error())
-	tk.MustExec("drop view alter_view")
 }
 
 func (s *testSuite6) TestAddNotNullColumnNoDefault(c *C) {
@@ -287,10 +261,6 @@ func (s *testSuite6) TestAlterTableModifyColumn(c *C) {
 	createSQL := result.Rows()[0][1]
 	expected := "CREATE TABLE `mc` (\n  `c1` bigint(20) DEFAULT NULL,\n  `c2` text DEFAULT NULL,\n  `c3` bit(1) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
 	c.Assert(createSQL, Equals, expected)
-	tk.MustExec("create or replace view alter_view as select c1,c2 from mc")
-	_, err = tk.Exec("alter table alter_view modify column c2 text")
-	c.Assert(err.Error(), Equals, ddl.ErrWrongObject.GenWithStackByArgs("test", "alter_view", "BASE TABLE").Error())
-	tk.MustExec("drop view alter_view")
 
 	// test multiple collate modification in column.
 	tk.MustExec("drop table if exists modify_column_multiple_collate")

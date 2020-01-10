@@ -79,9 +79,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.flag |= inCreateOrDropTable
 		p.resolveCreateTableStmt(node)
 		p.checkCreateTableGrammar(node)
-	case *ast.CreateViewStmt:
-		p.flag |= inCreateOrDropTable
-		p.checkCreateViewGrammar(node)
 	case *ast.DropTableStmt:
 		p.flag |= inCreateOrDropTable
 		p.checkDropTableGrammar(node)
@@ -124,8 +121,6 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		p.flag &= ^inCreateOrDropTable
 		p.checkAutoIncrement(x)
 		p.checkContainDotColumn(x)
-	case *ast.CreateViewStmt:
-		p.flag &= ^inCreateOrDropTable
 	case *ast.DropTableStmt, *ast.AlterTableStmt, *ast.RenameTableStmt:
 		p.flag &= ^inCreateOrDropTable
 	case *ast.ExplainStmt:
@@ -373,20 +368,6 @@ func (p *preprocessor) checkCreateTableGrammar(stmt *ast.CreateTableStmt) {
 	} else if len(stmt.Cols) == 0 && stmt.ReferTable == nil {
 		p.err = ddl.ErrTableMustHaveColumns
 		return
-	}
-}
-
-func (p *preprocessor) checkCreateViewGrammar(stmt *ast.CreateViewStmt) {
-	vName := stmt.ViewName.Name.String()
-	if isIncorrectName(vName) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(vName)
-		return
-	}
-	for _, col := range stmt.Cols {
-		if isIncorrectName(col.String()) {
-			p.err = ddl.ErrWrongColumnName.GenWithStackByArgs(col)
-			return
-		}
 	}
 }
 

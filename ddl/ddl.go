@@ -123,8 +123,6 @@ var (
 	// It's exported for testing.
 	ErrUnsupportedModifyPrimaryKey = terror.ClassDDL.New(mysql.ErrUnsupportedDDLOperation, fmt.Sprintf(mysql.MySQLErrName[mysql.ErrUnsupportedDDLOperation], "%s primary key"))
 
-	// ErrColumnBadNull returns for a bad null value.
-	ErrColumnBadNull = terror.ClassDDL.New(mysql.ErrBadNull, mysql.MySQLErrName[mysql.ErrBadNull])
 	// ErrBadField forbids to refer to unknown column.
 	ErrBadField = terror.ClassDDL.New(mysql.ErrBadField, mysql.MySQLErrName[mysql.ErrBadField])
 	// ErrCantRemoveAllFields returns for deleting all columns.
@@ -149,8 +147,6 @@ var (
 	ErrWrongNameForIndex = terror.ClassDDL.New(mysql.ErrWrongNameForIndex, mysql.MySQLErrName[mysql.ErrWrongNameForIndex])
 	// ErrUnknownCharacterSet returns unknown character set.
 	ErrUnknownCharacterSet = terror.ClassDDL.New(mysql.ErrUnknownCharacterSet, mysql.MySQLErrName[mysql.ErrUnknownCharacterSet])
-	// ErrUnknownCollation returns unknown collation.
-	ErrUnknownCollation = terror.ClassDDL.New(mysql.ErrUnknownCollation, mysql.MySQLErrName[mysql.ErrUnknownCollation])
 	// ErrCollationCharsetMismatch returns when collation not match the charset.
 	ErrCollationCharsetMismatch = terror.ClassDDL.New(mysql.ErrCollationCharsetMismatch, mysql.MySQLErrName[mysql.ErrCollationCharsetMismatch])
 	// ErrConflictingDeclarations return conflict declarations.
@@ -162,22 +158,14 @@ var (
 
 	// ErrPartitionMgmtOnNonpartitioned returns it's not a partition table.
 	ErrPartitionMgmtOnNonpartitioned = terror.ClassDDL.New(mysql.ErrPartitionMgmtOnNonpartitioned, mysql.MySQLErrName[mysql.ErrPartitionMgmtOnNonpartitioned])
-	// ErrUniqueKeyNeedAllFieldsInPf returns must include all columns in the table's partitioning function.
-	ErrUniqueKeyNeedAllFieldsInPf = terror.ClassDDL.New(mysql.ErrUniqueKeyNeedAllFieldsInPf, mysql.MySQLErrName[mysql.ErrUniqueKeyNeedAllFieldsInPf])
 	// ErrWarnDataTruncated returns data truncated error.
 	ErrWarnDataTruncated = terror.ClassDDL.New(mysql.WarnDataTruncated, mysql.MySQLErrName[mysql.WarnDataTruncated])
-	// ErrViewWrongList returns create view must include all columns in the select clause
-	ErrViewWrongList = terror.ClassDDL.New(mysql.ErrViewWrongList, mysql.MySQLErrName[mysql.ErrViewWrongList])
 	// ErrAlterOperationNotSupported returns when alter operations is not supported.
 	ErrAlterOperationNotSupported = terror.ClassDDL.New(mysql.ErrAlterOperationNotSupportedReason, mysql.MySQLErrName[mysql.ErrAlterOperationNotSupportedReason])
 	// ErrWrongObject returns for wrong object.
 	ErrWrongObject = terror.ClassDDL.New(mysql.ErrWrongObject, mysql.MySQLErrName[mysql.ErrWrongObject])
 	// ErrTableCantHandleFt returns FULLTEXT keys are not supported by table type
 	ErrTableCantHandleFt = terror.ClassDDL.New(mysql.ErrTableCantHandleFt, mysql.MySQLErrName[mysql.ErrTableCantHandleFt])
-	// ErrFieldNotFoundPart returns an error when 'partition by columns' are not found in table columns.
-	ErrFieldNotFoundPart = terror.ClassDDL.New(mysql.ErrFieldNotFoundPart, mysql.MySQLErrName[mysql.ErrFieldNotFoundPart])
-	// ErrWrongTypeColumnValue returns 'Partition column values of incorrect type'
-	ErrWrongTypeColumnValue = terror.ClassDDL.New(mysql.ErrWrongTypeColumnValue, mysql.MySQLErrName[mysql.ErrWrongTypeColumnValue])
 )
 
 // DDL is responsible for updating schema in data store and maintaining in-memory InfoSchema cache.
@@ -186,11 +174,9 @@ type DDL interface {
 	AlterSchema(ctx sessionctx.Context, stmt *ast.AlterDatabaseStmt) error
 	DropSchema(ctx sessionctx.Context, schema model.CIStr) error
 	CreateTable(ctx sessionctx.Context, stmt *ast.CreateTableStmt) error
-	CreateView(ctx sessionctx.Context, stmt *ast.CreateViewStmt) error
 	CreateTableWithLike(ctx sessionctx.Context, ident, referIdent ast.Ident, ifNotExists bool) error
 	DropTable(ctx sessionctx.Context, tableIdent ast.Ident) (err error)
 	RecoverTable(ctx sessionctx.Context, tbInfo *model.TableInfo, schemaID, autoID, dropJobID int64, snapshotTS uint64) (err error)
-	DropView(ctx sessionctx.Context, tableIdent ast.Ident) (err error)
 	CreateIndex(ctx sessionctx.Context, tableIdent ast.Ident, keyType ast.IndexKeyType, indexName model.CIStr,
 		columnNames []*ast.IndexPartSpecification, indexOption *ast.IndexOption, ifNotExists bool) error
 	DropIndex(ctx sessionctx.Context, tableIdent ast.Ident, indexName model.CIStr, ifExists bool) error

@@ -500,9 +500,7 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onDropSchema(t, job)
 	case model.ActionCreateTable:
 		ver, err = onCreateTable(d, t, job)
-	case model.ActionCreateView:
-		ver, err = onCreateView(d, t, job)
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable:
 		ver, err = onDropTableOrView(t, job)
 	case model.ActionAddColumn:
 		ver, err = onAddColumn(d, t, job)
