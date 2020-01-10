@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/table"
@@ -176,19 +175,11 @@ func (s *testIntegrationSuite3) TestCreateTableIfNotExists(c *C) {
 	tk.MustExec("create table ct1(a bigint)")
 	tk.MustExec("create table ct(a bigint)")
 
-	// Test duplicate create-table with `LIKE` clause
-	tk.MustExec("create table if not exists ct like ct1;")
+	// Test duplicate create-table without `LIKE` clause
+	tk.MustExec("create table if not exists ct(b bigint, c varchar(60));")
 	warnings := tk.Se.GetSessionVars().StmtCtx.GetWarnings()
 	c.Assert(len(warnings), GreaterEqual, 1)
 	lastWarn := warnings[len(warnings)-1]
-	c.Assert(terror.ErrorEqual(infoschema.ErrTableExists, lastWarn.Err), IsTrue, Commentf("err %v", lastWarn.Err))
-	c.Assert(lastWarn.Level, Equals, stmtctx.WarnLevelNote)
-
-	// Test duplicate create-table without `LIKE` clause
-	tk.MustExec("create table if not exists ct(b bigint, c varchar(60));")
-	warnings = tk.Se.GetSessionVars().StmtCtx.GetWarnings()
-	c.Assert(len(warnings), GreaterEqual, 1)
-	lastWarn = warnings[len(warnings)-1]
 	c.Assert(terror.ErrorEqual(infoschema.ErrTableExists, lastWarn.Err), IsTrue)
 }
 
@@ -1646,7 +1637,7 @@ func (s *testIntegrationSuite4) TestInsertIntoGeneratedColumnWithDefaultExpr(c *
 
 	// generated columns with index
 	tk.MustExec("drop table if exists t2")
-	tk.MustExec("create table t2 like t1")
+	tk.MustExec("create table t2 (a int, b int as (-a) virtual, c int as (-a) stored)")
 	tk.MustExec("alter table t2 add index idx1(a)")
 	tk.MustExec("alter table t2 add index idx2(b)")
 	tk.MustExec("insert into t2 values (1, default, default)")
