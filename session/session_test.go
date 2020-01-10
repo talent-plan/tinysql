@@ -574,16 +574,6 @@ func (s *testSessionSuite) TestRetryForCurrentTxn(c *C) {
 	tk.MustQuery("select * from history").Check(testkit.Rows("2"))
 }
 
-// TestTruncateAlloc tests that the auto_increment ID does not reuse the old table's allocator.
-func (s *testSessionSuite) TestTruncateAlloc(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table truncate_id (a int primary key auto_increment)")
-	tk.MustExec("insert truncate_id values (), (), (), (), (), (), (), (), (), ()")
-	tk.MustExec("truncate table truncate_id")
-	tk.MustExec("insert truncate_id values (), (), (), (), (), (), (), (), (), ()")
-	tk.MustQuery("select a from truncate_id where a > 11").Check(testkit.Rows())
-}
-
 func (s *testSessionSuite) TestString(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("select 1")

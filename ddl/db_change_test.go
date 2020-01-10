@@ -1050,18 +1050,6 @@ func (s *testStateChangeSuite) TestParallelAlterSchemaCharsetAndCollate(c *C) {
 	tk.MustQuery(sql).Check(testkit.Rows("utf8mb4 utf8mb4_general_ci"))
 }
 
-// TestParallelTruncateTableAndAddColumn tests add column when truncate table.
-func (s *testStateChangeSuite) TestParallelTruncateTableAndAddColumn(c *C) {
-	sql1 := "truncate table t"
-	sql2 := "alter table t add column c3 int"
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2, NotNil)
-		c.Assert(err2.Error(), Equals, "[domain:8028]Information schema is changed during the execution of the statement(for example, table definition may be updated by other DDL ran in parallel). If you see this error often, try increasing `tidb_max_delta_schema_count`. [try again later]")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
 // TestParallelFlashbackTable tests parallel flashback table.
 func (s *serialTestStateChangeSuite) TestParallelFlashbackTable(c *C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange", `return(true)`), IsNil)
@@ -1112,7 +1100,7 @@ func getDDLJobStartTime(tk *testkit.TestKit, dbName, tblName string) string {
 	re := tk.MustQuery("admin show ddl jobs 100")
 	rows := re.Rows()
 	for _, row := range rows {
-		if row[1] == dbName && row[2] == tblName && (row[3] == "drop table" || row[3] == "truncate table") {
+		if row[1] == dbName && row[2] == tblName && (row[3] == "drop table") {
 			return row[8].(string)
 		}
 	}

@@ -105,8 +105,6 @@ func (s *testFailDBSuite) TestHalfwayCancelOperations(c *C) {
 	c.Assert(err, IsNil)
 	_, err = s.se.Execute(context.Background(), "insert into t values(1)")
 	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "truncate table t")
-	c.Assert(err, NotNil)
 	// Make sure that the table's data has not been deleted.
 	rs, err := s.se.Execute(context.Background(), "select count(*) from t")
 	c.Assert(err, IsNil)
@@ -285,13 +283,6 @@ func (s *testFailDBSuite) TestGenGlobalIDFail(c *C) {
 	tk.MustExec("use gen_global_id_fail")
 
 	sql1 := "create table t1(a bigint PRIMARY KEY, b int)"
-	sql2 := `create table t2(a bigint PRIMARY KEY, b int) partition by range (a) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than maxvalue)`
-	sql3 := `truncate table t1`
-	sql4 := `truncate table t2`
 
 	testcases := []struct {
 		sql     string
@@ -299,13 +290,7 @@ func (s *testFailDBSuite) TestGenGlobalIDFail(c *C) {
 		mockErr bool
 	}{
 		{sql1, "t1", true},
-		{sql2, "t2", true},
 		{sql1, "t1", false},
-		{sql2, "t2", false},
-		{sql3, "t1", true},
-		{sql4, "t2", true},
-		{sql3, "t1", false},
-		{sql4, "t2", false},
 	}
 
 	for idx, test := range testcases {

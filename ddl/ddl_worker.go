@@ -276,7 +276,7 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 
 			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
 			err = w.deleteRange(job)
-		case model.ActionDropSchema, model.ActionDropTable, model.ActionTruncateTable, model.ActionDropIndex, model.ActionDropPrimaryKey:
+		case model.ActionDropSchema, model.ActionDropTable, model.ActionDropIndex, model.ActionDropPrimaryKey:
 			err = w.deleteRange(job)
 		}
 	}
@@ -524,8 +524,6 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onCreateForeignKey(t, job)
 	case model.ActionDropForeignKey:
 		ver, err = onDropForeignKey(t, job)
-	case model.ActionTruncateTable:
-		ver, err = onTruncateTable(d, t, job)
 	case model.ActionRebaseAutoID:
 		ver, err = onRebaseAutoID(d.store, t, job)
 	case model.ActionRenameTable:
@@ -684,14 +682,7 @@ func updateSchemaVersion(t *meta.Meta, job *model.Job) (int64, error) {
 		Type:     job.Type,
 		SchemaID: job.SchemaID,
 	}
-	if job.Type == model.ActionTruncateTable {
-		// Truncate table has two table ID, should be handled differently.
-		err = job.DecodeArgs(&diff.TableID)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		diff.OldTableID = job.TableID
-	} else if job.Type == model.ActionRenameTable {
+	if job.Type == model.ActionRenameTable {
 		err = job.DecodeArgs(&diff.OldSchemaID)
 		if err != nil {
 			return 0, errors.Trace(err)

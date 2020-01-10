@@ -1109,7 +1109,7 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(1, null, 0), (2, 1, 0)")
 	results = []struct {
 		result [][]interface{}
@@ -1153,7 +1153,7 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(1, null, 0), (2, 1, 0), (null, 2, 0)")
 	results = []struct {
 		result [][]interface{}
@@ -1197,7 +1197,7 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(1, null, 0), (2, null, 0)")
 	tests = []struct {
 		sql string
@@ -1221,7 +1221,7 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(null, 1, 1), (2, 2, 2), (3, null, 3), (4, 4, 3)")
 	tests = []struct {
 		sql string
@@ -1286,7 +1286,7 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 	tk.MustExec("drop table if exists s")
 	tk.MustExec("create table s(a int, b int)")
 	tk.MustExec("insert into s values(1, 2)")
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(null, null, 0)")
 	tests = []struct {
 		sql string
@@ -1316,9 +1316,9 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table s")
+	tk.MustExec("delete from s")
 	tk.MustExec("insert into s values(2, 2)")
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(null, 1, 0)")
 	tests = []struct {
 		sql string
@@ -1348,9 +1348,9 @@ func (s *testSuiteJoin3) TestNullEmptyAwareSemiJoin(c *C) {
 		}
 	}
 
-	tk.MustExec("truncate table s")
+	tk.MustExec("delete from s")
 	tk.MustExec("insert into s values(null, 2)")
-	tk.MustExec("truncate table t")
+	tk.MustExec("delete from t")
 	tk.MustExec("insert into t values(1, 1, 0)")
 	tests = []struct {
 		sql string

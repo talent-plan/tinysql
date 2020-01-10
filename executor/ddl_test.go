@@ -42,19 +42,6 @@ import (
 	"github.com/pingcap/tidb/util/testutil"
 )
 
-func (s *testSuite6) TestTruncateTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists truncate_test;`)
-	tk.MustExec(`create table truncate_test (a int)`)
-	tk.MustExec(`insert truncate_test values (1),(2),(3)`)
-	result := tk.MustQuery("select * from truncate_test")
-	result.Check(testkit.Rows("1", "2", "3"))
-	tk.MustExec("truncate table truncate_test")
-	result = tk.MustQuery("select * from truncate_test")
-	result.Check(nil)
-}
-
 // TestInTxnExecDDLFail tests the following case:
 //  1. Execute the SQL of "begin";
 //  2. A SQL that will fail to execute;
@@ -66,7 +53,7 @@ func (s *testSuite6) TestInTxnExecDDLFail(c *C) {
 	tk.MustExec("insert into t values (1);")
 	tk.MustExec("begin;")
 	tk.MustExec("insert into t values (1);")
-	_, err := tk.Exec("truncate table t;")
+	_, err := tk.Exec("alter table t comment = 'xx' ")
 	c.Assert(err.Error(), Equals, "[kv:1062]Duplicate entry '1' for key 'PRIMARY'")
 	result := tk.MustQuery("select count(*) from t")
 	result.Check(testkit.Rows("1"))

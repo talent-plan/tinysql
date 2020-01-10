@@ -101,9 +101,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeFlashbackTable(x)
 	case *ast.RenameTableStmt:
 		err = e.executeRenameTable(x)
-	case *ast.TruncateTableStmt:
-		err = e.executeTruncateTable(x)
-
 	}
 	if err != nil {
 		// If the owner return ErrTableNotExists error when running this DDL, it may be caused by schema changed,
@@ -125,12 +122,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	// DDL will force commit old transaction, after DDL, in transaction status should be false.
 	e.ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusInTrans, false)
 	return nil
-}
-
-func (e *DDLExec) executeTruncateTable(s *ast.TruncateTableStmt) error {
-	ident := ast.Ident{Schema: s.Table.Schema, Name: s.Table.Name}
-	err := domain.GetDomain(e.ctx).DDL().TruncateTable(e.ctx, ident)
-	return err
 }
 
 func (e *DDLExec) executeRenameTable(s *ast.RenameTableStmt) error {

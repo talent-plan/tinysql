@@ -43,7 +43,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/mock"
@@ -521,52 +520,6 @@ func testCancelDropIndex(c *C, store kv.Storage, d ddl.DDL, idxName, addIdxSQL, 
 	d.(ddl.DDLForTest).SetHook(originalHook)
 	tk.MustExec(addIdxSQL)
 	tk.MustExec(dropIdxSQL)
-}
-
-// TestCancelTruncateTable tests cancel ddl job which type is truncate table.
-func (s *testDBSuite5) TestCancelTruncateTable(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.mustExec(c, "use test_db")
-	s.mustExec(c, "create database if not exists test_truncate_table")
-	s.mustExec(c, "drop table if exists t")
-	s.mustExec(c, "create table t(c1 int, c2 int)")
-	defer s.mustExec(c, "drop table t;")
-	var checkErr error
-	hook := &ddl.TestDDLCallback{}
-	hook.OnJobRunBeforeExported = func(job *model.Job) {
-		if job.Type == model.ActionTruncateTable && job.State == model.JobStateNone {
-			jobIDs := []int64{job.ID}
-			hookCtx := mock.NewContext()
-			hookCtx.Store = s.store
-			err := hookCtx.NewTxn(context.Background())
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			txn, err := hookCtx.Txn(true)
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			errs, err := admin.CancelJobs(txn, jobIDs)
-			if err != nil {
-				checkErr = errors.Trace(err)
-				return
-			}
-			if errs[0] != nil {
-				checkErr = errors.Trace(errs[0])
-				return
-			}
-			checkErr = txn.Commit(context.Background())
-		}
-	}
-	originalHook := s.dom.DDL().GetHook()
-	s.dom.DDL().(ddl.DDLForTest).SetHook(hook)
-	_, err := s.tk.Exec("truncate table t")
-	c.Assert(checkErr, IsNil)
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[ddl:8214]Cancelled DDL job")
-	s.dom.DDL().(ddl.DDLForTest).SetHook(originalHook)
 }
 
 // TestCancelRenameIndex tests cancel ddl job which type is rename index.
@@ -1858,53 +1811,6 @@ func (s *testDBSuite3) TestFKOnGeneratedColumns(c *C) {
 	s.tk.MustExec("create table t5 (a int, b int generated always as (a % 10) stored);")
 	s.tk.MustExec("alter table t5 add foreign key (a) references t1(a) on delete no action;")
 	s.tk.MustExec("drop table t1,t2,t3,t4,t5;")
-}
-
-func (s *testDBSuite3) TestTruncateTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table truncate_table (c1 int, c2 int)")
-	tk.MustExec("insert truncate_table values (1, 1), (2, 2)")
-	ctx := tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	oldTblInfo, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("truncate_table"))
-	c.Assert(err, IsNil)
-	oldTblID := oldTblInfo.Meta().ID
-
-	tk.MustExec("truncate table truncate_table")
-
-	tk.MustExec("insert truncate_table values (3, 3), (4, 4)")
-	tk.MustQuery("select * from truncate_table").Check(testkit.Rows("3 3", "4 4"))
-
-	is = domain.GetDomain(ctx).InfoSchema()
-	newTblInfo, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("truncate_table"))
-	c.Assert(err, IsNil)
-	c.Assert(newTblInfo.Meta().ID, Greater, oldTblID)
-
-	// Verify that the old table data has been deleted by background worker.
-	tablePrefix := tablecodec.EncodeTablePrefix(oldTblID)
-	hasOldTableData := true
-	for i := 0; i < waitForCleanDataRound; i++ {
-		err = kv.RunInNewTxn(s.store, false, func(txn kv.Transaction) error {
-			it, err1 := txn.Iter(tablePrefix, nil)
-			if err1 != nil {
-				return err1
-			}
-			if !it.Valid() {
-				hasOldTableData = false
-			} else {
-				hasOldTableData = it.Key().HasPrefix(tablePrefix)
-			}
-			it.Close()
-			return nil
-		})
-		c.Assert(err, IsNil)
-		if !hasOldTableData {
-			break
-		}
-		time.Sleep(waitForCleanDataInterval)
-	}
-	c.Assert(hasOldTableData, IsFalse)
 }
 
 func (s *testDBSuite4) TestRenameTable(c *C) {

@@ -388,53 +388,6 @@ func getTableInfo(t *meta.Meta, tableID, schemaID int64) (*model.TableInfo, erro
 	return tblInfo, nil
 }
 
-// onTruncateTable delete old table meta, and creates a new table identical to old table except for table ID.
-// As all the old data is encoded with old table ID, it can not be accessed any more.
-// A background job will be created to delete old data.
-func onTruncateTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error) {
-	schemaID := job.SchemaID
-	tableID := job.TableID
-	var newTableID int64
-	err := job.DecodeArgs(&newTableID)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-	tblInfo, err := getTableInfoAndCancelFaultJob(t, job, schemaID)
-	if err != nil {
-		return ver, errors.Trace(err)
-	}
-
-	err = t.DropTableOrView(schemaID, tblInfo.ID, true)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-	failpoint.Inject("truncateTableErr", func(val failpoint.Value) {
-		if val.(bool) {
-			job.State = model.JobStateCancelled
-			failpoint.Return(ver, errors.New("occur an error after dropping table"))
-		}
-	})
-
-	tblInfo.ID = newTableID
-	err = t.CreateTableOrView(schemaID, tblInfo)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	ver, err = updateSchemaVersion(t, job)
-	if err != nil {
-		return ver, errors.Trace(err)
-	}
-	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
-	startKey := tablecodec.EncodeTablePrefix(tableID)
-	var oldPartitionIDs []int64
-	job.Args = []interface{}{startKey, oldPartitionIDs}
-	return ver, nil
-}
-
 func onRebaseAutoID(store kv.Storage, t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	schemaID := job.SchemaID
 	var newBase int64

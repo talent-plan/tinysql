@@ -59,10 +59,6 @@ func (b *Builder) ApplyDiff(m *meta.Meta, diff *model.SchemaDiff) ([]int64, erro
 	case model.ActionDropTable, model.ActionDropView:
 		oldTableID = diff.TableID
 		tblIDs = append(tblIDs, oldTableID)
-	case model.ActionTruncateTable:
-		oldTableID = diff.OldTableID
-		newTableID = diff.TableID
-		tblIDs = append(tblIDs, oldTableID, newTableID)
 	default:
 		oldTableID = diff.TableID
 		newTableID = diff.TableID
