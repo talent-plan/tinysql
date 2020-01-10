@@ -38,7 +38,6 @@
       "*core.Explain",
       "*core.Explain",
       "TableReader(Table(t))->Insert",
-      "Show->Sel([eq(cast(Column#4), 0)])->Projection",
       "Dual->Projection",
       "Dual->Projection",
       "Join{DataScan(t1)->DataScan(t2)}->Projection",
@@ -56,7 +55,6 @@
       "DataScan(t)->Projection->Projection",
       "DataScan(t)->Projection->Projection",
       "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.b)(test.t.a,test.t.c)->Projection",
-      "Join{DataScan(t1)->Sel([like(cast(test.t.d), abc, 92)])->DataScan(t2)->Sel([like(cast(test.t.d), abc, 92)])}(test.t.a,test.t.b)(test.t.d,test.t.d)->Projection",
       "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
       "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
       "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
@@ -656,19 +654,7 @@
   },
   {
     "Name": "TestTablePartition",
-    "Cases": [
-      "UnionAll{Partition(41)->Partition(42)->Partition(43)->Partition(44)->Partition(45)}->Projection",
-      "UnionAll{Partition(41)->Partition(42)}->Projection",
-      "UnionAll{Partition(41)->Partition(42)->Partition(43)}->Projection",
-      "UnionAll{Partition(42)->Partition(43)}->Projection",
-      "UnionAll{UnionAll{Partition(42)->Partition(43)}->Projection->Projection->UnionAll{Partition(42)->Partition(43)}->Projection->Projection}",
-      "UnionAll{UnionAll{Partition(42)->Partition(43)}->Projection->Projection->UnionAll{Partition(42)->Partition(43)}->Projection->Projection}",
-      "Partition(41)->Projection",
-      "Partition(45)->Projection",
-      "Dual->Projection",
-      "Partition(41)->Projection",
-      "UnionAll{Partition(41)->Partition(44)}->Projection"
-    ]
+    "Cases": null
   },
   {
     "Name": "TestJoinPredicatePushDown",

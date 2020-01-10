@@ -210,10 +210,6 @@ func (sr *simpleRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok boo
 		sr.isNullToExpression(v)
 	case *ast.IsTruthExpr:
 		sr.isTrueToScalarFunc(v)
-	case *ast.PatternLikeExpr:
-		sr.likeToScalarFunc(v)
-	case *ast.PatternRegexpExpr:
-		sr.regexpToScalarFunc(v)
 	case *ast.PatternInExpr:
 		if v.Sel == nil {
 			sr.inToExpression(len(v.List), v.Not, &v.Type)
@@ -411,31 +407,6 @@ func (sr *simpleRewriter) unaryOpToExpression(v *ast.UnaryOperationExpr) {
 	newExpr, err := NewFunction(sr.ctx, op, &v.Type, expr)
 	sr.err = err
 	sr.push(newExpr)
-}
-
-func (sr *simpleRewriter) likeToScalarFunc(v *ast.PatternLikeExpr) {
-	pattern := sr.pop()
-	expr := sr.pop()
-	sr.err = CheckArgsNotMultiColumnRow(expr, pattern)
-	if sr.err != nil {
-		return
-	}
-	escapeTp := &types.FieldType{}
-	types.DefaultTypeForValue(int(v.Escape), escapeTp)
-	function := sr.notToExpression(v.Not, ast.Like, &v.Type,
-		expr, pattern, &Constant{Value: types.NewIntDatum(int64(v.Escape)), RetType: escapeTp})
-	sr.push(function)
-}
-
-func (sr *simpleRewriter) regexpToScalarFunc(v *ast.PatternRegexpExpr) {
-	parttern := sr.pop()
-	expr := sr.pop()
-	sr.err = CheckArgsNotMultiColumnRow(expr, parttern)
-	if sr.err != nil {
-		return
-	}
-	function := sr.notToExpression(v.Not, ast.Regexp, &v.Type, expr, parttern)
-	sr.push(function)
 }
 
 func (sr *simpleRewriter) rowToScalarFunc(v *ast.RowExpr) {

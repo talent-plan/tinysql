@@ -1306,14 +1306,6 @@ func (s *testSuiteP2) TestToPBExpr(c *C) {
 	result.Check(testkit.Rows("3.300000 3"))
 
 	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a varchar(255), b int)")
-	tk.MustExec("insert t values ('abc123', 1)")
-	tk.MustExec("insert t values ('ab123', 2)")
-	result = tk.MustQuery("select * from t where a like 'ab%'")
-	result.Check(testkit.Rows("abc123 1", "ab123 2"))
-	result = tk.MustQuery("select * from t where a like 'ab_12'")
-	result.Check(nil)
-	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int primary key)")
 	tk.MustExec("insert t values (1)")
 	tk.MustExec("insert t values (2)")
@@ -1415,25 +1407,6 @@ func (s *testSuiteP2) TestTableDual(c *C) {
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a int primary key)")
 	tk.MustQuery("select t1.* from t t1, t t2 where t1.a=t2.a and 1=0").Check(testkit.Rows())
-}
-
-func (s *testSuiteP2) TestTableScan(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use information_schema")
-	result := tk.MustQuery("select * from schemata")
-	// There must be these tables: information_schema, mysql and test.
-	c.Assert(len(result.Rows()), GreaterEqual, 3)
-	tk.MustExec("use test")
-	tk.MustExec("create database mytest")
-	rowStr1 := fmt.Sprintf("%s %s %s %s %v", "def", "mysql", "utf8mb4", "utf8mb4_bin", nil)
-	rowStr2 := fmt.Sprintf("%s %s %s %s %v", "def", "mytest", "utf8mb4", "utf8mb4_bin", nil)
-	tk.MustExec("use information_schema")
-	result = tk.MustQuery("select * from schemata where schema_name = 'mysql'")
-	result.Check(testkit.Rows(rowStr1))
-	result = tk.MustQuery("select * from schemata where schema_name like 'my%'")
-	result.Check(testkit.Rows(rowStr1, rowStr2))
-	result = tk.MustQuery("select 1 from tables limit 1")
-	result.Check(testkit.Rows("1"))
 }
 
 func (s *testSuiteP2) TestAdapterStatement(c *C) {

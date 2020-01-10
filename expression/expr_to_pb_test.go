@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
@@ -270,38 +269,6 @@ func (s *testEvaluatorSuite) TestCompareFunc2Pb(c *C) {
 		js, err := json.Marshal(pbExpr)
 		c.Assert(err, IsNil)
 		c.Assert(string(js), Equals, jsons[i])
-	}
-}
-
-func (s *testEvaluatorSuite) TestLikeFunc2Pb(c *C) {
-	var likeFuncs []Expression
-	sc := new(stmtctx.StatementContext)
-	client := new(mock.Client)
-
-	retTp := types.NewFieldType(mysql.TypeString)
-	retTp.Charset = charset.CharsetUTF8
-	retTp.Collate = charset.CollationUTF8
-	args := []Expression{
-		&Constant{RetType: retTp, Value: types.NewDatum("string")},
-		&Constant{RetType: retTp, Value: types.NewDatum("pattern")},
-		&Constant{RetType: retTp, Value: types.NewDatum(`%abc%`)},
-		&Constant{RetType: retTp, Value: types.NewDatum("\\")},
-	}
-	ctx := mock.NewContext()
-	retTp = types.NewFieldType(mysql.TypeUnspecified)
-	fc, err := NewFunction(ctx, ast.Like, retTp, args[0], args[1], args[3])
-	c.Assert(err, IsNil)
-	likeFuncs = append(likeFuncs, fc)
-
-	fc, err = NewFunction(ctx, ast.Like, retTp, args[0], args[2], args[3])
-	c.Assert(err, IsNil)
-	likeFuncs = append(likeFuncs, fc)
-
-	pbExprs := ExpressionsToPBList(sc, likeFuncs, client)
-	for _, pbExpr := range pbExprs {
-		js, err := json.Marshal(pbExpr)
-		c.Assert(err, IsNil)
-		c.Assert(string(js), Equals, "null")
 	}
 }
 

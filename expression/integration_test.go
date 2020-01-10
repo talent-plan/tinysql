@@ -497,19 +497,6 @@ func (s *testIntegrationSuite2) TestStringBuiltin(c *C) {
 	result = tk.MustQuery(`select make_set(0, "12"), make_set(3, "aa", "11"), make_set(3, NULL, "中文"), make_set(NULL, "aa");`)
 	result.Check(testkit.Rows(" aa,11 中文 <nil>"))
 
-	// for quote
-	result = tk.MustQuery(`select quote("aaaa"), quote(""), quote("\"\""), quote("\n\n");`)
-	result.Check(testkit.Rows("'aaaa' '' '\"\"' '\n\n'"))
-	result = tk.MustQuery(`select quote(0121), quote(0000), quote("中文"), quote(NULL);`)
-	result.Check(testkit.Rows("'121' '0' '中文' NULL"))
-	tk.MustQuery(`select quote(null) is NULL;`).Check(testkit.Rows(`0`))
-	tk.MustQuery(`select quote(null) is NOT NULL;`).Check(testkit.Rows(`1`))
-	tk.MustQuery(`select length(quote(null));`).Check(testkit.Rows(`4`))
-	tk.MustQuery(`select quote(null) REGEXP binary 'null'`).Check(testkit.Rows(`0`))
-	tk.MustQuery(`select quote(null) REGEXP binary 'NULL'`).Check(testkit.Rows(`1`))
-	tk.MustQuery(`select quote(null) REGEXP 'NULL'`).Check(testkit.Rows(`1`))
-	tk.MustQuery(`select quote(null) REGEXP 'null'`).Check(testkit.Rows(`1`))
-
 	// for convert
 	result = tk.MustQuery(`select convert("123" using "binary"), convert("中文" using "binary"), convert("中文" using "utf8"), convert("中文" using "utf8mb4"), convert(cast("中文" as binary) using "utf8");`)
 	result.Check(testkit.Rows("123 中文 中文 中文 中文"))
@@ -1052,73 +1039,6 @@ func (s *testIntegrationSuite) TestColumnInfoModified(c *C) {
 	c.Assert(col.Tp, Equals, mysql.TypeLong)
 }
 
-func (s *testIntegrationSuite) TestSetVariables(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	_, err := tk.Exec("set sql_mode='adfasdfadsfdasd';")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("set @@sql_mode='adfasdfadsfdasd';")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("set @@global.sql_mode='adfasdfadsfdasd';")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("set @@session.sql_mode='adfasdfadsfdasd';")
-	c.Assert(err, NotNil)
-
-	var r *testkit.Result
-	_, err = tk.Exec("set @@session.sql_mode=',NO_ZERO_DATE,ANSI,ANSI_QUOTES';")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery(`select @@session.sql_mode`)
-	r.Check(testkit.Rows("NO_ZERO_DATE,REAL_AS_FLOAT,PIPES_AS_CONCAT,ANSI_QUOTES,IGNORE_SPACE,ONLY_FULL_GROUP_BY,ANSI"))
-	r = tk.MustQuery(`show variables like 'sql_mode'`)
-	r.Check(testkit.Rows("sql_mode NO_ZERO_DATE,REAL_AS_FLOAT,PIPES_AS_CONCAT,ANSI_QUOTES,IGNORE_SPACE,ONLY_FULL_GROUP_BY,ANSI"))
-
-	// for invalid SQL mode.
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists tab0")
-	tk.MustExec("CREATE TABLE tab0(col1 time)")
-	_, err = tk.Exec("set sql_mode='STRICT_TRANS_TABLES';")
-	c.Assert(err, IsNil)
-	_, err = tk.Exec("INSERT INTO tab0 select cast('999:44:33' as time);")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[types:1292]Truncated incorrect time value: '999h44m33s'")
-	_, err = tk.Exec("set sql_mode=' ,';")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("INSERT INTO tab0 select cast('999:44:33' as time);")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[types:1292]Truncated incorrect time value: '999h44m33s'")
-
-	// issue #5478
-	_, err = tk.Exec("set session transaction read write;")
-	c.Assert(err, IsNil)
-	_, err = tk.Exec("set global transaction read write;")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery(`select @@session.tx_read_only, @@global.tx_read_only, @@session.transaction_read_only, @@global.transaction_read_only;`)
-	r.Check(testkit.Rows("0 0 0 0"))
-
-	_, err = tk.Exec("set session transaction read only;")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery(`select @@session.tx_read_only, @@global.tx_read_only, @@session.transaction_read_only, @@global.transaction_read_only;`)
-	r.Check(testkit.Rows("1 0 1 0"))
-	_, err = tk.Exec("set global transaction read only;")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery(`select @@session.tx_read_only, @@global.tx_read_only, @@session.transaction_read_only, @@global.transaction_read_only;`)
-	r.Check(testkit.Rows("1 1 1 1"))
-
-	_, err = tk.Exec("set session transaction read write;")
-	c.Assert(err, IsNil)
-	_, err = tk.Exec("set global transaction read write;")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery(`select @@session.tx_read_only, @@global.tx_read_only, @@session.transaction_read_only, @@global.transaction_read_only;`)
-	r.Check(testkit.Rows("0 0 0 0"))
-
-	_, err = tk.Exec("set @@global.max_user_connections='';")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, variable.ErrWrongTypeForVar.GenWithStackByArgs("max_user_connections").Error())
-	_, err = tk.Exec("set @@global.max_prepared_stmt_count='';")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, variable.ErrWrongTypeForVar.GenWithStackByArgs("max_prepared_stmt_count").Error())
-}
-
 func (s *testIntegrationSuite) TestIssues(c *C) {
 	// for issue #4954
 	tk := testkit.NewTestKit(c, s.store)
@@ -1298,9 +1218,6 @@ func (s *testIntegrationSuite) TestPrefixIndex(c *C) {
 	tk.MustExec("INSERT INTO prefix VALUES(0, 'b', 2), (1, 'bbb', 3), (2, 'bbc', 4), (3, 'bbb', 5), (4, 'abc', 6), (5, 'abc', 7), (6, 'abc', 7), (7, 'ÿÿ', 8), (8, 'ÿÿ0', 9), (9, 'ÿÿÿ', 10);")
 	res = tk.MustQuery("select c, b from prefix where b > 'ÿ' and b < 'ÿÿc'")
 	res.Check(testkit.Rows("8 ÿÿ", "9 ÿÿ0"))
-
-	res = tk.MustQuery("select a, b from prefix where b LIKE 'ÿÿ%'")
-	res.Check(testkit.Rows("7 ÿÿ", "8 ÿÿ0", "9 ÿÿÿ"))
 }
 
 func (s *testIntegrationSuite) TestDecimalMul(c *C) {

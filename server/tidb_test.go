@@ -116,11 +116,6 @@ func (ts *TidbTestSuite) TestSystemTimeZone(c *C) {
 	tk.MustQuery("select @@system_time_zone").Check(tz1)
 }
 
-func (ts *TidbTestSuite) TestClientWithCollation(c *C) {
-	c.Parallel()
-	runTestClientWithCollation(c)
-}
-
 func (ts *TidbTestSuite) TestCreateTableFlen(c *C) {
 	// issue #4540
 	qctx, err := ts.tidbdrv.OpenCtx(uint64(0), 0, uint8(tmysql.DefaultCollationID), "test", nil)

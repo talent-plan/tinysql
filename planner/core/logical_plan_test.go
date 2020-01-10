@@ -565,14 +565,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 			err: expression.ErrOperandColumns,
 		},
 		{
-			sql: "select (1,2) rlike '1'",
-			err: expression.ErrOperandColumns,
-		},
-		{
-			sql: "select (1,2) like '1'",
-			err: expression.ErrOperandColumns,
-		},
-		{
 			sql: "select case(1,2) when(1,2) then true end",
 			err: expression.ErrOperandColumns,
 		},

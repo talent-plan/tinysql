@@ -27,13 +27,6 @@ import (
 	"github.com/pingcap/tidb/types/parser_driver"
 )
 
-func boolToInt64(v bool) int64 {
-	if v {
-		return 1
-	}
-	return 0
-}
-
 // IsValidCurrentTimestampExpr returns true if exprNode is a valid CurrentTimestamp expression.
 // Here `valid` means it is consistent with the given fieldType's Decimal.
 func IsValidCurrentTimestampExpr(exprNode ast.ExprNode, fieldType *types.FieldType) bool {

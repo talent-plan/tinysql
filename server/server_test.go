@@ -138,41 +138,6 @@ func runTestSpecialType(t *C) {
 	})
 }
 
-func runTestClientWithCollation(t *C) {
-	runTests(t, func(config *mysql.Config) {
-		config.Collation = "utf8mb4_general_ci"
-	}, func(dbt *DBTest) {
-		var name, charset, collation string
-		// check session variable collation_connection
-		rows := dbt.mustQuery("show variables like 'collation_connection'")
-		t.Assert(rows.Next(), IsTrue)
-		err := rows.Scan(&name, &collation)
-		t.Assert(err, IsNil)
-		t.Assert(collation, Equals, "utf8mb4_general_ci")
-
-		// check session variable character_set_client
-		rows = dbt.mustQuery("show variables like 'character_set_client'")
-		t.Assert(rows.Next(), IsTrue)
-		err = rows.Scan(&name, &charset)
-		t.Assert(err, IsNil)
-		t.Assert(charset, Equals, "utf8mb4")
-
-		// check session variable character_set_results
-		rows = dbt.mustQuery("show variables like 'character_set_results'")
-		t.Assert(rows.Next(), IsTrue)
-		err = rows.Scan(&name, &charset)
-		t.Assert(err, IsNil)
-		t.Assert(charset, Equals, "utf8mb4")
-
-		// check session variable character_set_connection
-		rows = dbt.mustQuery("show variables like 'character_set_connection'")
-		t.Assert(rows.Next(), IsTrue)
-		err = rows.Scan(&name, &charset)
-		t.Assert(err, IsNil)
-		t.Assert(charset, Equals, "utf8mb4")
-	})
-}
-
 func runTestConcurrentUpdate(c *C) {
 	dbName := "Concurrent"
 	runTestsOnNewDB(c, nil, dbName, func(dbt *DBTest) {

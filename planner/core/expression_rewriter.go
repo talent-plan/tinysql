@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	driver "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 // EvalSubquery evaluates incorrelated subqueries once.
@@ -932,10 +931,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 
 		er.ctxStack[len(er.ctxStack)-1] = expression.BuildCastFunction(er.sctx, arg, v.Tp)
 		er.ctxNameStk[len(er.ctxNameStk)-1] = types.EmptyName
-	case *ast.PatternLikeExpr:
-		er.patternLikeToExpression(v)
-	case *ast.PatternRegexpExpr:
-		er.regexpToScalarFunc(v)
 	case *ast.RowExpr:
 		er.rowToScalarFunc(v)
 	case *ast.PatternInExpr:
@@ -1276,59 +1271,6 @@ func (er *expressionRewriter) caseToExpression(v *ast.CaseExpr) {
 		return
 	}
 	er.ctxStackPop(argsLen)
-	er.ctxStackAppend(function, types.EmptyName)
-}
-
-func (er *expressionRewriter) patternLikeToExpression(v *ast.PatternLikeExpr) {
-	l := len(er.ctxStack)
-	er.err = expression.CheckArgsNotMultiColumnRow(er.ctxStack[l-2:]...)
-	if er.err != nil {
-		return
-	}
-
-	var function expression.Expression
-	fieldType := &types.FieldType{}
-	isPatternExactMatch := false
-	// Treat predicate 'like' the same way as predicate '=' when it is an exact match.
-	if patExpression, ok := er.ctxStack[l-1].(*expression.Constant); ok {
-		patString, isNull, err := patExpression.EvalString(nil, chunk.Row{})
-		if err != nil {
-			er.err = err
-			return
-		}
-		if !isNull {
-			patValue, patTypes := stringutil.CompilePattern(patString, v.Escape)
-			if stringutil.IsExactMatch(patTypes) && er.ctxStack[l-2].GetType().EvalType() == types.ETString {
-				op := ast.EQ
-				if v.Not {
-					op = ast.NE
-				}
-				types.DefaultTypeForValue(string(patValue), fieldType)
-				function, er.err = er.constructBinaryOpFunction(er.ctxStack[l-2],
-					&expression.Constant{Value: types.NewStringDatum(string(patValue)), RetType: fieldType},
-					op)
-				isPatternExactMatch = true
-			}
-		}
-	}
-	if !isPatternExactMatch {
-		types.DefaultTypeForValue(int(v.Escape), fieldType)
-		function = er.notToExpression(v.Not, ast.Like, &v.Type,
-			er.ctxStack[l-2], er.ctxStack[l-1], &expression.Constant{Value: types.NewIntDatum(int64(v.Escape)), RetType: fieldType})
-	}
-
-	er.ctxStackPop(2)
-	er.ctxStackAppend(function, types.EmptyName)
-}
-
-func (er *expressionRewriter) regexpToScalarFunc(v *ast.PatternRegexpExpr) {
-	l := len(er.ctxStack)
-	er.err = expression.CheckArgsNotMultiColumnRow(er.ctxStack[l-2:]...)
-	if er.err != nil {
-		return
-	}
-	function := er.notToExpression(v.Not, ast.Regexp, &v.Type, er.ctxStack[l-2], er.ctxStack[l-1])
-	er.ctxStackPop(2)
 	er.ctxStackAppend(function, types.EmptyName)
 }
 
