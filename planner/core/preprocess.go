@@ -104,11 +104,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		return in, true
 	case *ast.Join:
 		p.checkNonUniqTableAlias(node)
-	case *ast.RecoverTableStmt, *ast.FlashBackTableStmt:
-		// The specified table in recover table statement maybe already been dropped.
-		// So skip check table name here, otherwise, recover table [table_name] syntax will return
-		// table not exists error. But recover table statement is use to recover the dropped table. So skip children here.
-		return in, true
 	default:
 		p.flag &= ^parentIsJoin
 	}

@@ -2700,9 +2700,6 @@ func (b *PlanBuilder) buildUpdate(ctx context.Context, update *ast.UpdateStmt) (
 		return nil, err
 	}
 
-	var tableList []*ast.TableName
-	tableList = extractTableList(update.TableRefs.TableRefs, tableList, false)
-
 	oldSchemaLen := p.Schema().Len()
 	if update.Where != nil {
 		p, err = b.buildSelection(ctx, p, update.Where, nil)

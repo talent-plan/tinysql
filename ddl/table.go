@@ -15,8 +15,6 @@ package ddl
 
 import (
 	"fmt"
-	"sync/atomic"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/ast"
@@ -30,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/gcutil"
 )
 
 func onCreateTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ error) {
@@ -124,163 +121,6 @@ func onDropTableOrView(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	}
 
 	return ver, errors.Trace(err)
-}
-
-const (
-	recoverTableCheckFlagNone int64 = iota
-	recoverTableCheckFlagEnableGC
-	recoverTableCheckFlagDisableGC
-)
-
-func (w *worker) onRecoverTable(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
-	schemaID := job.SchemaID
-	tblInfo := &model.TableInfo{}
-	var autoID, dropJobID, recoverTableCheckFlag int64
-	var snapshotTS uint64
-	if err = job.DecodeArgs(tblInfo, &autoID, &dropJobID, &snapshotTS, &recoverTableCheckFlag); err != nil {
-		// Invalid arguments, cancel this job.
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	// check GC and safe point
-	gcEnable, err := checkGCEnable(w)
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-
-	err = checkTableNotExists(d, t, schemaID, tblInfo.Name.L)
-	if err != nil {
-		if infoschema.ErrDatabaseNotExists.Equal(err) || infoschema.ErrTableExists.Equal(err) {
-			job.State = model.JobStateCancelled
-		}
-		return ver, errors.Trace(err)
-	}
-
-	// Recover table divide into 2 steps:
-	// 1. Check GC enable status, to decided whether enable GC after recover table.
-	//     a. Why not disable GC before put the job to DDL job queue?
-	//        Think about concurrency problem. If a recover job-1 is doing and already disabled GC,
-	//        then, another recover table job-2 check GC enable will get disable before into the job queue.
-	//        then, after recover table job-2 finished, the GC will be disabled.
-	//     b. Why split into 2 steps? 1 step also can finish this job: check GC -> disable GC -> recover table -> finish job.
-	//        What if the transaction commit failed? then, the job will retry, but the GC already disabled when first running.
-	//        So, after this job retry succeed, the GC will be disabled.
-	// 2. Do recover table job.
-	//     a. Check whether GC enabled, if enabled, disable GC first.
-	//     b. Check GC safe point. If drop table time if after safe point time, then can do recover.
-	//        otherwise, can't recover table, because the records of the table may already delete by gc.
-	//     c. Remove GC task of the table from gc_delete_range table.
-	//     d. Create table and rebase table auto ID.
-	//     e. Finish.
-	switch tblInfo.State {
-	case model.StateNone:
-		// none -> write only
-		// check GC enable and update flag.
-		if gcEnable {
-			job.Args[len(job.Args)-1] = recoverTableCheckFlagEnableGC
-		} else {
-			job.Args[len(job.Args)-1] = recoverTableCheckFlagDisableGC
-		}
-
-		job.SchemaState = model.StateWriteOnly
-		tblInfo.State = model.StateWriteOnly
-		ver, err = updateVersionAndTableInfo(t, job, tblInfo, false)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-	case model.StateWriteOnly:
-		// write only -> public
-		// do recover table.
-		if gcEnable {
-			err = disableGC(w)
-			if err != nil {
-				job.State = model.JobStateCancelled
-				return ver, errors.Errorf("disable gc failed, try again later. err: %v", err)
-			}
-		}
-		// check GC safe point
-		err = checkSafePoint(w, snapshotTS)
-		if err != nil {
-			job.State = model.JobStateCancelled
-			return ver, errors.Trace(err)
-		}
-		// Remove dropped table DDL job from gc_delete_range table.
-		var tids = []int64{tblInfo.ID}
-		err = w.delRangeManager.removeFromGCDeleteRange(dropJobID, tids)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-
-		tblInfo.State = model.StatePublic
-		tblInfo.UpdateTS = t.StartTS
-		err = t.CreateTableAndSetAutoID(schemaID, tblInfo, autoID)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-
-		failpoint.Inject("mockRecoverTableCommitErr", func(val failpoint.Value) {
-			if val.(bool) && atomic.CompareAndSwapUint32(&mockRecoverTableCommitErrOnce, 0, 1) {
-				kv.MockCommitErrorEnable()
-			}
-		})
-
-		ver, err = updateVersionAndTableInfo(t, job, tblInfo, true)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-
-		// Finish this job.
-		job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
-	default:
-		return ver, ErrInvalidDDLState.GenWithStackByArgs("table", tblInfo.State)
-	}
-	return ver, nil
-}
-
-// mockRecoverTableCommitErrOnce uses to make sure
-// `mockRecoverTableCommitErr` only mock error once.
-var mockRecoverTableCommitErrOnce uint32
-
-func enableGC(w *worker) error {
-	ctx, err := w.sessPool.get()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer w.sessPool.put(ctx)
-
-	return gcutil.EnableGC(ctx)
-}
-
-func disableGC(w *worker) error {
-	ctx, err := w.sessPool.get()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer w.sessPool.put(ctx)
-
-	return gcutil.DisableGC(ctx)
-}
-
-func checkGCEnable(w *worker) (enable bool, err error) {
-	ctx, err := w.sessPool.get()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	defer w.sessPool.put(ctx)
-
-	return gcutil.CheckGCEnable(ctx)
-}
-
-func checkSafePoint(w *worker, snapshotTS uint64) error {
-	ctx, err := w.sessPool.get()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer w.sessPool.put(ctx)
-
-	return gcutil.ValidateSnapshot(ctx, snapshotTS)
 }
 
 func getTable(store kv.Storage, schemaID int64, tblInfo *model.TableInfo) (table.Table, error) {

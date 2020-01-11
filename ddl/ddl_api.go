@@ -1299,34 +1299,6 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 	return errors.Trace(err)
 }
 
-func (d *ddl) RecoverTable(ctx sessionctx.Context, tbInfo *model.TableInfo, schemaID, autoID, dropJobID int64, snapshotTS uint64) (err error) {
-	is := d.GetInfoSchemaWithInterceptor(ctx)
-	// Check schema exist.
-	schema, ok := is.SchemaByID(schemaID)
-	if !ok {
-		return errors.Trace(infoschema.ErrDatabaseNotExists.GenWithStackByArgs(
-			fmt.Sprintf("(Schema ID %d)", schemaID),
-		))
-	}
-	// Check not exist table with same name.
-	if ok := is.TableExists(schema.Name, tbInfo.Name); ok {
-		return infoschema.ErrTableExists.GenWithStackByArgs(tbInfo.Name)
-	}
-
-	tbInfo.State = model.StateNone
-	job := &model.Job{
-		SchemaID:   schemaID,
-		TableID:    tbInfo.ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionRecoverTable,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{tbInfo, autoID, dropJobID, snapshotTS, recoverTableCheckFlagNone},
-	}
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
 func checkCharsetAndCollation(cs string, co string) error {
 	if !charset.ValidCharsetAndCollation(cs, co) {
 		return ErrUnknownCharacterSet.GenWithStackByArgs(cs)

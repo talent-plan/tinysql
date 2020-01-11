@@ -280,10 +280,6 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 			err = w.deleteRange(job)
 		}
 	}
-	switch job.Type {
-	case model.ActionRecoverTable:
-		err = finishRecoverTable(w, t, job)
-	}
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -303,23 +299,6 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 	}
 	err = t.AddHistoryDDLJob(job, updateRawArgs)
 	return errors.Trace(err)
-}
-
-func finishRecoverTable(w *worker, t *meta.Meta, job *model.Job) error {
-	tbInfo := &model.TableInfo{}
-	var autoID, dropJobID, recoverTableCheckFlag int64
-	var snapshotTS uint64
-	err := job.DecodeArgs(tbInfo, &autoID, &dropJobID, &snapshotTS, &recoverTableCheckFlag)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if recoverTableCheckFlag == recoverTableCheckFlagEnableGC {
-		err = enableGC(w)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
 }
 
 func isDependencyJobDone(t *meta.Meta, job *model.Job) (bool, error) {
@@ -532,8 +511,6 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onModifyTableComment(t, job)
 	case model.ActionModifyTableCharsetAndCollate:
 		ver, err = onModifyTableCharsetAndCollate(t, job)
-	case model.ActionRecoverTable:
-		ver, err = w.onRecoverTable(d, t, job)
 	case model.ActionSetTiFlashReplica:
 		ver, err = onSetTableFlashReplica(t, job)
 	case model.ActionUpdateTiFlashReplicaStatus:
