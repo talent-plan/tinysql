@@ -2868,19 +2868,11 @@ func (s *testDBSuite2) TestSkipSchemaChecker(c *C) {
 	tk2.MustExec("alter table t1 set tiflash replica 2 location labels 'a','b';")
 	tk.MustExec("commit")
 
-	// Test skip schema checker for ActionUpdateTiFlashReplicaStatus.
-	tk.MustExec("begin")
-	tk.MustExec("insert into t1 set a=1;")
-	tb := testGetTableByName(c, s.tk.Se, "test", "t1")
-	err := domain.GetDomain(s.tk.Se).DDL().UpdateTableReplicaInfo(s.tk.Se, tb.Meta().ID, true)
-	c.Assert(err, IsNil)
-	tk.MustExec("commit")
-
 	// Test can't skip schema checker.
 	tk.MustExec("begin")
 	tk.MustExec("insert into t1 set a=1;")
 	tk2.MustExec("alter table t1 add column b int;")
-	_, err = tk.Exec("commit")
+	_, err := tk.Exec("commit")
 	c.Assert(terror.ErrorEqual(domain.ErrInfoSchemaChanged, err), IsTrue)
 }
 

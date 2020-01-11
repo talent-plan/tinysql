@@ -162,8 +162,6 @@ var (
 	ErrWarnDataTruncated = terror.ClassDDL.New(mysql.WarnDataTruncated, mysql.MySQLErrName[mysql.WarnDataTruncated])
 	// ErrAlterOperationNotSupported returns when alter operations is not supported.
 	ErrAlterOperationNotSupported = terror.ClassDDL.New(mysql.ErrAlterOperationNotSupportedReason, mysql.MySQLErrName[mysql.ErrAlterOperationNotSupportedReason])
-	// ErrWrongObject returns for wrong object.
-	ErrWrongObject = terror.ClassDDL.New(mysql.ErrWrongObject, mysql.MySQLErrName[mysql.ErrWrongObject])
 	// ErrTableCantHandleFt returns FULLTEXT keys are not supported by table type
 	ErrTableCantHandleFt = terror.ClassDDL.New(mysql.ErrTableCantHandleFt, mysql.MySQLErrName[mysql.ErrTableCantHandleFt])
 )
@@ -180,7 +178,6 @@ type DDL interface {
 	DropIndex(ctx sessionctx.Context, tableIdent ast.Ident, indexName model.CIStr, ifExists bool) error
 	AlterTable(ctx sessionctx.Context, tableIdent ast.Ident, spec []*ast.AlterTableSpec) error
 	RenameTable(ctx sessionctx.Context, oldTableIdent, newTableIdent ast.Ident, isAlterTable bool) error
-	UpdateTableReplicaInfo(ctx sessionctx.Context, tid int64, available bool) error
 
 	// GetLease returns current schema lease time.
 	GetLease() time.Duration

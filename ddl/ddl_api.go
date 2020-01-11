@@ -2391,36 +2391,6 @@ func (d *ddl) AlterTableSetTiFlashReplica(ctx sessionctx.Context, ident ast.Iden
 	return errors.Trace(err)
 }
 
-// UpdateTableReplicaInfo updates the table flash replica infos.
-func (d *ddl) UpdateTableReplicaInfo(ctx sessionctx.Context, tid int64, available bool) error {
-	is := d.infoHandle.Get()
-	tb, ok := is.TableByID(tid)
-	if !ok {
-		return infoschema.ErrTableNotExists.GenWithStack("Table which ID = %d does not exist.", tid)
-	}
-
-	if tb.Meta().TiFlashReplica == nil || (tb.Meta().TiFlashReplica.Available == available) {
-		return nil
-	}
-
-	db, ok := is.SchemaByTable(tb.Meta())
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStack("Database of table `%s` does not exist.", tb.Meta().Name)
-	}
-
-	job := &model.Job{
-		SchemaID:   db.ID,
-		TableID:    tb.Meta().ID,
-		SchemaName: db.Name.L,
-		Type:       model.ActionUpdateTiFlashReplicaStatus,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{available},
-	}
-	err := d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
 // checkAlterTableCharset uses to check is it possible to change the charset of table.
 // This function returns 2 variable:
 // doNothing: if doNothing is true, means no need to change any more, because the target charset is same with the charset of table.
