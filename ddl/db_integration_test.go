@@ -1440,19 +1440,6 @@ func (s *testIntegrationSuite3) TestAlterAlgorithm(c *C) {
 	s.assertAlterWarnExec(c, "alter table t drop index idx_b1, ALGORITHM=COPY")
 	s.tk.MustExec("alter table t drop index idx_b2, ALGORITHM=INSTANT")
 
-	// Test rename
-	s.assertAlterWarnExec(c, "alter table t rename to t1, ALGORITHM=COPY")
-	s.assertAlterErrorExec(c, "alter table t1 rename to t, ALGORITHM=INPLACE")
-	s.tk.MustExec("alter table t1 rename to t, ALGORITHM=INSTANT")
-	s.tk.MustExec("alter table t rename to t1, ALGORITHM=DEFAULT")
-	s.tk.MustExec("alter table t1 rename to t")
-
-	// Test rename index
-	s.assertAlterWarnExec(c, "alter table t rename index idx_c to idx_c1, ALGORITHM=COPY")
-	s.assertAlterErrorExec(c, "alter table t rename index idx_c1 to idx_c, ALGORITHM=INPLACE")
-	s.tk.MustExec("alter table t rename index idx_c1 to idx_c, ALGORITHM=INSTANT")
-	s.tk.MustExec("alter table t rename index idx_c to idx_c1, ALGORITHM=DEFAULT")
-
 	// Table options
 	s.assertAlterWarnExec(c, "alter table t comment = 'test', ALGORITHM=COPY")
 	s.assertAlterErrorExec(c, "alter table t comment = 'test', ALGORITHM=INPLACE")

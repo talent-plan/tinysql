@@ -82,9 +82,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 	case *ast.DropTableStmt:
 		p.flag |= inCreateOrDropTable
 		p.checkDropTableGrammar(node)
-	case *ast.RenameTableStmt:
-		p.flag |= inCreateOrDropTable
-		p.checkRenameTableGrammar(node)
 	case *ast.CreateIndexStmt:
 		p.checkCreateIndexGrammar(node)
 	case *ast.AlterTableStmt:
@@ -116,7 +113,7 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		p.flag &= ^inCreateOrDropTable
 		p.checkAutoIncrement(x)
 		p.checkContainDotColumn(x)
-	case *ast.DropTableStmt, *ast.AlterTableStmt, *ast.RenameTableStmt:
+	case *ast.DropTableStmt, *ast.AlterTableStmt:
 		p.flag &= ^inCreateOrDropTable
 	case *ast.ExplainStmt:
 		if _, ok := x.Stmt.(*ast.ShowStmt); ok {
@@ -441,25 +438,6 @@ func (p *preprocessor) checkCreateIndexGrammar(stmt *ast.CreateIndexStmt) {
 	p.err = checkIndexInfo(stmt.IndexName, stmt.IndexPartSpecifications)
 }
 
-func (p *preprocessor) checkRenameTableGrammar(stmt *ast.RenameTableStmt) {
-	oldTable := stmt.OldTable.Name.String()
-	newTable := stmt.NewTable.Name.String()
-
-	p.checkRenameTable(oldTable, newTable)
-}
-
-func (p *preprocessor) checkRenameTable(oldTable, newTable string) {
-	if isIncorrectName(oldTable) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(oldTable)
-		return
-	}
-
-	if isIncorrectName(newTable) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(newTable)
-		return
-	}
-}
-
 func (p *preprocessor) checkAlterTableGrammar(stmt *ast.AlterTableStmt) {
 	tName := stmt.Table.Name.String()
 	if isIncorrectName(tName) {
@@ -699,11 +677,4 @@ func (p *preprocessor) resolveCreateTableStmt(node *ast.CreateTableStmt) {
 	}
 }
 
-func (p *preprocessor) resolveAlterTableStmt(node *ast.AlterTableStmt) {
-	for _, spec := range node.Specs {
-		if spec.Tp == ast.AlterTableRenameTable {
-			p.flag |= inCreateOrDropTable
-			break
-		}
-	}
-}
+func (p *preprocessor) resolveAlterTableStmt(node *ast.AlterTableStmt) {}

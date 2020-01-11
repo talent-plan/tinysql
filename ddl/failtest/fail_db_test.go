@@ -129,42 +129,6 @@ func (s *testFailDBSuite) TestHalfwayCancelOperations(c *C) {
 	_, err = s.se.Execute(context.Background(), "select * from t")
 	c.Assert(err, IsNil)
 
-	// test for renaming table
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/ddl/renameTableErr", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/ddl/renameTableErr"), IsNil)
-	}()
-
-	_, err = s.se.Execute(context.Background(), "create table tx(a int)")
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "insert into tx values(1)")
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "rename table tx to ty")
-	c.Assert(err, NotNil)
-	// Make sure that the table's data has not been deleted.
-	rs, err = s.se.Execute(context.Background(), "select count(*) from tx")
-	c.Assert(err, IsNil)
-	req = rs[0].NewChunk()
-	err = rs[0].Next(context.Background(), req)
-	c.Assert(err, IsNil)
-	c.Assert(req.NumRows() == 0, IsFalse)
-	row = req.GetRow(0)
-	c.Assert(row.Len(), Equals, 1)
-	c.Assert(row.GetInt64(0), DeepEquals, int64(1))
-	c.Assert(rs[0].Close(), IsNil)
-	// Execute ddl statement reload schema.
-	_, err = s.se.Execute(context.Background(), "alter table tx comment 'tx'")
-	c.Assert(err, IsNil)
-	err = s.dom.DDL().GetHook().OnChanged(nil)
-	c.Assert(err, IsNil)
-	s.se, err = session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "use cancel_job_db")
-	c.Assert(err, IsNil)
-	// Test schema is correct.
-	_, err = s.se.Execute(context.Background(), "select * from tx")
-	c.Assert(err, IsNil)
-
 	// clean up
 	_, err = s.se.Execute(context.Background(), "drop database cancel_job_db")
 	c.Assert(err, IsNil)

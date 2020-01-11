@@ -107,6 +107,6 @@ func (s *testSuite5) TestShowEscape(c *C) {
 			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 	))
 
-	tk.MustExec("rename table \"t`abl\"\"e\" to t")
+	tk.MustExec("drop table \"t`abl\"\"e\"")
 	tk.MustExec("set sql_mode=@old_sql_mode")
 }

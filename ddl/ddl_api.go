@@ -1473,8 +1473,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 			err = d.DropIndex(ctx, ident, model.NewCIStr(spec.Name), spec.IfExists)
 		case ast.AlterTableDropPrimaryKey:
 			err = d.dropIndex(ctx, ident, true, model.NewCIStr(mysql.PrimaryKeyName), spec.IfExists)
-		case ast.AlterTableRenameIndex:
-			err = d.RenameIndex(ctx, ident, spec)
 		case ast.AlterTableAddConstraint:
 			constr := spec.Constraint
 			switch spec.Constraint.Tp {
@@ -1504,10 +1502,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 			err = d.ChangeColumn(ctx, ident, spec)
 		case ast.AlterTableAlterColumn:
 			err = d.AlterColumn(ctx, ident, spec)
-		case ast.AlterTableRenameTable:
-			newIdent := ast.Ident{Schema: spec.NewTable.Schema, Name: spec.NewTable.Name}
-			isAlterTable := true
-			err = d.RenameTable(ctx, ident, newIdent, isAlterTable)
 		case ast.AlterTablePartition:
 			// Prevent silent succeed if user executes ALTER TABLE x PARTITION BY ...
 			err = errors.New("alter table partition is unsupported")
@@ -2449,42 +2443,6 @@ func checkAlterTableCharset(tblInfo *model.TableInfo, dbInfo *model.DBInfo, toCh
 	return doNothing, nil
 }
 
-// RenameIndex renames an index.
-// In TiDB, indexes are case-insensitive (so index 'a' and 'A" are considered the same index),
-// but index names are case-sensitive (we can rename index 'a' to 'A')
-func (d *ddl) RenameIndex(ctx sessionctx.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ident.Schema)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(ident.Schema)
-	}
-
-	tb, err := is.TableByName(ident.Schema, ident.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ident.Schema, ident.Name))
-	}
-	duplicate, err := validateRenameIndex(spec.FromKey, spec.ToKey, tb.Meta())
-	if duplicate {
-		return nil
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    tb.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionRenameIndex,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{spec.FromKey, spec.ToKey},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
 // DropTable will proceed even if some table in the list does not exists.
 func (d *ddl) DropTable(ctx sessionctx.Context, ti ast.Ident) (err error) {
 	schema, tb, err := d.getSchemaAndTableByIdent(ctx, ti)
@@ -2498,61 +2456,6 @@ func (d *ddl) DropTable(ctx sessionctx.Context, ti ast.Ident) (err error) {
 		SchemaName: schema.Name.L,
 		Type:       model.ActionDropTable,
 		BinlogInfo: &model.HistoryInfo{},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-func (d *ddl) RenameTable(ctx sessionctx.Context, oldIdent, newIdent ast.Ident, isAlterTable bool) error {
-	is := d.GetInfoSchemaWithInterceptor(ctx)
-	oldSchema, ok := is.SchemaByName(oldIdent.Schema)
-	if !ok {
-		if isAlterTable {
-			return infoschema.ErrTableNotExists.GenWithStackByArgs(oldIdent.Schema, oldIdent.Name)
-		}
-		if is.TableExists(newIdent.Schema, newIdent.Name) {
-			return infoschema.ErrTableExists.GenWithStackByArgs(newIdent)
-		}
-		return errFileNotFound.GenWithStackByArgs(oldIdent.Schema, oldIdent.Name)
-	}
-	oldTbl, err := is.TableByName(oldIdent.Schema, oldIdent.Name)
-	if err != nil {
-		if isAlterTable {
-			return infoschema.ErrTableNotExists.GenWithStackByArgs(oldIdent.Schema, oldIdent.Name)
-		}
-		if is.TableExists(newIdent.Schema, newIdent.Name) {
-			return infoschema.ErrTableExists.GenWithStackByArgs(newIdent)
-		}
-		return errFileNotFound.GenWithStackByArgs(oldIdent.Schema, oldIdent.Name)
-	}
-	if isAlterTable && newIdent.Schema.L == oldIdent.Schema.L && newIdent.Name.L == oldIdent.Name.L {
-		// oldIdent is equal to newIdent, do nothing
-		return nil
-	}
-	newSchema, ok := is.SchemaByName(newIdent.Schema)
-	if !ok {
-		return ErrErrorOnRename.GenWithStackByArgs(
-			fmt.Sprintf("%s.%s", oldIdent.Schema, oldIdent.Name),
-			fmt.Sprintf("%s.%s", newIdent.Schema, newIdent.Name),
-			168,
-			fmt.Sprintf("Database `%s` doesn't exist", newIdent.Schema))
-	}
-	if is.TableExists(newIdent.Schema, newIdent.Name) {
-		return infoschema.ErrTableExists.GenWithStackByArgs(newIdent)
-	}
-	if err := checkTooLongTable(newIdent.Name); err != nil {
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   newSchema.ID,
-		TableID:    oldTbl.Meta().ID,
-		SchemaName: newSchema.Name.L,
-		Type:       model.ActionRenameTable,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{oldSchema.ID, newIdent.Name},
 	}
 
 	err = d.doDDLJob(ctx, job)

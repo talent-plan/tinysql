@@ -45,8 +45,6 @@ func (s *testDDLAlgorithmSuite) TestFindAlterAlgorithm(c *C) {
 		{ast.AlterTableSpec{Tp: ast.AlterTableDropPrimaryKey}, instantAlgorithm, ast.AlgorithmTypeInstant},
 		{ast.AlterTableSpec{Tp: ast.AlterTableDropIndex}, instantAlgorithm, ast.AlgorithmTypeInstant},
 		{ast.AlterTableSpec{Tp: ast.AlterTableDropForeignKey}, instantAlgorithm, ast.AlgorithmTypeInstant},
-		{ast.AlterTableSpec{Tp: ast.AlterTableRenameTable}, instantAlgorithm, ast.AlgorithmTypeInstant},
-		{ast.AlterTableSpec{Tp: ast.AlterTableRenameIndex}, instantAlgorithm, ast.AlgorithmTypeInstant},
 
 		// Alter table options.
 		{ast.AlterTableSpec{Tp: ast.AlterTableOption, Options: []*ast.TableOption{{Tp: ast.TableOptionShardRowID}}}, instantAlgorithm, ast.AlgorithmTypeInstant},

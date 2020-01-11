@@ -264,39 +264,6 @@ func dropIndexColumnFlag(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) {
 	}
 }
 
-func validateRenameIndex(from, to model.CIStr, tbl *model.TableInfo) (ignore bool, err error) {
-	if fromIdx := tbl.FindIndexByName(from.L); fromIdx == nil {
-		return false, errors.Trace(infoschema.ErrKeyNotExists.GenWithStackByArgs(from.O, tbl.Name))
-	}
-	// Take case-sensitivity into account, if `FromKey` and  `ToKey` are the same, nothing need to be changed
-	if from.O == to.O {
-		return true, nil
-	}
-	// If spec.FromKey.L == spec.ToKey.L, we operate on the same index(case-insensitive) and change its name (case-sensitive)
-	// e.g: from `inDex` to `IndEX`. Otherwise, we try to rename an index to another different index which already exists,
-	// that's illegal by rule.
-	if toIdx := tbl.FindIndexByName(to.L); toIdx != nil && from.L != to.L {
-		return false, errors.Trace(infoschema.ErrKeyNameDuplicate.GenWithStackByArgs(toIdx.Name.O))
-	}
-	return false, nil
-}
-
-func onRenameIndex(t *meta.Meta, job *model.Job) (ver int64, _ error) {
-	tblInfo, from, to, err := checkRenameIndex(t, job)
-	if err != nil {
-		return ver, errors.Trace(err)
-	}
-
-	idx := tblInfo.FindIndexByName(from.L)
-	idx.Name = to
-	if ver, err = updateVersionAndTableInfo(t, job, tblInfo, true); err != nil {
-		job.State = model.JobStateCancelled
-		return ver, errors.Trace(err)
-	}
-	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
-	return ver, nil
-}
-
 func getNullColInfos(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) ([]*model.ColumnInfo, error) {
 	nullCols := make([]*model.ColumnInfo, 0, len(indexInfo.Columns))
 	for _, colName := range indexInfo.Columns {
@@ -609,31 +576,6 @@ func checkDropIndexOnAutoIncrementColumn(tblInfo *model.TableInfo, indexInfo *mo
 		}
 	}
 	return nil
-}
-
-func checkRenameIndex(t *meta.Meta, job *model.Job) (*model.TableInfo, model.CIStr, model.CIStr, error) {
-	var from, to model.CIStr
-	schemaID := job.SchemaID
-	tblInfo, err := getTableInfoAndCancelFaultJob(t, job, schemaID)
-	if err != nil {
-		return nil, from, to, errors.Trace(err)
-	}
-
-	if err := job.DecodeArgs(&from, &to); err != nil {
-		job.State = model.JobStateCancelled
-		return nil, from, to, errors.Trace(err)
-	}
-
-	// Double check. See function `RenameIndex` in ddl_api.go
-	duplicate, err := validateRenameIndex(from, to, tblInfo)
-	if duplicate {
-		return nil, from, to, nil
-	}
-	if err != nil {
-		job.State = model.JobStateCancelled
-		return nil, from, to, errors.Trace(err)
-	}
-	return tblInfo, from, to, errors.Trace(err)
 }
 
 const (

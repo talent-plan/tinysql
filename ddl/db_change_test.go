@@ -739,17 +739,6 @@ func (s *testStateChangeSuite) TestParallelDropIndex(c *C) {
 	s.testControlParallelExecSQL(c, sql1, sql2, f)
 }
 
-func (s *testStateChangeSuite) TestParallelCreateAndRename(c *C) {
-	sql1 := "create table t_exists(c int);"
-	sql2 := "alter table t rename to t_exists;"
-	defer s.se.Execute(context.Background(), "drop table t_exists")
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2.Error(), Equals, "[schema:1050]Table 't_exists' already exists")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
 type checkRet func(c *C, err1, err2 error)
 
 func (s *testStateChangeSuiteBase) testControlParallelExecSQL(c *C, sql1, sql2 string, f checkRet) {

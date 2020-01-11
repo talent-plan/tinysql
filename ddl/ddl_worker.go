@@ -495,16 +495,12 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = w.onCreateIndex(d, t, job, true)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = onDropIndex(t, job)
-	case model.ActionRenameIndex:
-		ver, err = onRenameIndex(t, job)
 	case model.ActionAddForeignKey:
 		ver, err = onCreateForeignKey(t, job)
 	case model.ActionDropForeignKey:
 		ver, err = onDropForeignKey(t, job)
 	case model.ActionRebaseAutoID:
 		ver, err = onRebaseAutoID(d.store, t, job)
-	case model.ActionRenameTable:
-		ver, err = onRenameTable(d, t, job)
 	case model.ActionShardRowID:
 		ver, err = w.onShardRowID(d, t, job)
 	case model.ActionModifyTableComment:
@@ -656,15 +652,7 @@ func updateSchemaVersion(t *meta.Meta, job *model.Job) (int64, error) {
 		Version:  schemaVersion,
 		Type:     job.Type,
 		SchemaID: job.SchemaID,
-	}
-	if job.Type == model.ActionRenameTable {
-		err = job.DecodeArgs(&diff.OldSchemaID)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		diff.TableID = job.TableID
-	} else {
-		diff.TableID = job.TableID
+		TableID:  job.TableID,
 	}
 	err = t.SetSchemaDiff(diff)
 	return schemaVersion, errors.Trace(err)

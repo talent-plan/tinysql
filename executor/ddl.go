@@ -87,8 +87,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeDropDatabase(x)
 	case *ast.DropTableStmt:
 		err = e.executeDropTableOrView(x)
-	case *ast.RenameTableStmt:
-		err = e.executeRenameTable(x)
 	}
 	if err != nil {
 		// If the owner return ErrTableNotExists error when running this DDL, it may be caused by schema changed,
@@ -110,18 +108,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	// DDL will force commit old transaction, after DDL, in transaction status should be false.
 	e.ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusInTrans, false)
 	return nil
-}
-
-func (e *DDLExec) executeRenameTable(s *ast.RenameTableStmt) error {
-	if len(s.TableToTables) != 1 {
-		// Now we only allow one schema changing at the same time.
-		return errors.Errorf("can't run multi schema change")
-	}
-	oldIdent := ast.Ident{Schema: s.OldTable.Schema, Name: s.OldTable.Name}
-	newIdent := ast.Ident{Schema: s.NewTable.Schema, Name: s.NewTable.Name}
-	isAlterTable := false
-	err := domain.GetDomain(e.ctx).DDL().RenameTable(e.ctx, oldIdent, newIdent, isAlterTable)
-	return err
 }
 
 func (e *DDLExec) executeCreateDatabase(s *ast.CreateDatabaseStmt) error {
