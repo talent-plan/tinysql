@@ -989,18 +989,6 @@ func (s *testSessionSuite2) TestIndexColumnLength(c *C) {
 	c.Assert(idxC2Cols[0].Length, Equals, 6)
 }
 
-func (s *testSessionSuite2) TestIgnoreForeignKey(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	sqlText := `CREATE TABLE address (
-		id bigint(20) NOT NULL AUTO_INCREMENT,
-		user_id bigint(20) NOT NULL,
-		PRIMARY KEY (id),
-		CONSTRAINT FK_7rod8a71yep5vxasb0ms3osbg FOREIGN KEY (user_id) REFERENCES waimaiqa.user (id),
-		INDEX FK_7rod8a71yep5vxasb0ms3osbg (user_id) comment ''
-		) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci ROW_FORMAT=COMPACT COMMENT='' CHECKSUM=0 DELAY_KEY_WRITE=0;`
-	tk.MustExec(sqlText)
-}
-
 // TestISColumns tests information_schema.columns.
 func (s *testSessionSuite2) TestISColumns(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)

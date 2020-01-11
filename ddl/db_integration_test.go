@@ -372,8 +372,6 @@ func (s *testIntegrationSuite5) TestMySQLErrorCode(c *C) {
 	tk.MustGetErrCode(sql, mysql.ErrUnknownCharacterSet)
 	sql = "create table t1(a int) character set laitn1;"
 	tk.MustGetErrCode(sql, mysql.ErrUnknownCharacterSet)
-	sql = "create table test_error_code (a int not null ,b int not null,c int not null, d int not null, foreign key (b, c) references product(id));"
-	tk.MustGetErrCode(sql, mysql.ErrWrongFkDef)
 	sql = "create table test_error_code_2;"
 	tk.MustGetErrCode(sql, mysql.ErrTableMustHaveColumns)
 	sql = "create table test_error_code_2 (unique(c1));"
@@ -1691,15 +1689,4 @@ func (s *testIntegrationSuite3) TestSqlFunctionsInGeneratedColumns(c *C) {
 	tk.MustGetErrCode("create table t (a int, b int as (updatexml(1, 1, 1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
 	tk.MustGetErrCode("create table t (a int, b int as (statement_digest(1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
 	tk.MustGetErrCode("create table t (a int, b int as (statement_digest_text(1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
-}
-
-func (s *testIntegrationSuite3) TestParserIssue284(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table test.t_parser_issue_284(c1 int not null primary key)")
-	_, err := tk.Exec("create table test.t_parser_issue_284_2(id int not null primary key, c1 int not null, constraint foreign key (c1) references t_parser_issue_284(c1))")
-	c.Assert(err, IsNil)
-
-	tk.MustExec("drop table test.t_parser_issue_284")
-	tk.MustExec("drop table test.t_parser_issue_284_2")
 }

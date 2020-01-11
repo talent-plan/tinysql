@@ -100,8 +100,7 @@ func IsJobRollbackable(job *model.Job) bool {
 		}
 	case model.ActionDropColumn, model.ActionModifyColumn,
 		model.ActionDropTablePartition, model.ActionAddTablePartition,
-		model.ActionRebaseAutoID, model.ActionShardRowID, model.ActionAddForeignKey,
-		model.ActionDropForeignKey,
+		model.ActionRebaseAutoID, model.ActionShardRowID,
 		model.ActionModifyTableCharsetAndCollate,
 		model.ActionModifySchemaCharsetAndCollate:
 		return job.SchemaState == model.StateNone

@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -72,7 +71,6 @@ const (
 	tableTiDBIndexes                        = "TIDB_INDEXES"
 	tableAnalyzeStatus                      = "ANALYZE_STATUS"
 	tableTiDBServersInfo                    = "TIDB_SERVERS_INFO"
-	tableTiFlashReplica                     = "TIFLASH_REPLICA"
 )
 
 var tableIDMap = map[string]int64{
@@ -111,7 +109,6 @@ var tableIDMap = map[string]int64{
 	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
 	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 35,
 	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 36,
-	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 37,
 }
 
 type columnInfo struct {
@@ -732,15 +729,6 @@ var filesCols = []columnInfo{
 	{"CHECKSUM", mysql.TypeLonglong, 21, 0, nil, nil},
 	{"STATUS", mysql.TypeVarchar, 20, 0, nil, nil},
 	{"EXTRA", mysql.TypeVarchar, 255, 0, nil, nil},
-}
-
-var tableTableTiFlashReplicaCols = []columnInfo{
-	{"TABLE_SCHEMA", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"REPLICA_COUNT", mysql.TypeLonglong, 64, 0, nil, nil},
-	{"LOCATION_LABELS", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"AVAILABLE", mysql.TypeTiny, 1, 0, nil, nil},
 }
 
 func dataForSchemata(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
@@ -1380,30 +1368,6 @@ func keyColumnUsageInTable(schema *model.DBInfo, table *model.TableInfo) [][]typ
 			rows = append(rows, record)
 		}
 	}
-	for _, fk := range table.ForeignKeys {
-		fkRefCol := ""
-		if len(fk.RefCols) > 0 {
-			fkRefCol = fk.RefCols[0].O
-		}
-		for i, key := range fk.Cols {
-			col := nameToCol[key.L]
-			record := types.MakeDatums(
-				catalogVal,    // CONSTRAINT_CATALOG
-				schema.Name.O, // CONSTRAINT_SCHEMA
-				fk.Name.O,     // CONSTRAINT_NAME
-				catalogVal,    // TABLE_CATALOG
-				schema.Name.O, // TABLE_SCHEMA
-				table.Name.O,  // TABLE_NAME
-				col.Name.O,    // COLUMN_NAME
-				i+1,           // ORDINAL_POSITION,
-				1,             // POSITION_IN_UNIQUE_CONSTRAINT
-				schema.Name.O, // REFERENCED_TABLE_SCHEMA
-				fk.RefTable.O, // REFERENCED_TABLE_NAME
-				fkRefCol,      // REFERENCED_COLUMN_NAME
-			)
-			rows = append(rows, record)
-		}
-	}
 	return rows
 }
 
@@ -1436,28 +1400,6 @@ type ServerInfo struct {
 	StatusAddr string
 	Version    string
 	GitHash    string
-}
-
-// dataForTableTiFlashReplica constructs data for table tiflash replica info.
-func dataForTableTiFlashReplica(schemas []*model.DBInfo) [][]types.Datum {
-	var rows [][]types.Datum
-	for _, schema := range schemas {
-		for _, tbl := range schema.Tables {
-			if tbl.TiFlashReplica == nil {
-				continue
-			}
-			record := types.MakeDatums(
-				schema.Name.O,                   // TABLE_SCHEMA
-				tbl.Name.O,                      // TABLE_NAME
-				tbl.ID,                          // TABLE_ID
-				int64(tbl.TiFlashReplica.Count), // REPLICA_COUNT
-				strings.Join(tbl.TiFlashReplica.LocationLabels, ","), // LOCATION_LABELS
-				tbl.TiFlashReplica.Available,                         // AVAILABLE
-			)
-			rows = append(rows, record)
-		}
-	}
-	return rows
 }
 
 var tableNameToColumns = map[string][]columnInfo{
@@ -1494,7 +1436,6 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableTiDBIndexes:                        tableTiDBIndexesCols,
 	tableAnalyzeStatus:                      tableAnalyzeStatusCols,
 	tableTiDBServersInfo:                    tableTiDBServersInfoCols,
-	tableTiFlashReplica:                     tableTableTiFlashReplicaCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocator, meta *model.TableInfo) (table.Table, error) {
@@ -1582,8 +1523,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForProcesslist(ctx)
 	case tableTiDBServersInfo:
 		fullRows, err = dataForServersInfo()
-	case tableTiFlashReplica:
-		fullRows = dataForTableTiFlashReplica(dbs)
 	}
 	if err != nil {
 		return nil, err

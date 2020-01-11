@@ -144,28 +144,6 @@ func (s *testDDLSuite) TestInvalidDDLJob(c *C) {
 	c.Assert(err.Error(), Equals, "[ddl:8204]invalid ddl job type: none")
 }
 
-func (s *testDDLSuite) TestForeignKeyError(c *C) {
-	store := testCreateStore(c, "test_foreign_key_error")
-	defer store.Close()
-
-	d := newDDL(
-		context.Background(),
-		WithStore(store),
-		WithLease(testLease),
-	)
-	defer d.Stop()
-	ctx := testNewContext(d)
-
-	doDDLJobErr(c, -1, 1, model.ActionAddForeignKey, nil, ctx, d)
-	doDDLJobErr(c, -1, 1, model.ActionDropForeignKey, nil, ctx, d)
-
-	dbInfo := testSchemaInfo(c, d, "test")
-	tblInfo := testTableInfo(c, d, "t", 3)
-	testCreateSchema(c, ctx, d, dbInfo)
-	testCreateTable(c, ctx, d, dbInfo, tblInfo)
-	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionDropForeignKey, []interface{}{model.NewCIStr("c1_foreign_key")}, ctx, d)
-}
-
 func (s *testDDLSuite) TestIndexError(c *C) {
 	store := testCreateStore(c, "test_index_error")
 	defer store.Close()
@@ -373,8 +351,8 @@ func buildCancelJobTests(firstID int64) []testCancelJob {
 		{act: model.ActionRenameTable, jobIDs: []int64{firstID + 23}, cancelRetErrs: noErrs, cancelState: model.StateNone},
 		{act: model.ActionRenameTable, jobIDs: []int64{firstID + 24}, cancelRetErrs: []error{admin.ErrCancelFinishedDDLJob.GenWithStackByArgs(firstID + 24)}, cancelState: model.StatePublic},
 
-		{act: model.ActionModifyTableCharsetAndCollate, jobIDs: []int64{firstID + 23}, cancelRetErrs: noErrs, cancelState: model.StateNone},
-		{act: model.ActionModifyTableCharsetAndCollate, jobIDs: []int64{firstID + 24}, cancelRetErrs: []error{admin.ErrCancelFinishedDDLJob.GenWithStackByArgs(firstID + 26)}, cancelState: model.StatePublic},
+		{act: model.ActionModifyTableCharsetAndCollate, jobIDs: []int64{firstID + 19}, cancelRetErrs: noErrs, cancelState: model.StateNone},
+		{act: model.ActionModifyTableCharsetAndCollate, jobIDs: []int64{firstID + 20}, cancelRetErrs: []error{admin.ErrCancelFinishedDDLJob.GenWithStackByArgs(firstID + 26)}, cancelState: model.StatePublic},
 		{act: model.ActionTruncateTablePartition, jobIDs: []int64{firstID + 27}, cancelRetErrs: noErrs, cancelState: model.StateNone},
 		{act: model.ActionTruncateTablePartition, jobIDs: []int64{firstID + 28}, cancelRetErrs: []error{admin.ErrCancelFinishedDDLJob.GenWithStackByArgs(firstID + 28)}, cancelState: model.StatePublic},
 		{act: model.ActionModifySchemaCharsetAndCollate, jobIDs: []int64{firstID + 30}, cancelRetErrs: noErrs, cancelState: model.StateNone},
@@ -646,38 +624,6 @@ func (s *testDDLSuite) TestCancelJob(c *C) {
 	changedCol := model.FindColumnInfo(changedTable.Meta().Columns, col.Name.L)
 	c.Assert(changedCol.DefaultValue, IsNil)
 
-	// Test add foreign key failed cause by canceled.
-	updateTest(&tests[16])
-	addForeignKeyArgs := []interface{}{model.FKInfo{Name: model.NewCIStr("fk1")}}
-	doDDLJobErrWithSchemaState(ctx, d, c, dbInfo.ID, tblInfo.ID, test.act, addForeignKeyArgs, &test.cancelState)
-	c.Check(checkErr, IsNil)
-	changedTable = testGetTable(c, d, dbInfo.ID, tblInfo.ID)
-	c.Assert(len(changedTable.Meta().ForeignKeys), Equals, 0)
-
-	// Test add foreign key successful.
-	updateTest(&tests[17])
-	doDDLJobSuccess(ctx, d, c, dbInfo.ID, tblInfo.ID, test.act, addForeignKeyArgs)
-	c.Check(checkErr, IsNil)
-	changedTable = testGetTable(c, d, dbInfo.ID, tblInfo.ID)
-	c.Assert(len(changedTable.Meta().ForeignKeys), Equals, 1)
-	c.Assert(changedTable.Meta().ForeignKeys[0].Name, Equals, addForeignKeyArgs[0].(model.FKInfo).Name)
-
-	// Test drop foreign key failed cause by canceled.
-	updateTest(&tests[18])
-	dropForeignKeyArgs := []interface{}{addForeignKeyArgs[0].(model.FKInfo).Name}
-	doDDLJobErrWithSchemaState(ctx, d, c, dbInfo.ID, tblInfo.ID, test.act, dropForeignKeyArgs, &test.cancelState)
-	c.Check(checkErr, IsNil)
-	changedTable = testGetTable(c, d, dbInfo.ID, tblInfo.ID)
-	c.Assert(len(changedTable.Meta().ForeignKeys), Equals, 1)
-	c.Assert(changedTable.Meta().ForeignKeys[0].Name, Equals, dropForeignKeyArgs[0].(model.CIStr))
-
-	// Test drop foreign key successful.
-	updateTest(&tests[19])
-	doDDLJobSuccess(ctx, d, c, dbInfo.ID, tblInfo.ID, test.act, dropForeignKeyArgs)
-	c.Check(checkErr, IsNil)
-	changedTable = testGetTable(c, d, dbInfo.ID, tblInfo.ID)
-	c.Assert(len(changedTable.Meta().ForeignKeys), Equals, 0)
-
 	// test modify table charset failed caused by canceled.
 	test = &tests[22]
 	modifyTableCharsetArgs := []interface{}{"utf8mb4", "utf8mb4_bin"}
@@ -704,7 +650,6 @@ func (s *testDDLSuite) TestIgnorableSpec(c *C) {
 		ast.AlterTableDropColumn,
 		ast.AlterTableDropPrimaryKey,
 		ast.AlterTableDropIndex,
-		ast.AlterTableDropForeignKey,
 		ast.AlterTableModifyColumn,
 		ast.AlterTableChangeColumn,
 		ast.AlterTableAlterColumn,

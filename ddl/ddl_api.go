@@ -1006,22 +1006,19 @@ func checkColumnAttributes(colName string, tp *types.FieldType) error {
 	return nil
 }
 
-func checkDuplicateConstraint(namesMap map[string]bool, name string, foreign bool) error {
+func checkDuplicateConstraint(namesMap map[string]bool, name string) error {
 	if name == "" {
 		return nil
 	}
 	nameLower := strings.ToLower(name)
 	if namesMap[nameLower] {
-		if foreign {
-			return infoschema.ErrCannotAddForeign
-		}
 		return ErrDupKeyName.GenWithStack("duplicate key name %s", name)
 	}
 	namesMap[nameLower] = true
 	return nil
 }
 
-func setEmptyConstraintName(namesMap map[string]bool, constr *ast.Constraint, foreign bool) {
+func setEmptyConstraintName(namesMap map[string]bool, constr *ast.Constraint) {
 	if constr.Name == "" && len(constr.Keys) > 0 {
 		colName := constr.Keys[0].Column.Name.L
 		constrName := colName
@@ -1032,11 +1029,7 @@ func setEmptyConstraintName(namesMap map[string]bool, constr *ast.Constraint, fo
 		}
 		for namesMap[constrName] {
 			// We loop forever until we find constrName that haven't been used.
-			if foreign {
-				constrName = fmt.Sprintf("fk_%s_%d", colName, i)
-			} else {
-				constrName = fmt.Sprintf("%s_%d", colName, i)
-			}
+			constrName = fmt.Sprintf("%s_%d", colName, i)
 			i++
 		}
 		constr.Name = constrName
@@ -1046,30 +1039,18 @@ func setEmptyConstraintName(namesMap map[string]bool, constr *ast.Constraint, fo
 
 func checkConstraintNames(constraints []*ast.Constraint) error {
 	constrNames := map[string]bool{}
-	fkNames := map[string]bool{}
 
 	// Check not empty constraint name whether is duplicated.
 	for _, constr := range constraints {
-		if constr.Tp == ast.ConstraintForeignKey {
-			err := checkDuplicateConstraint(fkNames, constr.Name, true)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			err := checkDuplicateConstraint(constrNames, constr.Name, false)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		err := checkDuplicateConstraint(constrNames, constr.Name)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 
 	// Set empty constraint names.
 	for _, constr := range constraints {
-		if constr.Tp == ast.ConstraintForeignKey {
-			setEmptyConstraintName(fkNames, constr, true)
-		} else {
-			setEmptyConstraintName(constrNames, constr, false)
-		}
+		setEmptyConstraintName(constrNames, constr)
 	}
 
 	return nil
@@ -1094,21 +1075,6 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 		tbInfo.Columns = append(tbInfo.Columns, v.ToInfo())
 	}
 	for _, constr := range constraints {
-		if constr.Tp == ast.ConstraintForeignKey {
-			for _, fk := range tbInfo.ForeignKeys {
-				if fk.Name.L == strings.ToLower(constr.Name) {
-					return nil, infoschema.ErrCannotAddForeign
-				}
-			}
-			fk, err := buildFKInfo(model.NewCIStr(constr.Name), constr.Keys, constr.Refer, cols, tbInfo)
-			if err != nil {
-				return nil, err
-			}
-			fk.State = model.StatePublic
-
-			tbInfo.ForeignKeys = append(tbInfo.ForeignKeys, fk)
-			continue
-		}
 		if constr.Tp == ast.ConstraintPrimaryKey {
 			lastCol, err := checkPKOnGeneratedColumn(tbInfo, constr.Keys)
 			if err != nil {
@@ -1482,10 +1448,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 			case ast.ConstraintUniq, ast.ConstraintUniqIndex, ast.ConstraintUniqKey:
 				err = d.CreateIndex(ctx, ident, ast.IndexKeyTypeUnique, model.NewCIStr(constr.Name),
 					spec.Constraint.Keys, constr.Option, false) // IfNotExists should be not applied
-			case ast.ConstraintForeignKey:
-				// NOTE: we do not handle `symbol` and `index_name` well in the parser and we do not check ForeignKey already exists,
-				// so we just also ignore the `if not exists` check.
-				err = d.CreateForeignKey(ctx, ident, model.NewCIStr(constr.Name), spec.Constraint.Keys, spec.Constraint.Refer)
 			case ast.ConstraintPrimaryKey:
 				err = d.CreatePrimaryKey()
 			case ast.ConstraintFulltext:
@@ -1493,9 +1455,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 			default:
 				// Nothing to do now.
 			}
-		case ast.AlterTableDropForeignKey:
-			// NOTE: we do not check `if not exists` and `if exists` for ForeignKey now.
-			err = d.DropForeignKey(ctx, ident, model.NewCIStr(spec.Name))
 		case ast.AlterTableModifyColumn:
 			err = d.ModifyColumn(ctx, ident, spec)
 		case ast.AlterTableChangeColumn:
@@ -1537,8 +1496,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 					return errors.Trace(err)
 				}
 			}
-		case ast.AlterTableSetTiFlashReplica:
-			err = d.AlterTableSetTiFlashReplica(ctx, ident, spec.TiFlashReplica)
 		default:
 			// Nothing to do now.
 		}
@@ -2350,41 +2307,6 @@ func (d *ddl) AlterTableCharsetAndCollate(ctx sessionctx.Context, ident ast.Iden
 	return errors.Trace(err)
 }
 
-// AlterTableSetTiFlashReplica sets the TiFlash replicas info.
-func (d *ddl) AlterTableSetTiFlashReplica(ctx sessionctx.Context, ident ast.Ident, replicaInfo *ast.TiFlashReplicaSpec) error {
-	schema, tb, err := d.getSchemaAndTableByIdent(ctx, ident)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	tbReplicaInfo := tb.Meta().TiFlashReplica
-	if tbReplicaInfo != nil && tbReplicaInfo.Count == replicaInfo.Count &&
-		len(tbReplicaInfo.LocationLabels) == len(replicaInfo.Labels) {
-		changed := false
-		for i, lable := range tbReplicaInfo.LocationLabels {
-			if replicaInfo.Labels[i] != lable {
-				changed = true
-				break
-			}
-		}
-		if !changed {
-			return nil
-		}
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    tb.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionSetTiFlashReplica,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{*replicaInfo},
-	}
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
 // checkAlterTableCharset uses to check is it possible to change the charset of table.
 // This function returns 2 variable:
 // doNothing: if doNothing is true, means no need to change any more, because the target charset is same with the charset of table.
@@ -2543,138 +2465,6 @@ func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, keyType ast.Inde
 		ctx.GetSessionVars().StmtCtx.AppendNote(err)
 		return nil
 	}
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
-
-func buildFKInfo(fkName model.CIStr, keys []*ast.IndexPartSpecification, refer *ast.ReferenceDef, cols []*table.Column, tbInfo *model.TableInfo) (*model.FKInfo, error) {
-	if len(keys) != len(refer.IndexPartSpecifications) {
-		return nil, infoschema.ErrForeignKeyNotMatch.GenWithStackByArgs("foreign key without name")
-	}
-
-	// all base columns of stored generated columns
-	baseCols := make(map[string]struct{})
-	for _, col := range cols {
-		if col.IsGenerated() && col.GeneratedStored {
-			for name := range col.Dependences {
-				baseCols[name] = struct{}{}
-			}
-		}
-	}
-
-	fkInfo := &model.FKInfo{
-		Name:     fkName,
-		RefTable: refer.Table.Name,
-		Cols:     make([]model.CIStr, len(keys)),
-	}
-
-	for i, key := range keys {
-		// Check add foreign key to generated columns
-		// For more detail, see https://dev.mysql.com/doc/refman/8.0/en/innodb-foreign-key-constraints.html#innodb-foreign-key-generated-columns
-		for _, col := range cols {
-			if col.Name.L != key.Column.Name.L {
-				continue
-			}
-			if col.IsGenerated() {
-				// Check foreign key on virtual generated columns
-				if !col.GeneratedStored {
-					return nil, infoschema.ErrCannotAddForeign
-				}
-
-				// Check wrong reference options of foreign key on stored generated columns
-				switch refer.OnUpdate.ReferOpt {
-				case ast.ReferOptionCascade, ast.ReferOptionSetNull, ast.ReferOptionSetDefault:
-					return nil, errWrongFKOptionForGeneratedColumn.GenWithStackByArgs("ON UPDATE " + refer.OnUpdate.ReferOpt.String())
-				}
-				switch refer.OnDelete.ReferOpt {
-				case ast.ReferOptionSetNull, ast.ReferOptionSetDefault:
-					return nil, errWrongFKOptionForGeneratedColumn.GenWithStackByArgs("ON DELETE " + refer.OnDelete.ReferOpt.String())
-				}
-				continue
-			}
-			// Check wrong reference options of foreign key on base columns of stored generated columns
-			if _, ok := baseCols[col.Name.L]; ok {
-				switch refer.OnUpdate.ReferOpt {
-				case ast.ReferOptionCascade, ast.ReferOptionSetNull, ast.ReferOptionSetDefault:
-					return nil, infoschema.ErrCannotAddForeign
-				}
-				switch refer.OnDelete.ReferOpt {
-				case ast.ReferOptionCascade, ast.ReferOptionSetNull, ast.ReferOptionSetDefault:
-					return nil, infoschema.ErrCannotAddForeign
-				}
-			}
-		}
-		if table.FindCol(cols, key.Column.Name.O) == nil {
-			return nil, errKeyColumnDoesNotExits.GenWithStackByArgs(key.Column.Name)
-		}
-		fkInfo.Cols[i] = key.Column.Name
-	}
-
-	fkInfo.RefCols = make([]model.CIStr, len(refer.IndexPartSpecifications))
-	for i, key := range refer.IndexPartSpecifications {
-		fkInfo.RefCols[i] = key.Column.Name
-	}
-
-	fkInfo.OnDelete = int(refer.OnDelete.ReferOpt)
-	fkInfo.OnUpdate = int(refer.OnUpdate.ReferOpt)
-
-	return fkInfo, nil
-}
-
-func (d *ddl) CreateForeignKey(ctx sessionctx.Context, ti ast.Ident, fkName model.CIStr, keys []*ast.IndexPartSpecification, refer *ast.ReferenceDef) error {
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ti.Schema)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(ti.Schema)
-	}
-
-	t, err := is.TableByName(ti.Schema, ti.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ti.Schema, ti.Name))
-	}
-
-	fkInfo, err := buildFKInfo(fkName, keys, refer, t.Cols(), t.Meta())
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    t.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionAddForeignKey,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{fkInfo},
-	}
-
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-
-}
-
-func (d *ddl) DropForeignKey(ctx sessionctx.Context, ti ast.Ident, fkName model.CIStr) error {
-	is := d.infoHandle.Get()
-	schema, ok := is.SchemaByName(ti.Schema)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(ti.Schema)
-	}
-
-	t, err := is.TableByName(ti.Schema, ti.Name)
-	if err != nil {
-		return errors.Trace(infoschema.ErrTableNotExists.GenWithStackByArgs(ti.Schema, ti.Name))
-	}
-
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    t.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionDropForeignKey,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{fkName},
-	}
-
-	err = d.doDDLJob(ctx, job)
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
 }
