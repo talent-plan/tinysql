@@ -2324,10 +2324,6 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 		return b.buildMemTable(ctx, dbName, tableInfo)
 	}
 
-	if tableInfo.IsView() {
-		return b.BuildDataSourceFromView(ctx, dbName, tableInfo)
-	}
-
 	tblName := *asName
 	if tblName.L == "" {
 		tblName = tn.Name
@@ -2504,84 +2500,6 @@ func (b *PlanBuilder) buildMemTable(ctx context.Context, dbName model.CIStr, tab
 	p.SetSchema(schema)
 	p.names = names
 	return p, nil
-}
-
-// BuildDataSourceFromView is used to build LogicalPlan from view
-func (b *PlanBuilder) BuildDataSourceFromView(ctx context.Context, dbName model.CIStr, tableInfo *model.TableInfo) (LogicalPlan, error) {
-	charset, collation := b.ctx.GetSessionVars().GetCharsetInfo()
-	viewParser := parser.New()
-	selectNode, err := viewParser.ParseOneStmt(tableInfo.View.SelectStmt, charset, collation)
-	if err != nil {
-		return nil, err
-	}
-
-	selectLogicalPlan, err := b.Build(ctx, selectNode)
-	if err != nil {
-		err = ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
-		return nil, err
-	}
-
-	if tableInfo.View.Security == model.SecurityDefiner {
-
-	}
-
-	if b.ctx.GetSessionVars().StmtCtx.InExplainStmt {
-
-	}
-
-	if len(tableInfo.Columns) != selectLogicalPlan.Schema().Len() {
-		return nil, ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
-	}
-
-	return b.buildProjUponView(ctx, dbName, tableInfo, selectLogicalPlan)
-}
-
-func (b *PlanBuilder) buildProjUponView(ctx context.Context, dbName model.CIStr, tableInfo *model.TableInfo, selectLogicalPlan Plan) (LogicalPlan, error) {
-	columnInfo := tableInfo.Cols()
-	cols := selectLogicalPlan.Schema().Clone().Columns
-	names := selectLogicalPlan.OutputNames().Shallow()
-	// In the old version of VIEW implementation, tableInfo.View.Cols is used to
-	// store the origin columns' names of the underlying SelectStmt used when
-	// creating the view.
-	if tableInfo.View.Cols != nil {
-		cols = cols[:0]
-		names = names[:0]
-		for _, info := range columnInfo {
-			idx := expression.FindFieldNameIdxByColName(selectLogicalPlan.OutputNames(), info.Name.L)
-			if idx == -1 {
-				return nil, ErrViewInvalid.GenWithStackByArgs(dbName.O, tableInfo.Name.O)
-			}
-			cols = append(cols, selectLogicalPlan.Schema().Columns[idx])
-			names = append(names, selectLogicalPlan.OutputNames()[idx])
-		}
-	}
-
-	projSchema := expression.NewSchema(make([]*expression.Column, 0, len(tableInfo.Columns))...)
-	projExprs := make([]expression.Expression, 0, len(tableInfo.Columns))
-	projNames := make(types.NameSlice, 0, len(tableInfo.Columns))
-	for i, name := range names {
-		origColName := name.ColName
-		if tableInfo.View.Cols != nil {
-			origColName = tableInfo.View.Cols[i]
-		}
-		projNames = append(projNames, &types.FieldName{
-			TblName:     name.TblName,
-			OrigTblName: name.OrigTblName,
-			ColName:     columnInfo[i].Name,
-			OrigColName: origColName,
-			DBName:      name.DBName,
-		})
-		projSchema.Append(&expression.Column{
-			UniqueID: b.ctx.GetSessionVars().AllocPlanColumnID(),
-			RetType:  cols[i].GetType(),
-		})
-		projExprs = append(projExprs, cols[i])
-	}
-	projUponView := LogicalProjection{Exprs: projExprs}.Init(b.ctx, b.getSelectOffset())
-	projUponView.names = projNames
-	projUponView.SetChildren(selectLogicalPlan.(LogicalPlan))
-	projUponView.SetSchema(projSchema)
-	return projUponView, nil
 }
 
 // buildApplyWithJoinType builds apply plan with outerPlan and innerPlan, which apply join with particular join type for
@@ -2780,14 +2698,6 @@ func (b *PlanBuilder) buildUpdate(ctx context.Context, update *ast.UpdateStmt) (
 	p, err := b.buildResultSetNode(ctx, update.TableRefs.TableRefs)
 	if err != nil {
 		return nil, err
-	}
-
-	var tableList []*ast.TableName
-	tableList = extractTableList(update.TableRefs.TableRefs, tableList, false)
-	for _, t := range tableList {
-		if t.TableInfo.IsView() {
-			return nil, errors.Errorf("update view %s is not supported now.", t.Name.O)
-		}
 	}
 
 	oldSchemaLen := p.Schema().Len()
@@ -3083,16 +2993,6 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, delete *ast.DeleteStmt) (
 				}
 				// check sql like: `delete b from (select * from t) as a, t`
 				return nil, ErrUnknownTable.GenWithStackByArgs(tn.Name.O, "MULTI DELETE")
-			}
-			if tn.TableInfo.IsView() {
-				return nil, errors.Errorf("delete view %s is not supported now.", tn.Name.O)
-			}
-		}
-	} else {
-		// Delete from a, b, c, d.
-		for _, v := range tableList {
-			if v.TableInfo.IsView() {
-				return nil, errors.Errorf("delete view %s is not supported now.", v.Name.O)
 			}
 		}
 	}

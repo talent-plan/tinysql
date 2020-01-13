@@ -276,13 +276,9 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 
 			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
 			err = w.deleteRange(job)
-		case model.ActionDropSchema, model.ActionDropTable, model.ActionTruncateTable, model.ActionDropIndex, model.ActionDropPrimaryKey:
+		case model.ActionDropSchema, model.ActionDropTable, model.ActionDropIndex, model.ActionDropPrimaryKey:
 			err = w.deleteRange(job)
 		}
-	}
-	switch job.Type {
-	case model.ActionRecoverTable:
-		err = finishRecoverTable(w, t, job)
 	}
 	if err != nil {
 		return errors.Trace(err)
@@ -303,23 +299,6 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 	}
 	err = t.AddHistoryDDLJob(job, updateRawArgs)
 	return errors.Trace(err)
-}
-
-func finishRecoverTable(w *worker, t *meta.Meta, job *model.Job) error {
-	tbInfo := &model.TableInfo{}
-	var autoID, dropJobID, recoverTableCheckFlag int64
-	var snapshotTS uint64
-	err := job.DecodeArgs(tbInfo, &autoID, &dropJobID, &snapshotTS, &recoverTableCheckFlag)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if recoverTableCheckFlag == recoverTableCheckFlagEnableGC {
-		err = enableGC(w)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
 }
 
 func isDependencyJobDone(t *meta.Meta, job *model.Job) (bool, error) {
@@ -500,9 +479,7 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onDropSchema(t, job)
 	case model.ActionCreateTable:
 		ver, err = onCreateTable(d, t, job)
-	case model.ActionCreateView:
-		ver, err = onCreateView(d, t, job)
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable:
 		ver, err = onDropTableOrView(t, job)
 	case model.ActionAddColumn:
 		ver, err = onAddColumn(d, t, job)
@@ -518,30 +495,14 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = w.onCreateIndex(d, t, job, true)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = onDropIndex(t, job)
-	case model.ActionRenameIndex:
-		ver, err = onRenameIndex(t, job)
-	case model.ActionAddForeignKey:
-		ver, err = onCreateForeignKey(t, job)
-	case model.ActionDropForeignKey:
-		ver, err = onDropForeignKey(t, job)
-	case model.ActionTruncateTable:
-		ver, err = onTruncateTable(d, t, job)
 	case model.ActionRebaseAutoID:
 		ver, err = onRebaseAutoID(d.store, t, job)
-	case model.ActionRenameTable:
-		ver, err = onRenameTable(d, t, job)
 	case model.ActionShardRowID:
 		ver, err = w.onShardRowID(d, t, job)
 	case model.ActionModifyTableComment:
 		ver, err = onModifyTableComment(t, job)
 	case model.ActionModifyTableCharsetAndCollate:
 		ver, err = onModifyTableCharsetAndCollate(t, job)
-	case model.ActionRecoverTable:
-		ver, err = w.onRecoverTable(d, t, job)
-	case model.ActionSetTiFlashReplica:
-		ver, err = onSetTableFlashReplica(t, job)
-	case model.ActionUpdateTiFlashReplicaStatus:
-		ver, err = onUpdateFlashReplicaStatus(t, job)
 	default:
 		// Invalid job, cancel it.
 		job.State = model.JobStateCancelled
@@ -683,22 +644,7 @@ func updateSchemaVersion(t *meta.Meta, job *model.Job) (int64, error) {
 		Version:  schemaVersion,
 		Type:     job.Type,
 		SchemaID: job.SchemaID,
-	}
-	if job.Type == model.ActionTruncateTable {
-		// Truncate table has two table ID, should be handled differently.
-		err = job.DecodeArgs(&diff.TableID)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		diff.OldTableID = job.TableID
-	} else if job.Type == model.ActionRenameTable {
-		err = job.DecodeArgs(&diff.OldSchemaID)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		diff.TableID = job.TableID
-	} else {
-		diff.TableID = job.TableID
+		TableID:  job.TableID,
 	}
 	err = t.SetSchemaDiff(diff)
 	return schemaVersion, errors.Trace(err)

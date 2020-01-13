@@ -264,15 +264,6 @@ func (s *seqTestSuite) TestAdminShowNextID(c *C) {
 	tk.MustExec("insert into tt values(20, 1)")
 	r = tk.MustQuery("admin show tt next_row_id")
 	r.Check(testkit.Rows("test tt id 31"))
-	// test for renaming the table
-	tk.MustExec("create database test1")
-	tk.MustExec("rename table test.tt to test1.tt")
-	tk.MustExec("use test1")
-	r = tk.MustQuery("admin show tt next_row_id")
-	r.Check(testkit.Rows("test1 tt id 31"))
-	tk.MustExec("insert test1.tt values ()")
-	r = tk.MustQuery("admin show tt next_row_id")
-	r.Check(testkit.Rows("test1 tt id 41"))
 }
 
 func (s *seqTestSuite) TestNoHistoryWhenDisableRetry(c *C) {

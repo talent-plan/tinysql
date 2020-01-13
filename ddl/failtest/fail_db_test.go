@@ -105,8 +105,6 @@ func (s *testFailDBSuite) TestHalfwayCancelOperations(c *C) {
 	c.Assert(err, IsNil)
 	_, err = s.se.Execute(context.Background(), "insert into t values(1)")
 	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "truncate table t")
-	c.Assert(err, NotNil)
 	// Make sure that the table's data has not been deleted.
 	rs, err := s.se.Execute(context.Background(), "select count(*) from t")
 	c.Assert(err, IsNil)
@@ -129,42 +127,6 @@ func (s *testFailDBSuite) TestHalfwayCancelOperations(c *C) {
 	c.Assert(err, IsNil)
 	// Test schema is correct.
 	_, err = s.se.Execute(context.Background(), "select * from t")
-	c.Assert(err, IsNil)
-
-	// test for renaming table
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/ddl/renameTableErr", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/ddl/renameTableErr"), IsNil)
-	}()
-
-	_, err = s.se.Execute(context.Background(), "create table tx(a int)")
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "insert into tx values(1)")
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "rename table tx to ty")
-	c.Assert(err, NotNil)
-	// Make sure that the table's data has not been deleted.
-	rs, err = s.se.Execute(context.Background(), "select count(*) from tx")
-	c.Assert(err, IsNil)
-	req = rs[0].NewChunk()
-	err = rs[0].Next(context.Background(), req)
-	c.Assert(err, IsNil)
-	c.Assert(req.NumRows() == 0, IsFalse)
-	row = req.GetRow(0)
-	c.Assert(row.Len(), Equals, 1)
-	c.Assert(row.GetInt64(0), DeepEquals, int64(1))
-	c.Assert(rs[0].Close(), IsNil)
-	// Execute ddl statement reload schema.
-	_, err = s.se.Execute(context.Background(), "alter table tx comment 'tx'")
-	c.Assert(err, IsNil)
-	err = s.dom.DDL().GetHook().OnChanged(nil)
-	c.Assert(err, IsNil)
-	s.se, err = session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	_, err = s.se.Execute(context.Background(), "use cancel_job_db")
-	c.Assert(err, IsNil)
-	// Test schema is correct.
-	_, err = s.se.Execute(context.Background(), "select * from tx")
 	c.Assert(err, IsNil)
 
 	// clean up
@@ -285,13 +247,6 @@ func (s *testFailDBSuite) TestGenGlobalIDFail(c *C) {
 	tk.MustExec("use gen_global_id_fail")
 
 	sql1 := "create table t1(a bigint PRIMARY KEY, b int)"
-	sql2 := `create table t2(a bigint PRIMARY KEY, b int) partition by range (a) (
-			      partition p0 values less than (3440),
-			      partition p1 values less than (61440),
-			      partition p2 values less than (122880),
-			      partition p3 values less than maxvalue)`
-	sql3 := `truncate table t1`
-	sql4 := `truncate table t2`
 
 	testcases := []struct {
 		sql     string
@@ -299,13 +254,7 @@ func (s *testFailDBSuite) TestGenGlobalIDFail(c *C) {
 		mockErr bool
 	}{
 		{sql1, "t1", true},
-		{sql2, "t2", true},
 		{sql1, "t1", false},
-		{sql2, "t2", false},
-		{sql3, "t1", true},
-		{sql4, "t2", true},
-		{sql3, "t1", false},
-		{sql4, "t2", false},
 	}
 
 	for idx, test := range testcases {

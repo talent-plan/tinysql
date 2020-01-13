@@ -96,9 +96,7 @@ func (s *testSessionSuiteBase) TearDownTest(c *C) {
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
 		tableType := tb[1]
-		if tableType == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else if tableType == "BASE TABLE" {
+		if tableType == "BASE TABLE" {
 			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 		} else {
 			panic(fmt.Sprintf("Unexpected table '%s' with type '%s'.", tableName, tableType))
@@ -574,16 +572,6 @@ func (s *testSessionSuite) TestRetryForCurrentTxn(c *C) {
 	tk.MustQuery("select * from history").Check(testkit.Rows("2"))
 }
 
-// TestTruncateAlloc tests that the auto_increment ID does not reuse the old table's allocator.
-func (s *testSessionSuite) TestTruncateAlloc(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table truncate_id (a int primary key auto_increment)")
-	tk.MustExec("insert truncate_id values (), (), (), (), (), (), (), (), (), ()")
-	tk.MustExec("truncate table truncate_id")
-	tk.MustExec("insert truncate_id values (), (), (), (), (), (), (), (), (), ()")
-	tk.MustQuery("select a from truncate_id where a > 11").Check(testkit.Rows())
-}
-
 func (s *testSessionSuite) TestString(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("select 1")
@@ -999,18 +987,6 @@ func (s *testSessionSuite2) TestIndexColumnLength(c *C) {
 
 	idxC2Cols := tables.FindIndexByColName(tab, "c2").Meta().Columns
 	c.Assert(idxC2Cols[0].Length, Equals, 6)
-}
-
-func (s *testSessionSuite2) TestIgnoreForeignKey(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	sqlText := `CREATE TABLE address (
-		id bigint(20) NOT NULL AUTO_INCREMENT,
-		user_id bigint(20) NOT NULL,
-		PRIMARY KEY (id),
-		CONSTRAINT FK_7rod8a71yep5vxasb0ms3osbg FOREIGN KEY (user_id) REFERENCES waimaiqa.user (id),
-		INDEX FK_7rod8a71yep5vxasb0ms3osbg (user_id) comment ''
-		) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci ROW_FORMAT=COMPACT COMMENT='' CHECKSUM=0 DELAY_KEY_WRITE=0;`
-	tk.MustExec(sqlText)
 }
 
 // TestISColumns tests information_schema.columns.
@@ -1812,37 +1788,6 @@ func (s *testSessionSuite2) TestStatementErrorInTransaction(c *C) {
 	tk.MustExec("update test set b = 11 where a = 1 and b = 2;")
 	tk.MustExec("rollback")
 	tk.MustQuery("select * from test where a = 1 and b = 11").Check(testkit.Rows())
-}
-
-func (s *testSessionSuite2) TestRollbackOnCompileError(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table t (a int)")
-	tk.MustExec("insert t values (1)")
-
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk2.MustQuery("select * from t").Check(testkit.Rows("1"))
-
-	tk.MustExec("rename table t to t2")
-
-	var meetErr bool
-	for i := 0; i < 100; i++ {
-		_, err := tk2.Exec("insert t values (1)")
-		if err != nil {
-			meetErr = true
-			break
-		}
-	}
-	c.Assert(meetErr, IsTrue)
-	tk.MustExec("rename table t2 to t")
-	var recoverErr bool
-	for i := 0; i < 100; i++ {
-		_, err := tk2.Exec("insert t values (1)")
-		if err == nil {
-			recoverErr = true
-			break
-		}
-	}
-	c.Assert(recoverErr, IsTrue)
 }
 
 func (s *testSessionSuite2) TestSetTransactionIsolationOneShot(c *C) {

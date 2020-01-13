@@ -461,9 +461,6 @@ func (b *PlanBuilder) getPossibleAccessPaths(indexHints []*ast.IndexHint, tbl ta
 		tp = kv.TiDB
 	}
 	publicPaths = append(publicPaths, &util.AccessPath{IsTablePath: true, StoreType: tp})
-	if tblInfo.TiFlashReplica != nil && tblInfo.TiFlashReplica.Available {
-		publicPaths = append(publicPaths, &util.AccessPath{IsTablePath: true, StoreType: kv.TiFlash})
-	}
 	for _, index := range tblInfo.Indices {
 		if index.State == model.StatePublic {
 			publicPaths = append(publicPaths, &util.AccessPath{Index: index})
@@ -691,9 +688,6 @@ func getPhysicalIDsAndPartitionNames(tblInfo *model.TableInfo, partitionNames []
 func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
 	p := &Analyze{Opts: opts}
 	for _, tbl := range as.TableNames {
-		if tbl.TableInfo.IsView() {
-			return nil, errors.Errorf("analyze %s is not supported now.", tbl.Name.O)
-		}
 		idxInfo, colInfo, pkInfo := getColsInfo(tbl)
 		physicalIDs, names, err := getPhysicalIDsAndPartitionNames(tbl.TableInfo, as.PartitionNames)
 		if err != nil {
@@ -971,18 +965,13 @@ func (b *PlanBuilder) buildShow(ctx context.Context, show *ast.ShowStmt) (Plan, 
 			GlobalScope: show.GlobalScope,
 		},
 	}.Init(b.ctx)
-	isView := false
 	switch show.Tp {
 	case ast.ShowTables, ast.ShowTableStatus:
 		if p.DBName == "" {
 			return nil, ErrNoDB
 		}
-	case ast.ShowCreateTable:
-		if table, err := b.is.TableByName(show.Table.Schema, show.Table.Name); err == nil {
-			isView = table.Meta().IsView()
-		}
 	}
-	schema, names := buildShowSchema(show, isView)
+	schema, names := buildShowSchema(show)
 	p.SetSchema(schema)
 	p.names = names
 	for _, col := range p.schema.Columns {
@@ -1102,13 +1091,6 @@ func (b *PlanBuilder) buildInsert(ctx context.Context, insert *ast.InsertStmt) (
 		return nil, infoschema.ErrTableNotExists.GenWithStackByArgs()
 	}
 	tableInfo := tn.TableInfo
-	if tableInfo.IsView() {
-		err := errors.Errorf("insert into view %s is not supported now.", tableInfo.Name.O)
-		if insert.IsReplace {
-			err = errors.Errorf("replace into view %s is not supported now.", tableInfo.Name.O)
-		}
-		return nil, err
-	}
 	// Build Schema with DBName otherwise ColumnRef with DBName cannot match any Column in Schema.
 	schema, names := expression.TableInfo2SchemaAndNames(b.ctx, tn.Schema, tableInfo)
 	tableInPlan, ok := b.is.TableByID(tableInfo.ID)
@@ -1460,26 +1442,6 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 		if v.Name == "" {
 			return nil, ErrNoDB
 		}
-	case *ast.CreateViewStmt:
-		b.capFlag |= canExpandAST
-		defer func() {
-			b.capFlag &= ^canExpandAST
-		}()
-		plan, err := b.Build(ctx, v.Select)
-		if err != nil {
-			return nil, err
-		}
-		schema := plan.Schema()
-		names := plan.OutputNames()
-		if v.Cols == nil {
-			v.Cols = make([]model.CIStr, len(schema.Columns))
-			for i, name := range names {
-				v.Cols[i] = name.ColName
-			}
-		}
-		if len(v.Cols) != schema.Len() {
-			return nil, ddl.ErrViewWrongList
-		}
 	}
 	p := &DDL{Statement: node}
 	return p, nil
@@ -1588,7 +1550,7 @@ func buildShowWarningsSchema() (*expression.Schema, types.NameSlice) {
 }
 
 // buildShowSchema builds column info for ShowStmt including column name and type.
-func buildShowSchema(s *ast.ShowStmt, isView bool) (schema *expression.Schema, outputNames []*types.FieldName) {
+func buildShowSchema(s *ast.ShowStmt) (schema *expression.Schema, outputNames []*types.FieldName) {
 	var names []string
 	var ftypes []byte
 	switch s.Tp {
@@ -1635,17 +1597,11 @@ func buildShowSchema(s *ast.ShowStmt, isView bool) (schema *expression.Schema, o
 		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong,
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong}
 	case ast.ShowCreateTable:
-		if !isView {
-			names = []string{"Table", "Create Table"}
-		} else {
-			names = []string{"View", "Create View", "character_set_client", "collation_connection"}
-		}
+		names = []string{"Table", "Create Table"}
 	case ast.ShowCreateUser:
 		if s.User != nil {
 			names = []string{fmt.Sprintf("CREATE USER for %s", s.User)}
 		}
-	case ast.ShowCreateView:
-		names = []string{"View", "Create View", "character_set_client", "collation_connection"}
 	case ast.ShowCreateDatabase:
 		names = []string{"Database", "Create Database"}
 	case ast.ShowDrainerStatus:

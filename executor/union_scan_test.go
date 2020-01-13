@@ -46,15 +46,6 @@ func (s *testSuite7) TestDirtyTransaction(c *C) {
 	tk.MustQuery("select * from t order by a desc").Check(testkit.Rows("7 6", "6 8", "4 8", "3 4", "2 3", "1 5"))
 	tk.MustQuery("select * from t order by b, a").Check(testkit.Rows("2 3", "3 4", "1 5", "7 6", "4 8", "6 8"))
 	tk.MustQuery("select * from t order by b desc, a desc").Check(testkit.Rows("6 8", "4 8", "7 6", "1 5", "3 4", "2 3"))
-	// Truncate Table
-	tk.MustExec("truncate table t")
-	tk.MustQuery("select * from t").Check(testkit.Rows())
-	tk.MustExec("insert t values (1, 2)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 2"))
-	tk.MustExec("truncate table t")
-	tk.MustExec("insert t values (3, 4)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("3 4"))
-	tk.MustExec("commit")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (a int, b int)")
