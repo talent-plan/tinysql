@@ -20,57 +20,11 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/hack"
 )
-
-func (s *testEvaluatorSuite) TestBitCount(c *C) {
-	stmtCtx := s.ctx.GetSessionVars().StmtCtx
-	origin := stmtCtx.IgnoreTruncate
-	stmtCtx.IgnoreTruncate = true
-	defer func() {
-		stmtCtx.IgnoreTruncate = origin
-	}()
-	fc := funcs[ast.BitCount]
-	var bitCountCases = []struct {
-		origin interface{}
-		count  interface{}
-	}{
-		{int64(8), int64(1)},
-		{int64(29), int64(4)},
-		{int64(0), int64(0)},
-		{int64(-1), int64(64)},
-		{int64(-11), int64(62)},
-		{int64(-1000), int64(56)},
-		{float64(1.1), int64(1)},
-		{float64(3.1), int64(2)},
-		{float64(-1.1), int64(64)},
-		{float64(-3.1), int64(63)},
-		{uint64(math.MaxUint64), int64(64)},
-		{string("xxx"), int64(0)},
-		{nil, nil},
-	}
-	for _, test := range bitCountCases {
-		in := types.NewDatum(test.origin)
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants([]types.Datum{in}))
-		c.Assert(err, IsNil)
-		c.Assert(f, NotNil)
-		count, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		if count.IsNull() {
-			c.Assert(test.count, IsNil)
-			continue
-		}
-		sc := new(stmtctx.StatementContext)
-		sc.IgnoreTruncate = true
-		res, err := count.ToInt64(sc)
-		c.Assert(err, IsNil)
-		c.Assert(res, Equals, test.count)
-	}
-}
 
 func (s *testEvaluatorSuite) TestInFunc(c *C) {
 	fc := funcs[ast.In]

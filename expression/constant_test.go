@@ -129,14 +129,6 @@ func (*testExpressionSuite) TestConstantPropagation(c *C) {
 			solver: []PropagateConstantSolver{newPropConstSolver()},
 			conditions: []Expression{
 				newFunction(ast.EQ, newColumn(0), newColumn(1)),
-				newFunction(ast.EQ, newColumn(0), newFunction(ast.BitLength, newColumn(2))),
-			},
-			result: "eq(Column#0, Column#1), eq(Column#0, bit_length(cast(Column#2))), eq(Column#1, bit_length(cast(Column#2)))",
-		},
-		{
-			solver: []PropagateConstantSolver{newPropConstSolver()},
-			conditions: []Expression{
-				newFunction(ast.EQ, newColumn(0), newColumn(1)),
 				newFunction(ast.LE, newFunction(ast.Mul, newColumn(0), newColumn(0)), newLonglong(50)),
 			},
 			result: "eq(Column#0, Column#1), le(mul(Column#0, Column#0), 50), le(mul(Column#1, Column#1), 50)",
@@ -148,14 +140,6 @@ func (*testExpressionSuite) TestConstantPropagation(c *C) {
 				newFunction(ast.LE, newColumn(0), newFunction(ast.Plus, newColumn(1), newLonglong(1))),
 			},
 			result: "eq(Column#0, Column#1), le(Column#0, plus(Column#0, 1)), le(Column#0, plus(Column#1, 1)), le(Column#1, plus(Column#1, 1))",
-		},
-		{
-			solver: []PropagateConstantSolver{newPropConstSolver()},
-			conditions: []Expression{
-				newFunction(ast.EQ, newColumn(0), newColumn(1)),
-				newFunction(ast.LE, newColumn(0), newFunction(ast.Rand)),
-			},
-			result: "eq(Column#0, Column#1), le(cast(Column#0), rand())",
 		},
 	}
 	for _, tt := range tests {
@@ -188,10 +172,6 @@ func (*testExpressionSuite) TestConstantFolding(c *C) {
 		{
 			condition: newFunction(ast.LT, newColumn(0), newFunction(ast.Greatest, newLonglong(1), newLonglong(2))),
 			result:    "lt(Column#0, 2)",
-		},
-		{
-			condition: newFunction(ast.EQ, newColumn(0), newFunction(ast.Rand)),
-			result:    "eq(cast(Column#0), rand())",
 		},
 		{
 			condition: newFunction(ast.IsNull, newLonglong(1)),

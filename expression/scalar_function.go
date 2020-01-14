@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -114,9 +113,6 @@ func (sf *ScalarFunction) MarshalJSON() ([]byte, error) {
 func newFunctionImpl(ctx sessionctx.Context, fold bool, funcName string, retType *types.FieldType, args ...Expression) (Expression, error) {
 	if retType == nil {
 		return nil, errors.Errorf("RetType cannot be nil for ScalarFunction.")
-	}
-	if funcName == ast.Cast {
-		return BuildCastFunction(ctx, args[0], retType), nil
 	}
 	fc, ok := funcs[funcName]
 	if !ok {

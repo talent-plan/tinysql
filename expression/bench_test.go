@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/math"
 	"github.com/pingcap/tidb/util/mock"
 )
 
@@ -275,68 +274,6 @@ func (g *selectStringGener) gen() interface{} {
 	return g.candidates[rand.Intn(len(g.candidates))]
 }
 
-type decimalJSONGener struct {
-	nullRation float64
-}
-
-func (g *decimalJSONGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-
-	var f float64
-	if rand.Float64() < 0.5 {
-		f = rand.Float64() * 100000
-	} else {
-		f = -rand.Float64() * 100000
-	}
-	if err := (&types.MyDecimal{}).FromFloat64(f); err != nil {
-		panic(err)
-	}
-	return json.CreateBinary(f)
-}
-
-type jsonStringGener struct{}
-
-func (g *jsonStringGener) gen() interface{} {
-	j := new(json.BinaryJSON)
-	if err := j.UnmarshalJSON([]byte(fmt.Sprintf(`{"key":%v}`, rand.Int()))); err != nil {
-		panic(err)
-	}
-	return j.String()
-}
-
-type decimalStringGener struct{}
-
-func (g *decimalStringGener) gen() interface{} {
-	tempDecimal := new(types.MyDecimal)
-	if err := tempDecimal.FromFloat64(rand.Float64()); err != nil {
-		panic(err)
-	}
-	return tempDecimal.String()
-}
-
-type jsonTimeGener struct{}
-
-func (g *jsonTimeGener) gen() interface{} {
-	tm := types.Time{Time: getRandomTime(), Type: mysql.TypeDatetime, Fsp: types.DefaultFsp}
-	return json.CreateBinary(tm.String())
-}
-
-type rangeDurationGener struct {
-	nullRation float64
-}
-
-func (g *rangeDurationGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-	tm := (math.Abs(rand.Int63n(12))*3600 + math.Abs(rand.Int63n(60))*60 + math.Abs(rand.Int63n(60))) * 1000
-	tu := (tm + math.Abs(rand.Int63n(1000))) * 1000
-	return types.Duration{
-		Duration: time.Duration(tu * 1000)}
-}
-
 // rangeRealGener is used to generate float64 items in [begin, end].
 type rangeRealGener struct {
 	begin float64
@@ -444,79 +381,6 @@ func (g *randHexStrGener) gen() interface{} {
 	return string(buf)
 }
 
-// dateTimeStrGener is used to generate strings which are dataTime format
-type dateTimeStrGener struct {
-	Fsp   int
-	Year  int
-	Month int
-	Day   int
-}
-
-func (g *dateTimeStrGener) gen() interface{} {
-	if g.Year == 0 {
-		g.Year = 1970 + rand.Intn(100)
-	}
-	if g.Month == 0 {
-		g.Month = rand.Intn(10) + 1
-	}
-	if g.Day == 0 {
-		g.Day = rand.Intn(20) + 1
-	}
-	hour := rand.Intn(12)
-	minute := rand.Intn(60)
-	second := rand.Intn(60)
-	dataTimeStr := fmt.Sprintf("%d-%d-%d %d:%d:%d",
-		g.Year, g.Month, g.Day, hour, minute, second)
-	if g.Fsp > 0 && g.Fsp <= 6 {
-		microFmt := fmt.Sprintf(".%%0%dd", g.Fsp)
-		return dataTimeStr + fmt.Sprintf(microFmt, rand.Int()%(10^g.Fsp))
-	}
-
-	return dataTimeStr
-}
-
-// dateStrGener is used to generate strings which are date format
-type dateStrGener struct {
-	Year       int
-	Month      int
-	Day        int
-	NullRation float64
-}
-
-func (g *dateStrGener) gen() interface{} {
-	if g.NullRation > 1e-6 && rand.Float64() < g.NullRation {
-		return nil
-	}
-
-	if g.Year == 0 {
-		g.Year = 1970 + rand.Intn(100)
-	}
-	if g.Month == 0 {
-		g.Month = rand.Intn(10) + 1
-	}
-	if g.Day == 0 {
-		g.Day = rand.Intn(20) + 1
-	}
-
-	return fmt.Sprintf("%d-%d-%d", g.Year, g.Month, g.Day)
-}
-
-// timeStrGener is used to generate strings which are time format
-type timeStrGener struct {
-	nullRation float64
-}
-
-func (g *timeStrGener) gen() interface{} {
-	if g.nullRation > 1e-6 && rand.Float64() < g.nullRation {
-		return nil
-	}
-	hour := rand.Intn(12)
-	minute := rand.Intn(60)
-	second := rand.Intn(60)
-
-	return fmt.Sprintf("%d:%d:%d", hour, minute, second)
-}
-
 // constStrGener always returns the given string
 type constStrGener struct {
 	s string
@@ -524,25 +388,6 @@ type constStrGener struct {
 
 func (g *constStrGener) gen() interface{} {
 	return g.s
-}
-
-type randDurInt struct{}
-
-func (g *randDurInt) gen() interface{} {
-	return int64(rand.Intn(types.TimeMaxHour)*10000 + rand.Intn(60)*100 + rand.Intn(60))
-}
-
-type randDurReal struct{}
-
-func (g *randDurReal) gen() interface{} {
-	return float64(rand.Intn(types.TimeMaxHour)*10000 + rand.Intn(60)*100 + rand.Intn(60))
-}
-
-type randDurDecimal struct{}
-
-func (g *randDurDecimal) gen() interface{} {
-	d := new(types.MyDecimal)
-	return d.FromFloat64(float64(rand.Intn(types.TimeMaxHour)*10000 + rand.Intn(60)*100 + rand.Intn(60)))
 }
 
 type vecExprBenchCase struct {
@@ -817,30 +662,7 @@ func genVecBuiltinFuncBenchCase(ctx sessionctx.Context, funcName string, testCas
 		input.SetNumVirtualRows(testCase.chunkSize)
 	}
 
-	var err error
-	if funcName == ast.Cast {
-		var fc functionClass
-		tp := eType2FieldType(testCase.retEvalType)
-		switch testCase.retEvalType {
-		case types.ETInt:
-			fc = &castAsIntFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETDecimal:
-			fc = &castAsDecimalFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETReal:
-			fc = &castAsRealFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETDatetime, types.ETTimestamp:
-			fc = &castAsTimeFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETDuration:
-			fc = &castAsDurationFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETJson:
-			fc = &castAsJSONFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		case types.ETString:
-			fc = &castAsStringFunctionClass{baseFunctionClass{ast.Cast, 1, 1}, tp}
-		}
-		baseFunc, err = fc.getFunction(ctx, cols)
-	} else {
-		baseFunc, err = funcs[funcName].getFunction(ctx, cols)
-	}
+	baseFunc, err := funcs[funcName].getFunction(ctx, cols)
 	if err != nil {
 		panic(err)
 	}

@@ -209,27 +209,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec("insert into test values(2, 3)")
 	tk.MustQuery("select * from test use index (id) where id = 2").Check(testkit.Rows("2 2", "2 3"))
 
-	// issue 6360
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint unsigned);")
-	tk.MustExec(" set @orig_sql_mode = @@sql_mode; set @@sql_mode = 'strict_all_tables';")
-	_, err = tk.Exec("insert into t value (-1);")
-	c.Assert(types.ErrWarnDataOutOfRange.Equal(err), IsTrue)
-	tk.MustExec("set @@sql_mode = '';")
-	tk.MustExec("insert into t value (-1);")
-	// TODO: the following warning messages are not consistent with MySQL, fix them in the future PRs
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1690 constant -1 overflows bigint"))
-	tk.MustExec("insert into t select -1;")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1690 constant -1 overflows bigint"))
-	tk.MustExec("insert into t select cast(-1 as unsigned);")
-	tk.MustExec("insert into t value (-1.111);")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1690 constant -1.111 overflows bigint"))
-	tk.MustExec("insert into t value ('-1.111');")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1690 BIGINT UNSIGNED value is out of range in '-1'"))
-	r = tk.MustQuery("select * from t;")
-	r.Check(testkit.Rows("0", "0", "18446744073709551615", "0", "0"))
-	tk.MustExec("set @@sql_mode = @orig_sql_mode;")
-
 	// issue 6424
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a time(6))")
@@ -1251,13 +1230,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	_, err = tk.Exec("update t, (select * from t) as b set b.k = t.k")
 	c.Assert(err.Error(), Equals, "[planner:1288]The target table b of the UPDATE is not updatable")
 	tk.MustExec("update t, (select * from t) as b set t.k = b.k")
-
-	// issue 8045
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec(`CREATE TABLE t1 (c1 float)`)
-	tk.MustExec("INSERT INTO t1 SET c1 = 1")
-	tk.MustExec("UPDATE t1 SET c1 = 1.2 WHERE c1=1;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 
 	// issue 8119
 	tk.MustExec("drop table if exists t;")

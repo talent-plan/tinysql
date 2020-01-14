@@ -16,7 +16,6 @@ package core
 import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
-	"github.com/pingcap/tidb/sessionctx"
 )
 
 // injectExtraProjection is used to extract the expressions of specific
@@ -53,24 +52,12 @@ func (pe *projInjector) inject(plan PhysicalPlan) PhysicalPlan {
 	return plan
 }
 
-// wrapCastForAggFunc wraps the args of an aggregate function with a cast function.
-// If the mode is FinalMode or Partial2Mode, we do not need to wrap cast upon the args,
-// since the types of the args are already the expected.
-func wrapCastForAggFuncs(sctx sessionctx.Context, aggFuncs []*aggregation.AggFuncDesc) {
-	for i := range aggFuncs {
-		if aggFuncs[i].Mode != aggregation.FinalMode && aggFuncs[i].Mode != aggregation.Partial2Mode {
-			aggFuncs[i].WrapCastForAggArgs(sctx)
-		}
-	}
-}
-
 // InjectProjBelowAgg injects a ProjOperator below AggOperator. If all the args
 // of `aggFuncs`, and all the item of `groupByItems` are columns or constants,
 // we do not need to build the `proj`.
 func InjectProjBelowAgg(aggPlan PhysicalPlan, aggFuncs []*aggregation.AggFuncDesc, groupByItems []expression.Expression) PhysicalPlan {
 	hasScalarFunc := false
 
-	wrapCastForAggFuncs(aggPlan.SCtx(), aggFuncs)
 	for i := 0; !hasScalarFunc && i < len(aggFuncs); i++ {
 		for _, arg := range aggFuncs[i].Args {
 			_, isScalarFunc := arg.(*expression.ScalarFunction)

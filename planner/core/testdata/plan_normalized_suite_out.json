@@ -52,22 +52,6 @@
         ]
       },
       {
-        "SQL": "select * from t1 where t1.b > 1 and  t1.a in (select sum(t2.b) from t2 where t2.a=t1.a and t2.b is not null)",
-        "Plan": [
-          " Projection_10            root test.t1.a, test.t1.b, test.t1.c",
-          " └─Apply_12               root semi join, inner:StreamAgg_34, equal:eq(Column#8, Column#7)",
-          "   ├─Projection_13        root cast(test.t1.a), test.t1.a, test.t1.b, test.t1.c",
-          "   │ └─TableReader_16     root data:Selection_15",
-          "   │   └─Selection_15     cop  gt(test.t1.b, ?)",
-          "   │     └─TableScan_14   cop  table:t1, range:[?,?], keep order:false",
-          "   └─StreamAgg_34         root funcs:sum(Column#11)->Column#7",
-          "     └─TableReader_35     root data:StreamAgg_23",
-          "       └─StreamAgg_23     cop  funcs:sum(test.t2.b)->Column#11",
-          "         └─Selection_33   cop  not(isnull(test.t2.b))",
-          "           └─TableScan_32 cop  table:t2, range: decided by eq(test.t2.a, test.t1.a), keep order:false"
-        ]
-      },
-      {
         "SQL": "SELECT * from t1 where a!=1 order by c limit 1",
         "Plan": [
           " TopN_8             root test.t1.c:asc",

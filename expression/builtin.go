@@ -93,26 +93,6 @@ func newBaseBuiltinFuncWithTp(ctx sessionctx.Context, args []Expression, retType
 	if ctx == nil {
 		panic("ctx should not be nil")
 	}
-	for i := range args {
-		switch argTps[i] {
-		case types.ETInt:
-			args[i] = WrapWithCastAsInt(ctx, args[i])
-		case types.ETReal:
-			args[i] = WrapWithCastAsReal(ctx, args[i])
-		case types.ETDecimal:
-			args[i] = WrapWithCastAsDecimal(ctx, args[i])
-		case types.ETString:
-			args[i] = WrapWithCastAsString(ctx, args[i])
-		case types.ETDatetime:
-			args[i] = WrapWithCastAsTime(ctx, args[i], types.NewFieldType(mysql.TypeDatetime))
-		case types.ETTimestamp:
-			args[i] = WrapWithCastAsTime(ctx, args[i], types.NewFieldType(mysql.TypeTimestamp))
-		case types.ETDuration:
-			args[i] = WrapWithCastAsDuration(ctx, args[i])
-		case types.ETJson:
-			args[i] = WrapWithCastAsJSON(ctx, args[i])
-		}
-	}
 	var fieldType *types.FieldType
 	switch retType {
 	case types.ETInt:
@@ -311,34 +291,6 @@ func (b *baseBuiltinFunc) cloneFrom(from *baseBuiltinFunc) {
 
 func (b *baseBuiltinFunc) Clone() builtinFunc {
 	panic("you should not call this method.")
-}
-
-// baseBuiltinCastFunc will be contained in every struct that implement cast builtinFunc.
-type baseBuiltinCastFunc struct {
-	baseBuiltinFunc
-
-	// inUnion indicates whether cast is in union context.
-	inUnion bool
-}
-
-// metadata returns the metadata of cast functions
-func (b *baseBuiltinCastFunc) metadata() proto.Message {
-	args := &tipb.InUnionMetadata{
-		InUnion: b.inUnion,
-	}
-	return args
-}
-
-func (b *baseBuiltinCastFunc) cloneFrom(from *baseBuiltinCastFunc) {
-	b.baseBuiltinFunc.cloneFrom(&from.baseBuiltinFunc)
-	b.inUnion = from.inUnion
-}
-
-func newBaseBuiltinCastFunc(builtinFunc baseBuiltinFunc, inUnion bool) baseBuiltinCastFunc {
-	return baseBuiltinCastFunc{
-		baseBuiltinFunc: builtinFunc,
-		inUnion:         inUnion,
-	}
 }
 
 // vecBuiltinFunc contains all vectorized methods for a builtin function.

@@ -742,107 +742,6 @@ func (s *testSessionSuite) TestAutoIncrementWithRetry(c *C) {
 	c.Assert(lastInsertID+3, Equals, currLastInsertID)
 }
 
-func (s *testSessionSuite) TestSpecifyIndexPrefixLength(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	_, err := tk.Exec("create table t (c1 char, index(c1(3)));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create table t (c1 int, index(c1(3)));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create table t (c1 bit(10), index(c1(3)));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	tk.MustExec("create table t (c1 char, c2 int, c3 bit(10));")
-
-	_, err = tk.Exec("create index idx_c1 on t (c1(3));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create index idx_c1 on t (c2(3));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create index idx_c1 on t (c3(3));")
-	// ERROR 1089 (HY000): Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	tk.MustExec("drop table if exists t;")
-
-	_, err = tk.Exec("create table t (c1 int, c2 blob, c3 varchar(64), index(c2));")
-	// ERROR 1170 (42000): BLOB/TEXT column 'c2' used in key specification without a key length
-	c.Assert(err, NotNil)
-
-	tk.MustExec("create table t (c1 int, c2 blob, c3 varchar(64));")
-	_, err = tk.Exec("create index idx_c1 on t (c2);")
-	// ERROR 1170 (42000): BLOB/TEXT column 'c2' used in key specification without a key length
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create index idx_c1 on t (c2(555555));")
-	// ERROR 1071 (42000): Specified key was too long; max key length is 3072 bytes
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create index idx_c1 on t (c1(5))")
-	// ERROR 1089 (HY000): Incorrect prefix key;
-	// the used key part isn't a string, the used length is longer than the key part,
-	// or the storage engine doesn't support unique prefix keys
-	c.Assert(err, NotNil)
-
-	tk.MustExec("create index idx_c1 on t (c1);")
-	tk.MustExec("create index idx_c2 on t (c2(3));")
-	tk.MustExec("create unique index idx_c3 on t (c3(5));")
-
-	tk.MustExec("insert into t values (3, 'abc', 'def');")
-	tk.MustQuery("select c2 from t where c2 = 'abc';").Check(testkit.Rows("abc"))
-
-	tk.MustExec("insert into t values (4, 'abcd', 'xxx');")
-	tk.MustExec("insert into t values (4, 'abcf', 'yyy');")
-	tk.MustQuery("select c2 from t where c2 = 'abcf';").Check(testkit.Rows("abcf"))
-	tk.MustQuery("select c2 from t where c2 = 'abcd';").Check(testkit.Rows("abcd"))
-
-	tk.MustExec("insert into t values (4, 'ignore', 'abcdeXXX');")
-	_, err = tk.Exec("insert into t values (5, 'ignore', 'abcdeYYY');")
-	// ERROR 1062 (23000): Duplicate entry 'abcde' for key 'idx_c3'
-	c.Assert(err, NotNil)
-	tk.MustQuery("select c3 from t where c3 = 'abcde';").Check(testkit.Rows())
-
-	tk.MustExec("delete from t where c3 = 'abcdeXXX';")
-	tk.MustExec("delete from t where c2 = 'abc';")
-
-	tk.MustQuery("select c2 from t where c2 > 'abcd';").Check(testkit.Rows("abcf"))
-	tk.MustQuery("select c2 from t where c2 < 'abcf';").Check(testkit.Rows("abcd"))
-	tk.MustQuery("select c2 from t where c2 >= 'abcd';").Check(testkit.Rows("abcd", "abcf"))
-	tk.MustQuery("select c2 from t where c2 <= 'abcf';").Check(testkit.Rows("abcd", "abcf"))
-	tk.MustQuery("select c2 from t where c2 != 'abc';").Check(testkit.Rows("abcd", "abcf"))
-	tk.MustQuery("select c2 from t where c2 != 'abcd';").Check(testkit.Rows("abcf"))
-
-	tk.MustExec("drop table if exists t1;")
-	tk.MustExec("create table t1 (a int, b char(255), key(a, b(20)));")
-	tk.MustExec("insert into t1 values (0, '1');")
-	tk.MustExec("update t1 set b = b + 1 where a = 0;")
-	tk.MustQuery("select b from t1 where a = 0;").Check(testkit.Rows("2"))
-
-	// test union index.
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (a text, b text, c int, index (a(3), b(3), c));")
-	tk.MustExec("insert into t values ('abc', 'abcd', 1);")
-	tk.MustExec("insert into t values ('abcx', 'abcf', 2);")
-	tk.MustExec("insert into t values ('abcy', 'abcf', 3);")
-	tk.MustExec("insert into t values ('bbc', 'abcd', 4);")
-	tk.MustExec("insert into t values ('bbcz', 'abcd', 5);")
-	tk.MustExec("insert into t values ('cbck', 'abd', 6);")
-	tk.MustQuery("select c from t where a = 'abc' and b <= 'abc';").Check(testkit.Rows())
-	tk.MustQuery("select c from t where a = 'abc' and b <= 'abd';").Check(testkit.Rows("1"))
-	tk.MustQuery("select c from t where a < 'cbc' and b > 'abcd';").Check(testkit.Rows("2", "3"))
-	tk.MustQuery("select c from t where a <= 'abd' and b > 'abc';").Check(testkit.Rows("1", "2", "3"))
-	tk.MustQuery("select c from t where a < 'bbcc' and b = 'abcd';").Check(testkit.Rows("1", "4"))
-	tk.MustQuery("select c from t where a > 'bbcf';").Check(testkit.Rows("5", "6"))
-}
-
 func (s *testSessionSuite) TestResultField(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("create table t (id int);")
@@ -857,18 +756,6 @@ func (s *testSessionSuite) TestResultField(c *C) {
 	field := fields[0].Column
 	c.Assert(field.Tp, Equals, mysql.TypeLonglong)
 	c.Assert(field.Flen, Equals, 21)
-}
-
-func (s *testSessionSuite) TestResultType(c *C) {
-	// Testcase for https://github.com/pingcap/tidb/issues/325
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	rs, err := tk.Exec(`select cast(null as char(30))`)
-	c.Assert(err, IsNil)
-	req := rs.NewChunk()
-	err = rs.Next(context.Background(), req)
-	c.Assert(err, IsNil)
-	c.Assert(req.GetRow(0).IsNull(0), IsTrue)
-	c.Assert(rs.Fields()[0].Column.FieldType.Tp, Equals, mysql.TypeVarString)
 }
 
 func (s *testSessionSuite) TestFieldText(c *C) {
@@ -1127,17 +1014,6 @@ func (s *testSessionSuite2) TestDelete(c *C) {
 	tk1.MustExec("create table t (F1 VARCHAR(30));")
 	tk1.MustExec("insert into t (F1) values ('1'), ('4');")
 
-	tk.MustExec("create table t (F1 VARCHAR(30));")
-	tk.MustExec("insert into t (F1) values ('1'), ('2');")
-	tk.MustExec("delete m1 from t m2,t m1 where m1.F1>1;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("1"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (F1 VARCHAR(30));")
-	tk.MustExec("insert into t (F1) values ('1'), ('2');")
-	tk.MustExec("delete m1 from t m1,t m2 where true and m1.F1<2;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("2"))
-
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (F1 VARCHAR(30));")
 	tk.MustExec("insert into t (F1) values ('1'), ('2');")
@@ -1225,25 +1101,6 @@ func (s *testSessionSuite2) TestUnique(c *C) {
 	tk.MustExec("insert into test(id, val1, val2) values(3, 3, 3);")
 }
 
-func (s *testSessionSuite2) TestSet(c *C) {
-	// Test for https://github.com/pingcap/tidb/issues/1114
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set @tmp = 0")
-	tk.MustExec("set @tmp := @tmp + 1")
-	tk.MustQuery("select @tmp").Check(testkit.Rows("1"))
-	tk.MustQuery("select @tmp1 = 1, @tmp2 := 2").Check(testkit.Rows("<nil> 2"))
-	tk.MustQuery("select @tmp1 := 11, @tmp2").Check(testkit.Rows("11 2"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c int);")
-	tk.MustExec("insert into t values (1),(2);")
-	tk.MustExec("update t set c = 3 WHERE c = @var:= 1")
-	tk.MustQuery("select * from t").Check(testkit.Rows("3", "2"))
-	tk.MustQuery("select @tmp := count(*) from t").Check(testkit.Rows("2"))
-	tk.MustQuery("select @tmp := c-2 from t where c=3").Check(testkit.Rows("1"))
-}
-
 func (s *testSessionSuite2) TestMySQLTypes(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustQuery(`select 0x01 + 1, x'4D7953514C' = "MySQL"`).Check(testkit.Rows("2 1"))
@@ -1257,13 +1114,6 @@ func (s *testSessionSuite2) TestIssue986(c *C) {
  		PRIMARY KEY (id));`
 	tk.MustExec(sqlText)
 	tk.MustExec(`insert into address values ('10')`)
-}
-
-func (s *testSessionSuite2) TestCast(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustQuery("select cast(0.5 as unsigned)")
-	tk.MustQuery("select cast(-0.5 as signed)")
-	tk.MustQuery("select hex(cast(0x10 as binary(2)))").Check(testkit.Rows("1000"))
 }
 
 func (s *testSessionSuite2) TestTableInfoMeta(c *C) {

@@ -133,83 +133,6 @@ func (s *testEvaluatorSuite) primitiveValsToConstants(args []interface{}) []Expr
 	return cons
 }
 
-func (s *testEvaluatorSuite) TestBinopComparison(c *C) {
-	tbl := []struct {
-		lhs    interface{}
-		op     string
-		rhs    interface{}
-		result int64 // 0 for false, 1 for true
-	}{
-		// test EQ
-		{1, ast.EQ, 2, 0},
-		{false, ast.EQ, false, 1},
-		{false, ast.EQ, true, 0},
-		{true, ast.EQ, true, 1},
-		{true, ast.EQ, false, 0},
-		{"1", ast.EQ, true, 1},
-		{"1", ast.EQ, false, 0},
-
-		// test NEQ
-		{1, ast.NE, 2, 1},
-		{false, ast.NE, false, 0},
-		{false, ast.NE, true, 1},
-		{true, ast.NE, true, 0},
-		{"1", ast.NE, true, 0},
-		{"1", ast.NE, false, 1},
-
-		// test GT, GE
-		{1, ast.GT, 0, 1},
-		{1, ast.GT, 1, 0},
-		{1, ast.GE, 1, 1},
-		{3.14, ast.GT, 3, 1},
-		{3.14, ast.GE, 3.14, 1},
-
-		// test LT, LE
-		{1, ast.LT, 2, 1},
-		{1, ast.LT, 1, 0},
-		{1, ast.LE, 1, 1},
-	}
-	for _, t := range tbl {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.lhs, t.rhs)))
-		c.Assert(err, IsNil)
-		v, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		val, err := v.ToBool(s.ctx.GetSessionVars().StmtCtx)
-		c.Assert(err, IsNil)
-		c.Assert(val, Equals, t.result)
-	}
-
-	// test nil
-	nilTbl := []struct {
-		lhs interface{}
-		op  string
-		rhs interface{}
-	}{
-		{nil, ast.EQ, nil},
-		{nil, ast.EQ, 1},
-		{nil, ast.NE, nil},
-		{nil, ast.NE, 1},
-		{nil, ast.LT, nil},
-		{nil, ast.LT, 1},
-		{nil, ast.LE, nil},
-		{nil, ast.LE, 1},
-		{nil, ast.GT, nil},
-		{nil, ast.GT, 1},
-		{nil, ast.GE, nil},
-		{nil, ast.GE, 1},
-	}
-
-	for _, t := range nilTbl {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.lhs, t.rhs)))
-		c.Assert(err, IsNil)
-		v, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(v.Kind(), Equals, types.KindNull)
-	}
-}
-
 func (s *testEvaluatorSuite) TestBinopLogic(c *C) {
 	tbl := []struct {
 		lhs interface{}
@@ -284,189 +207,18 @@ func (s *testEvaluatorSuite) TestBinopBitop(c *C) {
 	}
 }
 
-func (s *testEvaluatorSuite) TestBinopNumeric(c *C) {
-	tbl := []struct {
-		lhs interface{}
-		op  string
-		rhs interface{}
-		ret interface{}
-	}{
-		// plus
-		{1, ast.Plus, 1, 2},
-		{1, ast.Plus, uint64(1), 2},
-		{1, ast.Plus, "1", 2},
-		{1, ast.Plus, types.NewDecFromInt(1), 2},
-		{uint64(1), ast.Plus, 1, 2},
-		{uint64(1), ast.Plus, uint64(1), 2},
-		{uint64(1), ast.Plus, -1, 0},
-		{1, ast.Plus, []byte("1"), 2},
-		{1, ast.Plus, types.NewBinaryLiteralFromUint(1, -1), 2},
-		{1, ast.Plus, types.Enum{Name: "a", Value: 1}, 2},
-		{1, ast.Plus, types.Set{Name: "a", Value: 1}, 2},
-
-		// minus
-		{1, ast.Minus, 1, 0},
-		{1, ast.Minus, uint64(1), 0},
-		{1, ast.Minus, float64(1), 0},
-		{1, ast.Minus, types.NewDecFromInt(1), 0},
-		{uint64(1), ast.Minus, 1, 0},
-		{uint64(1), ast.Minus, uint64(1), 0},
-		{types.NewDecFromInt(1), ast.Minus, 1, 0},
-		{"1", ast.Minus, []byte("1"), 0},
-
-		// mul
-		{1, ast.Mul, 1, 1},
-		{1, ast.Mul, uint64(1), 1},
-		{1, ast.Mul, float64(1), 1},
-		{1, ast.Mul, types.NewDecFromInt(1), 1},
-		{uint64(1), ast.Mul, 1, 1},
-		{uint64(1), ast.Mul, uint64(1), 1},
-		{types.Time{Time: types.FromDate(0, 0, 0, 0, 0, 0, 0)}, ast.Mul, 0, 0},
-		{types.ZeroDuration, ast.Mul, 0, 0},
-		{types.Time{Time: types.FromGoTime(time.Now()), Fsp: 0, Type: mysql.TypeDatetime}, ast.Mul, 0, 0},
-		{types.Time{Time: types.FromGoTime(time.Now()), Fsp: 6, Type: mysql.TypeDatetime}, ast.Mul, 0, 0},
-		{types.Duration{Duration: 100000000, Fsp: 6}, ast.Mul, 0, 0},
-
-		// div
-		{1, ast.Div, float64(1), 1},
-		{1, ast.Div, float64(0), nil},
-		{1, ast.Div, 2, 0.5},
-		{1, ast.Div, 0, nil},
-
-		// int div
-		{1, ast.IntDiv, 2, 0},
-		{1, ast.IntDiv, uint64(2), 0},
-		{1, ast.IntDiv, 0, nil},
-		{1, ast.IntDiv, uint64(0), nil},
-		{uint64(1), ast.IntDiv, 2, 0},
-		{uint64(1), ast.IntDiv, uint64(2), 0},
-		{uint64(1), ast.IntDiv, 0, nil},
-		{uint64(1), ast.IntDiv, uint64(0), nil},
-		{1.0, ast.IntDiv, 2.0, 0},
-
-		// mod
-		{10, ast.Mod, 2, 0},
-		{10, ast.Mod, uint64(2), 0},
-		{10, ast.Mod, 0, nil},
-		{10, ast.Mod, uint64(0), nil},
-		{-10, ast.Mod, uint64(2), 0},
-		{uint64(10), ast.Mod, 2, 0},
-		{uint64(10), ast.Mod, uint64(2), 0},
-		{uint64(10), ast.Mod, 0, nil},
-		{uint64(10), ast.Mod, uint64(0), nil},
-		{uint64(10), ast.Mod, -2, 0},
-		{float64(10), ast.Mod, 2, 0},
-		{float64(10), ast.Mod, 0, nil},
-		{types.NewDecFromInt(10), ast.Mod, 2, 0},
-		{types.NewDecFromInt(10), ast.Mod, 0, nil},
-	}
-
-	for _, t := range tbl {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.lhs, t.rhs)))
-		c.Assert(err, IsNil)
-		v, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		switch v.Kind() {
-		case types.KindNull:
-			c.Assert(t.ret, IsNil)
-		default:
-			// we use float64 as the result type check for all.
-			sc := s.ctx.GetSessionVars().StmtCtx
-			f, err := v.ToFloat64(sc)
-			c.Assert(err, IsNil)
-			d := types.NewDatum(t.ret)
-			r, err := d.ToFloat64(sc)
-			c.Assert(err, IsNil)
-			c.Assert(r, Equals, f)
-		}
-	}
-
-	testcases := []struct {
-		lhs interface{}
-		op  string
-		rhs interface{}
-	}{
-		// div
-		{1, ast.Div, float64(0)},
-		{1, ast.Div, 0},
-		// int div
-		{1, ast.IntDiv, 0},
-		{1, ast.IntDiv, uint64(0)},
-		{uint64(1), ast.IntDiv, 0},
-		{uint64(1), ast.IntDiv, uint64(0)},
-		// mod
-		{10, ast.Mod, 0},
-		{10, ast.Mod, uint64(0)},
-		{uint64(10), ast.Mod, 0},
-		{uint64(10), ast.Mod, uint64(0)},
-		{float64(10), ast.Mod, 0},
-		{types.NewDecFromInt(10), ast.Mod, 0},
-	}
-
-	oldInSelectStmt := s.ctx.GetSessionVars().StmtCtx.InSelectStmt
-	s.ctx.GetSessionVars().StmtCtx.InSelectStmt = false
-	oldSQLMode := s.ctx.GetSessionVars().SQLMode
-	s.ctx.GetSessionVars().SQLMode |= mysql.ModeErrorForDivisionByZero
-	oldInInsertStmt := s.ctx.GetSessionVars().StmtCtx.InInsertStmt
-	s.ctx.GetSessionVars().StmtCtx.InInsertStmt = true
-	for _, t := range testcases {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.lhs, t.rhs)))
-		c.Assert(err, IsNil)
-		_, err = evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, NotNil)
-	}
-
-	oldDividedByZeroAsWarning := s.ctx.GetSessionVars().StmtCtx.DividedByZeroAsWarning
-	s.ctx.GetSessionVars().StmtCtx.DividedByZeroAsWarning = true
-	for _, t := range testcases {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.lhs, t.rhs)))
-		c.Assert(err, IsNil)
-		v, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(v.Kind(), Equals, types.KindNull)
-	}
-
-	s.ctx.GetSessionVars().StmtCtx.InSelectStmt = oldInSelectStmt
-	s.ctx.GetSessionVars().SQLMode = oldSQLMode
-	s.ctx.GetSessionVars().StmtCtx.InInsertStmt = oldInInsertStmt
-	s.ctx.GetSessionVars().StmtCtx.DividedByZeroAsWarning = oldDividedByZeroAsWarning
-}
-
 func (s *testEvaluatorSuite) TestUnaryOp(c *C) {
 	tbl := []struct {
 		arg    interface{}
 		op     string
 		result interface{}
 	}{
-		// test NOT.
-		{1, ast.UnaryNot, int64(0)},
-		{0, ast.UnaryNot, int64(1)},
-		{nil, ast.UnaryNot, nil},
-		{types.NewBinaryLiteralFromUint(0, -1), ast.UnaryNot, int64(1)},
-		{types.NewBinaryLiteralFromUint(1, -1), ast.UnaryNot, int64(0)},
-		{types.Enum{Name: "a", Value: 1}, ast.UnaryNot, int64(0)},
-		{types.Set{Name: "a", Value: 1}, ast.UnaryNot, int64(0)},
-
-		// test BitNeg.
-		{nil, ast.BitNeg, nil},
-		{-1, ast.BitNeg, uint64(0)},
-
 		// test Minus.
 		{nil, ast.UnaryMinus, nil},
 		{float64(1.0), ast.UnaryMinus, float64(-1.0)},
 		{int64(1), ast.UnaryMinus, int64(-1)},
 		{int64(1), ast.UnaryMinus, int64(-1)},
 		{uint64(1), ast.UnaryMinus, -int64(1)},
-		{"1.0", ast.UnaryMinus, -1.0},
-		{[]byte("1.0"), ast.UnaryMinus, -1.0},
-		{types.NewBinaryLiteralFromUint(1, -1), ast.UnaryMinus, -1.0},
-		{true, ast.UnaryMinus, int64(-1)},
-		{false, ast.UnaryMinus, int64(0)},
-		{types.Enum{Name: "a", Value: 1}, ast.UnaryMinus, -1.0},
-		{types.Set{Name: "a", Value: 1}, ast.UnaryMinus, -1.0},
 	}
 	for i, t := range tbl {
 		fc := funcs[t.op]
@@ -500,23 +252,4 @@ func (s *testEvaluatorSuite) TestUnaryOp(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(ret, Equals, 0, Commentf("%v %s", t.arg, t.op))
 	}
-}
-
-func (s *testEvaluatorSuite) TestMod(c *C) {
-	fc := funcs[ast.Mod]
-	f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(234, 10)))
-	c.Assert(err, IsNil)
-	r, err := evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(r, testutil.DatumEquals, types.NewIntDatum(4))
-	f, err = fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(29, 9)))
-	c.Assert(err, IsNil)
-	r, err = evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(r, testutil.DatumEquals, types.NewIntDatum(2))
-	f, err = fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(34.5, 3)))
-	c.Assert(err, IsNil)
-	r, err = evalBuiltinFunc(f, chunk.Row{})
-	c.Assert(err, IsNil)
-	c.Assert(r, testutil.DatumEquals, types.NewDatum(1.5))
 }

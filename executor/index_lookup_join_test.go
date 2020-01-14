@@ -147,16 +147,6 @@ func (s *testSuite) TestIndexJoinOverflow(c *C) {
 	tk.MustQuery(`select /*+ INL_MERGE_JOIN(t2) */ * from t1 join t2 on t1.a = t2.a;`).Check(testkit.Rows())
 }
 
-func (s *testSuite5) TestIssue11061(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1(c varchar(30), index ix_c(c(10)))")
-	tk.MustExec("insert into t1 (c) values('7_chars'), ('13_characters')")
-	tk.MustQuery("SELECT /*+ INL_JOIN(t1) */ SUM(LENGTH(c)) FROM t1 WHERE c IN (SELECT t1.c FROM t1)").Check(testkit.Rows("20"))
-	tk.MustQuery("SELECT /*+ INL_HASH_JOIN(t1) */ SUM(LENGTH(c)) FROM t1 WHERE c IN (SELECT t1.c FROM t1)").Check(testkit.Rows("20"))
-	tk.MustQuery("SELECT /*+ INL_MERGE_JOIN(t1) */ SUM(LENGTH(c)) FROM t1 WHERE c IN (SELECT t1.c FROM t1)").Check(testkit.Rows("20"))
-}
-
 func (s *testSuite5) TestIndexJoinPartitionTable(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("drop table if exists t")

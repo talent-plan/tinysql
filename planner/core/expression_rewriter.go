@@ -916,21 +916,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		er.betweenToExpression(v)
 	case *ast.CaseExpr:
 		er.caseToExpression(v)
-	case *ast.FuncCastExpr:
-		arg := er.ctxStack[len(er.ctxStack)-1]
-		er.err = expression.CheckArgsNotMultiColumnRow(arg)
-		if er.err != nil {
-			return retNode, false
-		}
-
-		// check the decimal precision of "CAST(AS TIME)".
-		er.err = er.checkTimePrecision(v.Tp)
-		if er.err != nil {
-			return retNode, false
-		}
-
-		er.ctxStack[len(er.ctxStack)-1] = expression.BuildCastFunction(er.sctx, arg, v.Tp)
-		er.ctxNameStk[len(er.ctxNameStk)-1] = types.EmptyName
 	case *ast.RowExpr:
 		er.rowToScalarFunc(v)
 	case *ast.PatternInExpr:
@@ -978,13 +963,6 @@ func (er *expressionRewriter) newFunction(funcName string, retType *types.FieldT
 		return expression.NewFunctionBase(er.sctx, funcName, retType, args...)
 	}
 	return expression.NewFunction(er.sctx, funcName, retType, args...)
-}
-
-func (er *expressionRewriter) checkTimePrecision(ft *types.FieldType) error {
-	if ft.EvalType() == types.ETDuration && ft.Decimal > int(types.MaxFsp) {
-		return errTooBigPrecision.GenWithStackByArgs(ft.Decimal, "CAST", types.MaxFsp)
-	}
-	return nil
 }
 
 func (er *expressionRewriter) rewriteVariable(v *ast.VariableExpr) {
@@ -1298,12 +1276,6 @@ func (er *expressionRewriter) betweenToExpression(v *ast.BetweenExpr) {
 	}
 
 	expr, lexp, rexp := er.ctxStack[stkLen-3], er.ctxStack[stkLen-2], er.ctxStack[stkLen-1]
-
-	if expression.GetCmpTp4MinMax([]expression.Expression{expr, lexp, rexp}) == types.ETDatetime {
-		expr = expression.WrapWithCastAsTime(er.sctx, expr, types.NewFieldType(mysql.TypeDatetime))
-		lexp = expression.WrapWithCastAsTime(er.sctx, lexp, types.NewFieldType(mysql.TypeDatetime))
-		rexp = expression.WrapWithCastAsTime(er.sctx, rexp, types.NewFieldType(mysql.TypeDatetime))
-	}
 
 	var op string
 	var l, r expression.Expression

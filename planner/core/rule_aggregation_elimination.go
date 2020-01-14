@@ -15,8 +15,6 @@ package core
 
 import (
 	"context"
-	"math"
-
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
@@ -85,13 +83,13 @@ func (a *aggregationEliminateChecker) rewriteExpr(ctx sessionctx.Context, aggFun
 	switch aggFunc.Name {
 	case ast.AggFuncCount:
 		if aggFunc.Mode == aggregation.FinalMode {
-			return a.wrapCastFunction(ctx, aggFunc.Args[0], aggFunc.RetTp)
+			return aggFunc.Args[0]
 		}
 		return a.rewriteCount(ctx, aggFunc.Args, aggFunc.RetTp)
 	case ast.AggFuncSum, ast.AggFuncAvg, ast.AggFuncFirstRow, ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncGroupConcat:
-		return a.wrapCastFunction(ctx, aggFunc.Args[0], aggFunc.RetTp)
+		return aggFunc.Args[0]
 	case ast.AggFuncBitAnd, ast.AggFuncBitOr, ast.AggFuncBitXor:
-		return a.rewriteBitFunc(ctx, aggFunc.Name, aggFunc.Args[0], aggFunc.RetTp)
+		return aggFunc.Args[0]
 	default:
 		panic("Unsupported function")
 	}
@@ -114,27 +112,6 @@ func (a *aggregationEliminateChecker) rewriteCount(ctx sessionctx.Context, exprs
 	innerExpr := expression.ComposeDNFCondition(ctx, isNullExprs...)
 	newExpr := expression.NewFunctionInternal(ctx, ast.If, targetTp, innerExpr, expression.Zero, expression.One)
 	return newExpr
-}
-
-func (a *aggregationEliminateChecker) rewriteBitFunc(ctx sessionctx.Context, funcType string, arg expression.Expression, targetTp *types.FieldType) expression.Expression {
-	// For not integer type. We need to cast(cast(arg as signed) as unsigned) to make the bit function work.
-	innerCast := expression.WrapWithCastAsInt(ctx, arg)
-	outerCast := a.wrapCastFunction(ctx, innerCast, targetTp)
-	var finalExpr expression.Expression
-	if funcType != ast.AggFuncBitAnd {
-		finalExpr = expression.NewFunctionInternal(ctx, ast.Ifnull, targetTp, outerCast, expression.Zero.Clone())
-	} else {
-		finalExpr = expression.NewFunctionInternal(ctx, ast.Ifnull, outerCast.GetType(), outerCast, &expression.Constant{Value: types.NewUintDatum(math.MaxUint64), RetType: targetTp})
-	}
-	return finalExpr
-}
-
-// wrapCastFunction will wrap a cast if the targetTp is not equal to the arg's.
-func (a *aggregationEliminateChecker) wrapCastFunction(ctx sessionctx.Context, arg expression.Expression, targetTp *types.FieldType) expression.Expression {
-	if arg.GetType() == targetTp {
-		return arg
-	}
-	return expression.BuildCastFunction(ctx, arg, targetTp)
 }
 
 func (a *aggregationEliminator) optimize(ctx context.Context, p LogicalPlan) (LogicalPlan, error) {

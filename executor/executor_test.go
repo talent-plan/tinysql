@@ -31,14 +31,12 @@ import (
 	"github.com/pingcap/failpoint"
 	pb "github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
@@ -51,7 +49,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
-	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
@@ -639,10 +636,6 @@ func (s *testSuiteP1) TestOrderBy(c *C) {
 	// Order by position.
 	tk.MustQuery("select * from t order by 1").Check(testkit.Rows("1 2 abc", "2 1 bcd"))
 	tk.MustQuery("select * from t order by 2").Check(testkit.Rows("2 1 bcd", "1 2 abc"))
-
-	// Order by binary.
-	tk.MustQuery("select c1, c3 from t order by binary c1 desc").Check(testkit.Rows("2 bcd", "1 abc"))
-	tk.MustQuery("select c1, c2 from t order by binary c3").Check(testkit.Rows("1 2", "2 1"))
 }
 
 func (s *testSuiteP1) TestSelectErrorRow(c *C) {
@@ -716,264 +709,6 @@ func (s *testSuiteP1) TestIssue5055(c *C) {
 	tk.MustExec(`insert into t2 values(1);`)
 	result := tk.MustQuery("select tbl1.* from (select t1.a, 1 from t1) tbl1 left join t2 tbl2 on tbl1.a = tbl2.a order by tbl1.a desc limit 1;")
 	result.Check(testkit.Rows("1 1"))
-}
-
-func (s *testSuiteP2) TestUnion(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	testSQL := `drop table if exists union_test; create table union_test(id int);`
-	tk.MustExec(testSQL)
-
-	testSQL = `drop table if exists union_test;`
-	tk.MustExec(testSQL)
-	testSQL = `create table union_test(id int);`
-	tk.MustExec(testSQL)
-	testSQL = `insert union_test values (1),(2)`
-	tk.MustExec(testSQL)
-
-	testSQL = `select * from (select id from union_test union select id from union_test) t order by id;`
-	r := tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("1", "2"))
-
-	r = tk.MustQuery("select 1 union all select 1")
-	r.Check(testkit.Rows("1", "1"))
-
-	r = tk.MustQuery("select 1 union all select 1 union select 1")
-	r.Check(testkit.Rows("1"))
-
-	r = tk.MustQuery("select 1 as a union (select 2) order by a limit 1")
-	r.Check(testkit.Rows("1"))
-
-	r = tk.MustQuery("select 1 as a union (select 2) order by a limit 1, 1")
-	r.Check(testkit.Rows("2"))
-
-	r = tk.MustQuery("select id from union_test union all (select 1) order by id desc")
-	r.Check(testkit.Rows("2", "1", "1"))
-
-	r = tk.MustQuery("select id as a from union_test union (select 1) order by a desc")
-	r.Check(testkit.Rows("2", "1"))
-
-	r = tk.MustQuery(`select null as a union (select "abc") order by a`)
-	r.Check(testkit.Rows("<nil>", "abc"))
-
-	r = tk.MustQuery(`select "abc" as a union (select 1) order by a`)
-	r.Check(testkit.Rows("1", "abc"))
-
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (c int, d int)")
-	tk.MustExec("insert t1 values (NULL, 1)")
-	tk.MustExec("insert t1 values (1, 1)")
-	tk.MustExec("insert t1 values (1, 2)")
-	tk.MustExec("drop table if exists t2")
-	tk.MustExec("create table t2 (c int, d int)")
-	tk.MustExec("insert t2 values (1, 3)")
-	tk.MustExec("insert t2 values (1, 1)")
-	tk.MustExec("drop table if exists t3")
-	tk.MustExec("create table t3 (c int, d int)")
-	tk.MustExec("insert t3 values (3, 2)")
-	tk.MustExec("insert t3 values (4, 3)")
-	r = tk.MustQuery(`select sum(c1), c2 from (select c c1, d c2 from t1 union all select d c1, c c2 from t2 union all select c c1, d c2 from t3) x group by c2 order by c2`)
-	r.Check(testkit.Rows("5 1", "4 2", "4 3"))
-
-	tk.MustExec("drop table if exists t1, t2, t3")
-	tk.MustExec("create table t1 (a int primary key)")
-	tk.MustExec("create table t2 (a int primary key)")
-	tk.MustExec("create table t3 (a int primary key)")
-	tk.MustExec("insert t1 values (7), (8)")
-	tk.MustExec("insert t2 values (1), (9)")
-	tk.MustExec("insert t3 values (2), (3)")
-	r = tk.MustQuery("select * from t1 union all select * from t2 union all (select * from t3) order by a limit 2")
-	r.Check(testkit.Rows("1", "2"))
-
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1 (a int)")
-	tk.MustExec("create table t2 (a int)")
-	tk.MustExec("insert t1 values (2), (1)")
-	tk.MustExec("insert t2 values (3), (4)")
-	r = tk.MustQuery("select * from t1 union all (select * from t2) order by a limit 1")
-	r.Check(testkit.Rows("1"))
-	r = tk.MustQuery("select (select * from t1 where a != t.a union all (select * from t2 where a != t.a) order by a limit 1) from t1 t")
-	r.Check(testkit.Rows("1", "2"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int unsigned primary key auto_increment, c1 int, c2 int, index c1_c2 (c1, c2))")
-	tk.MustExec("insert into t (c1, c2) values (1, 1)")
-	tk.MustExec("insert into t (c1, c2) values (1, 2)")
-	tk.MustExec("insert into t (c1, c2) values (2, 3)")
-	r = tk.MustQuery("select * from (select * from t where t.c1 = 1 union select * from t where t.id = 1) s order by s.id")
-	r.Check(testkit.Rows("1 1 1", "2 1 2"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("CREATE TABLE t (f1 DATE)")
-	tk.MustExec("INSERT INTO t VALUES ('1978-11-26')")
-	r = tk.MustQuery("SELECT f1+0 FROM t UNION SELECT f1+0 FROM t")
-	r.Check(testkit.Rows("19781126"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("CREATE TABLE t (a int, b int)")
-	tk.MustExec("INSERT INTO t VALUES ('1', '1')")
-	r = tk.MustQuery("select b from (SELECT * FROM t UNION ALL SELECT a, b FROM t order by a) t")
-	r.Check(testkit.Rows("1", "1"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("CREATE TABLE t (a DECIMAL(4,2))")
-	tk.MustExec("INSERT INTO t VALUE(12.34)")
-	r = tk.MustQuery("SELECT 1 AS c UNION select a FROM t")
-	r.Sort().Check(testkit.Rows("1.00", "12.34"))
-
-	// #issue3771
-	r = tk.MustQuery("SELECT 'a' UNION SELECT CONCAT('a', -4)")
-	r.Sort().Check(testkit.Rows("a", "a-4"))
-
-	// test race
-	tk.MustQuery("SELECT @x:=0 UNION ALL SELECT @x:=0 UNION ALL SELECT @x")
-
-	// test field tp
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("CREATE TABLE t1 (a date)")
-	tk.MustExec("CREATE TABLE t2 (a date)")
-	tk.MustExec("SELECT a from t1 UNION select a FROM t2")
-	tk.MustQuery("show create table t1").Check(testkit.Rows("t1 CREATE TABLE `t1` (\n" + "  `a` date DEFAULT NULL\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-
-	// Move from session test.
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1 (c double);")
-	tk.MustExec("create table t2 (c double);")
-	tk.MustExec("insert into t1 value (73);")
-	tk.MustExec("insert into t2 value (930);")
-	// If set unspecified column flen to 0, it will cause bug in union.
-	// This test is used to prevent the bug reappear.
-	tk.MustQuery("select c from t1 union (select c from t2) order by c").Check(testkit.Rows("73", "930"))
-
-	// issue 5703
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a date)")
-	tk.MustExec("insert into t value ('2017-01-01'), ('2017-01-02')")
-	r = tk.MustQuery("(select a from t where a < 0) union (select a from t where a > 0) order by a")
-	r.Check(testkit.Rows("2017-01-01", "2017-01-02"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int)")
-	tk.MustExec("insert into t value(0),(0)")
-	tk.MustQuery("select 1 from (select a from t union all select a from t) tmp").Check(testkit.Rows("1", "1", "1", "1"))
-	tk.MustQuery("select 10 as a from dual union select a from t order by a desc limit 1 ").Check(testkit.Rows("10"))
-	tk.MustQuery("select -10 as a from dual union select a from t order by a limit 1 ").Check(testkit.Rows("-10"))
-	tk.MustQuery("select count(1) from (select a from t union all select a from t) tmp").Check(testkit.Rows("4"))
-
-	err := tk.ExecToErr("select 1 from (select a from t limit 1 union all select a from t limit 1) tmp")
-	c.Assert(err, NotNil)
-	terr := errors.Cause(err).(*terror.Error)
-	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWrongUsage))
-
-	err = tk.ExecToErr("select 1 from (select a from t order by a union all select a from t limit 1) tmp")
-	c.Assert(err, NotNil)
-	terr = errors.Cause(err).(*terror.Error)
-	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWrongUsage))
-
-	_, err = tk.Exec("(select a from t order by a) union all select a from t limit 1 union all select a from t limit 1")
-	c.Assert(terror.ErrorEqual(err, plannercore.ErrWrongUsage), IsTrue, Commentf("err %v", err))
-
-	_, err = tk.Exec("(select a from t limit 1) union all select a from t limit 1")
-	c.Assert(err, IsNil)
-	_, err = tk.Exec("(select a from t order by a) union all select a from t order by a")
-	c.Assert(err, IsNil)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int)")
-	tk.MustExec("insert into t value(1),(2),(3)")
-
-	tk.MustQuery("(select a from t order by a limit 2) union all (select a from t order by a desc limit 2) order by a desc limit 1,2").Check(testkit.Rows("2", "2"))
-	tk.MustQuery("select a from t union all select a from t order by a desc limit 5").Check(testkit.Rows("3", "3", "2", "2", "1"))
-	tk.MustQuery("(select a from t order by a desc limit 2) union all select a from t group by a order by a").Check(testkit.Rows("1", "2", "2", "3", "3"))
-	tk.MustQuery("(select a from t order by a desc limit 2) union all select 33 as a order by a desc limit 2").Check(testkit.Rows("33", "3"))
-
-	tk.MustQuery("select 1 union select 1 union all select 1").Check(testkit.Rows("1", "1"))
-	tk.MustQuery("select 1 union all select 1 union select 1").Check(testkit.Rows("1"))
-
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec(`create table t1(a bigint, b bigint);`)
-	tk.MustExec(`create table t2(a bigint, b bigint);`)
-	tk.MustExec(`insert into t1 values(1, 1);`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t1 select * from t1;`)
-	tk.MustExec(`insert into t2 values(1, 1);`)
-	tk.MustExec(`set @@tidb_init_chunk_size=2;`)
-	tk.MustExec(`set @@sql_mode="";`)
-	tk.MustQuery(`select count(*) from (select t1.a, t1.b from t1 left join t2 on t1.a=t2.a union all select t1.a, t1.a from t1 left join t2 on t1.a=t2.a) tmp;`).Check(testkit.Rows("128"))
-	tk.MustQuery(`select tmp.a, count(*) from (select t1.a, t1.b from t1 left join t2 on t1.a=t2.a union all select t1.a, t1.a from t1 left join t2 on t1.a=t2.a) tmp;`).Check(testkit.Rows("1 128"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int, b int)")
-	tk.MustExec("insert into t value(1 ,2)")
-	tk.MustQuery("select a, b from (select a, 0 as d, b from t union all select a, 0 as d, b from t) test;").Check(testkit.Rows("1 2", "1 2"))
-
-	// #issue 8141
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1(a int, b int)")
-	tk.MustExec("insert into t1 value(1,2),(1,1),(2,2),(2,2),(3,2),(3,2)")
-	tk.MustExec("set @@tidb_init_chunk_size=2;")
-	tk.MustQuery("select count(*) from (select a as c, a as d from t1 union all select a, b from t1) t;").Check(testkit.Rows("12"))
-
-	// #issue 8189 and #issue 8199
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("drop table if exists t2")
-	tk.MustExec("CREATE TABLE t1 (a int not null, b char (10) not null)")
-	tk.MustExec("insert into t1 values(1,'a'),(2,'b'),(3,'c'),(3,'c')")
-	tk.MustExec("CREATE TABLE t2 (a int not null, b char (10) not null)")
-	tk.MustExec("insert into t2 values(1,'a'),(2,'b'),(3,'c'),(3,'c')")
-	tk.MustQuery("select a from t1 union select a from t1 order by (select a+1);").Check(testkit.Rows("1", "2", "3"))
-
-	// #issue 8201
-	for i := 0; i < 4; i++ {
-		tk.MustQuery("SELECT(SELECT 0 AS a FROM dual UNION SELECT 1 AS a FROM dual ORDER BY a ASC  LIMIT 1) AS dev").Check(testkit.Rows("0"))
-	}
-
-	// #issue 8231
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("CREATE TABLE t1 (uid int(1))")
-	tk.MustExec("INSERT INTO t1 SELECT 150")
-	tk.MustQuery("SELECT 'a' UNION SELECT uid FROM t1 order by 1 desc;").Check(testkit.Rows("a", "150"))
-
-	// #issue 8196
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("drop table if exists t2")
-	tk.MustExec("CREATE TABLE t1 (a int not null, b char (10) not null)")
-	tk.MustExec("insert into t1 values(1,'a'),(2,'b'),(3,'c'),(3,'c')")
-	tk.MustExec("CREATE TABLE t2 (a int not null, b char (10) not null)")
-	tk.MustExec("insert into t2 values(3,'c'),(4,'d'),(5,'f'),(6,'e')")
-	tk.MustExec("analyze table t1")
-	tk.MustExec("analyze table t2")
-	_, err = tk.Exec("(select a,b from t1 limit 2) union all (select a,b from t2 order by a limit 1) order by t1.b")
-	c.Assert(err.Error(), Equals, "[planner:1250]Table 't1' from one of the SELECTs cannot be used in global ORDER clause")
-
-	// #issue 9900
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int, b decimal(6, 3))")
-	tk.MustExec("insert into t values(1, 1.000)")
-	tk.MustQuery("select count(distinct a), sum(distinct a), avg(distinct a) from (select a from t union all select b from t) tmp;").Check(testkit.Rows("1 1.000 1.0000000"))
-}
-
-func (s *testSuiteP1) TestNeighbouringProj(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1(a int, b int)")
-	tk.MustExec("create table t2(a int, b int)")
-	tk.MustExec("insert into t1 value(1, 1), (2, 2)")
-	tk.MustExec("insert into t2 value(1, 1), (2, 2)")
-	tk.MustQuery("select sum(c) from (select t1.a as a, t1.a as c, length(t1.b) from t1  union select a, b, b from t2) t;").Check(testkit.Rows("5"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a bigint, b bigint, c bigint);")
-	tk.MustExec("insert into t values(1, 1, 1), (2, 2, 2), (3, 3, 3);")
-	rs := tk.MustQuery("select cast(count(a) as signed), a as another, a from t group by a order by cast(count(a) as signed), a limit 10;")
-	rs.Check(testkit.Rows("1 1 1", "1 2 2", "1 3 3"))
 }
 
 func (s *testSuiteP1) TestIn(c *C) {
@@ -1277,71 +1012,6 @@ func (s *testSuiteP1) TestGeneratedColumnWrite(c *C) {
 	}
 }
 
-func (s *testSuiteP2) TestToPBExpr(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a decimal(10,6), b decimal, index idx_b (b))")
-	tk.MustExec("set sql_mode = ''")
-	tk.MustExec("insert t values (1.1, 1.1)")
-	tk.MustExec("insert t values (2.4, 2.4)")
-	tk.MustExec("insert t values (3.3, 2.7)")
-	result := tk.MustQuery("select * from t where a < 2.399999")
-	result.Check(testkit.Rows("1.100000 1"))
-	result = tk.MustQuery("select * from t where a > 1.5")
-	result.Check(testkit.Rows("2.400000 2", "3.300000 3"))
-	result = tk.MustQuery("select * from t where a <= 1.1")
-	result.Check(testkit.Rows("1.100000 1"))
-	result = tk.MustQuery("select * from t where b >= 3")
-	result.Check(testkit.Rows("3.300000 3"))
-	result = tk.MustQuery("select * from t where not (b = 1)")
-	result.Check(testkit.Rows("2.400000 2", "3.300000 3"))
-	result = tk.MustQuery("select * from t where b&1 = a|1")
-	result.Check(testkit.Rows("1.100000 1"))
-	result = tk.MustQuery("select * from t where b != 2 and b <=> 3")
-	result.Check(testkit.Rows("3.300000 3"))
-	result = tk.MustQuery("select * from t where b in (3)")
-	result.Check(testkit.Rows("3.300000 3"))
-	result = tk.MustQuery("select * from t where b not in (1, 2)")
-	result.Check(testkit.Rows("3.300000 3"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int primary key)")
-	tk.MustExec("insert t values (1)")
-	tk.MustExec("insert t values (2)")
-	result = tk.MustQuery("select * from t where not (a = 1)")
-	result.Check(testkit.Rows("2"))
-	result = tk.MustQuery("select * from t where not(not (a = 1))")
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery("select * from t where not(a != 1 and a != 2)")
-	result.Check(testkit.Rows("1", "2"))
-}
-
-func (s *testSuiteP2) TestDatumXAPI(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a decimal(10,6), b decimal, index idx_b (b))")
-	tk.MustExec("set sql_mode = ''")
-	tk.MustExec("insert t values (1.1, 1.1)")
-	tk.MustExec("insert t values (2.2, 2.2)")
-	tk.MustExec("insert t values (3.3, 2.7)")
-	result := tk.MustQuery("select * from t where a > 1.5")
-	result.Check(testkit.Rows("2.200000 2", "3.300000 3"))
-	result = tk.MustQuery("select * from t where b > 1.5")
-	result.Check(testkit.Rows("2.200000 2", "3.300000 3"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a time(3), b time, index idx_a (a))")
-	tk.MustExec("insert t values ('11:11:11', '11:11:11')")
-	tk.MustExec("insert t values ('11:11:12', '11:11:12')")
-	tk.MustExec("insert t values ('11:11:13', '11:11:13')")
-	result = tk.MustQuery("select * from t where a > '11:11:11.5'")
-	result.Check(testkit.Rows("11:11:12.000 11:11:12", "11:11:13.000 11:11:13"))
-	result = tk.MustQuery("select * from t where b > '11:11:11.5'")
-	result.Check(testkit.Rows("11:11:12.000 11:11:12", "11:11:13.000 11:11:13"))
-}
-
 func (s *testSuiteP2) TestSQLMode(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -1540,21 +1210,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	c.Assert(fields[0].ColumnAsName.L, Equals, "if(1,c,c)")
 }
 
-func (s *testSuiteP2) TestSelectVar(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (d int)")
-	tk.MustExec("insert into t values(1), (2), (1)")
-	// This behavior is different from MySQL.
-	result := tk.MustQuery("select @a, @a := d+1 from t")
-	result.Check(testkit.Rows("<nil> 2", "2 3", "3 2"))
-	// Test for PR #10658.
-	tk.MustExec("select SQL_BIG_RESULT d from t group by d")
-	tk.MustExec("select SQL_SMALL_RESULT d from t group by d")
-	tk.MustExec("select SQL_BUFFER_RESULT d from t group by d")
-}
-
 func (s *testSuiteP2) TestHistoryRead(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -1669,8 +1324,6 @@ func (s *testSuite) TestSimpleDAG(c *C) {
 	tk.MustQuery("select count(*) from t").Check(testkit.Rows("4"))
 	tk.MustQuery("select count(*), c from t group by c order by c").Check(testkit.Rows("2 1", "1 2", "1 3"))
 	tk.MustQuery("select sum(c) as s from t group by b order by s").Check(testkit.Rows("3", "4"))
-	tk.MustQuery("select avg(a) as s from t group by b order by s").Check(testkit.Rows("2.0000", "4.0000"))
-	tk.MustQuery("select sum(distinct c) from t group by b").Check(testkit.Rows("3", "3"))
 
 	tk.MustExec("create index i on t(c,b)")
 	tk.MustQuery("select a from t where c = 1").Check(testkit.Rows("1", "2"))
@@ -1682,194 +1335,6 @@ func (s *testSuite) TestSimpleDAG(c *C) {
 	tk.MustQuery("select * from t where b = 2").Check(testkit.Rows("4 2 3"))
 	tk.MustQuery("select count(*) from t where b = 1").Check(testkit.Rows("3"))
 	tk.MustQuery("select * from t where b = 1 and a > 1 limit 1").Check(testkit.Rows("2 1 1"))
-
-	// Test time push down.
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, c1 datetime);")
-	tk.MustExec("insert into t values (1, '2015-06-07 12:12:12')")
-	tk.MustQuery("select id from t where c1 = '2015-06-07 12:12:12'").Check(testkit.Rows("1"))
-}
-
-func (s *testSuite) TestTimestampTimeZone(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (ts timestamp)")
-	tk.MustExec("set time_zone = '+00:00'")
-	tk.MustExec("insert into t values ('2017-04-27 22:40:42')")
-	// The timestamp will get different value if time_zone session variable changes.
-	tests := []struct {
-		timezone string
-		expect   string
-	}{
-		{"+10:00", "2017-04-28 08:40:42"},
-		{"-6:00", "2017-04-27 16:40:42"},
-	}
-	for _, tt := range tests {
-		tk.MustExec(fmt.Sprintf("set time_zone = '%s'", tt.timezone))
-		tk.MustQuery("select * from t").Check(testkit.Rows(tt.expect))
-	}
-
-	// For issue https://github.com/pingcap/tidb/issues/3467
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec(`CREATE TABLE t1 (
- 	      id bigint(20) NOT NULL AUTO_INCREMENT,
- 	      uid int(11) DEFAULT NULL,
- 	      datetime timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
- 	      ip varchar(128) DEFAULT NULL,
- 	    PRIMARY KEY (id),
- 	      KEY i_datetime (datetime),
- 	      KEY i_userid (uid)
- 	    );`)
-	tk.MustExec(`INSERT INTO t1 VALUES (123381351,1734,"2014-03-31 08:57:10","127.0.0.1");`)
-	r := tk.MustQuery("select datetime from t1;") // Cover TableReaderExec
-	r.Check(testkit.Rows("2014-03-31 08:57:10"))
-	r = tk.MustQuery("select datetime from t1 where datetime='2014-03-31 08:57:10';")
-	r.Check(testkit.Rows("2014-03-31 08:57:10")) // Cover IndexReaderExec
-	r = tk.MustQuery("select * from t1 where datetime='2014-03-31 08:57:10';")
-	r.Check(testkit.Rows("123381351 1734 2014-03-31 08:57:10 127.0.0.1")) // Cover IndexLookupExec
-
-	// For issue https://github.com/pingcap/tidb/issues/3485
-	tk.MustExec("set time_zone = 'Asia/Shanghai'")
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec(`CREATE TABLE t1 (
-	    id bigint(20) NOT NULL AUTO_INCREMENT,
-	    datetime timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	    PRIMARY KEY (id)
-	  );`)
-	tk.MustExec(`INSERT INTO t1 VALUES (123381351,"2014-03-31 08:57:10");`)
-	r = tk.MustQuery(`select * from t1 where datetime="2014-03-31 08:57:10";`)
-	r.Check(testkit.Rows("123381351 2014-03-31 08:57:10"))
-	tk.MustExec(`alter table t1 add key i_datetime (datetime);`)
-	r = tk.MustQuery(`select * from t1 where datetime="2014-03-31 08:57:10";`)
-	r.Check(testkit.Rows("123381351 2014-03-31 08:57:10"))
-	r = tk.MustQuery(`select * from t1;`)
-	r.Check(testkit.Rows("123381351 2014-03-31 08:57:10"))
-	r = tk.MustQuery("select datetime from t1 where datetime='2014-03-31 08:57:10';")
-	r.Check(testkit.Rows("2014-03-31 08:57:10"))
-}
-
-func (s *testSuite) TestTimestampDefaultValueTimeZone(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("set time_zone = '+08:00'")
-	tk.MustExec(`create table t (a int, b timestamp default "2019-01-17 14:46:14")`)
-	tk.MustExec("insert into t set a=1")
-	r := tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '2019-01-17 14:46:14'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	tk.MustExec("set time_zone = '+00:00'")
-	tk.MustExec("insert into t set a=2")
-	r = tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '2019-01-17 06:46:14'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	r = tk.MustQuery(`select a,b from t order by a`)
-	r.Check(testkit.Rows("1 2019-01-17 06:46:14", "2 2019-01-17 06:46:14"))
-	// Test the column's version is greater than ColumnInfoVersion1.
-	sctx := tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(sctx).InfoSchema()
-	c.Assert(is, NotNil)
-	tb, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tb.Cols()[1].Version = model.ColumnInfoVersion1 + 1
-	tk.MustExec("insert into t set a=3")
-	r = tk.MustQuery(`select a,b from t order by a`)
-	r.Check(testkit.Rows("1 2019-01-17 06:46:14", "2 2019-01-17 06:46:14", "3 2019-01-17 06:46:14"))
-	tk.MustExec("delete from t where a=3")
-	// Change time zone back.
-	tk.MustExec("set time_zone = '+08:00'")
-	r = tk.MustQuery(`select a,b from t order by a`)
-	r.Check(testkit.Rows("1 2019-01-17 14:46:14", "2 2019-01-17 14:46:14"))
-	tk.MustExec("set time_zone = '-08:00'")
-	r = tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '2019-01-16 22:46:14'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-
-	// test zero default value in multiple time zone.
-	defer tk.MustExec(fmt.Sprintf("set @@sql_mode='%s'", tk.MustQuery("select @@sql_mode").Rows()[0][0]))
-	tk.MustExec("set @@sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION';")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("set time_zone = '+08:00'")
-	tk.MustExec(`create table t (a int, b timestamp default "0000-00-00 00")`)
-	tk.MustExec("insert into t set a=1")
-	r = tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '0000-00-00 00:00:00'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	tk.MustExec("set time_zone = '+00:00'")
-	tk.MustExec("insert into t set a=2")
-	r = tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '0000-00-00 00:00:00'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	tk.MustExec("set time_zone = '-08:00'")
-	tk.MustExec("insert into t set a=3")
-	r = tk.MustQuery(`show create table t`)
-	r.Check(testkit.Rows("t CREATE TABLE `t` (\n" + "  `a` int(11) DEFAULT NULL,\n" + "  `b` timestamp DEFAULT '0000-00-00 00:00:00'\n" + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	r = tk.MustQuery(`select a,b from t order by a`)
-	r.Check(testkit.Rows("1 0000-00-00 00:00:00", "2 0000-00-00 00:00:00", "3 0000-00-00 00:00:00"))
-
-	// test add timestamp column default current_timestamp.
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`set time_zone = 'Asia/Shanghai'`)
-	tk.MustExec(`create table t (a int)`)
-	tk.MustExec(`insert into t set a=1`)
-	tk.MustExec(`alter table t add column b timestamp not null default current_timestamp;`)
-	timeIn8 := tk.MustQuery("select b from t").Rows()[0][0]
-	tk.MustExec(`set time_zone = '+00:00'`)
-	timeIn0 := tk.MustQuery("select b from t").Rows()[0][0]
-	c.Assert(timeIn8 != timeIn0, IsTrue, Commentf("%v == %v", timeIn8, timeIn0))
-	datumTimeIn8, err := expression.GetTimeValue(tk.Se, timeIn8, mysql.TypeTimestamp, 0)
-	c.Assert(err, IsNil)
-	tIn8To0 := datumTimeIn8.GetMysqlTime()
-	timeZoneIn8, err := time.LoadLocation("Asia/Shanghai")
-	c.Assert(err, IsNil)
-	err = tIn8To0.ConvertTimeZone(timeZoneIn8, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(timeIn0 == tIn8To0.String(), IsTrue, Commentf("%v != %v", timeIn0, tIn8To0.String()))
-
-	// test add index.
-	tk.MustExec(`alter table t add index(b);`)
-
-	tk.MustExec(`set time_zone = '+05:00'`)
-
-}
-
-func (s *testSuite) TestTiDBCurrentTS(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery("select @@tidb_current_ts").Check(testkit.Rows("0"))
-	tk.MustExec("begin")
-	rows := tk.MustQuery("select @@tidb_current_ts").Rows()
-	tsStr := rows[0][0].(string)
-	txn, err := tk.Se.Txn(true)
-	c.Assert(err, IsNil)
-	c.Assert(tsStr, Equals, fmt.Sprintf("%d", txn.StartTS()))
-	tk.MustExec("begin")
-	rows = tk.MustQuery("select @@tidb_current_ts").Rows()
-	newTsStr := rows[0][0].(string)
-	txn, err = tk.Se.Txn(true)
-	c.Assert(err, IsNil)
-	c.Assert(newTsStr, Equals, fmt.Sprintf("%d", txn.StartTS()))
-	c.Assert(newTsStr, Not(Equals), tsStr)
-	tk.MustExec("commit")
-	tk.MustQuery("select @@tidb_current_ts").Check(testkit.Rows("0"))
-
-	_, err = tk.Exec("set @@tidb_current_ts = '1'")
-	c.Assert(terror.ErrorEqual(err, variable.ErrReadOnly), IsTrue, Commentf("err %v", err))
-}
-
-func (s *testSuite) TestEmptyEnum(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (e enum('Y', 'N'))")
-	tk.MustExec("set sql_mode='STRICT_TRANS_TABLES'")
-	_, err := tk.Exec("insert into t values (0)")
-	c.Assert(terror.ErrorEqual(err, table.ErrTruncatedWrongValueForField), IsTrue, Commentf("err %v", err))
-	_, err = tk.Exec("insert into t values ('abc')")
-	c.Assert(terror.ErrorEqual(err, table.ErrTruncatedWrongValueForField), IsTrue, Commentf("err %v", err))
-
-	tk.MustExec("set sql_mode=''")
-	tk.MustExec("insert into t values (0)")
-	tk.MustQuery("select * from t").Check(testkit.Rows(""))
-	tk.MustExec("insert into t values ('abc')")
-	tk.MustQuery("select * from t").Check(testkit.Rows("", ""))
-	tk.MustExec("insert into t values (null)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("", "", "<nil>"))
 }
 
 // TestIssue4024 This tests https://github.com/pingcap/tidb/issues/4024
@@ -2223,40 +1688,6 @@ func (s *testSuite) TestBit(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *testSuite) TestEnum(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c enum('a', 'b', 'c'))")
-	tk.MustExec("insert into t values ('a'), (2), ('c')")
-	tk.MustQuery("select * from t where c = 'a'").Check(testkit.Rows("a"))
-
-	tk.MustQuery("select c + 1 from t where c = 2").Check(testkit.Rows("3"))
-
-	tk.MustExec("delete from t")
-	tk.MustExec("insert into t values ()")
-	tk.MustExec("insert into t values (null), ('1')")
-	tk.MustQuery("select c + 1 from t where c = 1").Check(testkit.Rows("2"))
-}
-
-func (s *testSuite) TestSet(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c set('a', 'b', 'c'))")
-	tk.MustExec("insert into t values ('a'), (2), ('c'), ('a,b'), ('b,a')")
-	tk.MustQuery("select * from t where c = 'a'").Check(testkit.Rows("a"))
-
-	tk.MustQuery("select * from t where c = 'a,b'").Check(testkit.Rows("a,b", "a,b"))
-
-	tk.MustQuery("select c + 1 from t where c = 2").Check(testkit.Rows("3"))
-
-	tk.MustExec("delete from t")
-	tk.MustExec("insert into t values ()")
-	tk.MustExec("insert into t values (null), ('1')")
-	tk.MustQuery("select c + 1 from t where c = 1").Check(testkit.Rows("2"))
-}
-
 func (s *testSuite) TestSubqueryInValues(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 
@@ -2414,46 +1845,6 @@ func (s *testSuite3) TestIndexJoinTableDualPanic(c *C) {
 	tk.MustExec("insert into a (f1,f2) values (1,'a'), (2,'b'), (3,'c')")
 	tk.MustQuery("select a.* from a inner join (select 1 as k1,'k2-1' as k2) as k on a.f1=k.k1;").
 		Check(testkit.Rows("1 a"))
-}
-
-func (s *testSuite3) TestUnionAutoSignedCast(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1,t2")
-	tk.MustExec("create table t1 (id int, i int, b bigint, d double, dd decimal)")
-	tk.MustExec("create table t2 (id int, i int unsigned, b bigint unsigned, d double unsigned, dd decimal unsigned)")
-	tk.MustExec("insert into t1 values(1, -1, -1, -1.1, -1)")
-	tk.MustExec("insert into t2 values(2, 1, 1, 1.1, 1)")
-	tk.MustQuery("select * from t1 union select * from t2 order by id").
-		Check(testkit.Rows("1 -1 -1 -1.1 -1", "2 1 1 1.1 1"))
-	tk.MustQuery("select id, i, b, d, dd from t2 union select id, i, b, d, dd from t1 order by id").
-		Check(testkit.Rows("1 0 0 0 -1", "2 1 1 1.1 1"))
-	tk.MustQuery("select id, i from t2 union select id, cast(i as unsigned int) from t1 order by id").
-		Check(testkit.Rows("1 18446744073709551615", "2 1"))
-	tk.MustQuery("select dd from t2 union all select dd from t2").
-		Check(testkit.Rows("1", "1"))
-
-	tk.MustExec("drop table if exists t3,t4")
-	tk.MustExec("create table t3 (id int, v int)")
-	tk.MustExec("create table t4 (id int, v double unsigned)")
-	tk.MustExec("insert into t3 values (1, -1)")
-	tk.MustExec("insert into t4 values (2, 1)")
-	tk.MustQuery("select id, v from t3 union select id, v from t4 order by id").
-		Check(testkit.Rows("1 -1", "2 1"))
-	tk.MustQuery("select id, v from t4 union select id, v from t3 order by id").
-		Check(testkit.Rows("1 0", "2 1"))
-
-	tk.MustExec("drop table if exists t5,t6,t7")
-	tk.MustExec("create table t5 (id int, v bigint unsigned)")
-	tk.MustExec("create table t6 (id int, v decimal)")
-	tk.MustExec("create table t7 (id int, v bigint)")
-	tk.MustExec("insert into t5 values (1, 1)")
-	tk.MustExec("insert into t6 values (2, -1)")
-	tk.MustExec("insert into t7 values (3, -1)")
-	tk.MustQuery("select id, v from t5 union select id, v from t6 order by id").
-		Check(testkit.Rows("1 1", "2 -1"))
-	tk.MustQuery("select id, v from t5 union select id, v from t7 union select id, v from t6 order by id").
-		Check(testkit.Rows("1 1", "2 -1", "3 -1"))
 }
 
 func (s *testSuite3) TestUpdateJoin(c *C) {

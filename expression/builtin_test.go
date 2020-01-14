@@ -133,8 +133,6 @@ func newFunctionForTest(ctx sessionctx.Context, funcName string, args ...Express
 }
 
 var (
-	// MySQL int8.
-	int8Con = &Constant{RetType: &types.FieldType{Tp: mysql.TypeLonglong, Charset: charset.CharsetBin, Collate: charset.CollationBin}}
 	// MySQL varchar.
 	varcharCon = &Constant{RetType: &types.FieldType{Tp: mysql.TypeVarchar, Charset: charset.CharsetUTF8, Collate: charset.CollationUTF8}}
 )

@@ -50,7 +50,6 @@ var (
 	ErrPrivilegeCheckFail              = terror.ClassOptimizer.New(mysql.ErrPrivilegeCheckFail, mysql.MySQLErrName[mysql.ErrPrivilegeCheckFail])
 	ErrInvalidWildCard                 = terror.ClassOptimizer.New(mysql.ErrInvalidWildCard, mysql.MySQLErrName[mysql.ErrInvalidWildCard])
 	ErrMixOfGroupFuncAndFields         = terror.ClassOptimizer.New(mysql.ErrMixOfGroupFuncAndFieldsIncompatible, mysql.MySQLErrName[mysql.ErrMixOfGroupFuncAndFieldsIncompatible])
-	errTooBigPrecision                 = terror.ClassExpression.New(mysql.ErrTooBigPrecision, mysql.MySQLErrName[mysql.ErrTooBigPrecision])
 	ErrDBaccessDenied                  = terror.ClassOptimizer.New(mysql.ErrDBaccessDenied, mysql.MySQLErrName[mysql.ErrDBaccessDenied])
 	ErrTableaccessDenied               = terror.ClassOptimizer.New(mysql.ErrTableaccessDenied, mysql.MySQLErrName[mysql.ErrTableaccessDenied])
 	ErrSpecificAccessDenied            = terror.ClassOptimizer.New(mysql.ErrSpecificAccessDenied, mysql.MySQLErrName[mysql.ErrSpecificAccessDenied])
