@@ -14,7 +14,6 @@
 package types_test
 
 import (
-	"context"
 	"flag"
 
 	. "github.com/pingcap/check"
@@ -151,30 +150,6 @@ func (s *testMySQLConstSuite) TestPipesAsConcatMode(c *C) {
 	tk.MustExec("SET sql_mode='PIPES_AS_CONCAT';")
 	r := tk.MustQuery(`SELECT 'hello' || 'world';`)
 	r.Check(testkit.Rows("helloworld"))
-}
-
-func (s *testMySQLConstSuite) TestNoUnsignedSubtractionMode(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	ctx := context.Background()
-	tk.MustExec("set sql_mode='NO_UNSIGNED_SUBTRACTION'")
-	r := tk.MustQuery("SELECT CAST(0 as UNSIGNED) - 1;")
-	r.Check(testkit.Rows("-1"))
-	rs, _ := tk.Exec("SELECT CAST(18446744073709551615 as UNSIGNED) - 1;")
-	_, err := session.GetRows4Test(ctx, tk.Se, rs)
-	c.Assert(err, NotNil)
-	c.Assert(rs.Close(), IsNil)
-	rs, _ = tk.Exec("SELECT 1 - CAST(18446744073709551615 as UNSIGNED);")
-	_, err = session.GetRows4Test(ctx, tk.Se, rs)
-	c.Assert(err, NotNil)
-	c.Assert(rs.Close(), IsNil)
-	rs, _ = tk.Exec("SELECT CAST(-1 as UNSIGNED) - 1")
-	_, err = session.GetRows4Test(ctx, tk.Se, rs)
-	c.Assert(err, NotNil)
-	c.Assert(rs.Close(), IsNil)
-	rs, _ = tk.Exec("SELECT CAST(9223372036854775808 as UNSIGNED) - 1")
-	_, err = session.GetRows4Test(ctx, tk.Se, rs)
-	c.Assert(err, NotNil)
-	c.Assert(rs.Close(), IsNil)
 }
 
 func (s *testMySQLConstSuite) TestHighNotPrecedenceMode(c *C) {

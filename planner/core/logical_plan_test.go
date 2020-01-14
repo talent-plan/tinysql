@@ -337,26 +337,6 @@ func (s *testPlanSuite) TestGroupByWhenNotExistCols(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestDupRandJoinCondsPushDown(c *C) {
-	sql := "select * from t as t1 join t t2 on t1.a > rand() and t1.a > rand()"
-	comment := Commentf("for %s", sql)
-	stmt, err := s.ParseOneStmt(sql, "", "")
-	c.Assert(err, IsNil, comment)
-	p, _, err := BuildLogicalPlan(context.Background(), s.ctx, stmt, s.is)
-	c.Assert(err, IsNil, comment)
-	p, err = logicalOptimize(context.TODO(), flagPredicatePushDown, p.(LogicalPlan))
-	c.Assert(err, IsNil, comment)
-	proj, ok := p.(*LogicalProjection)
-	c.Assert(ok, IsTrue, comment)
-	join, ok := proj.children[0].(*LogicalJoin)
-	c.Assert(ok, IsTrue, comment)
-	leftPlan, ok := join.children[0].(*LogicalSelection)
-	c.Assert(ok, IsTrue, comment)
-	leftCond := fmt.Sprintf("%s", leftPlan.Conditions)
-	// Condition with mutable function cannot be de-duplicated when push down join conds.
-	c.Assert(leftCond, Equals, "[gt(cast(test.t.a), rand()) gt(cast(test.t.a), rand())]", comment)
-}
-
 func (s *testPlanSuite) TestSubquery(c *C) {
 	defer testleak.AfterTest(c)()
 	var input, output []string
@@ -554,10 +534,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 	}{
 		{
 			sql: "select date_format((1,2), '%H');",
-			err: expression.ErrOperandColumns,
-		},
-		{
-			sql: "select cast((1,2) as date)",
 			err: expression.ErrOperandColumns,
 		},
 		{

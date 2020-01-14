@@ -247,50 +247,6 @@ func (t *testTableSuite) TestGetZeroValue(c *C) {
 	}
 }
 
-func (t *testTableSuite) TestCastValue(c *C) {
-	ctx := mock.NewContext()
-	colInfo := model.ColumnInfo{
-		FieldType: *types.NewFieldType(mysql.TypeLong),
-		State:     model.StatePublic,
-	}
-	colInfo.Charset = mysql.UTF8Charset
-	val, err := CastValue(ctx, types.Datum{}, &colInfo)
-	c.Assert(err, Equals, nil)
-	c.Assert(val.GetInt64(), Equals, int64(0))
-
-	val, err = CastValue(ctx, types.NewDatum("test"), &colInfo)
-	c.Assert(err, Not(Equals), nil)
-	c.Assert(val.GetInt64(), Equals, int64(0))
-
-	col := ToColumn(&model.ColumnInfo{
-		FieldType: *types.NewFieldType(mysql.TypeTiny),
-		State:     model.StatePublic,
-	})
-
-	err = CastValues(ctx, []types.Datum{types.NewDatum("test")}, []*Column{col})
-	c.Assert(err, NotNil)
-	ctx.GetSessionVars().StmtCtx.DupKeyAsWarning = true
-	err = CastValues(ctx, []types.Datum{types.NewDatum("test")}, []*Column{col})
-	c.Assert(err, IsNil)
-	ctx.GetSessionVars().StmtCtx.DupKeyAsWarning = false
-
-	colInfoS := model.ColumnInfo{
-		FieldType: *types.NewFieldType(mysql.TypeString),
-		State:     model.StatePublic,
-	}
-	val, err = CastValue(ctx, types.NewDatum("test"), &colInfoS)
-	c.Assert(err, IsNil)
-	c.Assert(val, NotNil)
-
-	colInfoS.Charset = mysql.UTF8Charset
-	_, err = CastValue(ctx, types.NewDatum([]byte{0xf0, 0x9f, 0x8c, 0x80}), &colInfoS)
-	c.Assert(err, NotNil)
-
-	colInfoS.Charset = mysql.UTF8MB4Charset
-	_, err = CastValue(ctx, types.NewDatum([]byte{0xf0, 0x9f, 0x80}), &colInfoS)
-	c.Assert(err, NotNil)
-}
-
 func (t *testTableSuite) TestGetDefaultValue(c *C) {
 	ctx := mock.NewContext()
 	zeroTimestamp := types.ZeroTimestamp

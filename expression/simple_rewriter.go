@@ -57,7 +57,6 @@ func ParseSimpleExprCastWithTableInfo(ctx sessionctx.Context, exprStr string, ta
 	if err != nil {
 		return nil, err
 	}
-	e = BuildCastFunction(ctx, e, targetFt)
 	return e, nil
 }
 
@@ -193,13 +192,6 @@ func (sr *simpleRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok boo
 		sr.push(value)
 	case *ast.FuncCallExpr:
 		sr.funcCallToExpression(v)
-	case *ast.FuncCastExpr:
-		arg := sr.pop()
-		sr.err = CheckArgsNotMultiColumnRow(arg)
-		if sr.err != nil {
-			return retNode, false
-		}
-		sr.push(BuildCastFunction(sr.ctx, arg, v.Tp))
 	case *ast.BinaryOperationExpr:
 		sr.binaryOpToExpression(v)
 	case *ast.UnaryOperationExpr:

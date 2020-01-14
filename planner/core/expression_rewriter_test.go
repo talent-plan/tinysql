@@ -170,15 +170,6 @@ func (s *testExpressionRewriterSuite) TestCompareSubquery(c *C) {
 		"1 <nil>",
 		"2 <nil>",
 	))
-	// Test outer null checker.
-	tk.MustQuery("select b != any (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"<nil>",
-	))
-	tk.MustQuery("select b = all (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"<nil>",
-	))
 	tk.MustQuery("select * from t t1 where b != any (select a from t t2)").Check(testkit.Rows())
 	tk.MustQuery("select * from t t1 where b = all (select a from t t2)").Check(testkit.Rows())
 
@@ -194,30 +185,7 @@ func (s *testExpressionRewriterSuite) TestCompareSubquery(c *C) {
 
 	// Test inner null checker.
 	tk.MustExec("insert into t values(null, 1)")
-	tk.MustQuery("select b != any (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"<nil>",
-	))
-	tk.MustQuery("select b = all (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"<nil>",
-	))
 	tk.MustQuery("select * from t t1 where b != any (select a from t t2)").Check(testkit.Rows())
-	tk.MustQuery("select * from t t1 where b = all (select a from t t2)").Check(testkit.Rows())
-
-	tk.MustExec("delete from t where b = 1")
-	tk.MustExec("insert into t values(null, 2)")
-	tk.MustQuery("select b != any (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"1",
-	))
-	tk.MustQuery("select b = all (select a from t t2) from t t1").Check(testkit.Rows(
-		"<nil>",
-		"0",
-	))
-	tk.MustQuery("select * from t t1 where b != any (select a from t t2)").Check(testkit.Rows(
-		"<nil> 2",
-	))
 	tk.MustQuery("select * from t t1 where b = all (select a from t t2)").Check(testkit.Rows())
 }
 

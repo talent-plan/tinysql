@@ -83,17 +83,6 @@ func (s *testIntegrationSuite) TestShowSubquery(c *C) {
 	))
 }
 
-func (s *testIntegrationSuite) TestPpdWithSetVar(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(c1 int, c2 varchar(255))")
-	tk.MustExec("insert into t values(1,'a'),(2,'d'),(3,'c')")
-
-	tk.MustQuery("select t01.c1,t01.c2,t01.c3 from (select t1.*,@c3:=@c3+1 as c3 from (select t.*,@c3:=0 from t order by t.c1)t1)t01 where t01.c3=1 and t01.c2='d'").Check(testkit.Rows())
-	tk.MustQuery("select t01.c1,t01.c2,t01.c3 from (select t1.*,@c3:=@c3+1 as c3 from (select t.*,@c3:=0 from t order by t.c1)t1)t01 where t01.c3=2 and t01.c2='d'").Check(testkit.Rows("2 d 2"))
-}
-
 func (s *testIntegrationSuite) TestBitColErrorMessage(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 
@@ -193,28 +182,6 @@ func (s *testIntegrationSuite) TestAntiJoinConstProp(c *C) {
 	tk.MustQuery("select * from t1 where t1.a not in (select a from t2 where t1.a = 2)").Check(testkit.Rows(
 		"1 <nil>",
 	))
-}
-
-func (s *testIntegrationSuite) TestSimplifyOuterJoinWithCast(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int not null, b datetime default null)")
-
-	var input []string
-	var output []struct {
-		SQL  string
-		Plan []string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Plan = s.testData.ConvertRowsToStrings(tk.MustQuery(tt).Rows())
-		})
-		tk.MustQuery(tt).Check(testkit.Rows(output[i].Plan...))
-	}
 }
 
 func (s *testIntegrationSuite) TestNoneAccessPathsFoundByIsolationRead(c *C) {

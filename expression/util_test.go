@@ -125,31 +125,6 @@ func (s testUtilSuite) TestGetStrIntFromConstant(c *check.C) {
 	c.Assert(num, check.Equals, 123)
 }
 
-func (s *testUtilSuite) TestSubstituteCorCol2Constant(c *check.C) {
-	ctx := mock.NewContext()
-	corCol1 := &CorrelatedColumn{Data: &One.Value}
-	corCol1.RetType = types.NewFieldType(mysql.TypeLonglong)
-	corCol2 := &CorrelatedColumn{Data: &One.Value}
-	corCol2.RetType = types.NewFieldType(mysql.TypeLonglong)
-	cast := BuildCastFunction(ctx, corCol1, types.NewFieldType(mysql.TypeLonglong))
-	plus := newFunction(ast.Plus, cast, corCol2)
-	plus2 := newFunction(ast.Plus, plus, One)
-	ans1 := &Constant{Value: types.NewIntDatum(3), RetType: types.NewFieldType(mysql.TypeLonglong)}
-	ret, err := SubstituteCorCol2Constant(plus2)
-	c.Assert(err, check.IsNil)
-	c.Assert(ret.Equal(ctx, ans1), check.IsTrue)
-	col1 := &Column{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)}
-	ret, err = SubstituteCorCol2Constant(col1)
-	c.Assert(err, check.IsNil)
-	ans2 := col1
-	c.Assert(ret.Equal(ctx, ans2), check.IsTrue)
-	plus3 := newFunction(ast.Plus, plus2, col1)
-	ret, err = SubstituteCorCol2Constant(plus3)
-	c.Assert(err, check.IsNil)
-	ans3 := newFunction(ast.Plus, ans1, col1)
-	c.Assert(ret.Equal(ctx, ans3), check.IsTrue)
-}
-
 func (s *testUtilSuite) TestPushDownNot(c *check.C) {
 	ctx := mock.NewContext()
 	col := &Column{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)}

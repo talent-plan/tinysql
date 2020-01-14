@@ -17,7 +17,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
@@ -59,40 +58,26 @@ func (s *testEvaluatorSuite) TestIsBinaryLiteral(c *C) {
 	c.Assert(IsBinaryLiteral(con), IsFalse)
 }
 
-type testTableBuilder struct {
-	tableName   string
-	columnNames []string
-	tps         []byte
-}
-
-func newTestTableBuilder(tableName string) *testTableBuilder {
-	return &testTableBuilder{tableName: tableName}
-}
-
-func (builder *testTableBuilder) add(name string, tp byte) *testTableBuilder {
-	builder.columnNames = append(builder.columnNames, name)
-	builder.tps = append(builder.tps, tp)
-	return builder
-}
-
-func (builder *testTableBuilder) build() *model.TableInfo {
-	ti := &model.TableInfo{
-		ID:    1,
-		Name:  model.NewCIStr(builder.tableName),
-		State: model.StatePublic,
-	}
-	for i, colName := range builder.columnNames {
-		tp := builder.tps[i]
-		fieldType := types.NewFieldType(tp)
-		fieldType.Flen, fieldType.Decimal = mysql.GetDefaultFieldLengthAndDecimal(tp)
-		fieldType.Charset, fieldType.Collate = types.DefaultCharsetForType(tp)
-		ti.Columns = append(ti.Columns, &model.ColumnInfo{
-			ID:        int64(i + 1),
-			Name:      model.NewCIStr(colName),
-			Offset:    i,
-			FieldType: *fieldType,
-			State:     model.StatePublic,
-		})
-	}
-	return ti
-}
+var (
+	year, month, day = time.Now().In(time.UTC).Date()
+	tm               = types.Time{
+		Time: types.FromDate(year, int(month), day, 12, 59, 59, 0),
+		Type: mysql.TypeDatetime,
+		Fsp:  types.DefaultFsp}
+	tmWithFsp = types.Time{
+		Time: types.FromDate(year, int(month), day, 12, 59, 59, 555000),
+		Type: mysql.TypeDatetime,
+		Fsp:  types.MaxFsp}
+	duration = types.Duration{
+		Duration: time.Duration(12*time.Hour + 59*time.Minute + 59*time.Second),
+		Fsp:      types.DefaultFsp}
+	// durationDatum indicates duration "12:59:59".
+	durationDatum   = types.NewDatum(duration)
+	durationWithFsp = types.Duration{
+		Duration: time.Duration(12*time.Hour + 59*time.Minute + 59*time.Second + 555*time.Millisecond),
+		Fsp:      3}
+	dt = types.Time{
+		Time: types.FromDate(year, int(month), day, 0, 0, 0, 0),
+		Type: mysql.TypeDate,
+		Fsp:  types.DefaultFsp}
+)

@@ -298,12 +298,7 @@ func SubstituteCorCol2Constant(expr Expression) (Expression, error) {
 			}
 			return &Constant{Value: val, RetType: x.GetType()}, nil
 		}
-		var newSf Expression
-		if x.FuncName.L == ast.Cast {
-			newSf = BuildCastFunction(x.GetCtx(), newArgs[0], x.RetType)
-		} else {
-			newSf = NewFunctionInternal(x.GetCtx(), x.FuncName.L, x.GetType(), newArgs...)
-		}
+		newSf := NewFunctionInternal(x.GetCtx(), x.FuncName.L, x.GetType(), newArgs...)
 		return newSf, nil
 	case *CorrelatedColumn:
 		return &Constant{Value: *x.Data, RetType: x.GetType()}, nil

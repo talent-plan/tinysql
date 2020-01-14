@@ -284,23 +284,6 @@ func (s *testIntegrationSuite3) TestIssue3833(c *C) {
 	tk.MustGetErrCode("create table issue3833_2 (b char(0), c binary(0), d varchar(0), index(d))", mysql.ErrWrongKeyColumn)
 }
 
-func (s *testIntegrationSuite1) TestIssue2858And2717(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	tk.MustExec("create table t_issue_2858_bit (a bit(64) default b'0')")
-	tk.MustExec("insert into t_issue_2858_bit value ()")
-	tk.MustExec(`insert into t_issue_2858_bit values (100), ('10'), ('\0')`)
-	tk.MustQuery("select a+0 from t_issue_2858_bit").Check(testkit.Rows("0", "100", "12592", "0"))
-	tk.MustExec(`alter table t_issue_2858_bit alter column a set default '\0'`)
-
-	tk.MustExec("create table t_issue_2858_hex (a int default 0x123)")
-	tk.MustExec("insert into t_issue_2858_hex value ()")
-	tk.MustExec("insert into t_issue_2858_hex values (123), (0x321)")
-	tk.MustQuery("select a from t_issue_2858_hex").Check(testkit.Rows("291", "123", "801"))
-	tk.MustExec(`alter table t_issue_2858_hex alter column a set default 0x321`)
-}
-
 func (s *testIntegrationSuite1) TestIssue4432(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -737,64 +720,6 @@ func (s *testIntegrationSuite5) TestModifyingColumnOption(c *C) {
 	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: can't change unsigned integer to signed or vice versa")
 	_, err = tk.Exec("alter table t2 change b b int(11) unsigned")
 	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type int(11) not match origin char(1)")
-}
-
-func (s *testIntegrationSuite4) TestIndexOnMultipleGeneratedColumn(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("create database if not exists test")
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int as (a + 1), c int as (b + 1))")
-	tk.MustExec("insert into t (a) values (1)")
-	tk.MustExec("create index idx on t (c)")
-	tk.MustQuery("select * from t where c > 1").Check(testkit.Rows("1 2 3"))
-	res := tk.MustQuery("select * from t use index(idx) where c > 1")
-	tk.MustQuery("select * from t ignore index(idx) where c > 1").Check(res.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int as (a + 1), c int as (b + 1), d int as (c + 1))")
-	tk.MustExec("insert into t (a) values (1)")
-	tk.MustExec("create index idx on t (d)")
-	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 3 4"))
-	res = tk.MustQuery("select * from t use index(idx) where d > 2")
-	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a bigint, b decimal as (a+1), c varchar(20) as (b*2), d float as (a*23+b-1+length(c)))")
-	tk.MustExec("insert into t (a) values (1)")
-	tk.MustExec("create index idx on t (d)")
-	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 4 25"))
-	res = tk.MustQuery("select * from t use index(idx) where d > 2")
-	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a varchar(10), b float as (length(a)+123), c varchar(20) as (right(a, 2)), d float as (b+b-7+1-3+3*ASCII(c)))")
-	tk.MustExec("insert into t (a) values ('adorable')")
-	tk.MustExec("create index idx on t (d)")
-	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("adorable 131 le 577")) // 131+131-7+1-3+3*108
-	res = tk.MustQuery("select * from t use index(idx) where d > 2")
-	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a bigint, b decimal as (a), c int(10) as (a+b), d float as (a+b+c), e decimal as (a+b+c+d))")
-	tk.MustExec("insert into t (a) values (1)")
-	tk.MustExec("create index idx on t (d)")
-	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 1 2 4 8"))
-	res = tk.MustQuery("select * from t use index(idx) where d > 2")
-	tk.MustQuery("select * from t ignore index(idx) where d > 2").Check(res.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a bigint, b bigint as (a+1) virtual, c bigint as (b+1) virtual)")
-	tk.MustExec("alter table t add index idx_b(b)")
-	tk.MustExec("alter table t add index idx_c(c)")
-	tk.MustExec("insert into t(a) values(1)")
-	tk.MustExec("alter table t add column(d bigint as (c+1) virtual)")
-	tk.MustExec("alter table t add index idx_d(d)")
-	tk.MustQuery("select * from t where d > 2").Check(testkit.Rows("1 2 3 4"))
-	res = tk.MustQuery("select * from t use index(idx_d) where d > 2")
-	tk.MustQuery("select * from t ignore index(idx_d) where d > 2").Check(res.Rows())
-
 }
 
 func (s *testIntegrationSuite2) TestCaseInsensitiveCharsetAndCollate(c *C) {

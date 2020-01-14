@@ -15,6 +15,8 @@ package aggregation
 
 import (
 	"bytes"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"strings"
 
@@ -41,7 +43,18 @@ type baseFuncDesc struct {
 func newBaseFuncDesc(ctx sessionctx.Context, name string, args []expression.Expression) (baseFuncDesc, error) {
 	b := baseFuncDesc{Name: strings.ToLower(name), Args: args}
 	err := b.typeInfer(ctx)
-	return b, err
+	if err != nil {
+		return b, err
+	}
+	if _, ok := noNeedCastAggFuncs[name]; ok {
+		return b, nil
+	}
+	for _, arg := range args {
+		if arg.GetType().EvalType() != b.RetTp.EvalType() {
+			log.Warn(fmt.Sprintf("unmatched arg tp %v with return tp %v", arg.GetType().EvalType(), b.RetTp.EvalType()))
+		}
+	}
+	return b, nil
 }
 
 func (a *baseFuncDesc) equal(ctx sessionctx.Context, other *baseFuncDesc) bool {
@@ -162,16 +175,6 @@ func (a *baseFuncDesc) typeInfer4GroupConcat(ctx sessionctx.Context) {
 }
 
 func (a *baseFuncDesc) typeInfer4MaxMin(ctx sessionctx.Context) {
-	_, argIsScalaFunc := a.Args[0].(*expression.ScalarFunction)
-	if argIsScalaFunc && a.Args[0].GetType().Tp == mysql.TypeFloat {
-		// For scalar function, the result of "float32" is set to the "float64"
-		// field in the "Datum". If we do not wrap a cast-as-double function on a.Args[0],
-		// error would happen when extracting the evaluation of a.Args[0] to a ProjectionExec.
-		tp := types.NewFieldType(mysql.TypeDouble)
-		tp.Flen, tp.Decimal = mysql.MaxRealWidth, types.UnspecifiedLength
-		types.SetBinChsClnFlag(tp)
-		a.Args[0] = expression.BuildCastFunction(ctx, a.Args[0], tp)
-	}
 	a.RetTp = a.Args[0].GetType()
 	if (a.Name == ast.AggFuncMax || a.Name == ast.AggFuncMin) && a.RetTp.Tp != mysql.TypeBit {
 		a.RetTp = a.Args[0].GetType().Clone()
@@ -226,59 +229,4 @@ var noNeedCastAggFuncs = map[string]struct{}{
 	ast.AggFuncMax:      {},
 	ast.AggFuncMin:      {},
 	ast.AggFuncFirstRow: {},
-}
-
-// WrapCastForAggArgs wraps the args of an aggregate function with a cast function.
-func (a *baseFuncDesc) WrapCastForAggArgs(ctx sessionctx.Context) {
-	if len(a.Args) == 0 {
-		return
-	}
-	if _, ok := noNeedCastAggFuncs[a.Name]; ok {
-		return
-	}
-	var castFunc func(ctx sessionctx.Context, expr expression.Expression) expression.Expression
-	switch retTp := a.RetTp; retTp.EvalType() {
-	case types.ETInt:
-		castFunc = expression.WrapWithCastAsInt
-	case types.ETReal:
-		castFunc = expression.WrapWithCastAsReal
-	case types.ETString:
-		castFunc = expression.WrapWithCastAsString
-	case types.ETDecimal:
-		castFunc = expression.WrapWithCastAsDecimal
-	case types.ETDatetime, types.ETTimestamp:
-		castFunc = func(ctx sessionctx.Context, expr expression.Expression) expression.Expression {
-			return expression.WrapWithCastAsTime(ctx, expr, retTp)
-		}
-	case types.ETDuration:
-		castFunc = expression.WrapWithCastAsDuration
-	case types.ETJson:
-		castFunc = expression.WrapWithCastAsJSON
-	default:
-		panic("should never happen in baseFuncDesc.WrapCastForAggArgs")
-	}
-	for i := range a.Args {
-		a.Args[i] = castFunc(ctx, a.Args[i])
-		if a.Name != ast.AggFuncAvg && a.Name != ast.AggFuncSum {
-			continue
-		}
-		// After wrapping cast on the argument, flen etc. may not the same
-		// as the type of the aggregation function. The following part set
-		// the type of the argument exactly as the type of the aggregation
-		// function.
-		// Note: If the `Tp` of argument is the same as the `Tp` of the
-		// aggregation function, it will not wrap cast function on it
-		// internally. The reason of the special handling for `Column` is
-		// that the `RetType` of `Column` refers to the `infoschema`, so we
-		// need to set a new variable for it to avoid modifying the
-		// definition in `infoschema`.
-		if col, ok := a.Args[i].(*expression.Column); ok {
-			col.RetType = types.NewFieldType(col.RetType.Tp)
-		}
-		// originTp is used when the the `Tp` of column is TypeFloat32 while
-		// the type of the aggregation function is TypeFloat64.
-		originTp := a.Args[i].GetType().Tp
-		*(a.Args[i].GetType()) = *(a.RetTp)
-		a.Args[i].GetType().Tp = originTp
-	}
 }
