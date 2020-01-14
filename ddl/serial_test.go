@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
@@ -199,66 +198,6 @@ func (s *testSerialSuite) TestGetTableEndHandle(c *C) {
 	maxID, emptyTable = getMaxTableRowID(testCtx, s.store)
 	result.Check(testkit.Rows(fmt.Sprintf("%v", maxID)))
 	c.Assert(emptyTable, IsFalse)
-}
-
-func (s *testSerialSuite) TestCreateTableWithLike(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	// for the same database
-	tk.MustExec("create database ctwl_db")
-	tk.MustExec("use ctwl_db")
-	tk.MustExec("create table tt(id int primary key)")
-	tk.MustExec("create table t (c1 int not null auto_increment, c2 int, constraint cc foreign key (c2) references tt(id), primary key(c1)) auto_increment = 10")
-	tk.MustExec("insert into t set c2=1")
-	tk.MustExec("create table t1 like ctwl_db.t")
-	tk.MustExec("insert into t1 set c2=11")
-	tk.MustExec("create table t2 (like ctwl_db.t1)")
-	tk.MustExec("insert into t2 set c2=12")
-	tk.MustQuery("select * from t").Check(testkit.Rows("10 1"))
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 11"))
-	tk.MustQuery("select * from t2").Check(testkit.Rows("1 12"))
-	ctx := tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	tbl1, err := is.TableByName(model.NewCIStr("ctwl_db"), model.NewCIStr("t1"))
-	c.Assert(err, IsNil)
-	tbl1Info := tbl1.Meta()
-	c.Assert(tbl1Info.ForeignKeys, IsNil)
-	c.Assert(tbl1Info.PKIsHandle, Equals, true)
-	col := tbl1Info.Columns[0]
-	hasNotNull := mysql.HasNotNullFlag(col.Flag)
-	c.Assert(hasNotNull, IsTrue)
-	tbl2, err := is.TableByName(model.NewCIStr("ctwl_db"), model.NewCIStr("t2"))
-	c.Assert(err, IsNil)
-	tbl2Info := tbl2.Meta()
-	c.Assert(tbl2Info.ForeignKeys, IsNil)
-	c.Assert(tbl2Info.PKIsHandle, Equals, true)
-	c.Assert(mysql.HasNotNullFlag(tbl2Info.Columns[0].Flag), IsTrue)
-
-	// for different databases
-	tk.MustExec("create database ctwl_db1")
-	tk.MustExec("use ctwl_db1")
-	tk.MustExec("create table t1 like ctwl_db.t")
-	tk.MustExec("insert into t1 set c2=11")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 11"))
-	is = domain.GetDomain(ctx).InfoSchema()
-	tbl1, err = is.TableByName(model.NewCIStr("ctwl_db1"), model.NewCIStr("t1"))
-	c.Assert(err, IsNil)
-	c.Assert(tbl1.Meta().ForeignKeys, IsNil)
-
-	// for failure cases
-	tk.MustExec("use ctwl_db")
-	failSQL := fmt.Sprintf("create table t1 like test_not_exist.t")
-	tk.MustGetErrCode(failSQL, mysql.ErrNoSuchTable)
-	failSQL = fmt.Sprintf("create table t1 like test.t_not_exist")
-	tk.MustGetErrCode(failSQL, mysql.ErrNoSuchTable)
-	failSQL = fmt.Sprintf("create table t1 (like test_not_exist.t)")
-	tk.MustGetErrCode(failSQL, mysql.ErrNoSuchTable)
-	failSQL = fmt.Sprintf("create table test_not_exis.t1 like ctwl_db.t")
-	tk.MustGetErrCode(failSQL, mysql.ErrBadDB)
-	failSQL = fmt.Sprintf("create table t1 like ctwl_db.t")
-	tk.MustGetErrCode(failSQL, mysql.ErrTableExists)
-
-	tk.MustExec("drop database ctwl_db")
-	tk.MustExec("drop database ctwl_db1")
 }
 
 // TestCancelAddIndex1 tests canceling ddl job when the add index worker is not started.

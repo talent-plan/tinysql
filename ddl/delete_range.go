@@ -258,7 +258,7 @@ func insertJobIntoDeleteRangeTable(ctx sessionctx.Context, job *model.Job) error
 				return errors.Trace(err)
 			}
 		}
-	case model.ActionDropTable, model.ActionTruncateTable:
+	case model.ActionDropTable:
 		tableID := job.TableID
 		// The startKey here is for compatibility with previous versions, old version did not endKey so don't have to deal with.
 		var startKey kv.Key
@@ -279,7 +279,7 @@ func insertJobIntoDeleteRangeTable(ctx sessionctx.Context, job *model.Job) error
 		startKey = tablecodec.EncodeTablePrefix(tableID)
 		endKey := tablecodec.EncodeTablePrefix(tableID + 1)
 		return doInsert(s, job.ID, tableID, startKey, endKey, now)
-	case model.ActionDropTablePartition, model.ActionTruncateTablePartition:
+	case model.ActionDropTablePartition:
 		var physicalTableID int64
 		if err := job.DecodeArgs(&physicalTableID); err != nil {
 			return errors.Trace(err)

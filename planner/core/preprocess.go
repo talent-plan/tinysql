@@ -79,15 +79,9 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.flag |= inCreateOrDropTable
 		p.resolveCreateTableStmt(node)
 		p.checkCreateTableGrammar(node)
-	case *ast.CreateViewStmt:
-		p.flag |= inCreateOrDropTable
-		p.checkCreateViewGrammar(node)
 	case *ast.DropTableStmt:
 		p.flag |= inCreateOrDropTable
 		p.checkDropTableGrammar(node)
-	case *ast.RenameTableStmt:
-		p.flag |= inCreateOrDropTable
-		p.checkRenameTableGrammar(node)
 	case *ast.CreateIndexStmt:
 		p.checkCreateIndexGrammar(node)
 	case *ast.AlterTableStmt:
@@ -107,11 +101,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		return in, true
 	case *ast.Join:
 		p.checkNonUniqTableAlias(node)
-	case *ast.RecoverTableStmt, *ast.FlashBackTableStmt:
-		// The specified table in recover table statement maybe already been dropped.
-		// So skip check table name here, otherwise, recover table [table_name] syntax will return
-		// table not exists error. But recover table statement is use to recover the dropped table. So skip children here.
-		return in, true
 	default:
 		p.flag &= ^parentIsJoin
 	}
@@ -124,9 +113,7 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		p.flag &= ^inCreateOrDropTable
 		p.checkAutoIncrement(x)
 		p.checkContainDotColumn(x)
-	case *ast.CreateViewStmt:
-		p.flag &= ^inCreateOrDropTable
-	case *ast.DropTableStmt, *ast.AlterTableStmt, *ast.RenameTableStmt:
+	case *ast.DropTableStmt, *ast.AlterTableStmt:
 		p.flag &= ^inCreateOrDropTable
 	case *ast.ExplainStmt:
 		if _, ok := x.Stmt.(*ast.ShowStmt); ok {
@@ -376,20 +363,6 @@ func (p *preprocessor) checkCreateTableGrammar(stmt *ast.CreateTableStmt) {
 	}
 }
 
-func (p *preprocessor) checkCreateViewGrammar(stmt *ast.CreateViewStmt) {
-	vName := stmt.ViewName.Name.String()
-	if isIncorrectName(vName) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(vName)
-		return
-	}
-	for _, col := range stmt.Cols {
-		if isIncorrectName(col.String()) {
-			p.err = ddl.ErrWrongColumnName.GenWithStackByArgs(col)
-			return
-		}
-	}
-}
-
 func (p *preprocessor) checkDropTableGrammar(stmt *ast.DropTableStmt) {
 	for _, t := range stmt.Tables {
 		if isIncorrectName(t.Name.String()) {
@@ -463,25 +436,6 @@ func (p *preprocessor) checkCreateIndexGrammar(stmt *ast.CreateIndexStmt) {
 		return
 	}
 	p.err = checkIndexInfo(stmt.IndexName, stmt.IndexPartSpecifications)
-}
-
-func (p *preprocessor) checkRenameTableGrammar(stmt *ast.RenameTableStmt) {
-	oldTable := stmt.OldTable.Name.String()
-	newTable := stmt.NewTable.Name.String()
-
-	p.checkRenameTable(oldTable, newTable)
-}
-
-func (p *preprocessor) checkRenameTable(oldTable, newTable string) {
-	if isIncorrectName(oldTable) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(oldTable)
-		return
-	}
-
-	if isIncorrectName(newTable) {
-		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(newTable)
-		return
-	}
 }
 
 func (p *preprocessor) checkAlterTableGrammar(stmt *ast.AlterTableStmt) {
@@ -723,11 +677,4 @@ func (p *preprocessor) resolveCreateTableStmt(node *ast.CreateTableStmt) {
 	}
 }
 
-func (p *preprocessor) resolveAlterTableStmt(node *ast.AlterTableStmt) {
-	for _, spec := range node.Specs {
-		if spec.Tp == ast.AlterTableRenameTable {
-			p.flag |= inCreateOrDropTable
-			break
-		}
-	}
-}
+func (p *preprocessor) resolveAlterTableStmt(node *ast.AlterTableStmt) {}

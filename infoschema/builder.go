@@ -53,16 +53,12 @@ func (b *Builder) ApplyDiff(m *meta.Meta, diff *model.SchemaDiff) ([]int64, erro
 	var oldTableID, newTableID int64
 	tblIDs := make([]int64, 0, 2)
 	switch diff.Type {
-	case model.ActionCreateTable, model.ActionRecoverTable:
+	case model.ActionCreateTable:
 		newTableID = diff.TableID
 		tblIDs = append(tblIDs, newTableID)
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable:
 		oldTableID = diff.TableID
 		tblIDs = append(tblIDs, oldTableID)
-	case model.ActionTruncateTable:
-		oldTableID = diff.OldTableID
-		newTableID = diff.TableID
-		tblIDs = append(tblIDs, oldTableID, newTableID)
 	default:
 		oldTableID = diff.TableID
 		newTableID = diff.TableID
@@ -74,21 +70,10 @@ func (b *Builder) ApplyDiff(m *meta.Meta, diff *model.SchemaDiff) ([]int64, erro
 	// We try to reuse the old allocator, so the cached auto ID can be reused.
 	var alloc autoid.Allocator
 	if tableIDIsValid(oldTableID) {
-		if oldTableID == newTableID && diff.Type != model.ActionRenameTable && diff.Type != model.ActionRebaseAutoID {
+		if oldTableID == newTableID && diff.Type != model.ActionRebaseAutoID {
 			alloc, _ = b.is.AllocByID(oldTableID)
 		}
-		if diff.Type == model.ActionRenameTable && diff.OldSchemaID != diff.SchemaID {
-			oldRoDBInfo, ok := b.is.SchemaByID(diff.OldSchemaID)
-			if !ok {
-				return nil, ErrDatabaseNotExists.GenWithStackByArgs(
-					fmt.Sprintf("(Schema ID %d)", diff.OldSchemaID),
-				)
-			}
-			oldDBInfo := b.copySchemaTables(oldRoDBInfo.Name.L)
-			b.applyDropTable(oldDBInfo, oldTableID)
-		} else {
-			b.applyDropTable(dbInfo, oldTableID)
-		}
+		b.applyDropTable(dbInfo, oldTableID)
 	}
 	if tableIDIsValid(newTableID) {
 		// All types except DropTableOrView.

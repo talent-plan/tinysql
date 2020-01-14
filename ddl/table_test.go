@@ -104,24 +104,6 @@ func testCreateTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo,
 	return job
 }
 
-func testRenameTable(c *C, ctx sessionctx.Context, d *ddl, newSchemaID, oldSchemaID int64, tblInfo *model.TableInfo) *model.Job {
-	job := &model.Job{
-		SchemaID:   newSchemaID,
-		TableID:    tblInfo.ID,
-		Type:       model.ActionRenameTable,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{oldSchemaID, tblInfo.Name},
-	}
-	err := d.doDDLJob(ctx, job)
-	c.Assert(err, IsNil)
-
-	v := getSchemaVer(c, ctx)
-	tblInfo.State = model.StatePublic
-	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
-	tblInfo.State = model.StateNone
-	return job
-}
-
 func testDropTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo) *model.Job {
 	job := &model.Job{
 		SchemaID:   dbInfo.ID,
@@ -133,26 +115,6 @@ func testDropTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, t
 	c.Assert(err, IsNil)
 
 	v := getSchemaVer(c, ctx)
-	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
-	return job
-}
-
-func testTruncateTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo) *model.Job {
-	genIDs, err := d.genGlobalIDs(1)
-	c.Assert(err, IsNil)
-	newTableID := genIDs[0]
-	job := &model.Job{
-		SchemaID:   dbInfo.ID,
-		TableID:    tblInfo.ID,
-		Type:       model.ActionTruncateTable,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{newTableID},
-	}
-	err = d.doDDLJob(ctx, job)
-	c.Assert(err, IsNil)
-
-	v := getSchemaVer(c, ctx)
-	tblInfo.ID = newTableID
 	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
 	return job
 }
@@ -252,16 +214,6 @@ func (s *testTableSuite) TestTable(c *C) {
 	tblInfo = testTableInfo(c, d, "tt", 3)
 	job = testCreateTable(c, ctx, d, s.dbInfo, tblInfo)
 	testCheckTableState(c, d, s.dbInfo, tblInfo, model.StatePublic)
-	testCheckJobDone(c, d, job, true)
-	job = testTruncateTable(c, ctx, d, s.dbInfo, tblInfo)
-	testCheckTableState(c, d, s.dbInfo, tblInfo, model.StatePublic)
-	testCheckJobDone(c, d, job, true)
-
-	// for rename table
-	dbInfo1 := testSchemaInfo(c, s.d, "test_rename_table")
-	testCreateSchema(c, testNewContext(s.d), s.d, dbInfo1)
-	job = testRenameTable(c, ctx, d, dbInfo1.ID, s.dbInfo.ID, tblInfo)
-	testCheckTableState(c, d, dbInfo1, tblInfo, model.StatePublic)
 	testCheckJobDone(c, d, job, true)
 }
 

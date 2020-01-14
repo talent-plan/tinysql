@@ -302,13 +302,6 @@ func (s *testTableSuite) TestProfiling(c *C) {
 	tk.MustQuery("select * from information_schema.profiling").Check(testkit.Rows("0 0  0 0 0 0 0 0 0 0 0 0 0 0   0"))
 }
 
-func (s *testTableSuite) TestViews(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("CREATE DEFINER='root'@'localhost' VIEW test.v1 AS SELECT 1")
-	tk.MustQuery("SELECT * FROM information_schema.views WHERE table_schema='test' AND table_name='v1'").Check(testkit.Rows("def test v1 SELECT 1 CASCADED NO root@localhost DEFINER utf8mb4 utf8mb4_bin"))
-	tk.MustQuery("SELECT table_catalog, table_schema, table_name, table_type, engine, version, row_format, table_rows, avg_row_length, data_length, max_data_length, index_length, data_free, auto_increment, update_time, check_time, table_collation, checksum, create_options, table_comment FROM information_schema.tables WHERE table_schema='test' AND table_name='v1'").Check(testkit.Rows("def test v1 VIEW <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> VIEW"))
-}
-
 func (s *testTableSuite) TestTableIDAndIndexID(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("drop table if exists test.t")
@@ -341,9 +334,6 @@ func (s *testTableSuite) TestTableRowIDShardingInfo(c *C) {
 
 	tk.MustExec("CREATE TABLE `sharding_info_test_db`.`t3` (a int) SHARD_ROW_ID_BITS=4")
 	assertShardingInfo("t3", "SHARD_BITS=4")
-
-	tk.MustExec("CREATE VIEW `sharding_info_test_db`.`tv` AS select 1")
-	assertShardingInfo("tv", nil)
 
 	testFunc := func(dbName string, expectInfo interface{}) {
 		dbInfo := model.DBInfo{Name: model.NewCIStr(dbName)}
@@ -401,19 +391,6 @@ func (s *testTableSuite) TestReloadDropDatabase(c *C) {
 	c.Assert(terror.ErrorEqual(infoschema.ErrTableNotExists, err), IsTrue)
 	_, ok := is.TableByID(t2.Meta().ID)
 	c.Assert(ok, IsFalse)
-}
-
-func (s *testTableSuite) TestForTableTiFlashReplica(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int, b int, index idx(a))")
-	tk.MustExec("alter table t set tiflash replica 2 location labels 'a','b';")
-	tk.MustQuery("select TABLE_SCHEMA,TABLE_NAME,REPLICA_COUNT,LOCATION_LABELS,AVAILABLE from information_schema.tiflash_replica").Check(testkit.Rows("test t 2 a,b 0"))
-	tbl, err := domain.GetDomain(tk.Se).InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	tbl.Meta().TiFlashReplica.Available = true
-	tk.MustQuery("select TABLE_SCHEMA,TABLE_NAME,REPLICA_COUNT,LOCATION_LABELS,AVAILABLE from information_schema.tiflash_replica").Check(testkit.Rows("test t 2 a,b 1"))
 }
 
 func (s *testTableSuite) TestSystemSchemaID(c *C) {

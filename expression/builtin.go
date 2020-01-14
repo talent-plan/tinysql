@@ -23,6 +23,8 @@
 package expression
 
 import (
+	"fmt"
+	"github.com/pingcap/log"
 	"sort"
 	"strings"
 	"sync"
@@ -92,6 +94,11 @@ func newBaseBuiltinFuncWithTp(ctx sessionctx.Context, args []Expression, retType
 	}
 	if ctx == nil {
 		panic("ctx should not be nil")
+	}
+	for i := range args {
+		if argTps[i] != args[i].GetType().EvalType() {
+			log.Warn(fmt.Sprintf("unmatched arg type %v with %v", argTps[i], args[i].GetType().EvalType()))
+		}
 	}
 	var fieldType *types.FieldType
 	switch retType {
@@ -474,6 +481,9 @@ var funcs = map[string]functionClass{
 	ast.CharLength:      &charLengthFunctionClass{baseFunctionClass{ast.CharLength, 1, 1}},
 	ast.CharacterLength: &charLengthFunctionClass{baseFunctionClass{ast.CharacterLength, 1, 1}},
 	ast.FindInSet:       &findInSetFunctionClass{baseFunctionClass{ast.FindInSet, 2, 2}},
+
+	// information functions
+	ast.ConnectionID: &connectionIDFunctionClass{baseFunctionClass{ast.ConnectionID, 0, 0}},
 
 	// control functions
 	ast.If:     &ifFunctionClass{baseFunctionClass{ast.If, 3, 3}},

@@ -15,6 +15,8 @@ package aggregation
 
 import (
 	"bytes"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"strings"
 
@@ -41,7 +43,18 @@ type baseFuncDesc struct {
 func newBaseFuncDesc(ctx sessionctx.Context, name string, args []expression.Expression) (baseFuncDesc, error) {
 	b := baseFuncDesc{Name: strings.ToLower(name), Args: args}
 	err := b.typeInfer(ctx)
-	return b, err
+	if err != nil {
+		return b, err
+	}
+	if _, ok := noNeedCastAggFuncs[name]; ok {
+		return b, nil
+	}
+	for _, arg := range args {
+		if arg.GetType().EvalType() != b.RetTp.EvalType() {
+			log.Warn(fmt.Sprintf("unmatched arg tp %v with return tp %v", arg.GetType().EvalType(), b.RetTp.EvalType()))
+		}
+	}
+	return b, nil
 }
 
 func (a *baseFuncDesc) equal(ctx sessionctx.Context, other *baseFuncDesc) bool {
@@ -207,4 +220,13 @@ func (a *baseFuncDesc) GetDefaultValue() (v types.Datum) {
 		v = types.NewUintDatum(uint64(math.MaxUint64))
 	}
 	return
+}
+
+// We do not need to wrap cast upon these functions,
+// since the EvalXXX method called by the arg is determined by the corresponding arg type.
+var noNeedCastAggFuncs = map[string]struct{}{
+	ast.AggFuncCount:    {},
+	ast.AggFuncMax:      {},
+	ast.AggFuncMin:      {},
+	ast.AggFuncFirstRow: {},
 }

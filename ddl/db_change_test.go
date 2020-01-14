@@ -23,7 +23,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
@@ -38,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/admin"
-	"github.com/pingcap/tidb/util/gcutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
@@ -741,17 +739,6 @@ func (s *testStateChangeSuite) TestParallelDropIndex(c *C) {
 	s.testControlParallelExecSQL(c, sql1, sql2, f)
 }
 
-func (s *testStateChangeSuite) TestParallelCreateAndRename(c *C) {
-	sql1 := "create table t_exists(c int);"
-	sql2 := "alter table t rename to t_exists;"
-	defer s.se.Execute(context.Background(), "drop table t_exists")
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2.Error(), Equals, "[schema:1050]Table 't_exists' already exists")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
 type checkRet func(c *C, err1, err2 error)
 
 func (s *testStateChangeSuiteBase) testControlParallelExecSQL(c *C, sql1, sql2 string, f checkRet) {
@@ -1048,73 +1035,4 @@ func (s *testStateChangeSuite) TestParallelAlterSchemaCharsetAndCollate(c *C) {
 			WHERE schema_name='test_db_state'`
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustQuery(sql).Check(testkit.Rows("utf8mb4 utf8mb4_general_ci"))
-}
-
-// TestParallelTruncateTableAndAddColumn tests add column when truncate table.
-func (s *testStateChangeSuite) TestParallelTruncateTableAndAddColumn(c *C) {
-	sql1 := "truncate table t"
-	sql2 := "alter table t add column c3 int"
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2, NotNil)
-		c.Assert(err2.Error(), Equals, "[domain:8028]Information schema is changed during the execution of the statement(for example, table definition may be updated by other DDL ran in parallel). If you see this error often, try increasing `tidb_max_delta_schema_count`. [try again later]")
-	}
-	s.testControlParallelExecSQL(c, sql1, sql2, f)
-}
-
-// TestParallelFlashbackTable tests parallel flashback table.
-func (s *serialTestStateChangeSuite) TestParallelFlashbackTable(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange", `return(true)`), IsNil)
-	defer func(originGC bool) {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange"), IsNil)
-		if originGC {
-			ddl.EmulatorGCEnable()
-		} else {
-			ddl.EmulatorGCDisable()
-		}
-	}(ddl.IsEmulatorGCEnable())
-
-	// disable emulator GC.
-	// Disable emulator GC, otherwise, emulator GC will delete table record as soon as possible after executing drop table DDL.
-	ddl.EmulatorGCDisable()
-	gcTimeFormat := "20060102-15:04:05 -0700 MST"
-	timeBeforeDrop := time.Now().Add(0 - time.Duration(48*60*60*time.Second)).Format(gcTimeFormat)
-	safePointSQL := `INSERT HIGH_PRIORITY INTO mysql.tidb VALUES ('tikv_gc_safe_point', '%[1]s', '')
-			       ON DUPLICATE KEY
-			       UPDATE variable_value = '%[1]s'`
-	tk := testkit.NewTestKit(c, s.store)
-	// clear GC variables first.
-	tk.MustExec("delete from mysql.tidb where variable_name in ( 'tikv_gc_safe_point','tikv_gc_enable' )")
-	// set GC safe point
-	tk.MustExec(fmt.Sprintf(safePointSQL, timeBeforeDrop))
-	// set GC enable.
-	err := gcutil.EnableGC(tk.Se)
-	c.Assert(err, IsNil)
-
-	// prepare dropped table.
-	tk.MustExec("use test_db_state")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int);")
-	tk.MustExec("drop table if exists t")
-	// Test parallel flashback table.
-	ts := getDDLJobStartTime(tk, "test_db_state", "t")
-	sql1 := fmt.Sprintf("flashback table t until timestamp '%v' to t_flashback", ts)
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2, NotNil)
-		c.Assert(err2.Error(), Equals, "[schema:1050]Table 't_flashback' already exists")
-
-	}
-	s.testControlParallelExecSQL(c, sql1, sql1, f)
-}
-
-func getDDLJobStartTime(tk *testkit.TestKit, dbName, tblName string) string {
-	re := tk.MustQuery("admin show ddl jobs 100")
-	rows := re.Rows()
-	for _, row := range rows {
-		if row[1] == dbName && row[2] == tblName && (row[3] == "drop table" || row[3] == "truncate table") {
-			return row[8].(string)
-		}
-	}
-	return ""
 }

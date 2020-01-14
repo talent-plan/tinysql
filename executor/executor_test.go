@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -1968,41 +1967,6 @@ func (s *testSuite3) TestTSOFail(c *C) {
 	c.Assert(failpoint.Disable("github.com/pingcap/tidb/session/mockGetTSFail"), IsNil)
 }
 
-func (s *testSuite) TestSelectView(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table view_t (a int,b int)")
-	tk.MustExec("insert into view_t values(1,2)")
-	tk.MustExec("create definer='root'@'localhost' view view1 as select * from view_t")
-	tk.MustExec("create definer='root'@'localhost' view view2(c,d) as select * from view_t")
-	tk.MustExec("create definer='root'@'localhost' view view3(c,d) as select a,b from view_t")
-	tk.MustQuery("select * from view1;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view2;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view3;").Check(testkit.Rows("1 2"))
-	tk.MustExec("drop table view_t;")
-	tk.MustExec("create table view_t(c int,d int)")
-	err := tk.ExecToErr("select * from view1")
-	c.Assert(err.Error(), Equals, "[planner:1356]View 'test.view1' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them")
-	err = tk.ExecToErr("select * from view2")
-	c.Assert(err.Error(), Equals, "[planner:1356]View 'test.view2' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them")
-	err = tk.ExecToErr("select * from view3")
-	c.Assert(err.Error(), Equals, plannercore.ErrViewInvalid.GenWithStackByArgs("test", "view3").Error())
-	tk.MustExec("drop table view_t;")
-	tk.MustExec("create table view_t(a int,b int,c int)")
-	tk.MustExec("insert into view_t values(1,2,3)")
-	tk.MustQuery("select * from view1;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view2;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view3;").Check(testkit.Rows("1 2"))
-	tk.MustExec("alter table view_t drop column a")
-	tk.MustExec("alter table view_t add column a int after b")
-	tk.MustExec("update view_t set a=1;")
-	tk.MustQuery("select * from view1;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view2;").Check(testkit.Rows("1 2"))
-	tk.MustQuery("select * from view3;").Check(testkit.Rows("1 2"))
-	tk.MustExec("drop table view_t;")
-	tk.MustExec("drop view view1,view2,view3;")
-}
-
 type testSuite2 struct {
 	*baseTestSuite
 }
@@ -2013,11 +1977,7 @@ func (s *testSuite2) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2031,11 +1991,7 @@ func (s *testSuite3) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2049,11 +2005,7 @@ func (s *testSuite4) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2067,11 +2019,7 @@ func (s *testSuite5) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2085,11 +2033,7 @@ func (s *testSuite6) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2103,11 +2047,7 @@ func (s *testSuite7) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }
 
@@ -2121,10 +2061,6 @@ func (s *testSuite8) TearDownTest(c *C) {
 	r := tk.MustQuery("show full tables")
 	for _, tb := range r.Rows() {
 		tableName := tb[0]
-		if tb[1] == "VIEW" {
-			tk.MustExec(fmt.Sprintf("drop view %v", tableName))
-		} else {
-			tk.MustExec(fmt.Sprintf("drop table %v", tableName))
-		}
+		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
 }

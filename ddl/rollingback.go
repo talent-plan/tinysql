@@ -215,21 +215,6 @@ func rollingbackDropSchema(t *meta.Meta, job *model.Job) error {
 	return nil
 }
 
-func rollingbackRenameIndex(t *meta.Meta, job *model.Job) (ver int64, err error) {
-	tblInfo, from, _, err := checkRenameIndex(t, job)
-	if err != nil {
-		return ver, errors.Trace(err)
-	}
-	// Here rename index is done in a transaction, if the job is not completed, it can be canceled.
-	idx := tblInfo.FindIndexByName(from.L)
-	if idx.State == model.StatePublic {
-		job.State = model.JobStateCancelled
-		return ver, errCancelledDDLJob
-	}
-	job.State = model.JobStateRunning
-	return ver, errors.Trace(err)
-}
-
 func cancelOnlyNotHandledJob(job *model.Job) (ver int64, err error) {
 	// We can only cancel the not handled job.
 	if job.SchemaState == model.StateNone {
@@ -254,15 +239,12 @@ func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) 
 		ver, err = rollingbackDropColumn(t, job)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = rollingbackDropIndex(t, job)
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable:
 		err = rollingbackDropTableOrView(t, job)
 	case model.ActionDropSchema:
 		err = rollingbackDropSchema(t, job)
-	case model.ActionRenameIndex:
-		ver, err = rollingbackRenameIndex(t, job)
 	case model.ActionRebaseAutoID, model.ActionShardRowID,
-		model.ActionModifyColumn, model.ActionAddForeignKey,
-		model.ActionDropForeignKey, model.ActionRenameTable,
+		model.ActionModifyColumn,
 		model.ActionModifyTableCharsetAndCollate, model.ActionModifySchemaCharsetAndCollate:
 		ver, err = cancelOnlyNotHandledJob(job)
 	default:

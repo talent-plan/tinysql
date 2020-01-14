@@ -22,7 +22,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
@@ -42,19 +41,6 @@ import (
 	"github.com/pingcap/tidb/util/testutil"
 )
 
-func (s *testSuite6) TestTruncateTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists truncate_test;`)
-	tk.MustExec(`create table truncate_test (a int)`)
-	tk.MustExec(`insert truncate_test values (1),(2),(3)`)
-	result := tk.MustQuery("select * from truncate_test")
-	result.Check(testkit.Rows("1", "2", "3"))
-	tk.MustExec("truncate table truncate_test")
-	result = tk.MustQuery("select * from truncate_test")
-	result.Check(nil)
-}
-
 // TestInTxnExecDDLFail tests the following case:
 //  1. Execute the SQL of "begin";
 //  2. A SQL that will fail to execute;
@@ -66,7 +52,7 @@ func (s *testSuite6) TestInTxnExecDDLFail(c *C) {
 	tk.MustExec("insert into t values (1);")
 	tk.MustExec("begin;")
 	tk.MustExec("insert into t values (1);")
-	_, err := tk.Exec("truncate table t;")
+	_, err := tk.Exec("alter table t comment = 'xx' ")
 	c.Assert(err.Error(), Equals, "[kv:1062]Duplicate entry '1' for key 'PRIMARY'")
 	result := tk.MustQuery("select count(*) from t")
 	result.Check(testkit.Rows("1"))
@@ -201,28 +187,6 @@ func (s *testSuite6) TestCreateDropTable(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *testSuite6) TestCreateDropView(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create or replace view drop_test as select 1,2")
-
-	_, err := tk.Exec("drop table drop_test")
-	c.Assert(err.Error(), Equals, "[schema:1051]Unknown table 'test.drop_test'")
-
-	_, err = tk.Exec("drop view if exists drop_test")
-	c.Assert(err, IsNil)
-
-	_, err = tk.Exec("drop view mysql.gc_delete_range")
-	c.Assert(err.Error(), Equals, "Drop tidb system table 'mysql.gc_delete_range' is forbidden")
-
-	_, err = tk.Exec("drop view drop_test")
-	c.Assert(err.Error(), Equals, "[schema:1051]Unknown table 'test.drop_test'")
-
-	tk.MustExec("create table t_v(a int)")
-	_, err = tk.Exec("drop view t_v")
-	c.Assert(err.Error(), Equals, "[ddl:1347]'test.t_v' is not VIEW")
-}
-
 func (s *testSuite6) TestCreateDropIndex(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -251,10 +215,6 @@ func (s *testSuite6) TestAlterTableAddColumn(c *C) {
 	r.Close()
 	tk.MustExec("alter table alter_test add column c3 varchar(50) default 'CURRENT_TIMESTAMP'")
 	tk.MustQuery("select c3 from alter_test").Check(testkit.Rows("CURRENT_TIMESTAMP"))
-	tk.MustExec("create or replace view alter_view as select c1,c2 from alter_test")
-	_, err = tk.Exec("alter table alter_view add column c4 varchar(50)")
-	c.Assert(err.Error(), Equals, ddl.ErrWrongObject.GenWithStackByArgs("test", "alter_view", "BASE TABLE").Error())
-	tk.MustExec("drop view alter_view")
 }
 
 func (s *testSuite6) TestAddNotNullColumnNoDefault(c *C) {
@@ -300,10 +260,6 @@ func (s *testSuite6) TestAlterTableModifyColumn(c *C) {
 	createSQL := result.Rows()[0][1]
 	expected := "CREATE TABLE `mc` (\n  `c1` bigint(20) DEFAULT NULL,\n  `c2` text DEFAULT NULL,\n  `c3` bit(1) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
 	c.Assert(createSQL, Equals, expected)
-	tk.MustExec("create or replace view alter_view as select c1,c2 from mc")
-	_, err = tk.Exec("alter table alter_view modify column c2 text")
-	c.Assert(err.Error(), Equals, ddl.ErrWrongObject.GenWithStackByArgs("test", "alter_view", "BASE TABLE").Error())
-	tk.MustExec("drop view alter_view")
 
 	// test multiple collate modification in column.
 	tk.MustExec("drop table if exists modify_column_multiple_collate")
@@ -852,64 +808,4 @@ func (s *testSuite6) TestTimestampMinDefaultValue(c *C) {
 	tk.MustExec("drop table if exists tdv;")
 	tk.MustExec("create table tdv(a int);")
 	tk.MustExec("ALTER TABLE tdv ADD COLUMN ts timestamp DEFAULT '1970-01-01 08:00:01';")
-}
-
-func (s *testSuite3) TestRenameTable(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange"), IsNil)
-	}()
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("create database rename1")
-	tk.MustExec("create database rename2")
-	tk.MustExec("create database rename3")
-	tk.MustExec("create table rename1.t (a int primary key auto_increment)")
-	tk.MustExec("insert rename1.t values ()")
-	tk.MustExec("rename table rename1.t to rename2.t")
-	// Make sure the drop old database doesn't affect the rename3.t's operations.
-	tk.MustExec("drop database rename1")
-	tk.MustExec("insert rename2.t values ()")
-	tk.MustExec("rename table rename2.t to rename3.t")
-	tk.MustExec("insert rename3.t values ()")
-	tk.MustQuery("select * from rename3.t").Check(testkit.Rows("1", "5001", "10001"))
-	// Make sure the drop old database doesn't affect the rename3.t's operations.
-	tk.MustExec("drop database rename2")
-	tk.MustExec("insert rename3.t values ()")
-	tk.MustQuery("select * from rename3.t").Check(testkit.Rows("1", "5001", "10001", "10002"))
-	tk.MustExec("drop database rename3")
-
-	tk.MustExec("create database rename1")
-	tk.MustExec("create database rename2")
-	tk.MustExec("create table rename1.t (a int primary key auto_increment)")
-	tk.MustExec("rename table rename1.t to rename2.t1")
-	tk.MustExec("insert rename2.t1 values ()")
-	result := tk.MustQuery("select * from rename2.t1")
-	result.Check(testkit.Rows("1"))
-	// Make sure the drop old database doesn't affect the t1's operations.
-	tk.MustExec("drop database rename1")
-	tk.MustExec("insert rename2.t1 values ()")
-	result = tk.MustQuery("select * from rename2.t1")
-	result.Check(testkit.Rows("1", "2"))
-	// Rename a table to another table in the same database.
-	tk.MustExec("rename table rename2.t1 to rename2.t2")
-	tk.MustExec("insert rename2.t2 values ()")
-	result = tk.MustQuery("select * from rename2.t2")
-	result.Check(testkit.Rows("1", "2", "5001"))
-	tk.MustExec("drop database rename2")
-
-	tk.MustExec("create database rename1")
-	tk.MustExec("create database rename2")
-	tk.MustExec("create table rename1.t (a int primary key auto_increment)")
-	tk.MustExec("insert rename1.t values ()")
-	tk.MustExec("rename table rename1.t to rename2.t1")
-	// Make sure the value is greater than autoid.step.
-	tk.MustExec("insert rename2.t1 values (100000)")
-	tk.MustExec("insert rename2.t1 values ()")
-	result = tk.MustQuery("select * from rename2.t1")
-	result.Check(testkit.Rows("1", "100000", "100001"))
-	_, err := tk.Exec("insert rename1.t values ()")
-	c.Assert(err, NotNil)
-	tk.MustExec("drop database rename1")
-	tk.MustExec("drop database rename2")
 }

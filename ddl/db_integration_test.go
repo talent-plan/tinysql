@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/table"
@@ -176,19 +175,11 @@ func (s *testIntegrationSuite3) TestCreateTableIfNotExists(c *C) {
 	tk.MustExec("create table ct1(a bigint)")
 	tk.MustExec("create table ct(a bigint)")
 
-	// Test duplicate create-table with `LIKE` clause
-	tk.MustExec("create table if not exists ct like ct1;")
+	// Test duplicate create-table without `LIKE` clause
+	tk.MustExec("create table if not exists ct(b bigint, c varchar(60));")
 	warnings := tk.Se.GetSessionVars().StmtCtx.GetWarnings()
 	c.Assert(len(warnings), GreaterEqual, 1)
 	lastWarn := warnings[len(warnings)-1]
-	c.Assert(terror.ErrorEqual(infoschema.ErrTableExists, lastWarn.Err), IsTrue, Commentf("err %v", lastWarn.Err))
-	c.Assert(lastWarn.Level, Equals, stmtctx.WarnLevelNote)
-
-	// Test duplicate create-table without `LIKE` clause
-	tk.MustExec("create table if not exists ct(b bigint, c varchar(60));")
-	warnings = tk.Se.GetSessionVars().StmtCtx.GetWarnings()
-	c.Assert(len(warnings), GreaterEqual, 1)
-	lastWarn = warnings[len(warnings)-1]
 	c.Assert(terror.ErrorEqual(infoschema.ErrTableExists, lastWarn.Err), IsTrue)
 }
 
@@ -364,8 +355,6 @@ func (s *testIntegrationSuite5) TestMySQLErrorCode(c *C) {
 	tk.MustGetErrCode(sql, mysql.ErrUnknownCharacterSet)
 	sql = "create table t1(a int) character set laitn1;"
 	tk.MustGetErrCode(sql, mysql.ErrUnknownCharacterSet)
-	sql = "create table test_error_code (a int not null ,b int not null,c int not null, d int not null, foreign key (b, c) references product(id));"
-	tk.MustGetErrCode(sql, mysql.ErrWrongFkDef)
 	sql = "create table test_error_code_2;"
 	tk.MustGetErrCode(sql, mysql.ErrTableMustHaveColumns)
 	sql = "create table test_error_code_2 (unique(c1));"
@@ -1374,19 +1363,6 @@ func (s *testIntegrationSuite3) TestAlterAlgorithm(c *C) {
 	s.assertAlterWarnExec(c, "alter table t drop index idx_b1, ALGORITHM=COPY")
 	s.tk.MustExec("alter table t drop index idx_b2, ALGORITHM=INSTANT")
 
-	// Test rename
-	s.assertAlterWarnExec(c, "alter table t rename to t1, ALGORITHM=COPY")
-	s.assertAlterErrorExec(c, "alter table t1 rename to t, ALGORITHM=INPLACE")
-	s.tk.MustExec("alter table t1 rename to t, ALGORITHM=INSTANT")
-	s.tk.MustExec("alter table t rename to t1, ALGORITHM=DEFAULT")
-	s.tk.MustExec("alter table t1 rename to t")
-
-	// Test rename index
-	s.assertAlterWarnExec(c, "alter table t rename index idx_c to idx_c1, ALGORITHM=COPY")
-	s.assertAlterErrorExec(c, "alter table t rename index idx_c1 to idx_c, ALGORITHM=INPLACE")
-	s.tk.MustExec("alter table t rename index idx_c1 to idx_c, ALGORITHM=INSTANT")
-	s.tk.MustExec("alter table t rename index idx_c to idx_c1, ALGORITHM=DEFAULT")
-
 	// Table options
 	s.assertAlterWarnExec(c, "alter table t comment = 'test', ALGORITHM=COPY")
 	s.assertAlterErrorExec(c, "alter table t comment = 'test', ALGORITHM=INPLACE")
@@ -1571,7 +1547,7 @@ func (s *testIntegrationSuite4) TestInsertIntoGeneratedColumnWithDefaultExpr(c *
 
 	// generated columns with index
 	tk.MustExec("drop table if exists t2")
-	tk.MustExec("create table t2 like t1")
+	tk.MustExec("create table t2 (a int, b int as (-a) virtual, c int as (-a) stored)")
 	tk.MustExec("alter table t2 add index idx1(a)")
 	tk.MustExec("alter table t2 add index idx2(b)")
 	tk.MustExec("insert into t2 values (1, default, default)")
@@ -1638,15 +1614,4 @@ func (s *testIntegrationSuite3) TestSqlFunctionsInGeneratedColumns(c *C) {
 	tk.MustGetErrCode("create table t (a int, b int as (updatexml(1, 1, 1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
 	tk.MustGetErrCode("create table t (a int, b int as (statement_digest(1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
 	tk.MustGetErrCode("create table t (a int, b int as (statement_digest_text(1)))", mysql.ErrGeneratedColumnFunctionIsNotAllowed)
-}
-
-func (s *testIntegrationSuite3) TestParserIssue284(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table test.t_parser_issue_284(c1 int not null primary key)")
-	_, err := tk.Exec("create table test.t_parser_issue_284_2(id int not null primary key, c1 int not null, constraint foreign key (c1) references t_parser_issue_284(c1))")
-	c.Assert(err, IsNil)
-
-	tk.MustExec("drop table test.t_parser_issue_284")
-	tk.MustExec("drop table test.t_parser_issue_284_2")
 }
