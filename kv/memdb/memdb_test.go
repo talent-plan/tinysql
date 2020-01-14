@@ -230,7 +230,7 @@ func (s testMemDBSuite) TestReset(c *C) {
 }
 
 func (s testMemDBSuite) TestRandom(c *C) {
-	const cnt = 500000
+	const cnt = 10000
 	keys := make([][]byte, cnt)
 	for i := range keys {
 		keys[i] = make([]byte, rand.Intn(19)+1)
