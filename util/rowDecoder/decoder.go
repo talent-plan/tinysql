@@ -17,7 +17,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
@@ -139,7 +138,7 @@ func (rd *RowDecoder) DecodeAndEvalRowWithMap(ctx sessionctx.Context, handle int
 
 // BuildFullDecodeColMap build a map that contains [columnID -> struct{*table.Column, expression.Expression}] from
 // indexed columns and all of its depending columns. `genExprProducer` is used to produce a generated expression based on a table.Column.
-func BuildFullDecodeColMap(indexedCols []*table.Column, t table.Table, genExprProducer func(*table.Column) (expression.Expression, error)) (map[int64]Column, error) {
+func BuildFullDecodeColMap(indexedCols []*table.Column) (map[int64]Column, error) {
 	pendingCols := make([]*table.Column, len(indexedCols))
 	copy(pendingCols, indexedCols)
 	decodeColMap := make(map[int64]Column, len(pendingCols))
@@ -151,22 +150,7 @@ func BuildFullDecodeColMap(indexedCols []*table.Column, t table.Table, genExprPr
 		}
 
 		if col.IsGenerated() && !col.GeneratedStored {
-			// Find depended columns and put them into pendingCols. For example, idx(c) with column definition `c int as (a + b)`,
-			// depended columns of `c` is `a` and `b`, and both of them will be put into the pendingCols, waiting for next traversal.
-			for _, c := range t.Cols() {
-				if _, ok := col.Dependences[c.Name.L]; ok {
-					pendingCols = append(pendingCols, c)
-				}
-			}
-
-			e, err := genExprProducer(col)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			decodeColMap[col.ID] = Column{
-				Col:     col,
-				GenExpr: e,
-			}
+			panic("do not support virtual columns")
 		} else {
 			decodeColMap[col.ID] = Column{
 				Col: col,

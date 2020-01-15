@@ -70,18 +70,10 @@ func MockTableFromMeta(tblInfo *model.TableInfo) table.Table {
 
 	var t TableCommon
 	initTableCommon(&t, tblInfo, tblInfo.ID, columns, nil)
-	if tblInfo.GetPartitionInfo() == nil {
-		if err := initTableIndices(&t); err != nil {
-			return nil
-		}
-		return &t
-	}
-
-	ret, err := newPartitionedTable(&t, tblInfo)
-	if err != nil {
+	if err := initTableIndices(&t); err != nil {
 		return nil
 	}
-	return ret
+	return &t
 }
 
 // TableFromMeta creates a Table instance from model.TableInfo.
@@ -119,14 +111,10 @@ func TableFromMeta(alloc autoid.Allocator, tblInfo *model.TableInfo) (table.Tabl
 
 	var t TableCommon
 	initTableCommon(&t, tblInfo, tblInfo.ID, columns, alloc)
-	if tblInfo.GetPartitionInfo() == nil {
-		if err := initTableIndices(&t); err != nil {
-			return nil, err
-		}
-		return &t, nil
+	if err := initTableIndices(&t); err != nil {
+		return nil, err
 	}
-
-	return newPartitionedTable(&t, tblInfo)
+	return &t, nil
 }
 
 // initTableCommon initializes a TableCommon struct.
@@ -156,11 +144,6 @@ func initTableIndices(t *TableCommon) error {
 		t.indices = append(t.indices, idx)
 	}
 	return nil
-}
-
-func initTableCommonWithIndices(t *TableCommon, tblInfo *model.TableInfo, physicalTableID int64, cols []*table.Column, alloc autoid.Allocator) error {
-	initTableCommon(t, tblInfo, physicalTableID, cols, alloc)
-	return initTableIndices(t)
 }
 
 // Indices implements table.Table Indices interface.
@@ -991,14 +974,6 @@ func FindIndexByColName(t table.Table, name string) table.Index {
 // CheckHandleExists check whether recordID key exists. if not exists, return nil,
 // otherwise return kv.ErrKeyExists error.
 func CheckHandleExists(ctx context.Context, sctx sessionctx.Context, t table.Table, recordID int64, data []types.Datum) error {
-	if pt, ok := t.(*partitionedTable); ok {
-		info := t.Meta().GetPartitionInfo()
-		pid, err := pt.locatePartition(sctx, info, data)
-		if err != nil {
-			return err
-		}
-		t = pt.GetPartition(pid)
-	}
 	txn, err := sctx.Txn(true)
 	if err != nil {
 		return err

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	ddlutil "github.com/pingcap/tidb/ddl/util"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -1008,7 +1007,7 @@ func (w *addIndexWorker) run(d *ddlCtx) {
 	logutil.BgLogger().Info("[ddl] add index worker exit", zap.Int("workerID", w.id))
 }
 
-func makeupDecodeColMap(sessCtx sessionctx.Context, t table.Table, indexInfo *model.IndexInfo) (map[int64]decoder.Column, error) {
+func makeupDecodeColMap(t table.Table, indexInfo *model.IndexInfo) (map[int64]decoder.Column, error) {
 	cols := t.Cols()
 	indexedCols := make([]*table.Column, len(indexInfo.Columns))
 	for i, v := range indexInfo.Columns {
@@ -1016,10 +1015,7 @@ func makeupDecodeColMap(sessCtx sessionctx.Context, t table.Table, indexInfo *mo
 	}
 
 	var containsVirtualCol bool
-	decodeColMap, err := decoder.BuildFullDecodeColMap(indexedCols, t, func(genCol *table.Column) (expression.Expression, error) {
-		containsVirtualCol = true
-		return expression.ParseSimpleExprCastWithTableInfo(sessCtx, genCol.GeneratedExprString, t.Meta(), &genCol.FieldType)
-	})
+	decodeColMap, err := decoder.BuildFullDecodeColMap(indexedCols)
 	if err != nil {
 		return nil, err
 	}
@@ -1224,8 +1220,7 @@ func (w *worker) addPhysicalTableIndex(t table.PhysicalTable, indexInfo *model.I
 	totalAddedCount := job.GetRowCount()
 
 	startHandle, endHandle := reorgInfo.StartHandle, reorgInfo.EndHandle
-	sessCtx := newContext(reorgInfo.d.store)
-	decodeColMap, err := makeupDecodeColMap(sessCtx, t, indexInfo)
+	decodeColMap, err := makeupDecodeColMap(t, indexInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}

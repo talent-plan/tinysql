@@ -14,12 +14,7 @@
 package expression
 
 import (
-	"strings"
-	"sync/atomic"
-
 	"github.com/gogo/protobuf/proto"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
@@ -246,9 +241,6 @@ func (pc PbConverter) scalarFuncToPBExpr(expr *ScalarFunction) *tipb.Expr {
 	// Check whether this function has ProtoBuf signature.
 	pbCode := expr.Function.PbCode()
 	if pbCode <= tipb.ScalarFuncSig_Unspecified {
-		failpoint.Inject("PanicIfPbCodeUnspecified", func() {
-			panic(errors.Errorf("unspecified PbCode: %T", expr.Function))
-		})
 		return nil
 	}
 
@@ -308,23 +300,6 @@ func SortByItemToPB(sc *stmtctx.StatementContext, client kv.Client, expr Express
 }
 
 func (pc PbConverter) canFuncBePushed(sf *ScalarFunction) bool {
-	// Use the failpoint to control whether to push down an expression in the integration test.
-	// Push down all expression if the `failpoint expression` is `all`, otherwise, check
-	// whether scalar function's name is contained in the enabled expression list (e.g.`ne,eq,lt`).
-	failpoint.Inject("PushDownTestSwitcher", func(val failpoint.Value) bool {
-		enabled := val.(string)
-		if enabled == "all" {
-			return true
-		}
-		exprs := strings.Split(enabled, ",")
-		for _, expr := range exprs {
-			if strings.ToLower(strings.TrimSpace(expr)) == sf.FuncName.L {
-				return true
-			}
-		}
-		return false
-	})
-
 	switch sf.FuncName.L {
 	case
 		// op functions.
@@ -415,28 +390,15 @@ func (pc PbConverter) canFuncBePushed(sf *ScalarFunction) bool {
 
 		// date functions.
 		ast.DateFormat:
-		return isPushdownEnabled(sf.FuncName.L)
+		return true
 	case ast.Round:
 		switch sf.Function.PbCode() {
 		case
 			tipb.ScalarFuncSig_RoundReal,
 			tipb.ScalarFuncSig_RoundInt,
 			tipb.ScalarFuncSig_RoundDec:
-			return isPushdownEnabled(sf.FuncName.L)
+			return true
 		}
 	}
 	return false
-}
-
-func isPushdownEnabled(name string) bool {
-	_, disallowPushdown := DefaultExprPushdownBlacklist.Load().(map[string]struct{})[name]
-	return !disallowPushdown
-}
-
-// DefaultExprPushdownBlacklist indicates the expressions which can not be pushed down to TiKV.
-var DefaultExprPushdownBlacklist *atomic.Value
-
-func init() {
-	DefaultExprPushdownBlacklist = new(atomic.Value)
-	DefaultExprPushdownBlacklist.Store(make(map[string]struct{}))
 }

@@ -673,3 +673,21 @@ func CheckExprPushFlash(exprs []Expression) (exprPush, remain []Expression) {
 	}
 	return
 }
+
+// FindFieldName finds the column name from NameSlice.
+func FindFieldName(names types.NameSlice, astCol *ast.ColumnName) (int, error) {
+	dbName, tblName, colName := astCol.Schema, astCol.Table, astCol.Name
+	idx := -1
+	for i, name := range names {
+		if (dbName.L == "" || dbName.L == name.DBName.L) &&
+			(tblName.L == "" || tblName.L == name.TblName.L) &&
+			(colName.L == name.ColName.L) {
+			if idx == -1 {
+				idx = i
+			} else {
+				return -1, errNonUniq.GenWithStackByArgs(name.String(), "field list")
+			}
+		}
+	}
+	return idx, nil
+}
