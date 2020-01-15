@@ -358,38 +358,6 @@ func (g *randLenStrGener) gen() interface{} {
 	return string(buf)
 }
 
-type randHexStrGener struct {
-	lenBegin int
-	lenEnd   int
-}
-
-func (g *randHexStrGener) gen() interface{} {
-	n := rand.Intn(g.lenEnd-g.lenBegin) + g.lenBegin
-	buf := make([]byte, n)
-	for i := range buf {
-		x := rand.Intn(16)
-		if x < 10 {
-			buf[i] = byte('0' + x)
-		} else {
-			if x%2 == 0 {
-				buf[i] = byte('a' + x - 10)
-			} else {
-				buf[i] = byte('A' + x - 10)
-			}
-		}
-	}
-	return string(buf)
-}
-
-// constStrGener always returns the given string
-type constStrGener struct {
-	s string
-}
-
-func (g *constStrGener) gen() interface{} {
-	return g.s
-}
-
 type vecExprBenchCase struct {
 	// retEvalType is the EvalType of the expression result.
 	// This field is required.

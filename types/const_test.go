@@ -145,13 +145,6 @@ func (s *testMySQLConstSuite) TestRealAsFloatMode(c *C) {
 	c.Assert(row[1], Equals, "float")
 }
 
-func (s *testMySQLConstSuite) TestPipesAsConcatMode(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("SET sql_mode='PIPES_AS_CONCAT';")
-	r := tk.MustQuery(`SELECT 'hello' || 'world';`)
-	r.Check(testkit.Rows("helloworld"))
-}
-
 func (s *testMySQLConstSuite) TestHighNotPrecedenceMode(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -228,38 +221,6 @@ func (s *testMySQLConstSuite) TestIgnoreSpaceMode(c *C) {
 	tk.MustExec("CREATE TABLE test.NOW(a bigint);")
 	tk.MustExec("DROP TABLE NOW;")
 
-}
-
-func (s *testMySQLConstSuite) TestPadCharToFullLengthMode(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// test type `CHAR(n)`
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (a char(10));")
-	tk.MustExec("insert into t1 values ('xy');")
-	tk.MustExec("set sql_mode='';")
-	r := tk.MustQuery(`SELECT a='xy        ', char_length(a) FROM t1;`)
-	r.Check(testkit.Rows("0 2"))
-	r = tk.MustQuery(`SELECT count(*) FROM t1 WHERE a='xy        ';`)
-	r.Check(testkit.Rows("0"))
-	tk.MustExec("set sql_mode='PAD_CHAR_TO_FULL_LENGTH';")
-	r = tk.MustQuery(`SELECT a='xy        ', char_length(a) FROM t1;`)
-	r.Check(testkit.Rows("1 10"))
-	r = tk.MustQuery(`SELECT count(*) FROM t1 WHERE a='xy        ';`)
-	r.Check(testkit.Rows("1"))
-
-	// test type `VARCHAR(n)`
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (a varchar(10));")
-	tk.MustExec("insert into t1 values ('xy');")
-	tk.MustExec("set sql_mode='';")
-	r = tk.MustQuery(`SELECT a='xy        ', char_length(a) FROM t1;`)
-	r.Check(testkit.Rows("0 2"))
-	r = tk.MustQuery(`SELECT count(*) FROM t1 WHERE a='xy        ';`)
-	r.Check(testkit.Rows("0"))
-	tk.MustExec("set sql_mode='PAD_CHAR_TO_FULL_LENGTH';")
-	r = tk.MustQuery(`SELECT a='xy        ', char_length(a) FROM t1;`)
-	r.Check(testkit.Rows("0 2"))
 }
 
 func (s *testMySQLConstSuite) TestNoBackslashEscapesMode(c *C) {

@@ -301,12 +301,9 @@
       // Test stream agg + order.
       "select sum(e) as k, avg(b + c) from t where c = 1 and b = 1 and e = 1 group by c order by k",
       // Test agg can't push down.
-      "select sum(to_base64(e)) from t where c = 1",
       "select (select count(1) k from t s where s.a = t.a having k != 0) from t",
       // Test stream agg with multi group by columns.
-      "select sum(to_base64(e)) from t group by e,d,c order by c",
       "select sum(e+1) from t group by e,d,c order by c",
-      "select sum(to_base64(e)) from t group by e,d,c order by c,e",
       "select sum(e+1) from t group by e,d,c order by c,e",
       // Test stream agg + limit or sort
       "select count(*) from t group by g order by g limit 10",

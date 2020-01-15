@@ -71,61 +71,6 @@ func (s *testIntegrationSuite) TearDownSuite(c *C) {
 	s.store.Close()
 }
 
-func (s *testIntegrationSuite) TestFuncREPEAT(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	tk.MustExec("USE test;")
-	tk.MustExec("DROP TABLE IF EXISTS table_string;")
-	tk.MustExec("CREATE TABLE table_string(a CHAR(20), b VARCHAR(20), c TINYTEXT, d TEXT(20), e MEDIUMTEXT, f LONGTEXT, g BIGINT);")
-	tk.MustExec("INSERT INTO table_string (a, b, c, d, e, f, g) VALUES ('a', 'b', 'c', 'd', 'e', 'f', 2);")
-	tk.CheckExecResult(1, 0)
-
-	r := tk.MustQuery("SELECT REPEAT(a, g), REPEAT(b, g), REPEAT(c, g), REPEAT(d, g), REPEAT(e, g), REPEAT(f, g) FROM table_string;")
-	r.Check(testkit.Rows("aa bb cc dd ee ff"))
-
-	r = tk.MustQuery("SELECT REPEAT(NULL, g), REPEAT(NULL, g), REPEAT(NULL, g), REPEAT(NULL, g), REPEAT(NULL, g), REPEAT(NULL, g) FROM table_string;")
-	r.Check(testkit.Rows("<nil> <nil> <nil> <nil> <nil> <nil>"))
-
-	r = tk.MustQuery("SELECT REPEAT(a, NULL), REPEAT(b, NULL), REPEAT(c, NULL), REPEAT(d, NULL), REPEAT(e, NULL), REPEAT(f, NULL) FROM table_string;")
-	r.Check(testkit.Rows("<nil> <nil> <nil> <nil> <nil> <nil>"))
-
-	r = tk.MustQuery("SELECT REPEAT(a, 2), REPEAT(b, 2), REPEAT(c, 2), REPEAT(d, 2), REPEAT(e, 2), REPEAT(f, 2) FROM table_string;")
-	r.Check(testkit.Rows("aa bb cc dd ee ff"))
-
-	r = tk.MustQuery("SELECT REPEAT(NULL, 2), REPEAT(NULL, 2), REPEAT(NULL, 2), REPEAT(NULL, 2), REPEAT(NULL, 2), REPEAT(NULL, 2) FROM table_string;")
-	r.Check(testkit.Rows("<nil> <nil> <nil> <nil> <nil> <nil>"))
-
-	r = tk.MustQuery("SELECT REPEAT(a, -1), REPEAT(b, -2), REPEAT(c, -2), REPEAT(d, -2), REPEAT(e, -2), REPEAT(f, -2) FROM table_string;")
-	r.Check(testkit.Rows("     "))
-
-	r = tk.MustQuery("SELECT REPEAT(a, 0), REPEAT(b, 0), REPEAT(c, 0), REPEAT(d, 0), REPEAT(e, 0), REPEAT(f, 0) FROM table_string;")
-	r.Check(testkit.Rows("     "))
-
-	r = tk.MustQuery("SELECT REPEAT(a, 16777217), REPEAT(b, 16777217), REPEAT(c, 16777217), REPEAT(d, 16777217), REPEAT(e, 16777217), REPEAT(f, 16777217) FROM table_string;")
-	r.Check(testkit.Rows("<nil> <nil> <nil> <nil> <nil> <nil>"))
-}
-
-func (s *testIntegrationSuite) TestFuncLpadAndRpad(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	tk.MustExec(`USE test;`)
-	tk.MustExec(`DROP TABLE IF EXISTS t;`)
-	tk.MustExec(`CREATE TABLE t(a BINARY(10), b CHAR(10));`)
-	tk.MustExec(`INSERT INTO t SELECT "中文", "abc";`)
-	result := tk.MustQuery(`SELECT LPAD(a, 11, "a"), LPAD(b, 2, "xx") FROM t;`)
-	result.Check(testkit.Rows("a中文\x00\x00\x00\x00 ab"))
-	result = tk.MustQuery(`SELECT RPAD(a, 11, "a"), RPAD(b, 2, "xx") FROM t;`)
-	result.Check(testkit.Rows("中文\x00\x00\x00\x00a ab"))
-	result = tk.MustQuery(`SELECT LPAD("中文", 5, "字符"), LPAD("中文", 1, "a");`)
-	result.Check(testkit.Rows("字符字中文 中"))
-	result = tk.MustQuery(`SELECT RPAD("中文", 5, "字符"), RPAD("中文", 1, "a");`)
-	result.Check(testkit.Rows("中文字符字 中"))
-	result = tk.MustQuery(`SELECT RPAD("中文", -5, "字符"), RPAD("中文", 10, "");`)
-	result.Check(testkit.Rows("<nil> <nil>"))
-	result = tk.MustQuery(`SELECT LPAD("中文", -5, "字符"), LPAD("中文", 10, "");`)
-	result.Check(testkit.Rows("<nil> <nil>"))
-}
-
 func (s *testIntegrationSuite) TestOpBuiltin(c *C) {
 	defer s.cleanEnv(c)
 	tk := testkit.NewTestKit(c, s.store)

@@ -170,17 +170,6 @@ func (s *testUnitTestSuit) TestIndexJoinAnalyzeLookUpFilters(c *C) {
 			remained:        "[]",
 			compareFilters:  "<nil>",
 		},
-		// Keys are continuous and there're correlated filters.
-		{
-			innerKeys:       []*expression.Column{dsSchema.Columns[1]},
-			pushedDownConds: "a = 1",
-			otherConds:      "c > g and c < concat(g, \"ab\")",
-			ranges:          "[[1 NULL NULL,1 NULL NULL]]",
-			idxOff2KeyOff:   "[-1 0 -1 -1]",
-			accesses:        "[eq(Column#1, 1) gt(Column#3, Column#7) lt(Column#3, concat(Column#7, ab))]",
-			remained:        "[]",
-			compareFilters:  "gt(Column#3, Column#7) lt(Column#3, concat(Column#7, ab))",
-		},
 		// Can deal with prefix index correctly.
 		{
 			innerKeys:       []*expression.Column{dsSchema.Columns[1]},
