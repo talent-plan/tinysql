@@ -14,16 +14,12 @@
 package aggregation
 
 import (
-	"fmt"
-	"math"
-	"strconv"
-
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
+	"math"
 )
 
 // AggFuncDesc describes an aggregation function signature, only used in planner.
@@ -165,31 +161,12 @@ func (a *AggFuncDesc) GetAggFunc(ctx sessionctx.Context) Aggregation {
 		return &countFunction{aggFunction: aggFunc}
 	case ast.AggFuncAvg:
 		return &avgFunction{aggFunction: aggFunc}
-	case ast.AggFuncGroupConcat:
-		var s string
-		var err error
-		var maxLen uint64
-		s, err = variable.GetSessionSystemVar(ctx.GetSessionVars(), variable.GroupConcatMaxLen)
-		if err != nil {
-			panic(fmt.Sprintf("Error happened when GetAggFunc: no system variable named '%s'", variable.GroupConcatMaxLen))
-		}
-		maxLen, err = strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			panic(fmt.Sprintf("Error happened when GetAggFunc: illegal value for system variable named '%s'", variable.GroupConcatMaxLen))
-		}
-		return &concatFunction{aggFunction: aggFunc, maxLen: maxLen}
 	case ast.AggFuncMax:
 		return &maxMinFunction{aggFunction: aggFunc, isMax: true}
 	case ast.AggFuncMin:
 		return &maxMinFunction{aggFunction: aggFunc, isMax: false}
 	case ast.AggFuncFirstRow:
 		return &firstRowFunction{aggFunction: aggFunc}
-	case ast.AggFuncBitOr:
-		return &bitOrFunction{aggFunction: aggFunc}
-	case ast.AggFuncBitXor:
-		return &bitXorFunction{aggFunction: aggFunc}
-	case ast.AggFuncBitAnd:
-		return &bitAndFunction{aggFunction: aggFunc}
 	default:
 		panic("unsupported agg function")
 	}

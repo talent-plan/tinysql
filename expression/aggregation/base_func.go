@@ -23,7 +23,6 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
@@ -103,12 +102,8 @@ func (a *baseFuncDesc) typeInfer(ctx sessionctx.Context) error {
 		a.typeInfer4Sum(ctx)
 	case ast.AggFuncAvg:
 		a.typeInfer4Avg(ctx)
-	case ast.AggFuncGroupConcat:
-		a.typeInfer4GroupConcat(ctx)
 	case ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncFirstRow:
 		a.typeInfer4MaxMin(ctx)
-	case ast.AggFuncBitAnd, ast.AggFuncBitOr, ast.AggFuncBitXor:
-		a.typeInfer4BitFuncs(ctx)
 	default:
 		return errors.Errorf("unsupported agg function: %s", a.Name)
 	}
@@ -166,14 +161,6 @@ func (a *baseFuncDesc) typeInfer4Avg(ctx sessionctx.Context) {
 	types.SetBinChsClnFlag(a.RetTp)
 }
 
-func (a *baseFuncDesc) typeInfer4GroupConcat(ctx sessionctx.Context) {
-	a.RetTp = types.NewFieldType(mysql.TypeVarString)
-	a.RetTp.Charset, a.RetTp.Collate = charset.GetDefaultCharsetAndCollate()
-
-	a.RetTp.Flen, a.RetTp.Decimal = mysql.MaxBlobWidth, 0
-	// TODO: a.Args[i] = expression.WrapWithCastAsString(ctx, a.Args[i])
-}
-
 func (a *baseFuncDesc) typeInfer4MaxMin(ctx sessionctx.Context) {
 	a.RetTp = a.Args[0].GetType()
 	if (a.Name == ast.AggFuncMax || a.Name == ast.AggFuncMin) && a.RetTp.Tp != mysql.TypeBit {
@@ -183,14 +170,6 @@ func (a *baseFuncDesc) typeInfer4MaxMin(ctx sessionctx.Context) {
 	if a.RetTp.Tp == mysql.TypeEnum || a.RetTp.Tp == mysql.TypeSet {
 		a.RetTp = &types.FieldType{Tp: mysql.TypeString, Flen: mysql.MaxFieldCharLength}
 	}
-}
-
-func (a *baseFuncDesc) typeInfer4BitFuncs(ctx sessionctx.Context) {
-	a.RetTp = types.NewFieldType(mysql.TypeLonglong)
-	a.RetTp.Flen = 21
-	types.SetBinChsClnFlag(a.RetTp)
-	a.RetTp.Flag |= mysql.UnsignedFlag | mysql.NotNullFlag
-	// TODO: a.Args[0] = expression.WrapWithCastAsInt(ctx, a.Args[0])
 }
 
 // GetDefaultValue gets the default value when the function's input is null.

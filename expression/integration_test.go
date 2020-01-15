@@ -18,9 +18,6 @@ import (
 	"context"
 	"fmt"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -31,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
-	"github.com/pingcap/tidb/util/testutil"
 	"sort"
 	"strconv"
 )
@@ -69,135 +65,6 @@ func (s *testIntegrationSuite) SetUpSuite(c *C) {
 func (s *testIntegrationSuite) TearDownSuite(c *C) {
 	s.dom.Close()
 	s.store.Close()
-}
-
-func (s *testIntegrationSuite) TestAggregationBuiltin(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t(a decimal(7, 6))")
-	tk.MustExec("insert into t values(1.123456), (1.123456)")
-	result := tk.MustQuery("select avg(a) from t")
-	result.Check(testkit.Rows("1.1234560000"))
-
-	tk.MustExec("use test")
-	tk.MustExec("drop table t")
-	tk.MustExec("CREATE TABLE `t` (	`a` int, KEY `idx_a` (`a`))")
-	result = tk.MustQuery("select avg(a) from t")
-	result.Check(testkit.Rows("<nil>"))
-	result = tk.MustQuery("select max(a), min(a) from t")
-	result.Check(testkit.Rows("<nil> <nil>"))
-	result = tk.MustQuery("select distinct a from t")
-	result.Check(testkit.Rows())
-	result = tk.MustQuery("select sum(a) from t")
-	result.Check(testkit.Rows("<nil>"))
-	result = tk.MustQuery("select count(a) from t")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("18446744073709551615"))
-}
-
-func (s *testIntegrationSuite) TestAggregationBuiltinBitOr(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint)")
-	tk.MustExec("insert into t values(null);")
-	result := tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("0"))
-	tk.MustExec("insert into t values(1);")
-	result = tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("1"))
-	tk.MustExec("insert into t values(2);")
-	result = tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("3"))
-	tk.MustExec("insert into t values(4);")
-	result = tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("7"))
-	result = tk.MustQuery("select a, bit_or(a) from t group by a order by a")
-	result.Check(testkit.Rows("<nil> 0", "1 1", "2 2", "4 4"))
-	tk.MustExec("insert into t values(-1);")
-	result = tk.MustQuery("select bit_or(a) from t")
-	result.Check(testkit.Rows("18446744073709551615"))
-}
-
-func (s *testIntegrationSuite) TestAggregationBuiltinBitXor(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint)")
-	tk.MustExec("insert into t values(null);")
-	result := tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("0"))
-	tk.MustExec("insert into t values(1);")
-	result = tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("1"))
-	tk.MustExec("insert into t values(2);")
-	result = tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("3"))
-	tk.MustExec("insert into t values(3);")
-	result = tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("0"))
-	tk.MustExec("insert into t values(3);")
-	result = tk.MustQuery("select bit_xor(a) from t")
-	result.Check(testkit.Rows("3"))
-	result = tk.MustQuery("select a, bit_xor(a) from t group by a order by a")
-	result.Check(testkit.Rows("<nil> 0", "1 1", "2 2", "3 0"))
-}
-
-func (s *testIntegrationSuite) TestAggregationBuiltinBitAnd(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint)")
-	tk.MustExec("insert into t values(null);")
-	result := tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("18446744073709551615"))
-	tk.MustExec("insert into t values(7);")
-	result = tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("7"))
-	tk.MustExec("insert into t values(5);")
-	result = tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("5"))
-	tk.MustExec("insert into t values(3);")
-	result = tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("1"))
-	tk.MustExec("insert into t values(2);")
-	result = tk.MustQuery("select bit_and(a) from t")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select a, bit_and(a) from t group by a order by a desc")
-	result.Check(testkit.Rows("7 7", "5 5", "3 3", "2 2", "<nil> 18446744073709551615"))
-}
-
-func (s *testIntegrationSuite) TestAggregationBuiltinGroupConcat(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t(a varchar(100))")
-	tk.MustExec("create table d(a varchar(100))")
-	tk.MustExec("insert into t values('hello'), ('hello')")
-	result := tk.MustQuery("select group_concat(a) from t")
-	result.Check(testkit.Rows("hello,hello"))
-
-	tk.MustExec("set @@group_concat_max_len=7")
-	result = tk.MustQuery("select group_concat(a) from t")
-	result.Check(testkit.Rows("hello,h"))
-	tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning 1260 Some rows were cut by GROUPCONCAT(test.t.a)"))
-
-	_, err := tk.Exec("insert into d select group_concat(a) from t")
-	c.Assert(errors.Cause(err).(*terror.Error).Code(), Equals, terror.ErrCode(mysql.ErrCutValueGroupConcat))
-
-	tk.Exec("set sql_mode=''")
-	tk.MustExec("insert into d select group_concat(a) from t")
-	tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning 1260 Some rows were cut by GROUPCONCAT(test.t.a)"))
-	tk.MustQuery("select * from d").Check(testkit.Rows("hello,h"))
 }
 
 func (s *testIntegrationSuite) TestLiterals(c *C) {
