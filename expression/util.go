@@ -15,7 +15,6 @@ package expression
 
 import (
 	"strconv"
-	"unicode"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -234,45 +233,6 @@ func ColumnSubstituteImpl(expr Expression, schema *Schema, newExprs []Expression
 		}
 	}
 	return false, expr
-}
-
-// getValidPrefix gets a prefix of string which can parsed to a number with base. the minimum base is 2 and the maximum is 36.
-func getValidPrefix(s string, base int64) string {
-	var (
-		validLen int
-		upper    rune
-	)
-	switch {
-	case base >= 2 && base <= 9:
-		upper = rune('0' + base)
-	case base <= 36:
-		upper = rune('A' + base - 10)
-	default:
-		return ""
-	}
-Loop:
-	for i := 0; i < len(s); i++ {
-		c := rune(s[i])
-		switch {
-		case unicode.IsDigit(c) || unicode.IsLower(c) || unicode.IsUpper(c):
-			c = unicode.ToUpper(c)
-			if c < upper {
-				validLen = i + 1
-			} else {
-				break Loop
-			}
-		case c == '+' || c == '-':
-			if i != 0 {
-				break Loop
-			}
-		default:
-			break Loop
-		}
-	}
-	if validLen > 1 && s[0] == '+' {
-		return s[1:validLen]
-	}
-	return s[:validLen]
 }
 
 // SubstituteCorCol2Constant will substitute correlated column to constant value which it contains.

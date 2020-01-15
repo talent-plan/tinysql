@@ -436,25 +436,6 @@ func (s *testIntegrationSuite) TestValuesEnum(c *C) {
 	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 b`))
 }
 
-func (s *testIntegrationSuite) TestIssue10181(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(a bigint unsigned primary key);`)
-	tk.MustExec(`insert into t values(9223372036854775807), (18446744073709551615)`)
-	tk.MustQuery(`select * from t where a > 9223372036854775807-0.5 order by a`).Check(testkit.Rows(`9223372036854775807`, `18446744073709551615`))
-}
-
-func (s *testIntegrationSuite) TestExprPushdownBlacklist(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery(`select * from mysql.expr_pushdown_blacklist`).Check(testkit.Rows())
-}
-
-func (s *testIntegrationSuite) TestOptRuleBlacklist(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery(`select * from mysql.opt_rule_blacklist`).Check(testkit.Rows())
-}
-
 func (s *testIntegrationSuite) TestIssue10804(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustQuery(`SELECT @@information_schema_stats_expiry`).Check(testkit.Rows(`86400`))

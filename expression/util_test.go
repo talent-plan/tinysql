@@ -77,17 +77,6 @@ func (s *testUtilSuite) TestGetUint64FromConstant(c *check.C) {
 	c.Assert(num, check.Equals, uint64(1))
 }
 
-func (s *testUtilSuite) TestSetExprColumnInOperand(c *check.C) {
-	col := &Column{RetType: newIntFieldType()}
-	c.Assert(setExprColumnInOperand(col).(*Column).InOperand, check.IsTrue)
-
-	f, err := funcs[ast.Abs].getFunction(mock.NewContext(), []Expression{col})
-	c.Assert(err, check.IsNil)
-	fun := &ScalarFunction{Function: f}
-	setExprColumnInOperand(fun)
-	c.Assert(f.getArgs()[0].(*Column).InOperand, check.IsTrue)
-}
-
 func (s testUtilSuite) TestPopRowFirstArg(c *check.C) {
 	c1, c2, c3 := &Column{RetType: newIntFieldType()}, &Column{RetType: newIntFieldType()}, &Column{RetType: newIntFieldType()}
 	f, err := funcs[ast.RowFunc].getFunction(mock.NewContext(), []Expression{c1, c2, c3})

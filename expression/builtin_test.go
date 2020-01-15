@@ -14,8 +14,6 @@
 package expression
 
 import (
-	"reflect"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
@@ -59,41 +57,6 @@ func evalBuiltinFunc(f builtinFunc, row chunk.Row) (d types.Datum, err error) {
 	}
 	d.SetValue(res)
 	return
-}
-
-// tblToDtbl is a util function for test.
-func tblToDtbl(i interface{}) []map[string][]types.Datum {
-	l := reflect.ValueOf(i).Len()
-	tbl := make([]map[string][]types.Datum, l)
-	for j := 0; j < l; j++ {
-		v := reflect.ValueOf(i).Index(j).Interface()
-		val := reflect.ValueOf(v)
-		t := reflect.TypeOf(v)
-		item := make(map[string][]types.Datum, val.NumField())
-		for k := 0; k < val.NumField(); k++ {
-			tmp := val.Field(k).Interface()
-			item[t.Field(k).Name] = makeDatums(tmp)
-		}
-		tbl[j] = item
-	}
-	return tbl
-}
-
-func makeDatums(i interface{}) []types.Datum {
-	if i != nil {
-		t := reflect.TypeOf(i)
-		val := reflect.ValueOf(i)
-		switch t.Kind() {
-		case reflect.Slice:
-			l := val.Len()
-			res := make([]types.Datum, l)
-			for j := 0; j < l; j++ {
-				res[j] = types.NewDatum(val.Index(j).Interface())
-			}
-			return res
-		}
-	}
-	return types.MakeDatums(i)
 }
 
 func (s *testEvaluatorSuite) TestIsNullFunc(c *C) {
