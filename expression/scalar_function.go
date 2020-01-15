@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/hack"
@@ -68,11 +67,6 @@ func (sf *ScalarFunction) VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk
 // VecEvalDuration evaluates this expression in a vectorized manner.
 func (sf *ScalarFunction) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
 	return sf.Function.vecEvalDuration(input, result)
-}
-
-// VecEvalJSON evaluates this expression in a vectorized manner.
-func (sf *ScalarFunction) VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return sf.Function.vecEvalJSON(input, result)
 }
 
 // GetArgs gets arguments of function.
@@ -251,8 +245,6 @@ func (sf *ScalarFunction) Eval(row chunk.Row) (d types.Datum, err error) {
 		res, isNull, err = sf.EvalTime(sf.GetCtx(), row)
 	case types.ETDuration:
 		res, isNull, err = sf.EvalDuration(sf.GetCtx(), row)
-	case types.ETJson:
-		res, isNull, err = sf.EvalJSON(sf.GetCtx(), row)
 	case types.ETString:
 		res, isNull, err = sf.EvalString(sf.GetCtx(), row)
 	}
@@ -293,11 +285,6 @@ func (sf *ScalarFunction) EvalTime(ctx sessionctx.Context, row chunk.Row) (types
 // EvalDuration implements Expression interface.
 func (sf *ScalarFunction) EvalDuration(ctx sessionctx.Context, row chunk.Row) (types.Duration, bool, error) {
 	return sf.Function.evalDuration(row)
-}
-
-// EvalJSON implements Expression interface.
-func (sf *ScalarFunction) EvalJSON(ctx sessionctx.Context, row chunk.Row) (json.BinaryJSON, bool, error) {
-	return sf.Function.evalJSON(row)
 }
 
 // HashCode implements Expression interface.

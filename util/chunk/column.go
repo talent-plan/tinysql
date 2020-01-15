@@ -21,7 +21,6 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/hack"
 )
 
@@ -41,13 +40,6 @@ func (c *Column) appendNameValue(name string, val uint64) {
 	*(*uint64)(unsafe.Pointer(&buf[0])) = val
 	c.data = append(c.data, buf[:]...)
 	c.data = append(c.data, name...)
-	c.finishAppendVar()
-}
-
-// AppendJSON appends a BinaryJSON value into this Column.
-func (c *Column) AppendJSON(j json.BinaryJSON) {
-	c.data = append(c.data, j.TypeCode)
-	c.data = append(c.data, j.Value...)
 	c.finishAppendVar()
 }
 
@@ -108,8 +100,6 @@ func (c *Column) Reset(eType types.EvalType) {
 		c.ResizeTime(0, false)
 	case types.ETDuration:
 		c.ResizeGoDuration(0, false)
-	case types.ETJson:
-		c.ReserveJSON(0)
 	default:
 		panic(fmt.Sprintf("invalid EvalType %v", eType))
 	}
@@ -427,11 +417,6 @@ func (c *Column) ReserveBytes(n int) {
 	c.reserve(n, 8)
 }
 
-// ReserveJSON changes the column capacity to store n JSON elements and set the length to zero.
-func (c *Column) ReserveJSON(n int) {
-	c.reserve(n, 8)
-}
-
 // ReserveSet changes the column capacity to store n set elements and set the length to zero.
 func (c *Column) ReserveSet(n int) {
 	c.reserve(n, 8)
@@ -526,12 +511,6 @@ func (c *Column) GetDecimal(rowID int) *types.MyDecimal {
 // GetString returns the string in the specific row.
 func (c *Column) GetString(rowID int) string {
 	return string(hack.String(c.data[c.offsets[rowID]:c.offsets[rowID+1]]))
-}
-
-// GetJSON returns the JSON in the specific row.
-func (c *Column) GetJSON(rowID int) json.BinaryJSON {
-	start := c.offsets[rowID]
-	return json.BinaryJSON{TypeCode: c.data[start], Value: c.data[start+1 : c.offsets[rowID+1]]}
 }
 
 // GetBytes returns the byte slice in the specific row.

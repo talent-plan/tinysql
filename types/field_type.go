@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	ast "github.com/pingcap/parser/types"
-	"github.com/pingcap/tidb/types/json"
 	utilMath "github.com/pingcap/tidb/util/math"
 )
 
@@ -255,12 +254,6 @@ func DefaultTypeForValue(value interface{}, tp *FieldType) {
 		tp.Flen = len(x.Name)
 		tp.Decimal = UnspecifiedLength
 		SetBinChsClnFlag(tp)
-	case json.BinaryJSON:
-		tp.Tp = mysql.TypeJSON
-		tp.Flen = UnspecifiedLength
-		tp.Decimal = 0
-		tp.Charset = charset.CharsetBin
-		tp.Collate = charset.CollationBin
 	default:
 		tp.Tp = mysql.TypeUnspecified
 		tp.Flen = UnspecifiedLength

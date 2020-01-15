@@ -201,42 +201,6 @@ func (b *builtinIfNullDurationSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinIfNullJSONSig) vecEvalJSON(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalJSON(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalJSON(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	result.ReserveJSON(n)
-	for i := 0; i < n; i++ {
-		if !buf0.IsNull(i) {
-			result.AppendJSON(buf0.GetJSON(i))
-		} else if !buf1.IsNull(i) {
-			result.AppendJSON(buf1.GetJSON(i))
-		} else {
-			result.AppendNull()
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfNullJSONSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinIfIntSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETInt, n)
@@ -518,59 +482,5 @@ func (b *builtinIfDurationSig) vecEvalDuration(input *chunk.Chunk, result *chunk
 }
 
 func (b *builtinIfDurationSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinIfJSONSig) vecEvalJSON(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalInt(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalJSON(b.ctx, input, buf1); err != nil {
-		return err
-	}
-	buf2, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf2)
-	if err := b.args[2].VecEvalJSON(b.ctx, input, buf2); err != nil {
-		return err
-	}
-
-	result.ReserveJSON(n)
-	arg0 := buf0.Int64s()
-	for i := 0; i < n; i++ {
-		arg := arg0[i]
-		isNull0 := buf0.IsNull(i)
-		switch {
-		case isNull0 || arg == 0:
-			if buf2.IsNull(i) {
-				result.AppendNull()
-			} else {
-				result.AppendJSON(buf2.GetJSON(i))
-			}
-		case arg != 0:
-			if buf1.IsNull(i) {
-				result.AppendNull()
-			} else {
-				result.AppendJSON(buf1.GetJSON(i))
-			}
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfJSONSig) vectorized() bool {
 	return true
 }

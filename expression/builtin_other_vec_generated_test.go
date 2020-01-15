@@ -24,7 +24,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
 
 type inGener struct {
@@ -60,13 +59,6 @@ func (g inGener) gen() interface{} {
 		return t
 	case types.ETDuration:
 		return types.Duration{Duration: time.Duration(randNum)}
-	case types.ETJson:
-		j := new(json.BinaryJSON)
-		jsonStr := fmt.Sprintf("{\"key\":%v}", randNum)
-		if err := j.UnmarshalJSON([]byte(jsonStr)); err != nil {
-			panic(err)
-		}
-		return *j
 	case types.ETString:
 		return fmt.Sprint(randNum)
 	}
@@ -169,22 +161,6 @@ var vecBuiltinOtherGeneratedCases = map[string][]vecExprBenchCase{
 				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
 				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
 				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
-			},
-		},
-		// builtinInJSONSig
-		{
-			retEvalType: types.ETInt,
-			childrenTypes: []types.EvalType{
-				types.ETJson,
-				types.ETJson,
-				types.ETJson,
-				types.ETJson,
-			},
-			geners: []dataGenerator{
-				inGener{defaultGener{eType: types.ETJson, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETJson, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETJson, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETJson, nullRation: 0.2}},
 			},
 		},
 	},

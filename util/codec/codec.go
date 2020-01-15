@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 
@@ -118,11 +117,6 @@ func encode(sc *stmtctx.StatementContext, b []byte, vals []types.Datum, comparab
 			val, err = vals[i].GetBinaryLiteral().ToInt(sc)
 			terror.Log(errors.Trace(err))
 			b = encodeUnsignedInt(b, val, comparable)
-		case types.KindMysqlJSON:
-			b = append(b, jsonFlag)
-			j := vals[i].GetMysqlJSON()
-			b = append(b, j.TypeCode)
-			b = append(b, j.Value...)
 		case types.KindNull:
 			b = append(b, NilFlag)
 		case types.KindMinNotNull:
@@ -159,8 +153,6 @@ func EstimateValueSize(sc *stmtctx.StatementContext, val types.Datum) (int, erro
 		val, err := val.GetBinaryLiteral().ToInt(sc)
 		terror.Log(errors.Trace(err))
 		l = valueSizeOfUnsignedInt(val)
-	case types.KindMysqlJSON:
-		l = 2 + len(val.GetMysqlJSON().Value)
 	case types.KindNull, types.KindMinNotNull, types.KindMaxValue:
 		l = 1
 	default:
@@ -349,9 +341,6 @@ func encodeHashChunkRowIdx(sc *stmtctx.StatementContext, row chunk.Row, tp *type
 		v, err1 := types.BinaryLiteral(row.GetBytes(idx)).ToInt(sc)
 		terror.Log(errors.Trace(err1))
 		b = (*[unsafe.Sizeof(v)]byte)(unsafe.Pointer(&v))[:]
-	case mysql.TypeJSON:
-		flag = jsonFlag
-		b = row.GetBytes(idx)
 	default:
 		return 0, nil, errors.Errorf("unsupport column type for encode %d", tp.Tp)
 	}
@@ -583,24 +572,6 @@ func HashChunkSelected(sc *stmtctx.StatementContext, h []hash.Hash64, chk *chunk
 			_, _ = h[i].Write(buf)
 			_, _ = h[i].Write(b)
 		}
-	case mysql.TypeJSON:
-		for i := 0; i < rows; i++ {
-			if sel != nil && !sel[i] {
-				continue
-			}
-			if column.IsNull(i) {
-				buf[0], b = NilFlag, nil
-				isNull[i] = true
-			} else {
-				buf[0] = jsonFlag
-				b = column.GetBytes(i)
-			}
-
-			// As the golang doc described, `Hash.Write` never returns an error..
-			// See https://golang.org/pkg/hash/#Hash
-			_, _ = h[i].Write(buf)
-			_, _ = h[i].Write(b)
-		}
 	default:
 		return errors.Errorf("unsupport column type for encode %d", tp.Tp)
 	}
@@ -769,15 +740,6 @@ func DecodeOne(b []byte) (remain []byte, d types.Datum, err error) {
 			v := types.Duration{Duration: time.Duration(r), Fsp: types.MaxFsp}
 			d.SetValue(v)
 		}
-	case jsonFlag:
-		var size int
-		size, err = json.PeekBytesAsJSON(b)
-		if err != nil {
-			return b, d, err
-		}
-		j := json.BinaryJSON{TypeCode: b[0], Value: b[1:size]}
-		d.SetMysqlJSON(j)
-		b = b[size:]
 	case NilFlag:
 	default:
 		return b, d, errors.Errorf("invalid encoded key flag %v", flag)
@@ -846,8 +808,6 @@ func peek(b []byte) (length int, err error) {
 		l, err = peekVarint(b)
 	case uvarintFlag:
 		l, err = peekUvarint(b)
-	case jsonFlag:
-		l, err = json.PeekBytesAsJSON(b)
 	default:
 		return 0, errors.Errorf("invalid encoded key flag %v", flag)
 	}
@@ -997,14 +957,6 @@ func (decoder *Decoder) DecodeOne(b []byte, colIdx int, ft *types.FieldType) (re
 		}
 		v := types.Duration{Duration: time.Duration(r), Fsp: int8(ft.Decimal)}
 		chk.AppendDuration(colIdx, v)
-	case jsonFlag:
-		var size int
-		size, err = json.PeekBytesAsJSON(b)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		chk.AppendJSON(colIdx, json.BinaryJSON{TypeCode: b[0], Value: b[1:size]})
-		b = b[size:]
 	case NilFlag:
 		chk.AppendNull(colIdx)
 	default:
@@ -1137,17 +1089,6 @@ func HashGroupKey(sc *stmtctx.StatementContext, n int, col *chunk.Column, buf []
 			} else {
 				buf[i] = append(buf[i], durationFlag)
 				buf[i] = EncodeInt(buf[i], int64(ds[i]))
-			}
-		}
-	case types.ETJson:
-		for i := 0; i < n; i++ {
-			if col.IsNull(i) {
-				buf[i] = append(buf[i], NilFlag)
-			} else {
-				buf[i] = append(buf[i], jsonFlag)
-				j := col.GetJSON(i)
-				buf[i] = append(buf[i], j.TypeCode)
-				buf[i] = append(buf[i], j.Value...)
 			}
 		}
 	case types.ETString:

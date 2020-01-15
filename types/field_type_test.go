@@ -231,7 +231,6 @@ func (s *testFieldTypeSuite) TestAggFieldType(c *C) {
 		NewFieldType(mysql.TypeNewDate),
 		NewFieldType(mysql.TypeVarchar),
 		NewFieldType(mysql.TypeBit),
-		NewFieldType(mysql.TypeJSON),
 		NewFieldType(mysql.TypeNewDecimal),
 		NewFieldType(mysql.TypeEnum),
 		NewFieldType(mysql.TypeSet),
@@ -252,8 +251,6 @@ func (s *testFieldTypeSuite) TestAggFieldType(c *C) {
 		switch fts[i].Tp {
 		case mysql.TypeDate:
 			c.Assert(aggTp.Tp, Equals, mysql.TypeDate)
-		case mysql.TypeJSON:
-			c.Assert(aggTp.Tp, Equals, mysql.TypeJSON)
 		case mysql.TypeEnum, mysql.TypeSet, mysql.TypeVarString:
 			c.Assert(aggTp.Tp, Equals, mysql.TypeVarchar)
 		case mysql.TypeDecimal:
@@ -273,7 +270,7 @@ func (s *testFieldTypeSuite) TestAggFieldType(c *C) {
 			c.Assert(aggTp.Tp, Equals, mysql.TypeDouble)
 		case mysql.TypeTimestamp, mysql.TypeDate, mysql.TypeDuration,
 			mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeVarchar,
-			mysql.TypeBit, mysql.TypeJSON, mysql.TypeEnum, mysql.TypeSet,
+			mysql.TypeBit, mysql.TypeEnum, mysql.TypeSet,
 			mysql.TypeVarString, mysql.TypeGeometry:
 			c.Assert(aggTp.Tp, Equals, mysql.TypeVarchar)
 		case mysql.TypeString:
@@ -288,18 +285,6 @@ func (s *testFieldTypeSuite) TestAggFieldType(c *C) {
 			c.Assert(aggTp.Tp, Equals, mysql.TypeMediumBlob)
 		case mysql.TypeLongBlob:
 			c.Assert(aggTp.Tp, Equals, mysql.TypeLongBlob)
-		}
-
-		aggTp = AggFieldType([]*FieldType{fts[i], NewFieldType(mysql.TypeJSON)})
-		switch fts[i].Tp {
-		case mysql.TypeJSON, mysql.TypeNull:
-			c.Assert(aggTp.Tp, Equals, mysql.TypeJSON)
-		case mysql.TypeLongBlob, mysql.TypeMediumBlob, mysql.TypeTinyBlob, mysql.TypeBlob:
-			c.Assert(aggTp.Tp, Equals, mysql.TypeLongBlob)
-		case mysql.TypeString:
-			c.Assert(aggTp.Tp, Equals, mysql.TypeString)
-		default:
-			c.Assert(aggTp.Tp, Equals, mysql.TypeVarchar)
 		}
 	}
 }
@@ -324,7 +309,6 @@ func (s *testFieldTypeSuite) TestAggregateEvalType(c *C) {
 		NewFieldType(mysql.TypeNewDate),
 		NewFieldType(mysql.TypeVarchar),
 		NewFieldType(mysql.TypeBit),
-		NewFieldType(mysql.TypeJSON),
 		NewFieldType(mysql.TypeNewDecimal),
 		NewFieldType(mysql.TypeEnum),
 		NewFieldType(mysql.TypeSet),
@@ -343,7 +327,7 @@ func (s *testFieldTypeSuite) TestAggregateEvalType(c *C) {
 		switch fts[i].Tp {
 		case mysql.TypeDecimal, mysql.TypeNull, mysql.TypeTimestamp, mysql.TypeDate,
 			mysql.TypeDuration, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeVarchar,
-			mysql.TypeJSON, mysql.TypeEnum, mysql.TypeSet, mysql.TypeTinyBlob,
+			mysql.TypeEnum, mysql.TypeSet, mysql.TypeTinyBlob,
 			mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob,
 			mysql.TypeVarString, mysql.TypeString, mysql.TypeGeometry:
 			c.Assert(aggregatedEvalType.IsStringKind(), IsTrue)
@@ -365,7 +349,7 @@ func (s *testFieldTypeSuite) TestAggregateEvalType(c *C) {
 		switch fts[i].Tp {
 		case mysql.TypeDecimal, mysql.TypeNull, mysql.TypeTimestamp, mysql.TypeDate,
 			mysql.TypeDuration, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeVarchar,
-			mysql.TypeJSON, mysql.TypeEnum, mysql.TypeSet, mysql.TypeTinyBlob,
+			mysql.TypeEnum, mysql.TypeSet, mysql.TypeTinyBlob,
 			mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob,
 			mysql.TypeVarString, mysql.TypeString, mysql.TypeGeometry:
 			c.Assert(aggregatedEvalType.IsStringKind(), IsTrue)
@@ -385,7 +369,7 @@ func (s *testFieldTypeSuite) TestAggregateEvalType(c *C) {
 		aggregatedEvalType = AggregateEvalType([]*FieldType{fts[i], NewFieldType(mysql.TypeLong)}, &flag)
 		switch fts[i].Tp {
 		case mysql.TypeTimestamp, mysql.TypeDate, mysql.TypeDuration,
-			mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeVarchar, mysql.TypeJSON,
+			mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeVarchar,
 			mysql.TypeEnum, mysql.TypeSet, mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 			mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString,
 			mysql.TypeString, mysql.TypeGeometry:

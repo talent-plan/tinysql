@@ -16,7 +16,6 @@ package aggfuncs
 import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -61,11 +60,6 @@ type partialResult4MaxMinDuration struct {
 
 type partialResult4MaxMinString struct {
 	val    string
-	isNull bool
-}
-
-type partialResult4MaxMinJSON struct {
-	val    json.BinaryJSON
 	isNull bool
 }
 
@@ -586,71 +580,6 @@ func (e *maxMin4Duration) MergePartialResult(sctx sessionctx.Context, src, dst P
 	cmp := p1.val.Compare(p2.val)
 	if e.isMax && cmp == 1 || !e.isMax && cmp == -1 {
 		p2.val, p2.isNull = p1.val, false
-	}
-	return nil
-}
-
-type maxMin4JSON struct {
-	baseMaxMinAggFunc
-}
-
-func (e *maxMin4JSON) AllocPartialResult() PartialResult {
-	p := new(partialResult4MaxMinJSON)
-	p.isNull = true
-	return PartialResult(p)
-}
-
-func (e *maxMin4JSON) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4MaxMinJSON)(pr)
-	p.isNull = true
-}
-
-func (e *maxMin4JSON) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4MaxMinJSON)(pr)
-	if p.isNull {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendJSON(e.ordinal, p.val)
-	return nil
-}
-
-func (e *maxMin4JSON) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4MaxMinJSON)(pr)
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalJSON(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-		if p.isNull {
-			p.val = input.Copy()
-			p.isNull = false
-			continue
-		}
-		cmp := json.CompareBinary(input, p.val)
-		if e.isMax && cmp > 0 || !e.isMax && cmp < 0 {
-			p.val = input
-		}
-	}
-	return nil
-}
-
-func (e *maxMin4JSON) MergePartialResult(sctx sessionctx.Context, src, dst PartialResult) error {
-	p1, p2 := (*partialResult4MaxMinJSON)(src), (*partialResult4MaxMinJSON)(dst)
-	if p1.isNull {
-		return nil
-	}
-	if p2.isNull {
-		*p2 = *p1
-		return nil
-	}
-	cmp := json.CompareBinary(p1.val, p2.val)
-	if e.isMax && cmp > 0 || !e.isMax && cmp < 0 {
-		p2.val = p1.val
-		p2.isNull = false
 	}
 	return nil
 }

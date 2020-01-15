@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
 )
@@ -166,8 +165,6 @@ func getDataGenFunc(ft *types.FieldType) func(i int) types.Datum {
 		return func(i int) types.Datum { return types.NewTimeDatum(types.TimeFromDays(int64(i + 365))) }
 	case mysql.TypeDuration:
 		return func(i int) types.Datum { return types.NewDurationDatum(types.Duration{Duration: time.Duration(i)}) }
-	case mysql.TypeJSON:
-		return func(i int) types.Datum { return types.NewDatum(json.CreateBinary(int64(i))) }
 	}
 	return nil
 }

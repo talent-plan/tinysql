@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/parser/opcode"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -149,17 +148,8 @@ func newBaseBuiltinFuncWithTp(ctx sessionctx.Context, args []Expression, retType
 			Decimal: int(types.MaxFsp),
 			Flag:    mysql.BinaryFlag,
 		}
-	case types.ETJson:
-		fieldType = &types.FieldType{
-			Tp:      mysql.TypeJSON,
-			Flen:    mysql.MaxBlobWidth,
-			Decimal: 0,
-			Charset: mysql.DefaultCharset,
-			Collate: mysql.DefaultCollationName,
-			Flag:    mysql.BinaryFlag,
-		}
 	}
-	if mysql.HasBinaryFlag(fieldType.Flag) && fieldType.Tp != mysql.TypeJSON {
+	if mysql.HasBinaryFlag(fieldType.Flag) {
 		fieldType.Charset, fieldType.Collate = charset.CharsetBin, charset.CollationBin
 	} else {
 		fieldType.Charset, fieldType.Collate = charset.GetDefaultCharsetAndCollate()
@@ -228,10 +218,6 @@ func (b *baseBuiltinFunc) evalTime(row chunk.Row) (types.Time, bool, error) {
 
 func (b *baseBuiltinFunc) evalDuration(row chunk.Row) (types.Duration, bool, error) {
 	return types.Duration{}, false, errors.Errorf("baseBuiltinFunc.evalDuration() should never be called, please contact the TiDB team for help")
-}
-
-func (b *baseBuiltinFunc) evalJSON(row chunk.Row) (json.BinaryJSON, bool, error) {
-	return json.BinaryJSON{}, false, errors.Errorf("baseBuiltinFunc.evalJSON() should never be called, please contact the TiDB team for help")
 }
 
 func (b *baseBuiltinFunc) vectorized() bool {
@@ -345,8 +331,6 @@ type builtinFunc interface {
 	evalTime(row chunk.Row) (val types.Time, isNull bool, err error)
 	// evalDuration evaluates duration representation of builtinFunc by given row.
 	evalDuration(row chunk.Row) (val types.Duration, isNull bool, err error)
-	// evalJSON evaluates JSON representation of builtinFunc by given row.
-	evalJSON(row chunk.Row) (val json.BinaryJSON, isNull bool, err error)
 	// getArgs returns the arguments expressions.
 	getArgs() []Expression
 	// equal check if this function equals to another function.

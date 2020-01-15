@@ -21,8 +21,51 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
+
+var allTypes = []*types.FieldType{
+	types.NewFieldType(mysql.TypeTiny),
+	types.NewFieldType(mysql.TypeShort),
+	types.NewFieldType(mysql.TypeInt24),
+	types.NewFieldType(mysql.TypeLong),
+	types.NewFieldType(mysql.TypeLonglong),
+	{
+		Tp:      mysql.TypeLonglong,
+		Flen:    types.UnspecifiedLength,
+		Decimal: types.UnspecifiedLength,
+		Flag:    mysql.UnsignedFlag,
+	},
+	types.NewFieldType(mysql.TypeYear),
+	types.NewFieldType(mysql.TypeFloat),
+	types.NewFieldType(mysql.TypeDouble),
+	types.NewFieldType(mysql.TypeString),
+	types.NewFieldType(mysql.TypeVarString),
+	types.NewFieldType(mysql.TypeVarchar),
+	types.NewFieldType(mysql.TypeBlob),
+	types.NewFieldType(mysql.TypeTinyBlob),
+	types.NewFieldType(mysql.TypeMediumBlob),
+	types.NewFieldType(mysql.TypeLongBlob),
+	types.NewFieldType(mysql.TypeDate),
+	types.NewFieldType(mysql.TypeDatetime),
+	types.NewFieldType(mysql.TypeTimestamp),
+	types.NewFieldType(mysql.TypeDuration),
+	types.NewFieldType(mysql.TypeNewDecimal),
+	{
+		Tp:      mysql.TypeSet,
+		Flen:    types.UnspecifiedLength,
+		Decimal: types.UnspecifiedLength,
+		Flag:    mysql.UnsignedFlag,
+		Elems:   []string{"a", "b"},
+	},
+	{
+		Tp:      mysql.TypeEnum,
+		Flen:    types.UnspecifiedLength,
+		Decimal: types.UnspecifiedLength,
+		Flag:    mysql.UnsignedFlag,
+		Elems:   []string{"a", "b"},
+	},
+	types.NewFieldType(mysql.TypeBit),
+}
 
 func (s *testChunkSuite) TestMutRow(c *check.C) {
 	mutRow := MutRowFromTypes(allTypes)
@@ -67,18 +110,6 @@ func (s *testChunkSuite) TestMutRow(c *check.C) {
 	c.Assert(row.IsNull(0), check.IsTrue)
 	c.Assert(row.IsNull(1), check.IsFalse)
 
-	j, err := json.ParseBinaryFromString("true")
-	t := types.Time{
-		Time: types.FromDate(2000, 1, 1, 1, 0, 0, 0),
-		Type: mysql.TypeDatetime,
-		Fsp:  types.MaxFsp,
-	}
-	c.Assert(err, check.IsNil)
-	mutRow = MutRowFromValues(j, t)
-	row = mutRow.ToRow()
-	c.Assert(row.GetJSON(0), check.DeepEquals, j)
-	c.Assert(row.GetTime(1), check.DeepEquals, t)
-
 	retTypes := []*types.FieldType{types.NewFieldType(mysql.TypeDuration)}
 	chk := New(retTypes, 1, 1)
 	dur, err := types.ParseDuration(sc, "01:23:45", 0)
@@ -89,18 +120,6 @@ func (s *testChunkSuite) TestMutRow(c *check.C) {
 	c.Assert(chk.columns[0].data, check.BytesEquals, mutRow.c.columns[0].data)
 	mutRow.SetDatum(0, types.NewDurationDatum(dur))
 	c.Assert(chk.columns[0].data, check.BytesEquals, mutRow.c.columns[0].data)
-}
-
-func BenchmarkMutRowSetRow(b *testing.B) {
-	b.ReportAllocs()
-	rowChk := newChunk(8, 0)
-	rowChk.AppendInt64(0, 1)
-	rowChk.AppendString(1, "abcd")
-	row := rowChk.GetRow(0)
-	mutRow := MutRowFromValues(1, "abcd")
-	for i := 0; i < b.N; i++ {
-		mutRow.SetRow(row)
-	}
 }
 
 func BenchmarkMutRowSetDatums(b *testing.B) {
@@ -191,19 +210,6 @@ func BenchmarkMutRowShallowCopyPartialRow(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < rowsNum; j++ {
 			mutRow.ShallowCopyPartialRow(0, row)
-		}
-	}
-}
-
-func BenchmarkChunkAppendPartialRow(b *testing.B) {
-	b.ReportAllocs()
-	chk := newChunkWithInitCap(rowsNum, 0, 0, 8, 8, sizeTime)
-	row := MutRowFromValues("abc", "abcdefg", 123, 456, types.ZeroDatetime).ToRow()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		chk.Reset()
-		for j := 0; j < rowsNum; j++ {
-			chk.AppendPartialRow(0, row)
 		}
 	}
 }

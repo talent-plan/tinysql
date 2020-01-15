@@ -16,7 +16,6 @@ package aggfuncs
 import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -69,12 +68,6 @@ type partialResult4FirstRowDuration struct {
 	basePartialResult4FirstRow
 
 	val types.Duration
-}
-
-type partialResult4FirstRowJSON struct {
-	basePartialResult4FirstRow
-
-	val json.BinaryJSON
 }
 
 type firstRow4Int struct {
@@ -353,52 +346,6 @@ func (e *firstRow4Duration) AppendFinalResult2Chunk(sctx sessionctx.Context, pr 
 		return nil
 	}
 	chk.AppendDuration(e.ordinal, p.val)
-	return nil
-}
-
-type firstRow4JSON struct {
-	baseAggFunc
-}
-
-func (e *firstRow4JSON) AllocPartialResult() PartialResult {
-	return PartialResult(new(partialResult4FirstRowJSON))
-}
-
-func (e *firstRow4JSON) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4FirstRowJSON)(pr)
-	p.isNull, p.gotFirstRow = false, false
-}
-
-func (e *firstRow4JSON) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4FirstRowJSON)(pr)
-	if p.gotFirstRow {
-		return nil
-	}
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalJSON(sctx, row)
-		if err != nil {
-			return err
-		}
-		p.gotFirstRow, p.isNull, p.val = true, isNull, input.Copy()
-		break
-	}
-	return nil
-}
-func (*firstRow4JSON) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
-	p1, p2 := (*partialResult4FirstRowJSON)(src), (*partialResult4FirstRowJSON)(dst)
-	if !p2.gotFirstRow {
-		*p2 = *p1
-	}
-	return nil
-}
-
-func (e *firstRow4JSON) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4FirstRowJSON)(pr)
-	if p.isNull || !p.gotFirstRow {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendJSON(e.ordinal, p.val)
 	return nil
 }
 

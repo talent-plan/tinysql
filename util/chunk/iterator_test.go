@@ -17,7 +17,16 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"testing"
 )
+
+func TestT(t *testing.T) {
+	check.TestingT(t)
+}
+
+var _ = check.Suite(&testChunkSuite{})
+
+type testChunkSuite struct{}
 
 func (s *testChunkSuite) TestIteratorOnSel(c *check.C) {
 	fields := []*types.FieldType{types.NewFieldType(mysql.TypeLonglong)}

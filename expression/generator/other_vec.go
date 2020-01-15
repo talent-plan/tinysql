@@ -49,7 +49,6 @@ const newLine = "\n"
 const builtinOtherImports = `import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 `
@@ -101,11 +100,9 @@ var builtinInTmpl = template.Must(template.New("builtinInTmpl").Parse(`
 			compareResult = 0
 		}
 	{{- else if eq .Input.TypeName "Time" -}}
-		compareResult = arg0.Compare(arg1) 
+		compareResult = arg0.Compare(arg1)
 	{{- else if eq .Input.TypeName "Duration" -}}
 		compareResult = types.CompareDuration(arg0, arg1)
-	{{- else if eq .Input.TypeName "JSON" -}}
-		compareResult = json.CompareBinary(arg0, arg1)
 	{{- else -}}
 		compareResult = types.Compare{{ .Input.TypeNameInColumn }}(arg0, arg1)
 	{{- end -}}
@@ -114,7 +111,6 @@ var builtinInTmpl = template.Must(template.New("builtinInTmpl").Parse(`
 {{ range . }}
 {{ $InputInt := (eq .Input.TypeName "Int") }}
 {{ $InputString := (eq .Input.TypeName "String") }}
-{{ $InputJson := (eq .Input.TypeName "JSON") }}
 {{ $InputFixed := ( .Input.Fixed ) }}
 func (b *{{.SigName}}) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
@@ -150,7 +146,7 @@ func (b *{{.SigName}}) vecEvalInt(input *chunk.Chunk, result *chunk.Column) erro
 				hasNull[i] = true
 				continue
 			}
-	
+
 {{- /* get args */}}
 			{{- if $InputFixed }}
 				arg0 := args0[i]
@@ -159,7 +155,7 @@ func (b *{{.SigName}}) vecEvalInt(input *chunk.Chunk, result *chunk.Column) erro
 				arg0 := buf0.Get{{ .Input.TypeName }}(i)
 				arg1 := buf1.Get{{ .Input.TypeName }}(i)
 			{{- end }}
-	
+
 {{- /* compare */}}
 			{{- template "Compare" . }}
 			if compareResult == 0 {
@@ -203,7 +199,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
 
 type inGener struct {
@@ -239,13 +234,6 @@ func (g inGener) gen() interface{} {
 		return t
 	case types.ETDuration:
 		return types.Duration{ Duration: time.Duration(randNum) }
-	case types.ETJson:
-		j := new(json.BinaryJSON)
-		jsonStr := fmt.Sprintf("{\"key\":%v}", randNum)
-		if err := j.UnmarshalJSON([]byte(jsonStr)); err != nil {
-			panic(err)
-		}
-		return *j
 	case types.ETString:
 		return fmt.Sprint(randNum)
 	}
@@ -256,12 +244,12 @@ func (g inGener) gen() interface{} {
 var vecBuiltin{{ .Category }}GeneratedCases = map[string][]vecExprBenchCase {
 {{- range $.Functions }}
 	ast.{{ .FuncName }}: {
-	{{- range .Sigs }} 
+	{{- range .Sigs }}
 		// {{ .SigName }}
 		{
-			retEvalType: types.ET{{ .Output.ETName }}, 
+			retEvalType: types.ET{{ .Output.ETName }},
 			childrenTypes: []types.EvalType{
-				types.ET{{ .Input.ETName }}, 
+				types.ET{{ .Input.ETName }},
 				types.ET{{ .Input.ETName }},
 				types.ET{{ .Input.ETName }},
 				types.ET{{ .Input.ETName }},
@@ -272,10 +260,10 @@ var vecBuiltin{{ .Category }}GeneratedCases = map[string][]vecExprBenchCase {
 				inGener{defaultGener{eType: types.ET{{.Input.ETName}}, nullRation: 0.2}},
 				inGener{defaultGener{eType: types.ET{{.Input.ETName}}, nullRation: 0.2}},
 			},
-		}, 
+		},
 	{{- end }}
 {{- end }}
-	}, 
+	},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltin{{.Category}}EvalOneVecGenerated(c *C) {
@@ -307,7 +295,6 @@ var inSigsTmpl = []sig{
 	{SigName: "builtinInRealSig", Input: TypeReal, Output: TypeInt},
 	{SigName: "builtinInTimeSig", Input: TypeDatetime, Output: TypeInt},
 	{SigName: "builtinInDurationSig", Input: TypeDuration, Output: TypeInt},
-	{SigName: "builtinInJSONSig", Input: TypeJSON, Output: TypeInt},
 }
 
 type function struct {

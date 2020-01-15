@@ -403,18 +403,13 @@ func buildColumnAndConstraint(ctx sessionctx.Context, offset int,
 // In NO_ZERO_DATE SQL mode, TIMESTAMP/DATE/DATETIME type can't have zero date like '0000-00-00' or '0000-00-00 00:00:00'.
 func checkColumnDefaultValue(ctx sessionctx.Context, col *table.Column, value interface{}) (bool, interface{}, error) {
 	hasDefaultValue := true
-	if value != nil && (col.Tp == mysql.TypeJSON ||
-		col.Tp == mysql.TypeTinyBlob || col.Tp == mysql.TypeMediumBlob ||
+	if value != nil && (col.Tp == mysql.TypeTinyBlob || col.Tp == mysql.TypeMediumBlob ||
 		col.Tp == mysql.TypeLongBlob || col.Tp == mysql.TypeBlob) {
 		// In non-strict SQL mode.
 		if !ctx.GetSessionVars().SQLMode.HasStrictMode() && value == "" {
 			if col.Tp == mysql.TypeBlob || col.Tp == mysql.TypeLongBlob {
 				// The TEXT/BLOB default value can be ignored.
 				hasDefaultValue = false
-			}
-			// In non-strict SQL mode, if the column type is json and the default value is null, it is initialized to an empty array.
-			if col.Tp == mysql.TypeJSON {
-				value = `null`
 			}
 			sc := ctx.GetSessionVars().StmtCtx
 			sc.AppendWarning(errBlobCantHaveDefault.GenWithStackByArgs(col.Name.O))
@@ -662,8 +657,7 @@ func getDefaultValue(ctx sessionctx.Context, col *table.Column, c *ast.ColumnOpt
 	if v.Kind() == types.KindBinaryLiteral || v.Kind() == types.KindMysqlBit {
 		if tp == mysql.TypeBit ||
 			tp == mysql.TypeString || tp == mysql.TypeVarchar || tp == mysql.TypeVarString ||
-			tp == mysql.TypeBlob || tp == mysql.TypeLongBlob || tp == mysql.TypeMediumBlob || tp == mysql.TypeTinyBlob ||
-			tp == mysql.TypeJSON {
+			tp == mysql.TypeBlob || tp == mysql.TypeLongBlob || tp == mysql.TypeMediumBlob || tp == mysql.TypeTinyBlob {
 			// For BinaryLiteral / string fields, when getting default value we cast the value into BinaryLiteral{}, thus we return
 			// its raw string content here.
 			return v.GetBinaryLiteral().ToString(), nil

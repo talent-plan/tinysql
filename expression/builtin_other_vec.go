@@ -70,14 +70,6 @@ func (b *builtinValuesTimeSig) vecEvalTime(input *chunk.Chunk, result *chunk.Col
 	return errors.Errorf("not implemented")
 }
 
-func (b *builtinValuesJSONSig) vectorized() bool {
-	return false
-}
-
-func (b *builtinValuesJSONSig) vecEvalJSON(input *chunk.Chunk, result *chunk.Column) error {
-	return errors.Errorf("not implemented")
-}
-
 func (b *builtinSetVarSig) vectorized() bool {
 	return true
 }

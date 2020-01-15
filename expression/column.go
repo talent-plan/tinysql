@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -68,11 +67,6 @@ func (col *CorrelatedColumn) VecEvalTime(ctx sessionctx.Context, input *chunk.Ch
 // VecEvalDuration evaluates this expression in a vectorized manner.
 func (col *CorrelatedColumn) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
 	return genVecFromConstExpr(ctx, col, types.ETDuration, input, result)
-}
-
-// VecEvalJSON evaluates this expression in a vectorized manner.
-func (col *CorrelatedColumn) VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, col, types.ETJson, input, result)
 }
 
 // Eval implements Expression interface.
@@ -135,14 +129,6 @@ func (col *CorrelatedColumn) EvalDuration(ctx sessionctx.Context, row chunk.Row)
 		return types.Duration{}, true, nil
 	}
 	return col.Data.GetMysqlDuration(), false, nil
-}
-
-// EvalJSON returns JSON representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalJSON(ctx sessionctx.Context, row chunk.Row) (json.BinaryJSON, bool, error) {
-	if col.Data.IsNull() {
-		return json.BinaryJSON{}, true, nil
-	}
-	return col.Data.GetMysqlJSON(), false, nil
 }
 
 // Equal implements Expression interface.
@@ -412,14 +398,6 @@ func (col *Column) EvalDuration(ctx sessionctx.Context, row chunk.Row) (types.Du
 	}
 	duration := row.GetDuration(col.Index, col.RetType.Decimal)
 	return duration, false, nil
-}
-
-// EvalJSON returns JSON representation of Column.
-func (col *Column) EvalJSON(ctx sessionctx.Context, row chunk.Row) (json.BinaryJSON, bool, error) {
-	if row.IsNull(col.Index) {
-		return json.BinaryJSON{}, true, nil
-	}
-	return row.GetJSON(col.Index), false, nil
 }
 
 // Clone implements Expression interface.

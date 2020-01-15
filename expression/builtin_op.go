@@ -150,7 +150,7 @@ func (c *unaryNotFunctionClass) getFunction(ctx sessionctx.Context, args []Expre
 	argTp := args[0].GetType().EvalType()
 	if argTp == types.ETTimestamp || argTp == types.ETDatetime || argTp == types.ETDuration {
 		argTp = types.ETInt
-	} else if argTp == types.ETJson || argTp == types.ETString {
+	} else if argTp == types.ETString {
 		argTp = types.ETReal
 	}
 
@@ -401,8 +401,6 @@ func (c *isNullFunctionClass) getFunction(ctx sessionctx.Context, args []Express
 	argTp := args[0].GetType().EvalType()
 	if argTp == types.ETTimestamp {
 		argTp = types.ETDatetime
-	} else if argTp == types.ETJson {
-		argTp = types.ETString
 	}
 	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETInt, argTp)
 	bf.tp.Flen = 1

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -298,18 +297,6 @@ func (d *Datum) SetMysqlSet(b Set) {
 	d.b = hack.Slice(b.Name)
 }
 
-// GetMysqlJSON gets json.BinaryJSON value
-func (d *Datum) GetMysqlJSON() json.BinaryJSON {
-	return json.BinaryJSON{TypeCode: byte(d.i), Value: d.b}
-}
-
-// SetMysqlJSON sets json.BinaryJSON value
-func (d *Datum) SetMysqlJSON(b json.BinaryJSON) {
-	d.k = KindMysqlJSON
-	d.i = int64(b.TypeCode)
-	d.b = b.Value
-}
-
 // GetMysqlTime gets types.Time value
 func (d *Datum) GetMysqlTime() Time {
 	return d.x.(Time)
@@ -410,8 +397,6 @@ func (d *Datum) GetValue() interface{} {
 		return d.GetBinaryLiteral()
 	case KindMysqlSet:
 		return d.GetMysqlSet()
-	case KindMysqlJSON:
-		return d.GetMysqlJSON()
 	case KindMysqlTime:
 		return d.GetMysqlTime()
 	default:
@@ -458,8 +443,6 @@ func (d *Datum) SetValue(val interface{}) {
 		d.SetBinaryLiteral(BinaryLiteral(x))
 	case Set:
 		d.SetMysqlSet(x)
-	case json.BinaryJSON:
-		d.SetMysqlJSON(x)
 	case Time:
 		d.SetMysqlTime(x)
 	default:
@@ -512,8 +495,6 @@ func (d *Datum) CompareDatum(sc *stmtctx.StatementContext, ad *Datum) (int, erro
 		return d.compareBinaryLiteral(sc, ad.GetBinaryLiteral())
 	case KindMysqlSet:
 		return d.compareMysqlSet(sc, ad.GetMysqlSet())
-	case KindMysqlJSON:
-		return d.compareMysqlJSON(sc, ad.GetMysqlJSON())
 	case KindMysqlTime:
 		return d.compareMysqlTime(sc, ad.GetMysqlTime())
 	default:
@@ -697,14 +678,6 @@ func (d *Datum) compareMysqlSet(sc *stmtctx.StatementContext, set Set) (int, err
 	}
 }
 
-func (d *Datum) compareMysqlJSON(sc *stmtctx.StatementContext, target json.BinaryJSON) (int, error) {
-	origin, err := d.ToMysqlJSON()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return json.CompareBinary(origin, target), nil
-}
-
 func (d *Datum) compareMysqlTime(sc *stmtctx.StatementContext, time Time) (int, error) {
 	switch d.k {
 	case KindString, KindBytes:
@@ -754,8 +727,6 @@ func (d *Datum) ConvertTo(sc *stmtctx.StatementContext, target *FieldType) (Datu
 		return d.convertToMysqlBit(sc, target)
 	case mysql.TypeSet:
 		return d.convertToMysqlSet(sc, target)
-	case mysql.TypeJSON:
-		return d.convertToMysqlJSON(sc, target)
 	case mysql.TypeNull:
 		return Datum{}, nil
 	default:
@@ -793,8 +764,6 @@ func (d *Datum) convertToFloat(sc *stmtctx.StatementContext, target *FieldType) 
 	case KindBinaryLiteral, KindMysqlBit:
 		val, err1 := d.GetBinaryLiteral().ToInt(sc)
 		f, err = float64(val), err1
-	case KindMysqlJSON:
-		f, err = ConvertJSONToFloat(sc, d.GetMysqlJSON())
 	default:
 		return invalidConv(d, target.Tp)
 	}
@@ -853,8 +822,6 @@ func (d *Datum) convertToString(sc *stmtctx.StatementContext, target *FieldType)
 		s = d.GetMysqlSet().String()
 	case KindBinaryLiteral, KindMysqlBit:
 		s = d.GetBinaryLiteral().ToString()
-	case KindMysqlJSON:
-		s = d.GetMysqlJSON().String()
 	default:
 		return invalidConv(d, target.Tp)
 	}
@@ -961,10 +928,6 @@ func (d *Datum) convertToUint(sc *stmtctx.StatementContext, target *FieldType) (
 		val, err = ConvertFloatToUint(sc, d.GetMysqlSet().ToNumber(), upperBound, tp)
 	case KindBinaryLiteral, KindMysqlBit:
 		val, err = d.GetBinaryLiteral().ToInt(sc)
-	case KindMysqlJSON:
-		var i64 int64
-		i64, err = ConvertJSONToInt(sc, d.GetMysqlJSON(), true)
-		val = uint64(i64)
 	default:
 		return invalidConv(d, target.Tp)
 	}
@@ -1149,12 +1112,6 @@ func (d *Datum) convertToMysqlDecimal(sc *stmtctx.StatementContext, target *Fiel
 		val, err1 := d.GetBinaryLiteral().ToInt(sc)
 		err = err1
 		dec.FromUint(val)
-	case KindMysqlJSON:
-		f, err1 := ConvertJSONToFloat(sc, d.GetMysqlJSON())
-		if err1 != nil {
-			return ret, errors.Trace(err1)
-		}
-		err = dec.FromFloat64(f)
 	default:
 		return invalidConv(d, target.Tp)
 	}
@@ -1327,41 +1284,6 @@ func (d *Datum) convertToMysqlSet(sc *stmtctx.StatementContext, target *FieldTyp
 	return ret, nil
 }
 
-func (d *Datum) convertToMysqlJSON(sc *stmtctx.StatementContext, target *FieldType) (ret Datum, err error) {
-	switch d.k {
-	case KindString, KindBytes:
-		var j json.BinaryJSON
-		if j, err = json.ParseBinaryFromString(d.GetString()); err == nil {
-			ret.SetMysqlJSON(j)
-		}
-	case KindInt64:
-		i64 := d.GetInt64()
-		ret.SetMysqlJSON(json.CreateBinary(i64))
-	case KindUint64:
-		u64 := d.GetUint64()
-		ret.SetMysqlJSON(json.CreateBinary(u64))
-	case KindFloat32, KindFloat64:
-		f64 := d.GetFloat64()
-		ret.SetMysqlJSON(json.CreateBinary(f64))
-	case KindMysqlDecimal:
-		var f64 float64
-		if f64, err = d.GetMysqlDecimal().ToFloat64(); err == nil {
-			ret.SetMysqlJSON(json.CreateBinary(f64))
-		}
-	case KindMysqlJSON:
-		ret = *d
-	default:
-		var s string
-		if s, err = d.ToString(); err == nil {
-			// TODO: fix precision of MysqlTime. For example,
-			// On MySQL 5.7 CAST(NOW() AS JSON) -> "2011-11-11 11:11:11.111111",
-			// But now we can only return "2011-11-11 11:11:11".
-			ret.SetMysqlJSON(json.CreateBinary(s))
-		}
-	}
-	return ret, errors.Trace(err)
-}
-
 // ToBool converts to a bool.
 // We will use 1 for true, and 0 for false.
 func (d *Datum) ToBool(sc *stmtctx.StatementContext) (int64, error) {
@@ -1433,12 +1355,6 @@ func ConvertDatumToDecimal(sc *stmtctx.StatementContext, d Datum) (*MyDecimal, e
 		val, err1 := d.GetBinaryLiteral().ToInt(sc)
 		dec.FromUint(val)
 		err = err1
-	case KindMysqlJSON:
-		f, err1 := ConvertJSONToFloat(sc, d.GetMysqlJSON())
-		if err1 != nil {
-			return nil, errors.Trace(err1)
-		}
-		err = dec.FromFloat64(f)
 	default:
 		err = fmt.Errorf("can't convert %v to decimal", d.GetValue())
 	}
@@ -1525,8 +1441,6 @@ func (d *Datum) toSignedInteger(sc *stmtctx.StatementContext, tp byte) (int64, e
 	case KindMysqlSet:
 		fval := d.GetMysqlSet().ToNumber()
 		return ConvertFloatToInt(fval, lowerBound, upperBound, tp)
-	case KindMysqlJSON:
-		return ConvertJSONToInt(sc, d.GetMysqlJSON(), false)
 	case KindBinaryLiteral, KindMysqlBit:
 		val, err := d.GetBinaryLiteral().ToInt(sc)
 		return int64(val), errors.Trace(err)
@@ -1566,9 +1480,6 @@ func (d *Datum) ToFloat64(sc *stmtctx.StatementContext) (float64, error) {
 	case KindBinaryLiteral, KindMysqlBit:
 		val, err := d.GetBinaryLiteral().ToInt(sc)
 		return float64(val), errors.Trace(err)
-	case KindMysqlJSON:
-		f, err := ConvertJSONToFloat(sc, d.GetMysqlJSON())
-		return f, errors.Trace(err)
 	default:
 		return 0, errors.Errorf("cannot convert %v(type %T) to float64", d.GetValue(), d.GetValue())
 	}
@@ -1599,8 +1510,6 @@ func (d *Datum) ToString() (string, error) {
 		return d.GetMysqlEnum().String(), nil
 	case KindMysqlSet:
 		return d.GetMysqlSet().String(), nil
-	case KindMysqlJSON:
-		return d.GetMysqlJSON().String(), nil
 	case KindBinaryLiteral, KindMysqlBit:
 		return d.GetBinaryLiteral().ToString(), nil
 	default:
@@ -1620,39 +1529,6 @@ func (d *Datum) ToBytes() ([]byte, error) {
 		}
 		return []byte(str), nil
 	}
-}
-
-// ToMysqlJSON is similar to convertToMysqlJSON, except the
-// latter parses from string, but the former uses it as primitive.
-func (d *Datum) ToMysqlJSON() (j json.BinaryJSON, err error) {
-	var in interface{}
-	switch d.Kind() {
-	case KindMysqlJSON:
-		j = d.GetMysqlJSON()
-		return
-	case KindInt64:
-		in = d.GetInt64()
-	case KindUint64:
-		in = d.GetUint64()
-	case KindFloat32, KindFloat64:
-		in = d.GetFloat64()
-	case KindMysqlDecimal:
-		in, err = d.GetMysqlDecimal().ToFloat64()
-	case KindString, KindBytes:
-		in = d.GetString()
-	case KindBinaryLiteral, KindMysqlBit:
-		in = d.GetBinaryLiteral().ToString()
-	case KindNull:
-		in = nil
-	default:
-		in, err = d.ToString()
-	}
-	if err != nil {
-		err = errors.Trace(err)
-		return
-	}
-	j = json.CreateBinary(in)
-	return
 }
 
 func invalidConv(d *Datum, tp byte) (Datum, error) {

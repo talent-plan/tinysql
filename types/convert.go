@@ -26,8 +26,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types/json"
-	"github.com/pingcap/tidb/util/hack"
 )
 
 func truncateStr(str string, flen int) string {
@@ -548,83 +546,6 @@ func StrToFloat(sc *stmtctx.StatementContext, str string) (float64, error) {
 		return f, errors.Trace(err1)
 	}
 	return f, errors.Trace(err)
-}
-
-// ConvertJSONToInt casts JSON into int64.
-func ConvertJSONToInt(sc *stmtctx.StatementContext, j json.BinaryJSON, unsigned bool) (int64, error) {
-	switch j.TypeCode {
-	case json.TypeCodeObject, json.TypeCodeArray:
-		return 0, nil
-	case json.TypeCodeLiteral:
-		switch j.Value[0] {
-		case json.LiteralNil, json.LiteralFalse:
-			return 0, nil
-		default:
-			return 1, nil
-		}
-	case json.TypeCodeInt64, json.TypeCodeUint64:
-		return j.GetInt64(), nil
-	case json.TypeCodeFloat64:
-		f := j.GetFloat64()
-		if !unsigned {
-			lBound := IntergerSignedLowerBound(mysql.TypeLonglong)
-			uBound := IntergerSignedUpperBound(mysql.TypeLonglong)
-			u, e := ConvertFloatToInt(f, lBound, uBound, mysql.TypeLonglong)
-			return u, sc.HandleOverflow(e, e)
-		}
-		bound := IntergerUnsignedUpperBound(mysql.TypeLonglong)
-		u, err := ConvertFloatToUint(sc, f, bound, mysql.TypeLonglong)
-		return int64(u), sc.HandleOverflow(err, err)
-	case json.TypeCodeString:
-		str := string(hack.String(j.GetString()))
-		if !unsigned {
-			r, e := StrToInt(sc, str)
-			return r, sc.HandleOverflow(e, e)
-		}
-		u, err := StrToUint(sc, str)
-		return int64(u), sc.HandleOverflow(err, err)
-	}
-	return 0, errors.New("Unknown type code in JSON")
-}
-
-// ConvertJSONToFloat casts JSON into float64.
-func ConvertJSONToFloat(sc *stmtctx.StatementContext, j json.BinaryJSON) (float64, error) {
-	switch j.TypeCode {
-	case json.TypeCodeObject, json.TypeCodeArray:
-		return 0, nil
-	case json.TypeCodeLiteral:
-		switch j.Value[0] {
-		case json.LiteralNil, json.LiteralFalse:
-			return 0, nil
-		default:
-			return 1, nil
-		}
-	case json.TypeCodeInt64:
-		return float64(j.GetInt64()), nil
-	case json.TypeCodeUint64:
-		return float64(j.GetUint64()), nil
-	case json.TypeCodeFloat64:
-		return j.GetFloat64(), nil
-	case json.TypeCodeString:
-		str := string(hack.String(j.GetString()))
-		return StrToFloat(sc, str)
-	}
-	return 0, errors.New("Unknown type code in JSON")
-}
-
-// ConvertJSONToDecimal casts JSON into decimal.
-func ConvertJSONToDecimal(sc *stmtctx.StatementContext, j json.BinaryJSON) (*MyDecimal, error) {
-	res := new(MyDecimal)
-	if j.TypeCode != json.TypeCodeString {
-		f64, err := ConvertJSONToFloat(sc, j)
-		if err != nil {
-			return res, errors.Trace(err)
-		}
-		err = res.FromFloat64(f64)
-		return res, errors.Trace(err)
-	}
-	err := sc.HandleTruncate(res.FromString([]byte(j.GetString())))
-	return res, errors.Trace(err)
 }
 
 // getValidFloatPrefix gets prefix of string which can be successfully parsed as float.

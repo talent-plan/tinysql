@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/hack"
 )
@@ -40,10 +39,6 @@ func (s *testEvaluatorSuite) TestInFunc(c *C) {
 	duration2 := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Minute)}
 	duration3 := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Second)}
 	duration4 := types.Duration{Duration: time.Duration(12 * time.Hour)}
-	json1 := json.CreateBinary("123")
-	json2 := json.CreateBinary("123.1")
-	json3 := json.CreateBinary("123.2")
-	json4 := json.CreateBinary("123.3")
 	testCases := []struct {
 		args []interface{}
 		res  interface{}
@@ -68,8 +63,6 @@ func (s *testEvaluatorSuite) TestInFunc(c *C) {
 		{[]interface{}{time1, time2, time3, time4}, int64(0)},
 		{[]interface{}{duration1, duration2, duration3, duration4}, int64(0)},
 		{[]interface{}{duration1, duration2, duration1, duration4}, int64(1)},
-		{[]interface{}{json1, json2, json3, json4}, int64(0)},
-		{[]interface{}{json1, json1, json3, json4}, int64(1)},
 	}
 	for _, tc := range testCases {
 		fn, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))

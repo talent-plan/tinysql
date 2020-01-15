@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/testleak"
 )
@@ -210,15 +209,6 @@ func (s *testUtilSuite) TestDumpTextValue(c *C) {
 	bs, err = dumpTextRow(nil, columns, chunk.MutRowFromDatums([]types.Datum{set}).ToRow())
 	c.Assert(err, IsNil)
 	c.Assert(mustDecodeStr(c, bs), Equals, "sname")
-
-	js := types.Datum{}
-	binaryJSON, err := json.ParseBinaryFromString(`{"a": 1, "b": 2}`)
-	c.Assert(err, IsNil)
-	js.SetMysqlJSON(binaryJSON)
-	columns[0].Type = mysql.TypeJSON
-	bs, err = dumpTextRow(nil, columns, chunk.MutRowFromDatums([]types.Datum{js}).ToRow())
-	c.Assert(err, IsNil)
-	c.Assert(mustDecodeStr(c, bs), Equals, `{"a": 1, "b": 2}`)
 }
 
 func mustDecodeStr(c *C, b []byte) string {

@@ -43,6 +43,4 @@ var (
 	TypeDatetime = TypeContext{ETName: "Datetime", TypeName: "Time", TypeNameInColumn: "Time", TypeNameGo: "types.Time", Fixed: true}
 	// TypeDuration represents the template context of types.ETDuration .
 	TypeDuration = TypeContext{ETName: "Duration", TypeName: "Duration", TypeNameInColumn: "GoDuration", TypeNameGo: "time.Duration", Fixed: true}
-	// TypeJSON represents the template context of types.ETJson .
-	TypeJSON = TypeContext{ETName: "Json", TypeName: "JSON", TypeNameInColumn: "JSON", TypeNameGo: "json.BinaryJSON", Fixed: false}
 )

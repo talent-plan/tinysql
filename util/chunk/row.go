@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/hack"
 )
 
@@ -114,11 +113,6 @@ func (r Row) GetMyDecimal(colIdx int) *types.MyDecimal {
 	return r.c.columns[colIdx].GetDecimal(r.idx)
 }
 
-// GetJSON returns the JSON value with the colIdx.
-func (r Row) GetJSON(colIdx int) json.BinaryJSON {
-	return r.c.columns[colIdx].GetJSON(r.idx)
-}
-
 // GetDatumRow converts chunk.Row to types.DatumRow.
 // Keep in mind that GetDatumRow has a reference to r.c, which is a chunk,
 // this function works only if the underlying chunk is valid or unchanged.
@@ -195,10 +189,6 @@ func (r Row) GetDatum(colIdx int, tp *types.FieldType) types.Datum {
 	case mysql.TypeBit:
 		if !r.IsNull(colIdx) {
 			d.SetMysqlBit(r.GetBytes(colIdx))
-		}
-	case mysql.TypeJSON:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlJSON(r.GetJSON(colIdx))
 		}
 	}
 	return d

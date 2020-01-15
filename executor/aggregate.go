@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
@@ -1149,22 +1148,6 @@ func (e *vecGroupChecker) evalGroupItemsAndResolveGroups(item expression.Express
 		}
 		firstRowDatum.SetMysqlDuration(types.Duration{Duration: vals[0], Fsp: int8(item.GetType().Decimal)})
 		lastRowDatum.SetMysqlDuration(types.Duration{Duration: vals[numRows-1], Fsp: int8(item.GetType().Decimal)})
-	case types.ETJson:
-		previousKey := col.GetJSON(0)
-		for i := 1; i < numRows; i++ {
-			key := col.GetJSON(i)
-			isNull := col.IsNull(i)
-			if e.sameGroup[i] {
-				if isNull != previousIsNull || json.CompareBinary(previousKey, key) != 0 {
-					e.sameGroup[i] = false
-				}
-			}
-			previousKey = key
-			previousIsNull = isNull
-		}
-		// make a copy to avoid DATA RACE
-		firstRowDatum.SetMysqlJSON(col.GetJSON(0).Copy())
-		lastRowDatum.SetMysqlJSON(col.GetJSON(numRows - 1).Copy())
 	case types.ETString:
 		previousKey := col.GetString(0)
 		for i := 1; i < numRows; i++ {

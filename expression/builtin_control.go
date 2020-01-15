@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -36,14 +35,12 @@ var (
 	_ builtinFunc = &builtinIfNullStringSig{}
 	_ builtinFunc = &builtinIfNullTimeSig{}
 	_ builtinFunc = &builtinIfNullDurationSig{}
-	_ builtinFunc = &builtinIfNullJSONSig{}
 	_ builtinFunc = &builtinIfIntSig{}
 	_ builtinFunc = &builtinIfRealSig{}
 	_ builtinFunc = &builtinIfDecimalSig{}
 	_ builtinFunc = &builtinIfStringSig{}
 	_ builtinFunc = &builtinIfTimeSig{}
 	_ builtinFunc = &builtinIfDurationSig{}
-	_ builtinFunc = &builtinIfJSONSig{}
 )
 
 // InferType4ControlFuncs infer result type for builtin IF, IFNULL, NULLIF, LEAD and LAG.
@@ -153,9 +150,6 @@ func (c *ifFunctionClass) getFunction(ctx sessionctx.Context, args []Expression)
 	case types.ETDuration:
 		sig = &builtinIfDurationSig{bf}
 		sig.setPbCode(tipb.ScalarFuncSig_IfDuration)
-	case types.ETJson:
-		sig = &builtinIfJSONSig{bf}
-		sig.setPbCode(tipb.ScalarFuncSig_IfJson)
 	}
 	return sig, nil
 }
@@ -298,38 +292,6 @@ func (b *builtinIfDurationSig) evalDuration(row chunk.Row) (ret types.Duration, 
 	return arg2, isNull2, err
 }
 
-type builtinIfJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinIfJSONSig) Clone() builtinFunc {
-	newSig := &builtinIfJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinIfJSONSig) evalJSON(row chunk.Row) (ret json.BinaryJSON, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalInt(b.ctx, row)
-	if err != nil {
-		return ret, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalJSON(b.ctx, row)
-	if err != nil {
-		return ret, true, err
-	}
-	arg2, isNull2, err := b.args[2].EvalJSON(b.ctx, row)
-	if err != nil {
-		return ret, true, err
-	}
-	switch {
-	case isNull0 || arg0 == 0:
-		ret, isNull = arg2, isNull2
-	case arg0 != 0:
-		ret, isNull = arg1, isNull1
-	}
-	return
-}
-
 type ifNullFunctionClass struct {
 	baseFunctionClass
 }
@@ -368,9 +330,6 @@ func (c *ifNullFunctionClass) getFunction(ctx sessionctx.Context, args []Express
 	case types.ETDuration:
 		sig = &builtinIfNullDurationSig{bf}
 		sig.setPbCode(tipb.ScalarFuncSig_IfNullDuration)
-	case types.ETJson:
-		sig = &builtinIfNullJSONSig{bf}
-		sig.setPbCode(tipb.ScalarFuncSig_IfNullJson)
 	}
 	return sig, nil
 }
@@ -486,24 +445,5 @@ func (b *builtinIfNullDurationSig) evalDuration(row chunk.Row) (types.Duration, 
 		return arg0, err != nil, err
 	}
 	arg1, isNull, err := b.args[1].EvalDuration(b.ctx, row)
-	return arg1, isNull || err != nil, err
-}
-
-type builtinIfNullJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinIfNullJSONSig) Clone() builtinFunc {
-	newSig := &builtinIfNullJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinIfNullJSONSig) evalJSON(row chunk.Row) (json.BinaryJSON, bool, error) {
-	arg0, isNull, err := b.args[0].EvalJSON(b.ctx, row)
-	if !isNull {
-		return arg0, err != nil, err
-	}
-	arg1, isNull, err := b.args[1].EvalJSON(b.ctx, row)
 	return arg1, isNull || err != nil, err
 }

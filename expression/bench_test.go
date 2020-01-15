@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
 )
@@ -250,12 +249,6 @@ func (g *defaultGener) gen() interface{} {
 			Duration: time.Duration(rand.Int31()),
 		}
 		return d
-	case types.ETJson:
-		j := new(json.BinaryJSON)
-		if err := j.UnmarshalJSON([]byte(fmt.Sprintf(`{"key":%v}`, rand.Int()))); err != nil {
-			panic(err)
-		}
-		return *j
 	case types.ETString:
 		return randString()
 	}
@@ -419,8 +412,6 @@ func fillColumnWithGener(eType types.EvalType, chk *chunk.Chunk, colIdx int, gen
 			col.AppendTime(v.(types.Time))
 		case types.ETDuration:
 			col.AppendDuration(v.(types.Duration))
-		case types.ETJson:
-			col.AppendJSON(v.(json.BinaryJSON))
 		case types.ETString:
 			col.AppendString(v.(string))
 		}
@@ -455,8 +446,6 @@ func eType2FieldType(eType types.EvalType) *types.FieldType {
 		return types.NewFieldType(mysql.TypeDatetime)
 	case types.ETDuration:
 		return types.NewFieldType(mysql.TypeDuration)
-	case types.ETJson:
-		return types.NewFieldType(mysql.TypeJSON)
 	case types.ETString:
 		return types.NewFieldType(mysql.TypeVarString)
 	default:
@@ -547,13 +536,6 @@ func testVectorizedEvalOneVec(c *C, vecExprCases vecExprBenchCases) {
 					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
 					if !c1.IsNull(i) {
 						c.Assert(c1.GetDuration(i, 0), Equals, c2.GetDuration(i, 0), commentf(i))
-					}
-				}
-			case types.ETJson:
-				for i := 0; i < input.NumRows(); i++ {
-					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
-					if !c1.IsNull(i) {
-						c.Assert(c1.GetJSON(i), DeepEquals, c2.GetJSON(i), commentf(i))
 					}
 				}
 			case types.ETString:
@@ -772,23 +754,6 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 					}
 					i++
 				}
-			case types.ETJson:
-				err := baseFunc.vecEvalJSON(input, output)
-				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
-				// do not forget to call ResizeXXX/ReserveXXX
-				c.Assert(getColumnLen(output, testCase.retEvalType), Equals, input.NumRows())
-				vecWarnCnt = ctx.GetSessionVars().StmtCtx.WarningCount()
-				for row := it.Begin(); row != it.End(); row = it.Next() {
-					val, isNull, err := baseFunc.evalJSON(row)
-					c.Assert(err, IsNil, commentf(i))
-					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
-					if !isNull {
-						var cmp int
-						cmp = json.CompareBinary(val, output.GetJSON(i))
-						c.Assert(cmp, Equals, 0, commentf(i))
-					}
-					i++
-				}
 			case types.ETString:
 				err := baseFunc.vecEvalString(input, output)
 				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
@@ -874,12 +839,6 @@ func benchmarkVectorizedBuiltinFunc(b *testing.B, vecExprCases vecExprBenchCases
 				case types.ETDuration:
 					for i := 0; i < b.N; i++ {
 						if err := baseFunc.vecEvalDuration(input, output); err != nil {
-							b.Fatal(err)
-						}
-					}
-				case types.ETJson:
-					for i := 0; i < b.N; i++ {
-						if err := baseFunc.vecEvalJSON(input, output); err != nil {
 							b.Fatal(err)
 						}
 					}
@@ -969,21 +928,6 @@ func benchmarkVectorizedBuiltinFunc(b *testing.B, vecExprCases vecExprBenchCases
 								output.AppendNull()
 							} else {
 								output.AppendDuration(v)
-							}
-						}
-					}
-				case types.ETJson:
-					for i := 0; i < b.N; i++ {
-						output.Reset(testCase.retEvalType)
-						for row := it.Begin(); row != it.End(); row = it.Next() {
-							v, isNull, err := baseFunc.evalJSON(row)
-							if err != nil {
-								b.Fatal(err)
-							}
-							if isNull {
-								output.AppendNull()
-							} else {
-								output.AppendJSON(v)
 							}
 						}
 					}

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/testleak"
 )
@@ -798,36 +797,6 @@ func (s *testCodecSuite) TestDecimal(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *testCodecSuite) TestJSON(c *C) {
-	defer testleak.AfterTest(c)()
-	tbl := []string{
-		"1234.00",
-		`{"a": "b"}`,
-	}
-
-	datums := make([]types.Datum, 0, len(tbl))
-	for _, t := range tbl {
-		var d types.Datum
-		j, err := json.ParseBinaryFromString(t)
-		c.Assert(err, IsNil)
-		d.SetMysqlJSON(j)
-		datums = append(datums, d)
-	}
-
-	buf := make([]byte, 0, 4096)
-	buf, err := encode(nil, buf, datums, false)
-	c.Assert(err, IsNil)
-
-	datums1, err := Decode(buf, 2)
-	c.Assert(err, IsNil)
-
-	for i := range datums1 {
-		lhs := datums[i].GetMysqlJSON().String()
-		rhs := datums1[i].GetMysqlJSON().String()
-		c.Assert(lhs, Equals, rhs)
-	}
-}
-
 func (s *testCodecSuite) TestCut(c *C) {
 	defer testleak.AfterTest(c)()
 	table := []struct {
@@ -986,7 +955,6 @@ func datumsForTest(sc *stmtctx.StatementContext) ([]types.Datum, []*types.FieldT
 		{types.Enum{Name: "a", Value: 0}, &types.FieldType{Tp: mysql.TypeEnum, Elems: []string{"a"}}},
 		{types.Set{Name: "a", Value: 0}, &types.FieldType{Tp: mysql.TypeSet, Elems: []string{"a"}}},
 		{types.BinaryLiteral{100}, &types.FieldType{Tp: mysql.TypeBit, Flen: 8}},
-		{json.CreateBinary("abc"), types.NewFieldType(mysql.TypeJSON)},
 		{int64(1), types.NewFieldType(mysql.TypeYear)},
 	}
 

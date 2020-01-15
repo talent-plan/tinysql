@@ -48,8 +48,6 @@ func (s *testUtilSuite) TestBaseBuiltin(c *check.C) {
 	c.Assert(err, check.NotNil)
 	_, _, err = bf.evalDuration(chunk.Row{})
 	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalJSON(chunk.Row{})
-	c.Assert(err, check.NotNil)
 }
 
 func (s *testUtilSuite) TestGetUint64FromConstant(c *check.C) {
@@ -204,27 +202,6 @@ func isLogicOrFunction(e Expression) bool {
 		return f.FuncName.L == ast.LogicOr
 	}
 	return false
-}
-
-func (s *testUtilSuite) TestDisableParseJSONFlag4Expr(c *check.C) {
-	var expr Expression
-	expr = &Column{RetType: newIntFieldType()}
-	ft := expr.GetType()
-	ft.Flag |= mysql.ParseToJSONFlag
-	DisableParseJSONFlag4Expr(expr)
-	c.Assert(mysql.HasParseToJSONFlag(ft.Flag), check.IsTrue)
-
-	expr = &CorrelatedColumn{Column: Column{RetType: newIntFieldType()}}
-	ft = expr.GetType()
-	ft.Flag |= mysql.ParseToJSONFlag
-	DisableParseJSONFlag4Expr(expr)
-	c.Assert(mysql.HasParseToJSONFlag(ft.Flag), check.IsTrue)
-
-	expr = &ScalarFunction{RetType: newIntFieldType()}
-	ft = expr.GetType()
-	ft.Flag |= mysql.ParseToJSONFlag
-	DisableParseJSONFlag4Expr(expr)
-	c.Assert(mysql.HasParseToJSONFlag(ft.Flag), check.IsFalse)
 }
 
 func BenchmarkExtractColumns(b *testing.B) {

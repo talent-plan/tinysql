@@ -30,7 +30,6 @@ var (
 	_ AggFunc = (*countOriginal4Decimal)(nil)
 	_ AggFunc = (*countOriginal4Time)(nil)
 	_ AggFunc = (*countOriginal4Duration)(nil)
-	_ AggFunc = (*countOriginal4JSON)(nil)
 	_ AggFunc = (*countOriginal4String)(nil)
 	_ AggFunc = (*countOriginalWithDistinct)(nil)
 
@@ -42,7 +41,6 @@ var (
 	_ AggFunc = (*firstRow4Duration)(nil)
 	_ AggFunc = (*firstRow4Float32)(nil)
 	_ AggFunc = (*firstRow4Float64)(nil)
-	_ AggFunc = (*firstRow4JSON)(nil)
 
 	// All the AggFunc implementations for "MAX"/"MIN" are listed here.
 	_ AggFunc = (*maxMin4Int)(nil)
@@ -52,7 +50,6 @@ var (
 	_ AggFunc = (*maxMin4Decimal)(nil)
 	_ AggFunc = (*maxMin4String)(nil)
 	_ AggFunc = (*maxMin4Duration)(nil)
-	_ AggFunc = (*maxMin4JSON)(nil)
 
 	// All the AggFunc implementations for "AVG" are listed here.
 	_ AggFunc = (*avgOriginal4Decimal)(nil)

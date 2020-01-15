@@ -45,8 +45,6 @@ func evalBuiltinFunc(f builtinFunc, row chunk.Row) (d types.Datum, err error) {
 		res, isNull, err = f.evalTime(row)
 	case types.ETDuration:
 		res, isNull, err = f.evalDuration(row)
-	case types.ETJson:
-		res, isNull, err = f.evalJSON(row)
 	case types.ETString:
 		res, isNull, err = f.evalString(row)
 	}

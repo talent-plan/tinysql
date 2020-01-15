@@ -296,7 +296,6 @@ var ifNullSigs = []sig{
 	{Arg0: TypeString},
 	{Arg0: TypeDatetime},
 	{Arg0: TypeDuration},
-	{Arg0: TypeJSON},
 }
 
 var ifSigs = []sig{
@@ -306,7 +305,6 @@ var ifSigs = []sig{
 	{Arg0: TypeString},
 	{Arg0: TypeDatetime},
 	{Arg0: TypeDuration},
-	{Arg0: TypeJSON},
 }
 
 type sig struct {

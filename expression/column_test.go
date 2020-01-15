@@ -32,10 +32,6 @@ func (s *testEvaluatorSuite) TestColumn(c *C) {
 	c.Assert(col.IsCorrelated(), IsFalse)
 	c.Assert(col.Equal(nil, col.Decorrelate(nil)), IsTrue)
 
-	marshal, err := col.MarshalJSON()
-	c.Assert(err, IsNil)
-	c.Assert(marshal, DeepEquals, []byte{0x22, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x23, 0x31, 0x22})
-
 	intDatum := types.NewIntDatum(1)
 	corCol := &CorrelatedColumn{Column: *col, Data: &intDatum}
 	invalidCorCol := &CorrelatedColumn{Column: Column{}}

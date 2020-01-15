@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
 
 // CompareFunc is a function to compare the two values in Row, the two columns must have the same type.
@@ -49,8 +48,6 @@ func GetCompareFunc(tp *types.FieldType) CompareFunc {
 		return cmpNameValue
 	case mysql.TypeBit:
 		return cmpBit
-	case mysql.TypeJSON:
-		return cmpJSON
 	}
 	return nil
 }
@@ -152,15 +149,6 @@ func cmpBit(l Row, lCol int, r Row, rCol int) int {
 	return lBit.Compare(rBit)
 }
 
-func cmpJSON(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	lJ, rJ := l.GetJSON(lCol), r.GetJSON(rCol)
-	return json.CompareBinary(lJ, rJ)
-}
-
 // Compare compares the value with ad.
 func Compare(row Row, colIdx int, ad *types.Datum) int {
 	switch ad.Kind() {
@@ -198,9 +186,6 @@ func Compare(row Row, colIdx int, ad *types.Datum) int {
 	case types.KindMysqlSet:
 		l, r := row.GetSet(colIdx).Value, ad.GetMysqlSet().Value
 		return types.CompareUint64(l, r)
-	case types.KindMysqlJSON:
-		l, r := row.GetJSON(colIdx), ad.GetMysqlJSON()
-		return json.CompareBinary(l, r)
 	case types.KindMysqlTime:
 		l, r := row.GetTime(colIdx), ad.GetMysqlTime()
 		return l.Compare(r)

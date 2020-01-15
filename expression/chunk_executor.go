@@ -136,8 +136,6 @@ func evalOneVec(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, out
 		return expr.VecEvalTime(ctx, input, result)
 	case types.ETDuration:
 		return expr.VecEvalDuration(ctx, input, result)
-	case types.ETJson:
-		return expr.VecEvalJSON(ctx, input, result)
 	case types.ETString:
 		if err := expr.VecEvalString(ctx, input, result); err != nil {
 			return err
@@ -193,10 +191,6 @@ func evalOneColumn(ctx sessionctx.Context, expr Expression, iterator *chunk.Iter
 		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
 			err = executeToDuration(ctx, expr, fieldType, row, output, colID)
 		}
-	case types.ETJson:
-		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
-			err = executeToJSON(ctx, expr, fieldType, row, output, colID)
-		}
 	case types.ETString:
 		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
 			err = executeToString(ctx, expr, fieldType, row, output, colID)
@@ -217,8 +211,6 @@ func evalOneCell(ctx sessionctx.Context, expr Expression, row chunk.Row, output 
 		err = executeToDatetime(ctx, expr, fieldType, row, output, colID)
 	case types.ETDuration:
 		err = executeToDuration(ctx, expr, fieldType, row, output, colID)
-	case types.ETJson:
-		err = executeToJSON(ctx, expr, fieldType, row, output, colID)
 	case types.ETString:
 		err = executeToString(ctx, expr, fieldType, row, output, colID)
 	}
@@ -298,19 +290,6 @@ func executeToDuration(ctx sessionctx.Context, expr Expression, fieldType *types
 		output.AppendNull(colID)
 	} else {
 		output.AppendDuration(colID, res)
-	}
-	return nil
-}
-
-func executeToJSON(ctx sessionctx.Context, expr Expression, fieldType *types.FieldType, row chunk.Row, output *chunk.Chunk, colID int) error {
-	res, isNull, err := expr.EvalJSON(ctx, row)
-	if err != nil {
-		return err
-	}
-	if isNull {
-		output.AppendNull(colID)
-	} else {
-		output.AppendJSON(colID, res)
 	}
 	return nil
 }

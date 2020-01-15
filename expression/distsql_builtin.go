@@ -57,8 +57,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinLTTimeSig{base}
 	case tipb.ScalarFuncSig_LTDuration:
 		f = &builtinLTDurationSig{base}
-	case tipb.ScalarFuncSig_LTJson:
-		f = &builtinLTJSONSig{base}
 	case tipb.ScalarFuncSig_LEInt:
 		f = &builtinLEIntSig{base}
 	case tipb.ScalarFuncSig_LEReal:
@@ -71,8 +69,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinLETimeSig{base}
 	case tipb.ScalarFuncSig_LEDuration:
 		f = &builtinLEDurationSig{base}
-	case tipb.ScalarFuncSig_LEJson:
-		f = &builtinLEJSONSig{base}
 	case tipb.ScalarFuncSig_GTInt:
 		f = &builtinGTIntSig{base}
 	case tipb.ScalarFuncSig_GTReal:
@@ -85,8 +81,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinGTTimeSig{base}
 	case tipb.ScalarFuncSig_GTDuration:
 		f = &builtinGTDurationSig{base}
-	case tipb.ScalarFuncSig_GTJson:
-		f = &builtinGTJSONSig{base}
 	case tipb.ScalarFuncSig_GEInt:
 		f = &builtinGEIntSig{base}
 	case tipb.ScalarFuncSig_GEReal:
@@ -99,8 +93,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinGETimeSig{base}
 	case tipb.ScalarFuncSig_GEDuration:
 		f = &builtinGEDurationSig{base}
-	case tipb.ScalarFuncSig_GEJson:
-		f = &builtinGEJSONSig{base}
 	case tipb.ScalarFuncSig_EQInt:
 		f = &builtinEQIntSig{base}
 	case tipb.ScalarFuncSig_EQReal:
@@ -113,8 +105,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinEQTimeSig{base}
 	case tipb.ScalarFuncSig_EQDuration:
 		f = &builtinEQDurationSig{base}
-	case tipb.ScalarFuncSig_EQJson:
-		f = &builtinEQJSONSig{base}
 	case tipb.ScalarFuncSig_NEInt:
 		f = &builtinNEIntSig{base}
 	case tipb.ScalarFuncSig_NEReal:
@@ -127,8 +117,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinNETimeSig{base}
 	case tipb.ScalarFuncSig_NEDuration:
 		f = &builtinNEDurationSig{base}
-	case tipb.ScalarFuncSig_NEJson:
-		f = &builtinNEJSONSig{base}
 	case tipb.ScalarFuncSig_PlusReal:
 		f = &builtinArithmeticPlusRealSig{base}
 	case tipb.ScalarFuncSig_PlusDecimal:
@@ -197,8 +185,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinInTimeSig{base}
 	case tipb.ScalarFuncSig_InDuration:
 		f = &builtinInDurationSig{base}
-	case tipb.ScalarFuncSig_InJson:
-		f = &builtinInJSONSig{base}
 	case tipb.ScalarFuncSig_IfNullInt:
 		f = &builtinIfNullIntSig{base}
 	case tipb.ScalarFuncSig_IfNullReal:
@@ -223,10 +209,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinIfTimeSig{base}
 	case tipb.ScalarFuncSig_IfDuration:
 		f = &builtinIfDurationSig{base}
-	case tipb.ScalarFuncSig_IfNullJson:
-		f = &builtinIfNullJSONSig{base}
-	case tipb.ScalarFuncSig_IfJson:
-		f = &builtinIfJSONSig{base}
 	case tipb.ScalarFuncSig_Length:
 		f = &builtinLengthSig{base}
 	case tipb.ScalarFuncSig_Strcmp:
@@ -299,8 +281,6 @@ func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementCont
 		return convertDuration(expr.Val)
 	case tipb.ExprType_MysqlTime:
 		return convertTime(expr.Val, expr.FieldType, sc.TimeZone)
-	case tipb.ExprType_MysqlJson:
-		return convertJSON(expr.Val)
 	}
 	if expr.Tp != tipb.ExprType_ScalarFunc {
 		panic("should be a tipb.ExprType_ScalarFunc")
@@ -425,16 +405,4 @@ func convertDuration(val []byte) (*Constant, error) {
 	}
 	d.SetMysqlDuration(types.Duration{Duration: time.Duration(i), Fsp: types.MaxFsp})
 	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeDuration)}, nil
-}
-
-func convertJSON(val []byte) (*Constant, error) {
-	var d types.Datum
-	_, d, err := codec.DecodeOne(val)
-	if err != nil {
-		return nil, errors.Errorf("invalid json % x", val)
-	}
-	if d.Kind() != types.KindMysqlJSON {
-		return nil, errors.Errorf("invalid Datum.Kind() %d", d.Kind())
-	}
-	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeJSON)}, nil
 }

@@ -109,8 +109,6 @@ func (s *testEvaluatorSuite) kindToFieldType(kind byte) types.FieldType {
 		ft.Collate = charset.CollationBin
 	case types.KindMysqlBit:
 		ft.Tp = mysql.TypeBit
-	case types.KindMysqlJSON:
-		ft.Tp = mysql.TypeJSON
 	}
 	return ft
 }

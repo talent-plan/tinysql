@@ -8,7 +8,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/hack"
@@ -133,28 +132,6 @@ func (e *countOriginal4Duration) UpdatePartialResult(sctx sessionctx.Context, ro
 
 	for _, row := range rowsInGroup {
 		_, isNull, err := e.args[0].EvalDuration(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-
-		*p++
-	}
-
-	return nil
-}
-
-type countOriginal4JSON struct {
-	baseCount
-}
-
-func (e *countOriginal4JSON) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4Count)(pr)
-
-	for _, row := range rowsInGroup {
-		_, isNull, err := e.args[0].EvalJSON(sctx, row)
 		if err != nil {
 			return err
 		}
@@ -318,13 +295,6 @@ func (e *countOriginalWithDistinct) evalAndEncode(
 			break
 		}
 		encodedBytes = appendDuration(encodedBytes, buf, val)
-	case types.ETJson:
-		var val json.BinaryJSON
-		val, isNull, err = arg.EvalJSON(sctx, row)
-		if err != nil || isNull {
-			break
-		}
-		encodedBytes = appendJSON(encodedBytes, buf, val)
 	case types.ETString:
 		var val string
 		val, isNull, err = arg.EvalString(sctx, row)
@@ -381,11 +351,5 @@ func appendDuration(encodedBytes, buf []byte, val types.Duration) []byte {
 	*(*types.Duration)(unsafe.Pointer(&buf[0])) = val
 	buf = buf[:16]
 	encodedBytes = append(encodedBytes, buf...)
-	return encodedBytes
-}
-
-func appendJSON(encodedBytes, _ []byte, val json.BinaryJSON) []byte {
-	encodedBytes = append(encodedBytes, val.TypeCode)
-	encodedBytes = append(encodedBytes, val.Value...)
 	return encodedBytes
 }

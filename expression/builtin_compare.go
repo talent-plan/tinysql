@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -103,10 +102,7 @@ func GetAccurateCmpType(lhs, rhs Expression) types.EvalType {
 	lhsFieldType, rhsFieldType := lhs.GetType(), rhs.GetType()
 	lhsEvalType, rhsEvalType := lhsFieldType.EvalType(), rhsFieldType.EvalType()
 	cmpType := getBaseCmpType(lhsEvalType, rhsEvalType, lhsFieldType, rhsFieldType)
-	if (lhsEvalType.IsStringKind() && rhsFieldType.Tp == mysql.TypeJSON) ||
-		(lhsFieldType.Tp == mysql.TypeJSON && rhsEvalType.IsStringKind()) {
-		cmpType = types.ETJson
-	} else if cmpType == types.ETString && (types.IsTypeTime(lhsFieldType.Tp) || types.IsTypeTime(rhsFieldType.Tp)) {
+	if cmpType == types.ETString && (types.IsTypeTime(lhsFieldType.Tp) || types.IsTypeTime(rhsFieldType.Tp)) {
 		// date[time] <cmp> date[time]
 		// string <cmp> date[time]
 		// compare as time
@@ -170,8 +166,6 @@ func GetCmpFunction(lhs, rhs Expression) CompareFunc {
 		return CompareDuration
 	case types.ETDatetime, types.ETTimestamp:
 		return CompareTime
-	case types.ETJson:
-		return CompareJSON
 	}
 	return nil
 }
@@ -382,12 +376,6 @@ func (c *compareFunctionClass) getFunction(ctx sessionctx.Context, rawArgs []Exp
 // generateCmpSigs generates compare function signatures.
 func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Expression, tp types.EvalType) (sig builtinFunc, err error) {
 	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETInt, tp, tp)
-	if tp == types.ETJson {
-		// In compare, if we cast string to JSON, we shouldn't parse it.
-		for i := range args {
-			DisableParseJSONFlag4Expr(args[i])
-		}
-	}
 	bf.tp.Flen = 1
 	switch tp {
 	case types.ETInt:
@@ -516,27 +504,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 			sig = &builtinNETimeSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NETime)
 		}
-	case types.ETJson:
-		switch c.op {
-		case opcode.LT:
-			sig = &builtinLTJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_LTJson)
-		case opcode.LE:
-			sig = &builtinLEJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_LEJson)
-		case opcode.GT:
-			sig = &builtinGTJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_GTJson)
-		case opcode.GE:
-			sig = &builtinGEJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_GEJson)
-		case opcode.EQ:
-			sig = &builtinEQJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_EQJson)
-		case opcode.NE:
-			sig = &builtinNEJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NEJson)
-		}
 	}
 	return
 }
@@ -625,20 +592,6 @@ func (b *builtinLTTimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err e
 	return resOfLT(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
 }
 
-type builtinLTJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinLTJSONSig) Clone() builtinFunc {
-	newSig := &builtinLTJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinLTJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfLT(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
-}
-
 type builtinLEIntSig struct {
 	baseBuiltinFunc
 }
@@ -721,20 +674,6 @@ func (b *builtinLETimeSig) Clone() builtinFunc {
 
 func (b *builtinLETimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
 	return resOfLE(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
-}
-
-type builtinLEJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinLEJSONSig) Clone() builtinFunc {
-	newSig := &builtinLEJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinLEJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfLE(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
 }
 
 type builtinGTIntSig struct {
@@ -821,20 +760,6 @@ func (b *builtinGTTimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err e
 	return resOfGT(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
 }
 
-type builtinGTJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinGTJSONSig) Clone() builtinFunc {
-	newSig := &builtinGTJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinGTJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfGT(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
-}
-
 type builtinGEIntSig struct {
 	baseBuiltinFunc
 }
@@ -917,20 +842,6 @@ func (b *builtinGETimeSig) Clone() builtinFunc {
 
 func (b *builtinGETimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
 	return resOfGE(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
-}
-
-type builtinGEJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinGEJSONSig) Clone() builtinFunc {
-	newSig := &builtinGEJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinGEJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfGE(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
 }
 
 type builtinEQIntSig struct {
@@ -1017,20 +928,6 @@ func (b *builtinEQTimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err e
 	return resOfEQ(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
 }
 
-type builtinEQJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinEQJSONSig) Clone() builtinFunc {
-	newSig := &builtinEQJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinEQJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfEQ(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
-}
-
 type builtinNEIntSig struct {
 	baseBuiltinFunc
 }
@@ -1113,20 +1010,6 @@ func (b *builtinNETimeSig) Clone() builtinFunc {
 
 func (b *builtinNETimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
 	return resOfNE(CompareTime(b.ctx, b.args[0], b.args[1], row, row))
-}
-
-type builtinNEJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNEJSONSig) Clone() builtinFunc {
-	newSig := &builtinNEJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNEJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	return resOfNE(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
 }
 
 func resOfLT(val int64, isNull bool, err error) (int64, bool, error) {
@@ -1346,22 +1229,4 @@ func CompareDuration(sctx sessionctx.Context, lhsArg, rhsArg Expression, lhsRow,
 		return compareNull(isNull0, isNull1), true, nil
 	}
 	return int64(arg0.Compare(arg1)), false, nil
-}
-
-// CompareJSON compares two JSONs.
-func CompareJSON(sctx sessionctx.Context, lhsArg, rhsArg Expression, lhsRow, rhsRow chunk.Row) (int64, bool, error) {
-	arg0, isNull0, err := lhsArg.EvalJSON(sctx, lhsRow)
-	if err != nil {
-		return 0, true, err
-	}
-
-	arg1, isNull1, err := rhsArg.EvalJSON(sctx, rhsRow)
-	if err != nil {
-		return 0, true, err
-	}
-
-	if isNull0 || isNull1 {
-		return compareNull(isNull0, isNull1), true, nil
-	}
-	return int64(json.CompareBinary(arg0, arg1)), false, nil
 }

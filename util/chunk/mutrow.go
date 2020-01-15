@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/hack"
 )
 
@@ -99,8 +98,6 @@ func zeroValForType(tp *types.FieldType) interface{} {
 		return types.Set{}
 	case mysql.TypeEnum:
 		return types.Enum{}
-	case mysql.TypeJSON:
-		return json.CreateBinary(nil)
 	default:
 		return nil
 	}
@@ -137,11 +134,6 @@ func makeMutRowColumn(in interface{}) *Column {
 	case types.Time:
 		col := newMutRowFixedLenColumn(sizeTime)
 		*(*types.Time)(unsafe.Pointer(&col.data[0])) = x
-		return col
-	case json.BinaryJSON:
-		col := newMutRowVarLenColumn(len(x.Value) + 1)
-		col.data[0] = x.TypeCode
-		copy(col.data[1:], x.Value)
 		return col
 	case types.Duration:
 		col := newMutRowFixedLenColumn(8)
@@ -258,8 +250,6 @@ func (mr MutRow) SetValue(colIdx int, val interface{}) {
 		setMutRowNameValue(col, x.Name, x.Value)
 	case types.Set:
 		setMutRowNameValue(col, x.Name, x.Value)
-	case json.BinaryJSON:
-		setMutRowJSON(col, x)
 	}
 	col.nullBitmap[0] = 1
 }
@@ -291,8 +281,6 @@ func (mr MutRow) SetDatum(colIdx int, d types.Datum) {
 		*(*int64)(unsafe.Pointer(&col.data[0])) = int64(d.GetMysqlDuration().Duration)
 	case types.KindMysqlDecimal:
 		*(*types.MyDecimal)(unsafe.Pointer(&col.data[0])) = *d.GetMysqlDecimal()
-	case types.KindMysqlJSON:
-		setMutRowJSON(col, d.GetMysqlJSON())
 	case types.KindMysqlEnum:
 		e := d.GetMysqlEnum()
 		setMutRowNameValue(col, e.Name, e.Value)
@@ -328,22 +316,6 @@ func setMutRowNameValue(col *Column, name string, val uint64) {
 	}
 	binary.LittleEndian.PutUint64(col.data, val)
 	copy(col.data[8:], name)
-	col.offsets[1] = int64(dataLen)
-}
-
-func setMutRowJSON(col *Column, j json.BinaryJSON) {
-	dataLen := len(j.Value) + 1
-	if len(col.data) >= dataLen {
-		col.data = col.data[:dataLen]
-	} else {
-		// In MutRow, there always exists 1 data in every Column,
-		// we should allocate one more byte for null bitmap.
-		buf := make([]byte, dataLen+1)
-		col.data = buf[:dataLen]
-		col.nullBitmap = buf[dataLen:]
-	}
-	col.data[0] = j.TypeCode
-	copy(col.data[1:], j.Value)
 	col.offsets[1] = int64(dataLen)
 }
 

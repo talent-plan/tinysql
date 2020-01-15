@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
@@ -41,7 +40,6 @@ var (
 	_ builtinFunc = &builtinInRealSig{}
 	_ builtinFunc = &builtinInTimeSig{}
 	_ builtinFunc = &builtinInDurationSig{}
-	_ builtinFunc = &builtinInJSONSig{}
 	_ builtinFunc = &builtinRowSig{}
 	_ builtinFunc = &builtinSetVarSig{}
 	_ builtinFunc = &builtinGetVarSig{}
@@ -51,7 +49,6 @@ var (
 	_ builtinFunc = &builtinValuesStringSig{}
 	_ builtinFunc = &builtinValuesTimeSig{}
 	_ builtinFunc = &builtinValuesDurationSig{}
-	_ builtinFunc = &builtinValuesJSONSig{}
 )
 
 type inFunctionClass struct {
@@ -87,9 +84,6 @@ func (c *inFunctionClass) getFunction(ctx sessionctx.Context, args []Expression)
 	case types.ETDuration:
 		sig = &builtinInDurationSig{baseBuiltinFunc: bf}
 		sig.setPbCode(tipb.ScalarFuncSig_InDuration)
-	case types.ETJson:
-		sig = &builtinInJSONSig{baseBuiltinFunc: bf}
-		sig.setPbCode(tipb.ScalarFuncSig_InJson)
 	}
 	return sig, nil
 }
@@ -308,40 +302,6 @@ func (b *builtinInDurationSig) evalInt(row chunk.Row) (int64, bool, error) {
 	return 0, hasNull, nil
 }
 
-// builtinInJSONSig see https://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_in
-type builtinInJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinInJSONSig) Clone() builtinFunc {
-	newSig := &builtinInJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinInJSONSig) evalInt(row chunk.Row) (int64, bool, error) {
-	arg0, isNull0, err := b.args[0].EvalJSON(b.ctx, row)
-	if isNull0 || err != nil {
-		return 0, isNull0, err
-	}
-	var hasNull bool
-	for _, arg := range b.args[1:] {
-		evaledArg, isNull, err := arg.EvalJSON(b.ctx, row)
-		if err != nil {
-			return 0, true, err
-		}
-		if isNull {
-			hasNull = true
-			continue
-		}
-		result := json.CompareBinary(evaledArg, arg0)
-		if result == 0 {
-			return 1, false, nil
-		}
-	}
-	return 0, hasNull, nil
-}
-
 type rowFunctionClass struct {
 	baseFunctionClass
 }
@@ -483,8 +443,6 @@ func (c *valuesFunctionClass) getFunction(ctx sessionctx.Context, args []Express
 		sig = &builtinValuesTimeSig{bf, c.offset}
 	case types.ETDuration:
 		sig = &builtinValuesDurationSig{bf, c.offset}
-	case types.ETJson:
-		sig = &builtinValuesJSONSig{bf, c.offset}
 	}
 	return sig, nil
 }
@@ -686,35 +644,4 @@ func (b *builtinValuesDurationSig) evalDuration(_ chunk.Row) (types.Duration, bo
 		return duration, false, nil
 	}
 	return types.Duration{}, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
-}
-
-type builtinValuesJSONSig struct {
-	baseBuiltinFunc
-
-	offset int
-}
-
-func (b *builtinValuesJSONSig) Clone() builtinFunc {
-	newSig := &builtinValuesJSONSig{offset: b.offset}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalJSON evals a builtinValuesJSONSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-func (b *builtinValuesJSONSig) evalJSON(_ chunk.Row) (json.BinaryJSON, bool, error) {
-	if !b.ctx.GetSessionVars().StmtCtx.InInsertStmt {
-		return json.BinaryJSON{}, true, nil
-	}
-	row := b.ctx.GetSessionVars().CurrInsertValues
-	if row.IsEmpty() {
-		return json.BinaryJSON{}, true, errors.New("Session current insert values is nil")
-	}
-	if b.offset < row.Len() {
-		if row.IsNull(b.offset) {
-			return json.BinaryJSON{}, true, nil
-		}
-		return row.GetJSON(b.offset), false, nil
-	}
-	return json.BinaryJSON{}, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
 }

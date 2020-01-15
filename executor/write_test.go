@@ -1293,18 +1293,6 @@ func (s *testSuite4) TestUpdateCastOnlyModifiedValues(c *C) {
 	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	r = tk.MustQuery("SELECT * FROM update_modified")
 	r.Check(testkit.Rows("3 a"))
-
-	// Test update a field with different column type.
-	tk.MustExec(`CREATE TABLE update_with_diff_type (a int, b JSON)`)
-	tk.MustExec(`INSERT INTO update_with_diff_type VALUES(3, '{"a": "测试"}')`)
-	tk.MustExec(`UPDATE update_with_diff_type SET a = '300'`)
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	r = tk.MustQuery("SELECT a FROM update_with_diff_type")
-	r.Check(testkit.Rows("300"))
-	tk.MustExec(`UPDATE update_with_diff_type SET b = '{"a":   "\\u6d4b\\u8bd5"}'`)
-	tk.CheckLastMessage("Rows matched: 1  Changed: 0  Warnings: 0")
-	r = tk.MustQuery("SELECT b FROM update_with_diff_type")
-	r.Check(testkit.Rows(`{"a": "测试"}`))
 }
 
 func (s *testSuite4) fillMultiTableForUpdate(tk *testkit.TestKit) {

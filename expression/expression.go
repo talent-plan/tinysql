@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 
@@ -62,9 +61,6 @@ type VecExpr interface {
 
 	// VecEvalDuration evaluates this expression in a vectorized manner.
 	VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
-
-	// VecEvalJSON evaluates this expression in a vectorized manner.
-	VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
 }
 
 // Expression represents all scalar expression in SQL.
@@ -93,9 +89,6 @@ type Expression interface {
 
 	// EvalDuration returns the duration representation of expression.
 	EvalDuration(ctx sessionctx.Context, row chunk.Row) (val types.Duration, isNull bool, err error)
-
-	// EvalJSON returns the JSON representation of expression.
-	EvalJSON(ctx sessionctx.Context, row chunk.Row) (val json.BinaryJSON, isNull bool, err error)
 
 	// GetType gets the type that the expression returns.
 	GetType() *types.FieldType
@@ -415,8 +408,6 @@ func toBool(sc *stmtctx.StatementContext, eType types.EvalType, buf *chunk.Colum
 				}
 			}
 		}
-	case types.ETJson:
-		return errors.Errorf("cannot convert type json.BinaryJSON to bool")
 	}
 	return errors.Trace(err)
 }
@@ -434,8 +425,6 @@ func VecEval(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, result
 		err = expr.VecEvalTime(ctx, input, result)
 	case types.ETString:
 		err = expr.VecEvalString(ctx, input, result)
-	case types.ETJson:
-		err = expr.VecEvalJSON(ctx, input, result)
 	case types.ETDecimal:
 		err = expr.VecEvalDecimal(ctx, input, result)
 	default:

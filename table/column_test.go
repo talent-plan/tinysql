@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testleak"
 )
@@ -230,10 +229,6 @@ func (t *testTableSuite) TestGetZeroValue(c *C) {
 				Collate: charset.CollationBin,
 			},
 			types.NewDatum(""),
-		},
-		{
-			types.NewFieldType(mysql.TypeJSON),
-			types.NewDatum(json.CreateBinary(nil)),
 		},
 	}
 	sc := new(stmtctx.StatementContext)

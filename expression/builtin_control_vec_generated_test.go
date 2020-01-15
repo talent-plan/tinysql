@@ -53,8 +53,6 @@ var vecBuiltinControlCases = map[string][]vecExprBenchCase{
 		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETDatetime, types.ETDatetime}},
 
 		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETDuration, types.ETDuration}},
-
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETJson, types.ETJson}},
 	},
 
 	ast.If: {
@@ -70,8 +68,6 @@ var vecBuiltinControlCases = map[string][]vecExprBenchCase{
 		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener}},
 
 		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener}},
-
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETInt, types.ETJson, types.ETJson}, geners: []dataGenerator{defaultControlIntGener}},
 	},
 }
 

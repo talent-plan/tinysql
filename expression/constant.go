@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -103,11 +102,6 @@ func (c *Constant) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, r
 	return genVecFromConstExpr(ctx, c, types.ETDuration, input, result)
 }
 
-// VecEvalJSON evaluates this expression in a vectorized manner.
-func (c *Constant) VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, c, types.ETJson, input, result)
-}
-
 // Eval implements Expression interface.
 func (c *Constant) Eval(_ chunk.Row) (types.Datum, error) {
 	return c.Value, nil
@@ -169,14 +163,6 @@ func (c *Constant) EvalDuration(ctx sessionctx.Context, _ chunk.Row) (val types.
 		return types.Duration{}, true, nil
 	}
 	return c.Value.GetMysqlDuration(), false, nil
-}
-
-// EvalJSON returns JSON representation of Constant.
-func (c *Constant) EvalJSON(ctx sessionctx.Context, _ chunk.Row) (json.BinaryJSON, bool, error) {
-	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
-		return json.BinaryJSON{}, true, nil
-	}
-	return c.Value.GetMysqlJSON(), false, nil
 }
 
 // Equal implements Expression interface.

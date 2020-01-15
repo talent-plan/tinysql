@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 
@@ -28,7 +27,6 @@ func (s *testEvaluatorSuite) TestCompare(c *C) {
 	intVal, uintVal, realVal, stringVal, decimalVal := 1, uint64(1), 1.1, "123", types.NewDecFromFloatForTest(123.123)
 	timeVal := types.Time{Time: types.FromGoTime(time.Now()), Fsp: 6, Type: mysql.TypeDatetime}
 	durationVal := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Minute + 1*time.Second)}
-	jsonVal := json.CreateBinary("123")
 	// test cases for generating function signatures.
 	tests := []struct {
 		arg0     interface{}
@@ -58,12 +56,6 @@ func (s *testEvaluatorSuite) TestCompare(c *C) {
 		{timeVal, timeVal, ast.GE, mysql.TypeDatetime, 1},
 		{timeVal, timeVal, ast.EQ, mysql.TypeDatetime, 1},
 		{timeVal, timeVal, ast.NE, mysql.TypeDatetime, 0},
-		{jsonVal, jsonVal, ast.LT, mysql.TypeJSON, 0},
-		{jsonVal, jsonVal, ast.LE, mysql.TypeJSON, 1},
-		{jsonVal, jsonVal, ast.GT, mysql.TypeJSON, 0},
-		{jsonVal, jsonVal, ast.GE, mysql.TypeJSON, 1},
-		{jsonVal, jsonVal, ast.NE, mysql.TypeJSON, 0},
-		{jsonVal, jsonVal, ast.EQ, mysql.TypeJSON, 1},
 	}
 
 	for _, t := range tests {

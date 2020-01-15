@@ -49,7 +49,6 @@ const newLine = "\n"
 
 const builtinCompareImports = `import (
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 `
@@ -85,9 +84,7 @@ func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vecEvalInt(in
 		if result.IsNull(i) {
 			continue
 		}
-{{- if eq .type.ETName "Json" }}
-		val := json.CompareBinary(buf0.GetJSON(i), buf1.GetJSON(i))
-{{- else if eq .type.ETName "Real" }}
+{{- if eq .type.ETName "Real" }}
 		val := types.CompareFloat64(arg0[i], arg1[i])
 {{- else if eq .type.ETName "String" }}
 		val := types.CompareString(buf0.GetString(i), buf1.GetString(i))
@@ -172,7 +169,6 @@ var typesMap = []TypeContext{
 	TypeReal,
 	TypeDecimal,
 	TypeString,
-	TypeJSON,
 }
 
 func generateDotGo(fileName string, compares []CompareContext, types []TypeContext) (err error) {

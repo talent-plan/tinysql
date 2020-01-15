@@ -1652,10 +1652,6 @@ func (s *testDBSuite5) TestCheckColumnDefaultValue(c *C) {
 	s.tk.MustGetErrCode("create table text_default_text(c1 text not null default '');", mysql.ErrBlobCantHaveDefault)
 	s.tk.MustGetErrCode("create table text_default_text(c1 text not null default 'scds');", mysql.ErrBlobCantHaveDefault)
 
-	s.tk.MustExec("drop table if exists text_default_json;")
-	s.tk.MustGetErrCode("create table text_default_json(c1 json not null default '');", mysql.ErrBlobCantHaveDefault)
-	s.tk.MustGetErrCode("create table text_default_json(c1 json not null default 'dfew555');", mysql.ErrBlobCantHaveDefault)
-
 	s.tk.MustExec("drop table if exists text_default_blob;")
 	s.tk.MustGetErrCode("create table text_default_blob(c1 blob not null default '');", mysql.ErrBlobCantHaveDefault)
 	s.tk.MustGetErrCode("create table text_default_blob(c1 blob not null default 'scds54');", mysql.ErrBlobCantHaveDefault)
@@ -1683,17 +1679,6 @@ func (s *testDBSuite5) TestCheckColumnDefaultValue(c *C) {
 	tblInfo, err = is.TableByName(model.NewCIStr("test"), model.NewCIStr("text_default_blob"))
 	c.Assert(err, IsNil)
 	c.Assert(tblInfo.Meta().Columns[0].DefaultValue, Equals, "")
-
-	s.tk.MustExec("create table text_default_json(c1 json not null default '');")
-	s.tk.MustQuery(`show create table text_default_json`).Check(testutil.RowsWithSep("|",
-		"text_default_json CREATE TABLE `text_default_json` (\n"+
-			"  `c1` json NOT NULL DEFAULT 'null'\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-	is = domain.GetDomain(ctx).InfoSchema()
-	tblInfo, err = is.TableByName(model.NewCIStr("test"), model.NewCIStr("text_default_json"))
-	c.Assert(err, IsNil)
-	c.Assert(tblInfo.Meta().Columns[0].DefaultValue, Equals, `null`)
 }
 
 func (s *testDBSuite1) TestCharacterSetInColumns(c *C) {

@@ -100,21 +100,6 @@ func genVecFromConstExpr(ctx sessionctx.Context, expr Expression, targetType typ
 		for i := range ds {
 			ds[i] = v.Duration
 		}
-	case types.ETJson:
-		result.ReserveJSON(n)
-		v, isNull, err := expr.EvalJSON(ctx, chunk.Row{})
-		if err != nil {
-			return err
-		}
-		if isNull {
-			for i := 0; i < n; i++ {
-				result.AppendNull()
-			}
-		} else {
-			for i := 0; i < n; i++ {
-				result.AppendJSON(v)
-			}
-		}
 	case types.ETString:
 		result.ReserveString(n)
 		v, isNull, err := expr.EvalString(ctx, chunk.Row{})

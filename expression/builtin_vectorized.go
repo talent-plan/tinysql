@@ -61,8 +61,6 @@ func newBuffer(evalType types.EvalType, capacity int) (*chunk.Column, error) {
 		return chunk.NewColumn(types.NewFieldType(mysql.TypeDatetime), capacity), nil
 	case types.ETString:
 		return chunk.NewColumn(types.NewFieldType(mysql.TypeString), capacity), nil
-	case types.ETJson:
-		return chunk.NewColumn(types.NewFieldType(mysql.TypeJSON), capacity), nil
 	}
 	return nil, errors.Errorf("get column buffer for unsupported EvalType=%v", evalType)
 }

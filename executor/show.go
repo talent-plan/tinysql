@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/format"
 	"github.com/pingcap/tidb/util/sqlexec"
@@ -841,8 +840,6 @@ func (e *ShowExec) appendRow(row []interface{}) {
 			e.result.AppendMyDecimal(i, x)
 		case types.Time:
 			e.result.AppendTime(i, x)
-		case json.BinaryJSON:
-			e.result.AppendJSON(i, x)
 		case types.Duration:
 			e.result.AppendDuration(i, x)
 		case types.Enum:

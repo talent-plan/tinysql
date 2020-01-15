@@ -18,7 +18,6 @@ package expression
 import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 )
 
@@ -377,59 +376,5 @@ func (b *builtinInDurationSig) vecEvalInt(input *chunk.Chunk, result *chunk.Colu
 }
 
 func (b *builtinInDurationSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinInJSONSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalJSON(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETJson, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-
-	result.ResizeInt64(n, true)
-	r64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		r64s[i] = 0
-	}
-	hasNull := make([]bool, n)
-	var compareResult int
-
-	for j := 1; j < len(b.args); j++ {
-		if err := b.args[j].VecEvalJSON(b.ctx, input, buf1); err != nil {
-			return err
-		}
-		for i := 0; i < n; i++ {
-			if buf1.IsNull(i) || buf0.IsNull(i) {
-				hasNull[i] = true
-				continue
-			}
-			arg0 := buf0.GetJSON(i)
-			arg1 := buf1.GetJSON(i)
-			compareResult = json.CompareBinary(arg0, arg1)
-			if compareResult == 0 {
-				result.SetNull(i, false)
-				r64s[i] = 1
-			}
-		} // for i
-	} // for j
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			result.SetNull(i, hasNull[i])
-		}
-	}
-	return nil
-}
-
-func (b *builtinInJSONSig) vectorized() bool {
 	return true
 }

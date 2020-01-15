@@ -21,10 +21,8 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
 )
@@ -264,35 +262,6 @@ func (p *mockBuiltinDouble) vecEvalDuration(input *chunk.Chunk, result *chunk.Co
 	return nil
 }
 
-func (p *mockBuiltinDouble) vecEvalJSON(input *chunk.Chunk, result *chunk.Column) error {
-	var buf *chunk.Column
-	var err error
-	if buf, err = p.baseBuiltinFunc.bufAllocator.get(p.evalType, input.NumRows()); err != nil {
-		return err
-	}
-	if err := p.args[0].VecEvalJSON(p.ctx, input, buf); err != nil {
-		return err
-	}
-	result.ReserveString(input.NumRows())
-	for i := 0; i < input.NumRows(); i++ {
-		j := buf.GetJSON(i)
-		path, err := json.ParseJSONPathExpr("$.key")
-		if err != nil {
-			return err
-		}
-		ret, ok := j.Extract([]json.PathExpression{path})
-		if !ok {
-			return errors.Errorf("path not found")
-		}
-		if err := j.UnmarshalJSON([]byte(fmt.Sprintf(`{"key":%v}`, 2*ret.GetInt64()))); err != nil {
-			return err
-		}
-		result.AppendJSON(j)
-	}
-	p.baseBuiltinFunc.bufAllocator.put(buf)
-	return nil
-}
-
 func (p *mockBuiltinDouble) evalInt(row chunk.Row) (int64, bool, error) {
 	v, isNull, err := p.args[0].EvalInt(p.ctx, row)
 	if err != nil {
@@ -351,28 +320,6 @@ func (p *mockBuiltinDouble) evalDuration(row chunk.Row) (types.Duration, bool, e
 	return v, isNull, err
 }
 
-func (p *mockBuiltinDouble) evalJSON(row chunk.Row) (json.BinaryJSON, bool, error) {
-	j, isNull, err := p.args[0].EvalJSON(p.ctx, row)
-	if err != nil {
-		return json.BinaryJSON{}, false, err
-	}
-	if isNull {
-		return json.BinaryJSON{}, true, nil
-	}
-	path, err := json.ParseJSONPathExpr("$.key")
-	if err != nil {
-		return json.BinaryJSON{}, false, err
-	}
-	ret, ok := j.Extract([]json.PathExpression{path})
-	if !ok {
-		return json.BinaryJSON{}, true, err
-	}
-	if err := j.UnmarshalJSON([]byte(fmt.Sprintf(`{"key":%v}`, 2*ret.GetInt64()))); err != nil {
-		return json.BinaryJSON{}, false, err
-	}
-	return j, false, nil
-}
-
 func convertETType(eType types.EvalType) (mysqlType byte) {
 	switch eType {
 	case types.ETInt:
@@ -383,8 +330,6 @@ func convertETType(eType types.EvalType) (mysqlType byte) {
 		mysqlType = mysql.TypeNewDecimal
 	case types.ETDuration:
 		mysqlType = mysql.TypeDuration
-	case types.ETJson:
-		mysqlType = mysql.TypeJSON
 	case types.ETString:
 		mysqlType = mysql.TypeVarString
 	case types.ETDatetime:
@@ -417,12 +362,6 @@ func genMockRowDouble(eType types.EvalType, enableVec bool) (builtinFunc, *chunk
 			input.AppendMyDecimal(0, dec)
 		case types.ETDuration:
 			input.AppendDuration(0, types.Duration{Duration: time.Duration(i)})
-		case types.ETJson:
-			j := new(json.BinaryJSON)
-			if err := j.UnmarshalJSON([]byte(fmt.Sprintf(`{"key":%v}`, i))); err != nil {
-				return nil, nil, nil, err
-			}
-			input.AppendJSON(0, *j)
 		case types.ETString:
 			input.AppendString(0, fmt.Sprintf("%v", i))
 		case types.ETDatetime:
@@ -480,14 +419,6 @@ func (s *testEvaluatorSuite) checkVecEval(c *C, eType types.EvalType, sel []int,
 			c.Assert(err, IsNil)
 			c.Assert(v.Compare(ds[i]), Equals, 0)
 		}
-	case types.ETJson:
-		for i, j := range sel {
-			path, err := json.ParseJSONPathExpr("$.key")
-			c.Assert(err, IsNil)
-			ret, ok := result.GetJSON(i).Extract([]json.PathExpression{path})
-			c.Assert(ok, IsTrue)
-			c.Assert(ret.GetInt64(), Equals, int64(j*2))
-		}
 	case types.ETString:
 		for i, j := range sel {
 			c.Assert(result.GetString(i), Equals, fmt.Sprintf("%v%v", j, j))
@@ -509,14 +440,12 @@ func vecEvalType(f builtinFunc, eType types.EvalType, input *chunk.Chunk, result
 		return f.vecEvalString(input, result)
 	case types.ETDatetime:
 		return f.vecEvalTime(input, result)
-	case types.ETJson:
-		return f.vecEvalJSON(input, result)
 	}
 	panic("not implement")
 }
 
 func (s *testEvaluatorSuite) TestDoubleRow2Vec(c *C) {
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime, types.ETJson}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
 	for _, eType := range eTypes {
 		rowDouble, input, result, err := genMockRowDouble(eType, false)
 		c.Assert(err, IsNil)
@@ -540,7 +469,7 @@ func (s *testEvaluatorSuite) TestDoubleRow2Vec(c *C) {
 }
 
 func (s *testEvaluatorSuite) TestDoubleVec2Row(c *C) {
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime, types.ETJson}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
 	for _, eType := range eTypes {
 		rowDouble, input, result, err := genMockRowDouble(eType, true)
 		result.Reset(eType)
@@ -572,10 +501,6 @@ func (s *testEvaluatorSuite) TestDoubleVec2Row(c *C) {
 				v, _, err := rowDouble.evalTime(row)
 				c.Assert(err, IsNil)
 				result.AppendTime(v)
-			case types.ETJson:
-				v, _, err := rowDouble.evalJSON(row)
-				c.Assert(err, IsNil)
-				result.AppendJSON(v)
 			}
 		}
 		s.checkVecEval(c, eType, nil, result)
@@ -674,27 +599,12 @@ func evalRows(b *testing.B, it *chunk.Iterator4Chunk, eType types.EvalType, resu
 				}
 			}
 		}
-	case types.ETJson:
-		for i := 0; i < b.N; i++ {
-			result.Reset(eType)
-			for r := it.Begin(); r != it.End(); r = it.Next() {
-				v, isNull, err := rowDouble.evalJSON(r)
-				if err != nil {
-					b.Fatal(err)
-				}
-				if isNull {
-					result.AppendNull()
-				} else {
-					result.AppendJSON(v)
-				}
-			}
-		}
 	}
 }
 
 func BenchmarkMockDoubleRow(b *testing.B) {
 	typeNames := []string{"Int", "Real", "Decimal", "Duration", "String", "Datetime", "JSON"}
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime, types.ETJson}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {
 			rowDouble, input, result, _ := genMockRowDouble(eType, false)
@@ -707,7 +617,7 @@ func BenchmarkMockDoubleRow(b *testing.B) {
 
 func BenchmarkMockDoubleVec(b *testing.B) {
 	typeNames := []string{"Int", "Real", "Decimal", "Duration", "String", "Datetime", "JSON"}
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime, types.ETJson}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {
 			rowDouble, input, result, _ := genMockRowDouble(eType, true)

@@ -20,7 +20,6 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
 
 var msgErrSelNotNil = "The selection vector of Chunk is not nil. Please file a bug to the TiDB Team"
@@ -562,12 +561,6 @@ func (c *Chunk) AppendSet(colIdx int, set types.Set) {
 	c.columns[colIdx].appendNameValue(set.Name, set.Value)
 }
 
-// AppendJSON appends a JSON value to the chunk.
-func (c *Chunk) AppendJSON(colIdx int, j json.BinaryJSON) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].AppendJSON(j)
-}
-
 func (c *Chunk) appendSel(colIdx int) {
 	if colIdx == 0 && c.sel != nil { // use column 0 as standard
 		c.sel = append(c.sel, c.columns[0].length)
@@ -599,8 +592,6 @@ func (c *Chunk) AppendDatum(colIdx int, d *types.Datum) {
 		c.AppendSet(colIdx, d.GetMysqlSet())
 	case types.KindMysqlTime:
 		c.AppendTime(colIdx, d.GetMysqlTime())
-	case types.KindMysqlJSON:
-		c.AppendJSON(colIdx, d.GetMysqlJSON())
 	}
 }
 

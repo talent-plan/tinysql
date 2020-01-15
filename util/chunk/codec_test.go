@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 )
 
 var _ = check.Suite(&testCodecSuite{})
@@ -28,7 +27,7 @@ var _ = check.Suite(&testCodecSuite{})
 type testCodecSuite struct{}
 
 func (s *testCodecSuite) TestCodec(c *check.C) {
-	numCols := 6
+	numCols := 5
 	numRows := 10
 
 	colTypes := make([]*types.FieldType, 0, numCols)
@@ -37,7 +36,6 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeNewDecimal})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeJSON})
 
 	oldChk := NewChunkWithCapacity(colTypes, numRows)
 	for i := 0; i < numRows; i++ {
@@ -47,7 +45,6 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 		oldChk.AppendString(2, str)
 		oldChk.AppendString(3, str)
 		oldChk.AppendMyDecimal(4, types.NewDecFromStringForTest(str))
-		oldChk.AppendJSON(5, json.CreateBinary(str))
 	}
 
 	codec := NewCodec(colTypes)
@@ -67,13 +64,11 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 		c.Assert(row.IsNull(2), check.IsFalse)
 		c.Assert(row.IsNull(3), check.IsFalse)
 		c.Assert(row.IsNull(4), check.IsFalse)
-		c.Assert(row.IsNull(5), check.IsFalse)
 
 		c.Assert(row.GetInt64(1), check.Equals, int64(i))
 		c.Assert(row.GetString(2), check.Equals, str)
 		c.Assert(row.GetString(3), check.Equals, str)
 		c.Assert(row.GetMyDecimal(4).String(), check.Equals, str)
-		c.Assert(string(row.GetJSON(5).GetString()), check.Equals, str)
 	}
 }
 
@@ -174,7 +169,7 @@ func BenchmarkDecodeToChunk(b *testing.B) {
 }
 
 func BenchmarkDecodeToChunkWithVariableType(b *testing.B) {
-	numCols := 6
+	numCols := 5
 	numRows := 1024
 
 	colTypes := make([]*types.FieldType, 0, numCols)
@@ -183,7 +178,6 @@ func BenchmarkDecodeToChunkWithVariableType(b *testing.B) {
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeNewDecimal})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeJSON})
 
 	chk := NewChunkWithCapacity(colTypes, numRows)
 	for i := 0; i < numRows; i++ {
@@ -193,7 +187,6 @@ func BenchmarkDecodeToChunkWithVariableType(b *testing.B) {
 		chk.AppendString(2, str)
 		chk.AppendString(3, str)
 		chk.AppendMyDecimal(4, types.NewDecFromStringForTest(str))
-		chk.AppendJSON(5, json.CreateBinary(str))
 	}
 	codec := &Codec{colTypes}
 	buffer := codec.Encode(chk)

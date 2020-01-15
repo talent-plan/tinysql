@@ -24,7 +24,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types/json"
 )
 
 var _ = Suite(&testDatumSuite{})
@@ -155,7 +154,6 @@ func (ts *testTypeConvertSuite) TestToInt64(c *C) {
 	testDatumToInt64(c, NewBinaryLiteralFromUint(100, -1), int64(100))
 	testDatumToInt64(c, Enum{Name: "a", Value: 1}, int64(1))
 	testDatumToInt64(c, Set{Name: "a", Value: 1}, int64(1))
-	testDatumToInt64(c, json.CreateBinary(int64(3)), int64(3))
 
 	t, err := ParseTime(&stmtctx.StatementContext{
 		TimeZone: time.UTC,
@@ -229,55 +227,6 @@ func (ts *testTypeConvertSuite) TestToFloat64(c *C) {
 			c.Assert(err, ErrorMatches, t.errMsg)
 		}
 		c.Assert(converted, Equals, t.result)
-	}
-}
-
-// mustParseTimeIntoDatum is similar to ParseTime but panic if any error occurs.
-func mustParseTimeIntoDatum(s string, tp byte, fsp int8) (d Datum) {
-	t, err := ParseTime(&stmtctx.StatementContext{TimeZone: time.UTC}, s, tp, fsp)
-	if err != nil {
-		panic("ParseTime fail")
-	}
-	d.SetMysqlTime(t)
-	return
-}
-
-func (ts *testDatumSuite) TestToJSON(c *C) {
-	ft := NewFieldType(mysql.TypeJSON)
-	sc := new(stmtctx.StatementContext)
-	tests := []struct {
-		datum    Datum
-		expected string
-		success  bool
-	}{
-		{NewIntDatum(1), `1.0`, true},
-		{NewFloat64Datum(2), `2`, true},
-		{NewStringDatum("\"hello, 世界\""), `"hello, 世界"`, true},
-		{NewStringDatum("[1, 2, 3]"), `[1, 2, 3]`, true},
-		{NewStringDatum("{}"), `{}`, true},
-		{mustParseTimeIntoDatum("2011-11-10 11:11:11.111111", mysql.TypeTimestamp, 6), `"2011-11-10 11:11:11.111111"`, true},
-		{NewStringDatum(`{"a": "9223372036854775809"}`), `{"a": "9223372036854775809"}`, true},
-
-		// can not parse JSON from this string, so error occurs.
-		{NewStringDatum("hello, 世界"), "", false},
-	}
-	for _, tt := range tests {
-		obtain, err := tt.datum.ConvertTo(sc, ft)
-		if tt.success {
-			c.Assert(err, IsNil)
-
-			sd := NewStringDatum(tt.expected)
-			var expected Datum
-			expected, err = sd.ConvertTo(sc, ft)
-			c.Assert(err, IsNil)
-
-			var cmp int
-			cmp, err = obtain.CompareDatum(sc, &expected)
-			c.Assert(err, IsNil)
-			c.Assert(cmp, Equals, 0)
-		} else {
-			c.Assert(err, NotNil)
-		}
 	}
 }
 

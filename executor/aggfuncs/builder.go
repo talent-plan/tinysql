@@ -73,8 +73,6 @@ func buildCount(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 			return &countOriginal4Time{baseCount{base}}
 		case types.ETDuration:
 			return &countOriginal4Duration{baseCount{base}}
-		case types.ETJson:
-			return &countOriginal4JSON{baseCount{base}}
 		case types.ETString:
 			return &countOriginal4String{baseCount{base}}
 		}
@@ -185,8 +183,6 @@ func buildFirstRow(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 			return &firstRow4Duration{base}
 		case types.ETString:
 			return &firstRow4String{base}
-		case types.ETJson:
-			return &firstRow4JSON{base}
 		}
 	}
 	return nil
@@ -230,8 +226,6 @@ func buildMaxMin(aggFuncDesc *aggregation.AggFuncDesc, ordinal int, isMax bool) 
 			return &maxMin4Time{base}
 		case types.ETDuration:
 			return &maxMin4Duration{base}
-		case types.ETJson:
-			return &maxMin4JSON{base}
 		}
 	}
 	return nil
