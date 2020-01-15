@@ -44,122 +44,10 @@ const header = `// Copyright 2019 PingCAP, Inc.
 package expression
 
 import (
-	"time"
-
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 )
 `
-
-var builtinCaseWhenVec = template.Must(template.New("builtinCaseWhenVec").Parse(`
-{{ range .Sigs }}{{ with .Arg0 }}
-func (b *builtinCaseWhen{{ .TypeName }}Sig) vecEval{{ .TypeName }}(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	args, l := b.getArgs(), len(b.getArgs())
-	whens := make([]*chunk.Column, l/2)
-	whensSlice := make([][]int64, l/2)
-	thens := make([]*chunk.Column, l/2)
-	var eLse *chunk.Column
-	{{- if .Fixed }}
-	thensSlice := make([][]{{.TypeNameGo}}, l/2)
-	var eLseSlice []{{.TypeNameGo}}
-	{{- end }}
-
-	for j := 0; j < l-1; j+=2 {
-		bufWhen, err := b.bufAllocator.get(types.ETInt, n)
-		if err != nil {
-			return err
-		}
-		defer b.bufAllocator.put(bufWhen)
-		if err := args[j].VecEvalInt(b.ctx, input, bufWhen); err != nil {
-			return err
-		}
-		whens[j/2] = bufWhen
-		whensSlice[j/2] = bufWhen.Int64s()
-
-		bufThen, err := b.bufAllocator.get(types.ET{{ .ETName }}, n)
-		if err != nil {
-			return err
-		}
-		defer b.bufAllocator.put(bufThen)
-		if err := args[j+1].VecEval{{ .TypeName }}(b.ctx, input, bufThen); err != nil {
-			return err
-		}
-		thens[j/2] = bufThen
-		{{- if .Fixed }}
-		thensSlice[j/2] = bufThen.{{ .TypeNameInColumn }}s()
-		{{- end }}
-	}
-	// when clause(condition, result) -> args[i], args[i+1]; (i >= 0 && i+1 < l-1)
-	// else clause -> args[l-1]
-	// If case clause has else clause, l%2 == 1.
-	if l%2==1 {
-		bufElse, err := b.bufAllocator.get(types.ET{{ .ETName }}, n)
-		if err != nil {
-			return err
-		}
-		defer b.bufAllocator.put(bufElse)
-		if err := args[l-1].VecEval{{ .TypeName }}(b.ctx, input, bufElse); err != nil {
-			return err
-		}
-		eLse = bufElse
-		{{- if .Fixed }}
-		eLseSlice = bufElse.{{ .TypeNameInColumn }}s()
-		{{- end }}
-	}
-	
-	{{- if .Fixed }}
-	result.Resize{{ .TypeNameInColumn }}(n, false)
-	resultSlice := result.{{ .TypeNameInColumn }}s()
-	{{- else }}
-	result.Reserve{{ .TypeNameInColumn }}(n)
-	{{- end }}		
-ROW:
-	for i := 0; i < n; i++ {
-		for j := 0; j < l/2; j++ {
-			if whens[j].IsNull(i) || whensSlice[j][i] == 0 {
-				continue
-			}
-			{{- if .Fixed }}
-			resultSlice[i] = thensSlice[j][i]
-			result.SetNull(i, thens[j].IsNull(i))
-			{{- else }}
-			if thens[j].IsNull(i) {
-				result.AppendNull()
-			} else {
-				result.Append{{ .TypeNameInColumn }}(thens[j].Get{{ .TypeNameInColumn }}(i))
-			}
-			{{- end }}
-			continue ROW
-		}
-		if eLse != nil {
-			{{- if .Fixed }}
-			resultSlice[i] = eLseSlice[i]
-			result.SetNull(i, eLse.IsNull(i))
-			{{- else }}
-			if eLse.IsNull(i) {
-				result.AppendNull()
-			} else {
-				result.Append{{ .TypeNameInColumn }}(eLse.Get{{ .TypeNameInColumn }}(i))
-			}	
-			{{- end }}
-		} else {
-			{{- if .Fixed }}
-			result.SetNull(i, true)
-			{{- else }}
-			result.AppendNull()
-			{{- end }}
-		}
-	}
-	return nil
-}
-
-func (b *builtinCaseWhen{{ .TypeName }}Sig) vectorized() bool {
-	return true
-}
-{{ end }}{{/* with */}}
-{{ end }}{{/* range .Sigs */}}
-`))
 
 var builtinIfNullVec = template.Must(template.New("builtinIfNullVec").Parse(`
 {{ range .Sigs }}{{ with .Arg0 }}
@@ -353,17 +241,6 @@ func (g *controlIntGener) gen() interface{} {
 {{/* Add more test cases here if we have more functions in this file */}}
 var vecBuiltin{{.Category}}Cases = map[string][]vecExprBenchCase{
 {{ with index .Functions 0 }}
-	ast.Case: {
-	{{ range .Sigs }}
-		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ETInt, types.ET{{ .Arg0.ETName }}}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ETInt, types.ET{{ .Arg0.ETName }}, types.ET{{ .Arg0.ETName }}}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ETInt, types.ET{{ .Arg0.ETName }}, types.ETInt, types.ET{{ .Arg0.ETName }}}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ETInt, types.ET{{ .Arg0.ETName }}, types.ETInt, types.ET{{ .Arg0.ETName }}, types.ET{{ .Arg0.ETName }}}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-	{{ end }}
-	},
-{{ end }}
-
-{{ with index .Functions 1 }}
 	ast.Ifnull: {
 	{{ range .Sigs }}
 		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ET{{ .Arg0.ETName }}, types.ET{{ .Arg0.ETName }}}},
@@ -371,7 +248,7 @@ var vecBuiltin{{.Category}}Cases = map[string][]vecExprBenchCase{
 	},
 {{ end }}
 
-{{ with index .Functions 2 }}
+{{ with index .Functions 1 }}
 	ast.If: {
 	{{ range .Sigs }}
 		{retEvalType: types.ET{{ .Arg0.ETName }}, childrenTypes: []types.EvalType{types.ETInt, types.ET{{ .Arg0.ETName }}, types.ET{{ .Arg0.ETName }}}, geners: []dataGenerator{defaultControlIntGener}},
@@ -412,16 +289,6 @@ type typeContext struct {
 	Fixed bool
 }
 
-var caseWhenSigs = []sig{
-	{Arg0: TypeInt},
-	{Arg0: TypeReal},
-	{Arg0: TypeDecimal},
-	{Arg0: TypeString},
-	{Arg0: TypeDatetime},
-	{Arg0: TypeDuration},
-	{Arg0: TypeJSON},
-}
-
 var ifNullSigs = []sig{
 	{Arg0: TypeInt},
 	{Arg0: TypeReal},
@@ -458,7 +325,6 @@ var tmplVal = struct {
 }{
 	Category: "Control",
 	Functions: []function{
-		{FuncName: "Case", Sigs: caseWhenSigs, Tmpl: builtinCaseWhenVec},
 		{FuncName: "Ifnull", Sigs: ifNullSigs, Tmpl: builtinIfNullVec},
 		{FuncName: "If", Sigs: ifSigs, Tmpl: builtinIfVec},
 	},

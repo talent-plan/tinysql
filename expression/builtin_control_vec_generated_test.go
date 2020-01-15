@@ -40,44 +40,6 @@ func (g *controlIntGener) gen() interface{} {
 
 var vecBuiltinControlCases = map[string][]vecExprBenchCase{
 
-	ast.Case: {
-
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt, types.ETInt}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt, types.ETInt, types.ETInt}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt, types.ETInt, types.ETInt, types.ETInt}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETInt, types.ETReal}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETInt, types.ETReal, types.ETReal}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETInt, types.ETReal, types.ETInt, types.ETReal}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETInt, types.ETReal, types.ETInt, types.ETReal, types.ETReal}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETInt, types.ETDecimal}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETInt, types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETInt, types.ETDecimal, types.ETInt, types.ETDecimal}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETInt, types.ETDecimal, types.ETInt, types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt, types.ETString}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt, types.ETString, types.ETString}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt, types.ETString, types.ETInt, types.ETString}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt, types.ETString, types.ETInt, types.ETString, types.ETString}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime, types.ETInt, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime, types.ETInt, types.ETDatetime, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration, types.ETInt, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration, types.ETInt, types.ETDuration, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETInt, types.ETJson}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETInt, types.ETJson, types.ETJson}, geners: []dataGenerator{defaultControlIntGener}},
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETInt, types.ETJson, types.ETInt, types.ETJson}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-		{retEvalType: types.ETJson, childrenTypes: []types.EvalType{types.ETInt, types.ETJson, types.ETInt, types.ETJson, types.ETJson}, geners: []dataGenerator{defaultControlIntGener, nil, defaultControlIntGener}},
-	},
-
 	ast.Ifnull: {
 
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}},

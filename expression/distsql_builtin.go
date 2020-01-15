@@ -318,20 +318,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinIfNullJSONSig{base}
 	case tipb.ScalarFuncSig_IfJson:
 		f = &builtinIfJSONSig{base}
-	case tipb.ScalarFuncSig_CaseWhenInt:
-		f = &builtinCaseWhenIntSig{base}
-	case tipb.ScalarFuncSig_CaseWhenReal:
-		f = &builtinCaseWhenRealSig{base}
-	case tipb.ScalarFuncSig_CaseWhenDecimal:
-		f = &builtinCaseWhenDecimalSig{base}
-	case tipb.ScalarFuncSig_CaseWhenString:
-		f = &builtinCaseWhenStringSig{base}
-	case tipb.ScalarFuncSig_CaseWhenTime:
-		f = &builtinCaseWhenTimeSig{base}
-	case tipb.ScalarFuncSig_CaseWhenDuration:
-		f = &builtinCaseWhenDurationSig{base}
-	case tipb.ScalarFuncSig_CaseWhenJson:
-		f = &builtinCaseWhenJSONSig{base}
 	case tipb.ScalarFuncSig_Length:
 		f = &builtinLengthSig{base}
 	case tipb.ScalarFuncSig_Strcmp:

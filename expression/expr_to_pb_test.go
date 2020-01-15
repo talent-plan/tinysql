@@ -466,47 +466,6 @@ func (s *testEvaluatorSerialSuites) TestPushDownSwitcher(c *C) {
 	}
 }
 
-func (s *testEvaluatorSuite) TestControlFunc2Pb(c *C) {
-	var controlFuncs = make([]Expression, 0)
-	sc := new(stmtctx.StatementContext)
-	client := new(mock.Client)
-	dg := new(dataGen4Expr2PbTest)
-
-	funcNames := []string{
-		ast.Case,
-		ast.If,
-		ast.Ifnull,
-	}
-	for i, funcName := range funcNames {
-		args := []Expression{dg.genColumn(mysql.TypeLong, 1)}
-		args = append(args, dg.genColumn(mysql.TypeLong, 2))
-		if i < 2 {
-			args = append(args, dg.genColumn(mysql.TypeLong, 3))
-		}
-		fc, err := NewFunction(
-			mock.NewContext(),
-			funcName,
-			types.NewFieldType(mysql.TypeUnspecified),
-			args...,
-		)
-		c.Assert(err, IsNil)
-		controlFuncs = append(controlFuncs, fc)
-	}
-
-	pbExprs := ExpressionsToPBList(sc, controlFuncs, client)
-	jsons := []string{
-		"{\"tp\":10000,\"children\":[{\"tp\":201,\"val\":\"gAAAAAAAAAE=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAI=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAM=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}}],\"sig\":4208,\"field_type\":{\"tp\":3,\"flag\":128,\"flen\":0,\"decimal\":0,\"collate\":46,\"charset\":\"\"}}",
-		"{\"tp\":10000,\"children\":[{\"tp\":201,\"val\":\"gAAAAAAAAAE=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAI=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAM=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}}],\"sig\":4107,\"field_type\":{\"tp\":3,\"flag\":128,\"flen\":-1,\"decimal\":0,\"collate\":63,\"charset\":\"binary\"}}",
-		"{\"tp\":10000,\"children\":[{\"tp\":201,\"val\":\"gAAAAAAAAAE=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}},{\"tp\":201,\"val\":\"gAAAAAAAAAI=\",\"sig\":0,\"field_type\":{\"tp\":3,\"flag\":0,\"flen\":-1,\"decimal\":-1,\"collate\":46,\"charset\":\"\"}}],\"sig\":4101,\"field_type\":{\"tp\":3,\"flag\":128,\"flen\":-1,\"decimal\":0,\"collate\":63,\"charset\":\"binary\"}}",
-		"null",
-	}
-	for i, pbExpr := range pbExprs {
-		js, err := json.Marshal(pbExpr)
-		c.Assert(err, IsNil)
-		c.Assert(string(js), Equals, jsons[i])
-	}
-}
-
 func (s *testEvaluatorSuite) TestOtherFunc2Pb(c *C) {
 	var otherFuncs = make([]Expression, 0)
 	sc := new(stmtctx.StatementContext)

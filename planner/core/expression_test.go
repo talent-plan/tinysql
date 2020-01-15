@@ -20,10 +20,8 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testleak"
-	"github.com/pingcap/tidb/util/testutil"
 )
 
 var _ = Suite(&testExpressionSuite{})
@@ -70,44 +68,6 @@ func (s *testExpressionSuite) TestBetween(c *C) {
 		{exprStr: "1 not between 2 and 3", resultStr: "1"},
 	}
 	s.runTests(c, tests)
-}
-
-func (s *testExpressionSuite) TestCaseWhen(c *C) {
-	defer testleak.AfterTest(c)()
-	tests := []testCase{
-		{
-			exprStr:   "case 1 when 1 then 'str1' when 2 then 'str2' end",
-			resultStr: "str1",
-		},
-		{
-			exprStr:   "case 2 when 1 then 'str1' when 2 then 'str2' end",
-			resultStr: "str2",
-		},
-		{
-			exprStr:   "case 3 when 1 then 'str1' when 2 then 'str2' end",
-			resultStr: "<nil>",
-		},
-		{
-			exprStr:   "case 4 when 1 then 'str1' when 2 then 'str2' else 'str3' end",
-			resultStr: "str3",
-		},
-	}
-	s.runTests(c, tests)
-
-	// When expression value changed, result set back to null.
-	valExpr := ast.NewValueExpr(1)
-	whenClause := &ast.WhenClause{Expr: ast.NewValueExpr(1), Result: ast.NewValueExpr(1)}
-	caseExpr := &ast.CaseExpr{
-		Value:       valExpr,
-		WhenClauses: []*ast.WhenClause{whenClause},
-	}
-	v, err := evalAstExpr(s.ctx, caseExpr)
-	c.Assert(err, IsNil)
-	c.Assert(v, testutil.DatumEquals, types.NewDatum(int64(1)))
-	valExpr.SetValue(4)
-	v, err = evalAstExpr(s.ctx, caseExpr)
-	c.Assert(err, IsNil)
-	c.Assert(v.Kind(), Equals, types.KindNull)
 }
 
 func (s *testExpressionSuite) TestPatternIn(c *C) {
