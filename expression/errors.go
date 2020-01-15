@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
 )
 
 // Error instances.
@@ -63,21 +62,6 @@ func init() {
 		mysql.ErrIncorrectType:                     mysql.ErrIncorrectType,
 	}
 	terror.ErrClassToMySQLCodes[terror.ClassExpression] = expressionMySQLErrCodes
-}
-
-// handleInvalidTimeError reports error or warning depend on the context.
-func handleInvalidTimeError(ctx sessionctx.Context, err error) error {
-	if err == nil || !(types.ErrWrongValue.Equal(err) ||
-		types.ErrTruncatedWrongVal.Equal(err) || types.ErrInvalidWeekModeFormat.Equal(err) ||
-		types.ErrDatetimeFunctionOverflow.Equal(err)) {
-		return err
-	}
-	sc := ctx.GetSessionVars().StmtCtx
-	if ctx.GetSessionVars().StrictSQLMode && (sc.InInsertStmt || sc.InUpdateStmt || sc.InDeleteStmt) {
-		return err
-	}
-	sc.AppendWarning(err)
-	return nil
 }
 
 // handleDivisionByZeroError reports error or warning depend on the context.

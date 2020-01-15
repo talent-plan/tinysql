@@ -45,20 +45,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 	base := newBaseBuiltinFunc(ctx, args)
 	base.tp = fieldTp
 	switch sigCode {
-	case tipb.ScalarFuncSig_CoalesceInt:
-		f = &builtinCoalesceIntSig{base}
-	case tipb.ScalarFuncSig_CoalesceReal:
-		f = &builtinCoalesceRealSig{base}
-	case tipb.ScalarFuncSig_CoalesceDecimal:
-		f = &builtinCoalesceDecimalSig{base}
-	case tipb.ScalarFuncSig_CoalesceString:
-		f = &builtinCoalesceStringSig{base}
-	case tipb.ScalarFuncSig_CoalesceTime:
-		f = &builtinCoalesceTimeSig{base}
-	case tipb.ScalarFuncSig_CoalesceDuration:
-		f = &builtinCoalesceDurationSig{base}
-	case tipb.ScalarFuncSig_CoalesceJson:
-		f = &builtinCoalesceJSONSig{base}
 	case tipb.ScalarFuncSig_LTInt:
 		f = &builtinLTIntSig{base}
 	case tipb.ScalarFuncSig_LTReal:
@@ -101,30 +87,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinGTDurationSig{base}
 	case tipb.ScalarFuncSig_GTJson:
 		f = &builtinGTJSONSig{base}
-	case tipb.ScalarFuncSig_GreatestInt:
-		f = &builtinGreatestIntSig{base}
-	case tipb.ScalarFuncSig_GreatestReal:
-		f = &builtinGreatestRealSig{base}
-	case tipb.ScalarFuncSig_GreatestDecimal:
-		f = &builtinGreatestDecimalSig{base}
-	case tipb.ScalarFuncSig_GreatestString:
-		f = &builtinGreatestStringSig{base}
-	case tipb.ScalarFuncSig_GreatestTime:
-		f = &builtinGreatestTimeSig{base}
-	case tipb.ScalarFuncSig_LeastInt:
-		f = &builtinLeastIntSig{base}
-	case tipb.ScalarFuncSig_LeastReal:
-		f = &builtinLeastRealSig{base}
-	case tipb.ScalarFuncSig_LeastDecimal:
-		f = &builtinLeastDecimalSig{base}
-	case tipb.ScalarFuncSig_LeastString:
-		f = &builtinLeastStringSig{base}
-	case tipb.ScalarFuncSig_LeastTime:
-		f = &builtinLeastTimeSig{base}
-	case tipb.ScalarFuncSig_IntervalInt:
-		f = &builtinIntervalIntSig{base}
-	case tipb.ScalarFuncSig_IntervalReal:
-		f = &builtinIntervalRealSig{base}
 	case tipb.ScalarFuncSig_GEInt:
 		f = &builtinGEIntSig{base}
 	case tipb.ScalarFuncSig_GEReal:

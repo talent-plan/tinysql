@@ -808,22 +808,3 @@ func BenchmarkFloat32ColVec(b *testing.B) {
 		}
 	}
 }
-
-type gener struct {
-	defaultGener
-}
-
-func (g gener) gen() interface{} {
-	result := g.defaultGener.gen()
-	if _, ok := result.(string); ok {
-		dg := &defaultGener{eType: types.ETDuration, nullRation: 0}
-		d := dg.gen().(types.Duration)
-		if int8(d.Duration)%2 == 0 {
-			d.Fsp = 0
-		} else {
-			d.Fsp = 1
-		}
-		result = d.String()
-	}
-	return result
-}

@@ -393,11 +393,7 @@ type functionClass interface {
 // any set there.
 var funcs = map[string]functionClass{
 	// common functions
-	ast.Coalesce: &coalesceFunctionClass{baseFunctionClass{ast.Coalesce, 1, -1}},
-	ast.IsNull:   &isNullFunctionClass{baseFunctionClass{ast.IsNull, 1, 1}},
-	ast.Greatest: &greatestFunctionClass{baseFunctionClass{ast.Greatest, 2, -1}},
-	ast.Least:    &leastFunctionClass{baseFunctionClass{ast.Least, 2, -1}},
-	ast.Interval: &intervalFunctionClass{baseFunctionClass{ast.Interval, 2, -1}},
+	ast.IsNull: &isNullFunctionClass{baseFunctionClass{ast.IsNull, 1, 1}},
 
 	// string functions
 	ast.Length:      &lengthFunctionClass{baseFunctionClass{ast.Length, 1, 1}},

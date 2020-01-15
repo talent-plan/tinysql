@@ -170,10 +170,6 @@ func (*testExpressionSuite) TestConstantFolding(c *C) {
 			result:    "lt(Column#0, 3)",
 		},
 		{
-			condition: newFunction(ast.LT, newColumn(0), newFunction(ast.Greatest, newLonglong(1), newLonglong(2))),
-			result:    "lt(Column#0, 2)",
-		},
-		{
 			condition: newFunction(ast.IsNull, newLonglong(1)),
 			result:    "0",
 		},

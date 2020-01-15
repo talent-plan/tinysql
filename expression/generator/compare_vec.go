@@ -170,76 +170,6 @@ func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vectorized() 
 }
 `))
 
-var builtinCoalesceCompareVecTpl = template.Must(template.New("").Parse(`
-	{{ if .type.Fixed }}
-func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vecEval{{ .type.TypeName }}(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	result.Resize{{ .type.TypeNameInColumn }}(n, true)
-	i64s := result.{{ .type.TypeNameInColumn }}s()
-	buf1, err := b.bufAllocator.get(types.ET{{ .type.ETName }}, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	for j := 0; j < len(b.args); j++{
-
-		if err := b.args[j].VecEval{{ .type.TypeName }}(b.ctx, input, buf1); err != nil {
-			return err
-		}
-		args := buf1.{{ .type.TypeNameInColumn }}s()
-		for i := 0; i < n; i++ {
-			if !buf1.IsNull(i) && result.IsNull(i) {
-				i64s[i] = args[i]
-				result.SetNull(i, false)
-			}
-		}
-	}
-	return nil
-}
-{{ else }}
-func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vecEval{{ .type.TypeName }}(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	argLen := len(b.args)
-
-	bufs := make([]*chunk.Column, argLen)
-
-	for i := 0; i < argLen; i++ {
-		buf, err := b.bufAllocator.get(types.ETInt, n)
-		if err != nil {
-			return err
-		}
-		defer b.bufAllocator.put(buf)
-		err = b.args[i].VecEval{{ .type.TypeName }}(b.ctx, input, buf)
-		if err != nil {
-			return err
-		}
-		bufs[i]=buf
-	}
-	result.Reserve{{ .type.TypeName }}(n)
-
-	for i := 0; i < n; i++ {
-		for j := 0; j < argLen; j++ {
-			if !bufs[j].IsNull(i) {
-				result.Append{{ .type.TypeName }}(bufs[j].Get{{ .type.TypeName }}(i))
-				break
-			}
-			if j == argLen-1 && bufs[j].IsNull(i) {
-				result.AppendNull()
-			}
-		}
-	}
-	return nil
-}
-
-
-{{ end }}
-
-func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vectorized() bool {
-	return true
-}
-
-`))
-
 const builtinCompareVecTestHeader = `import (
 	"testing"
 
@@ -279,20 +209,6 @@ func BenchmarkVectorizedGeneratedBuiltinCompareFunc(b *testing.B) {
 }
 `
 
-var builtinCoalesceCompareVecTestFunc = template.Must(template.New("").Parse(`
-{
-	retEvalType: types.ET{{ .ETName }},
-	childrenTypes: []types.EvalType{types.ET{{ .ETName }}, types.ET{{ .ETName }}, types.ET{{ .ETName }}},
-	geners: []dataGenerator{
-		gener{defaultGener{eType: types.ET{{ .ETName }}, nullRation: 0.2}},
-		gener{defaultGener{eType: types.ET{{ .ETName }}, nullRation: 0.2}},
-		gener{defaultGener{eType: types.ET{{ .ETName }}, nullRation: 0.2}},
-	},
-},
-
-
-`))
-
 type CompareContext struct {
 	// Describe the name of CompareContext(LT/LE/GT/GE/EQ/NE/NullEQ)
 	CompareName string
@@ -308,7 +224,6 @@ var comparesMap = []CompareContext{
 	{CompareName: "EQ", Operator: "=="},
 	{CompareName: "NE", Operator: "!="},
 	{CompareName: "NullEQ"},
-	{CompareName: "Coalesce"},
 }
 
 var typesMap = []TypeContext{
@@ -338,13 +253,6 @@ func generateDotGo(fileName string, compares []CompareContext, types []TypeConte
 				if err != nil {
 					return err
 				}
-			} else if compareCtx.CompareName == "Coalesce" {
-
-				err := builtinCoalesceCompareVecTpl.Execute(w, ctx)
-				if err != nil {
-					return err
-				}
-
 			} else {
 				if typeCtx.TypeName == TypeInt.TypeName {
 					continue
@@ -370,20 +278,6 @@ func generateTestDotGo(fileName string, compares []CompareContext, types []TypeC
 	w.WriteString(builtinCompareVecTestHeader)
 
 	for _, compareCtx := range compares {
-		if compareCtx.CompareName == "Coalesce" {
-			err := builtinCompareVecTestFuncHeader.Execute(w, CompareContext{CompareName: "Coalesce"})
-			if err != nil {
-				return err
-			}
-			for _, typeCtx := range types {
-				err := builtinCoalesceCompareVecTestFunc.Execute(w, typeCtx)
-				if err != nil {
-					return err
-				}
-			}
-			w.WriteString(builtinCompareVecTestFuncTail)
-			continue
-		}
 		err := builtinCompareVecTestFuncHeader.Execute(w, compareCtx)
 		if err != nil {
 			return err
