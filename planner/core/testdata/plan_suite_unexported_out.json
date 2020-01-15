@@ -618,16 +618,6 @@
         "Right": "[]"
       },
       {
-        "Plan": "Join{DataScan(t1)->DataScan(t2)}->Projection",
-        "Left": "[]",
-        "Right": "[]"
-      },
-      {
-        "Plan": "Join{DataScan(t1)->DataScan(t2)}->Projection",
-        "Left": "[]",
-        "Right": "[]"
-      },
-      {
         "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Projection",
         "Left": "[]",
         "Right": "[]"
@@ -763,10 +753,6 @@
       {
         "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.c,test.t.c)->Projection",
         "JoinType": "inner join"
-      },
-      {
-        "Best": "Join{DataScan(t1)->DataScan(t2)}->Sel([nulleq(test.t.b, test.t.b)])->Projection",
-        "JoinType": "left outer join"
       }
     ]
   },

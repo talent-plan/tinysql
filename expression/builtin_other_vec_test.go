@@ -28,7 +28,6 @@ var vecBuiltinOtherCases = map[string][]vecExprBenchCase{
 	ast.GetVar: {
 		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETString}},
 	},
-	ast.BitCount: {{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}}},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltinOtherFunc(c *C) {

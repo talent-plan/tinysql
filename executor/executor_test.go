@@ -765,12 +765,6 @@ func (s *testSuiteP1) TestTablePKisHandleScan(c *C) {
 		{
 			"select * from t where a is null",
 			testkit.Rows(),
-		}, {
-			"select * from t where a is true",
-			testkit.Rows("-100", "1", "2", "3"),
-		}, {
-			"select * from t where a is false",
-			testkit.Rows(),
 		},
 		{
 			"select * from t where a in (1, 2)",

@@ -234,22 +234,6 @@ func (s *testIntegrationSuite3) TestIssue2293(c *C) {
 	tk.MustQuery("select * from t_issue_2293").Check(testkit.Rows("1"))
 }
 
-func (s *testIntegrationSuite2) TestIssue6101(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t1 (quantity decimal(2) unsigned);")
-	_, err := tk.Exec("insert into t1 values (500), (-500), (~0), (-1);")
-	terr := errors.Cause(err).(*terror.Error)
-	c.Assert(terr.Code(), Equals, terror.ErrCode(mysql.ErrWarnDataOutOfRange))
-	tk.MustExec("drop table t1")
-
-	tk.MustExec("set sql_mode=''")
-	tk.MustExec("create table t1 (quantity decimal(2) unsigned);")
-	tk.MustExec("insert into t1 values (500), (-500), (~0), (-1);")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("99", "0", "99", "0"))
-	tk.MustExec("drop table t1")
-}
-
 func (s *testIntegrationSuite1) TestIndexLength(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

@@ -24,47 +24,16 @@ import (
 )
 
 var vecBuiltinOpCases = map[string][]vecExprBenchCase{
-	ast.IsTruth: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}},
-	},
-	ast.IsFalsity: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}},
-	},
 	ast.LogicOr: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
-	},
-	ast.LogicXor: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
-	},
-	ast.Xor: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
 	},
 	ast.LogicAnd: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
 	},
-	ast.Or: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
-	},
-	ast.BitNeg: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}},
-	},
 	ast.UnaryNot: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt}},
-	},
-	ast.And: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: makeBinaryLogicOpDataGeners()},
-	},
-	ast.RightShift: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}},
-	},
-	ast.LeftShift: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}},
 	},
 	ast.UnaryMinus: {
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal}},

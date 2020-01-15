@@ -24,7 +24,6 @@ import (
 )
 
 var vecBuiltinArithmeticCases = map[string][]vecExprBenchCase{
-	ast.LE: {},
 	ast.Minus: {
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
 		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
@@ -36,66 +35,6 @@ var vecBuiltinArithmeticCases = map[string][]vecExprBenchCase{
 		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{nil, &rangeDecimalGener{0, 0, 0.2}}},
 	},
-	ast.IntDiv: {
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{nil, &rangeDecimalGener{0, 0, 0.2}}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal},
-			childrenFieldTypes: []*types.FieldType{{Tp: mysql.TypeNewDecimal, Flag: mysql.UnsignedFlag}, nil},
-			geners:             []dataGenerator{&rangeDecimalGener{0, 10000, 0.2}, &rangeDecimalGener{0, 10000, 0.2}},
-		},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal},
-			childrenFieldTypes: []*types.FieldType{nil, {Tp: mysql.TypeNewDecimal, Flag: mysql.UnsignedFlag}},
-			geners:             []dataGenerator{&rangeDecimalGener{0, 10000, 0.2}, &rangeDecimalGener{0, 10000, 0.2}},
-		},
-		// when the final result is at (-1, 0], it should be return 0 instead of the error
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal},
-			childrenFieldTypes: []*types.FieldType{nil, {Tp: mysql.TypeNewDecimal, Flag: mysql.UnsignedFlag}},
-			geners:             []dataGenerator{&rangeDecimalGener{-100, -1, 0.2}, &rangeDecimalGener{1000, 2000, 0.2}},
-		},
-	},
-	ast.Mod: {
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}, geners: []dataGenerator{nil, &rangeRealGener{0, 0, 0}}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}, geners: []dataGenerator{&rangeRealGener{0, 0, 0}, nil}},
-		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}, geners: []dataGenerator{nil, &rangeRealGener{0, 0, 1}}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{nil, &rangeDecimalGener{0, 0, 0}}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{&rangeDecimalGener{0, 0, 0}, nil}},
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{nil, &rangeDecimalGener{0, 0, 1}}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: []dataGenerator{nil, &rangeInt64Gener{0, 1}}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}, geners: []dataGenerator{&rangeInt64Gener{0, 1}, nil}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt},
-			geners: []dataGenerator{
-				&rangeInt64Gener{begin: math.MinInt64 / 2, end: math.MaxInt64 / 2},
-				&rangeInt64Gener{begin: math.MinInt64 / 2, end: math.MaxInt64 / 2},
-			},
-		},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt},
-			childrenFieldTypes: []*types.FieldType{{Tp: mysql.TypeLonglong, Flag: mysql.UnsignedFlag},
-				{Tp: mysql.TypeLonglong, Flag: mysql.UnsignedFlag}},
-			geners: []dataGenerator{
-				&rangeInt64Gener{begin: 0, end: math.MaxInt64},
-				&rangeInt64Gener{begin: 0, end: math.MaxInt64},
-			},
-		},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt},
-			childrenFieldTypes: []*types.FieldType{{Tp: mysql.TypeLonglong},
-				{Tp: mysql.TypeLonglong, Flag: mysql.UnsignedFlag}},
-			geners: []dataGenerator{
-				&rangeInt64Gener{begin: math.MinInt64 / 2, end: math.MaxInt64 / 2},
-				&rangeInt64Gener{begin: 0, end: math.MaxInt64},
-			},
-		},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt},
-			childrenFieldTypes: []*types.FieldType{{Tp: mysql.TypeLonglong, Flag: mysql.UnsignedFlag},
-				{Tp: mysql.TypeLonglong}},
-			geners: []dataGenerator{
-				&rangeInt64Gener{begin: 0, end: math.MaxInt64},
-				&rangeInt64Gener{begin: math.MinInt64 / 2, end: math.MaxInt64 / 2},
-			},
-		},
-	},
-	ast.Or: {},
 	ast.Mul: {
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
 		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
@@ -107,8 +46,6 @@ var vecBuiltinArithmeticCases = map[string][]vecExprBenchCase{
 			},
 		},
 	},
-	ast.Round: {},
-	ast.And:   {},
 	ast.Plus: {
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
 		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
@@ -143,7 +80,6 @@ var vecBuiltinArithmeticCases = map[string][]vecExprBenchCase{
 			},
 		},
 	},
-	ast.NE: {},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltinArithmeticFunc(c *C) {

@@ -129,20 +129,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinNEDurationSig{base}
 	case tipb.ScalarFuncSig_NEJson:
 		f = &builtinNEJSONSig{base}
-	case tipb.ScalarFuncSig_NullEQInt:
-		f = &builtinNullEQIntSig{base}
-	case tipb.ScalarFuncSig_NullEQReal:
-		f = &builtinNullEQRealSig{base}
-	case tipb.ScalarFuncSig_NullEQDecimal:
-		f = &builtinNullEQDecimalSig{base}
-	case tipb.ScalarFuncSig_NullEQString:
-		f = &builtinNullEQStringSig{base}
-	case tipb.ScalarFuncSig_NullEQTime:
-		f = &builtinNullEQTimeSig{base}
-	case tipb.ScalarFuncSig_NullEQDuration:
-		f = &builtinNullEQDurationSig{base}
-	case tipb.ScalarFuncSig_NullEQJson:
-		f = &builtinNullEQJSONSig{base}
 	case tipb.ScalarFuncSig_PlusReal:
 		f = &builtinArithmeticPlusRealSig{base}
 	case tipb.ScalarFuncSig_PlusDecimal:
@@ -165,24 +151,12 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinArithmeticDivideRealSig{base}
 	case tipb.ScalarFuncSig_DivideDecimal:
 		f = &builtinArithmeticDivideDecimalSig{base}
-	case tipb.ScalarFuncSig_IntDivideInt:
-		f = &builtinArithmeticIntDivideIntSig{base}
-	case tipb.ScalarFuncSig_IntDivideDecimal:
-		f = &builtinArithmeticIntDivideDecimalSig{base}
-	case tipb.ScalarFuncSig_ModReal:
-		f = &builtinArithmeticModRealSig{base}
-	case tipb.ScalarFuncSig_ModDecimal:
-		f = &builtinArithmeticModDecimalSig{base}
-	case tipb.ScalarFuncSig_ModInt:
-		f = &builtinArithmeticModIntSig{base}
 	case tipb.ScalarFuncSig_MultiplyIntUnsigned:
 		f = &builtinArithmeticMultiplyIntUnsignedSig{base}
 	case tipb.ScalarFuncSig_LogicalAnd:
 		f = &builtinLogicAndSig{base}
 	case tipb.ScalarFuncSig_LogicalOr:
 		f = &builtinLogicOrSig{base}
-	case tipb.ScalarFuncSig_LogicalXor:
-		f = &builtinLogicXorSig{base}
 	case tipb.ScalarFuncSig_UnaryNotInt:
 		f = &builtinUnaryNotIntSig{base}
 	case tipb.ScalarFuncSig_UnaryNotDecimal:
@@ -207,33 +181,6 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinTimeIsNullSig{base}
 	case tipb.ScalarFuncSig_IntIsNull:
 		f = &builtinIntIsNullSig{base}
-	//case tipb.ScalarFuncSig_JsonIsNull:
-	case tipb.ScalarFuncSig_BitAndSig:
-		f = &builtinBitAndSig{base}
-	case tipb.ScalarFuncSig_BitOrSig:
-		f = &builtinBitOrSig{base}
-	case tipb.ScalarFuncSig_BitXorSig:
-		f = &builtinBitXorSig{base}
-	case tipb.ScalarFuncSig_BitNegSig:
-		f = &builtinBitNegSig{base}
-	case tipb.ScalarFuncSig_IntIsTrue:
-		f = &builtinIntIsTrueSig{base, false}
-	case tipb.ScalarFuncSig_RealIsTrue:
-		f = &builtinRealIsTrueSig{base, false}
-	case tipb.ScalarFuncSig_DecimalIsTrue:
-		f = &builtinDecimalIsTrueSig{base, false}
-	case tipb.ScalarFuncSig_IntIsFalse:
-		f = &builtinIntIsFalseSig{base, false}
-	case tipb.ScalarFuncSig_RealIsFalse:
-		f = &builtinRealIsFalseSig{base, false}
-	case tipb.ScalarFuncSig_DecimalIsFalse:
-		f = &builtinDecimalIsFalseSig{base, false}
-	case tipb.ScalarFuncSig_LeftShift:
-		f = &builtinLeftShiftSig{base}
-	case tipb.ScalarFuncSig_RightShift:
-		f = &builtinRightShiftSig{base}
-	case tipb.ScalarFuncSig_BitCount:
-		f = &builtinBitCountSig{base}
 	case tipb.ScalarFuncSig_GetVar:
 		f = &builtinGetVarSig{base}
 	case tipb.ScalarFuncSig_SetVar:

@@ -71,52 +71,6 @@ func (s *testIntegrationSuite) TearDownSuite(c *C) {
 	s.store.Close()
 }
 
-func (s *testIntegrationSuite) TestOpBuiltin(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	// for logicAnd
-	result := tk.MustQuery("select 1 && 1, 1 && 0, 0 && 1, 0 && 0, 2 && -1, null && 1, '1a' && 'a'")
-	result.Check(testkit.Rows("1 0 0 0 1 <nil> 0"))
-	// for bitNeg
-	result = tk.MustQuery("select ~123, ~-123, ~null")
-	result.Check(testkit.Rows("18446744073709551492 122 <nil>"))
-	// for logicNot
-	result = tk.MustQuery("select !1, !123, !0, !null")
-	result.Check(testkit.Rows("0 0 1 <nil>"))
-	// for logicalXor
-	result = tk.MustQuery("select 1 xor 1, 1 xor 0, 0 xor 1, 0 xor 0, 2 xor -1, null xor 1, '1a' xor 'a'")
-	result.Check(testkit.Rows("0 1 1 0 0 <nil> 1"))
-	// for bitAnd
-	result = tk.MustQuery("select 123 & 321, -123 & 321, null & 1")
-	result.Check(testkit.Rows("65 257 <nil>"))
-	// for bitOr
-	result = tk.MustQuery("select 123 | 321, -123 | 321, null | 1")
-	result.Check(testkit.Rows("379 18446744073709551557 <nil>"))
-	// for bitXor
-	result = tk.MustQuery("select 123 ^ 321, -123 ^ 321, null ^ 1")
-	result.Check(testkit.Rows("314 18446744073709551300 <nil>"))
-	// for leftShift
-	result = tk.MustQuery("select 123 << 2, -123 << 2, null << 1")
-	result.Check(testkit.Rows("492 18446744073709551124 <nil>"))
-	// for rightShift
-	result = tk.MustQuery("select 123 >> 2, -123 >> 2, null >> 1")
-	result.Check(testkit.Rows("30 4611686018427387873 <nil>"))
-	// for logicOr
-	result = tk.MustQuery("select 1 || 1, 1 || 0, 0 || 1, 0 || 0, 2 || -1, null || 1, '1a' || 'a'")
-	result.Check(testkit.Rows("1 1 1 0 1 1 1"))
-	// for unaryPlus
-	result = tk.MustQuery(`select +1, +0, +(-9), +(-0.001), +0.999, +null, +"aaa"`)
-	result.Check(testkit.Rows("1 0 -9 -0.001 0.999 <nil> aaa"))
-	// for unaryMinus
-	tk.MustExec("drop table if exists f")
-	tk.MustExec("create table f(a decimal(65,0))")
-	tk.MustExec("insert into f value (-17000000000000000000)")
-	result = tk.MustQuery("select a from f")
-	result.Check(testkit.Rows("-17000000000000000000"))
-}
-
 func (s *testIntegrationSuite) TestAggregationBuiltin(c *C) {
 	defer s.cleanEnv(c)
 	tk := testkit.NewTestKit(c, s.store)

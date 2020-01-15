@@ -147,45 +147,6 @@ func (b *builtinGTIntSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) e
 	return nil
 }
 
-func (b *builtinNullEQIntSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinNullEQIntSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalInt(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	result.ResizeInt64(n, false)
-	if err := b.args[1].VecEvalInt(b.ctx, input, buf1); err != nil {
-		return err
-	}
-	vecCompareInt(mysql.HasUnsignedFlag(b.args[0].GetType().Flag), mysql.HasUnsignedFlag(b.args[1].GetType().Flag), buf0, buf1, result)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		isNull0 := buf0.IsNull(i)
-		isNull1 := buf1.IsNull(i)
-		if isNull0 && isNull1 {
-			i64s[i] = 1
-		} else if isNull0 || isNull1 || i64s[i] != 0 {
-			i64s[i] = 0
-		} else {
-			i64s[i] = 1
-		}
-	}
-	return nil
-}
-
 func (b *builtinLEIntSig) vectorized() bool {
 	return true
 }

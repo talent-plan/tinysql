@@ -66,13 +66,6 @@ var (
 	_ builtinFunc = &builtinNEStringSig{}
 	_ builtinFunc = &builtinNETimeSig{}
 	_ builtinFunc = &builtinNEDurationSig{}
-
-	_ builtinFunc = &builtinNullEQIntSig{}
-	_ builtinFunc = &builtinNullEQRealSig{}
-	_ builtinFunc = &builtinNullEQDecimalSig{}
-	_ builtinFunc = &builtinNullEQStringSig{}
-	_ builtinFunc = &builtinNullEQTimeSig{}
-	_ builtinFunc = &builtinNullEQDurationSig{}
 )
 
 type compareFunctionClass struct {
@@ -417,9 +410,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNEIntSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEInt)
-		case opcode.NullEQ:
-			sig = &builtinNullEQIntSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQInt)
 		}
 	case types.ETReal:
 		switch c.op {
@@ -441,9 +431,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNERealSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEReal)
-		case opcode.NullEQ:
-			sig = &builtinNullEQRealSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQReal)
 		}
 	case types.ETDecimal:
 		switch c.op {
@@ -465,9 +452,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNEDecimalSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEDecimal)
-		case opcode.NullEQ:
-			sig = &builtinNullEQDecimalSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQDecimal)
 		}
 	case types.ETString:
 		switch c.op {
@@ -489,9 +473,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNEStringSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEString)
-		case opcode.NullEQ:
-			sig = &builtinNullEQStringSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQString)
 		}
 	case types.ETDuration:
 		switch c.op {
@@ -513,9 +494,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNEDurationSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEDuration)
-		case opcode.NullEQ:
-			sig = &builtinNullEQDurationSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQDuration)
 		}
 	case types.ETDatetime, types.ETTimestamp:
 		switch c.op {
@@ -537,9 +515,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNETimeSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NETime)
-		case opcode.NullEQ:
-			sig = &builtinNullEQTimeSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQTime)
 		}
 	case types.ETJson:
 		switch c.op {
@@ -561,9 +536,6 @@ func (c *compareFunctionClass) generateCmpSigs(ctx sessionctx.Context, args []Ex
 		case opcode.NE:
 			sig = &builtinNEJSONSig{bf}
 			sig.setPbCode(tipb.ScalarFuncSig_NEJson)
-		case opcode.NullEQ:
-			sig = &builtinNullEQJSONSig{bf}
-			sig.setPbCode(tipb.ScalarFuncSig_NullEQJson)
 		}
 	}
 	return
@@ -1155,243 +1127,6 @@ func (b *builtinNEJSONSig) Clone() builtinFunc {
 
 func (b *builtinNEJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
 	return resOfNE(CompareJSON(b.ctx, b.args[0], b.args[1], row, row))
-}
-
-type builtinNullEQIntSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQIntSig) Clone() builtinFunc {
-	newSig := &builtinNullEQIntSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQIntSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalInt(b.ctx, row)
-	if err != nil {
-		return 0, isNull0, err
-	}
-	arg1, isNull1, err := b.args[1].EvalInt(b.ctx, row)
-	if err != nil {
-		return 0, isNull1, err
-	}
-	isUnsigned0, isUnsigned1 := mysql.HasUnsignedFlag(b.args[0].GetType().Flag), mysql.HasUnsignedFlag(b.args[1].GetType().Flag)
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case isUnsigned0 && isUnsigned1 && types.CompareUint64(uint64(arg0), uint64(arg1)) == 0:
-		res = 1
-	case !isUnsigned0 && !isUnsigned1 && types.CompareInt64(arg0, arg1) == 0:
-		res = 1
-	case isUnsigned0 && !isUnsigned1:
-		if arg1 < 0 || arg0 > math.MaxInt64 {
-			break
-		}
-		if types.CompareInt64(arg0, arg1) == 0 {
-			res = 1
-		}
-	case !isUnsigned0 && isUnsigned1:
-		if arg0 < 0 || arg1 > math.MaxInt64 {
-			break
-		}
-		if types.CompareInt64(arg0, arg1) == 0 {
-			res = 1
-		}
-	}
-	return res, false, nil
-}
-
-type builtinNullEQRealSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQRealSig) Clone() builtinFunc {
-	newSig := &builtinNullEQRealSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQRealSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalReal(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalReal(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case types.CompareFloat64(arg0, arg1) == 0:
-		res = 1
-	}
-	return res, false, nil
-}
-
-type builtinNullEQDecimalSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQDecimalSig) Clone() builtinFunc {
-	newSig := &builtinNullEQDecimalSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQDecimalSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalDecimal(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalDecimal(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case arg0.Compare(arg1) == 0:
-		res = 1
-	}
-	return res, false, nil
-}
-
-type builtinNullEQStringSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQStringSig) Clone() builtinFunc {
-	newSig := &builtinNullEQStringSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQStringSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalString(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalString(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case types.CompareString(arg0, arg1) == 0:
-		res = 1
-	}
-	return res, false, nil
-}
-
-type builtinNullEQDurationSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQDurationSig) Clone() builtinFunc {
-	newSig := &builtinNullEQDurationSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQDurationSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalDuration(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalDuration(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case arg0.Compare(arg1) == 0:
-		res = 1
-	}
-	return res, false, nil
-}
-
-type builtinNullEQTimeSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQTimeSig) Clone() builtinFunc {
-	newSig := &builtinNullEQTimeSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQTimeSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalTime(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalTime(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	case arg0.Compare(arg1) == 0:
-		res = 1
-	}
-	return res, false, nil
-}
-
-type builtinNullEQJSONSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinNullEQJSONSig) Clone() builtinFunc {
-	newSig := &builtinNullEQJSONSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinNullEQJSONSig) evalInt(row chunk.Row) (val int64, isNull bool, err error) {
-	arg0, isNull0, err := b.args[0].EvalJSON(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	arg1, isNull1, err := b.args[1].EvalJSON(b.ctx, row)
-	if err != nil {
-		return 0, true, err
-	}
-	var res int64
-	switch {
-	case isNull0 && isNull1:
-		res = 1
-	case isNull0 != isNull1:
-		break
-	default:
-		cmpRes := json.CompareBinary(arg0, arg1)
-		if cmpRes == 0 {
-			res = 1
-		}
-	}
-	return res, false, nil
 }
 
 func resOfLT(val int64, isNull bool, err error) (int64, bool, error) {

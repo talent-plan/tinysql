@@ -18,9 +18,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/testutil"
 )
 
 func (s *testEvaluatorSuite) TestUnary(c *C) {
@@ -60,90 +58,4 @@ func (s *testEvaluatorSuite) TestUnary(c *C) {
 
 	_, err := funcs[ast.UnaryMinus].getFunction(s.ctx, []Expression{Zero})
 	c.Assert(err, IsNil)
-}
-
-func (s *testEvaluatorSuite) TestIsTrueOrFalse(c *C) {
-	sc := s.ctx.GetSessionVars().StmtCtx
-	origin := sc.IgnoreTruncate
-	defer func() {
-		sc.IgnoreTruncate = origin
-	}()
-	sc.IgnoreTruncate = true
-
-	testCases := []struct {
-		args    []interface{}
-		isTrue  interface{}
-		isFalse interface{}
-	}{
-		{
-			args:    []interface{}{-12},
-			isTrue:  1,
-			isFalse: 0,
-		},
-		{
-			args:    []interface{}{12},
-			isTrue:  1,
-			isFalse: 0,
-		},
-		{
-			args:    []interface{}{0},
-			isTrue:  0,
-			isFalse: 1,
-		},
-		{
-			args:    []interface{}{float64(0)},
-			isTrue:  0,
-			isFalse: 1,
-		},
-		{
-			args:    []interface{}{"aaa"},
-			isTrue:  0,
-			isFalse: 1,
-		},
-		{
-			args:    []interface{}{""},
-			isTrue:  0,
-			isFalse: 1,
-		},
-		{
-			args:    []interface{}{"0.3"},
-			isTrue:  1,
-			isFalse: 0,
-		},
-		{
-			args:    []interface{}{float64(0.3)},
-			isTrue:  1,
-			isFalse: 0,
-		},
-		{
-			args:    []interface{}{types.NewDecFromFloatForTest(0.3)},
-			isTrue:  1,
-			isFalse: 0,
-		},
-		{
-			args:    []interface{}{nil},
-			isTrue:  0,
-			isFalse: 0,
-		},
-	}
-
-	for _, tc := range testCases {
-		isTrueSig, err := funcs[ast.IsTruth].getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))
-		c.Assert(err, IsNil)
-		c.Assert(isTrueSig, NotNil)
-
-		isTrue, err := evalBuiltinFunc(isTrueSig, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(isTrue, testutil.DatumEquals, types.NewDatum(tc.isTrue))
-	}
-
-	for _, tc := range testCases {
-		isFalseSig, err := funcs[ast.IsFalsity].getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))
-		c.Assert(err, IsNil)
-		c.Assert(isFalseSig, NotNil)
-
-		isFalse, err := evalBuiltinFunc(isFalseSig, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(isFalse, testutil.DatumEquals, types.NewDatum(tc.isFalse))
-	}
 }

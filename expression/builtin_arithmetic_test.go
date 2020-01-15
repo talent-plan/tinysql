@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/testutil"
-	"github.com/pingcap/tipb/go-tipb"
 )
 
 func (s *testEvaluatorSuite) TestSetFlenDecimal4RealOrDecimal(c *C) {
@@ -303,73 +302,6 @@ func (s *testEvaluatorSuite) TestArithmeticMultiply(c *C) {
 		sig, err := funcs[ast.Mul].getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))
 		c.Assert(err, IsNil)
 		c.Assert(sig, NotNil)
-		val, err := evalBuiltinFunc(sig, chunk.Row{})
-		c.Assert(err, IsNil)
-		c.Assert(val, testutil.DatumEquals, types.NewDatum(tc.expect))
-	}
-}
-
-func (s *testEvaluatorSuite) TestArithmeticDivide(c *C) {
-	testCases := []struct {
-		args   []interface{}
-		expect interface{}
-	}{
-		{
-			args:   []interface{}{float64(11.1111111), float64(11.1)},
-			expect: float64(1.001001),
-		},
-		{
-			args:   []interface{}{float64(11.1111111), float64(0)},
-			expect: nil,
-		},
-		{
-			args:   []interface{}{int64(11), int64(11)},
-			expect: float64(1),
-		},
-		{
-			args:   []interface{}{int64(11), int64(2)},
-			expect: float64(5.5),
-		},
-		{
-			args:   []interface{}{int64(11), int64(0)},
-			expect: nil,
-		},
-		{
-			args:   []interface{}{uint64(11), uint64(11)},
-			expect: float64(1),
-		},
-		{
-			args:   []interface{}{uint64(11), uint64(2)},
-			expect: float64(5.5),
-		},
-		{
-			args:   []interface{}{uint64(11), uint64(0)},
-			expect: nil,
-		},
-		{
-			args:   []interface{}{nil, float64(-0.11101)},
-			expect: nil,
-		},
-		{
-			args:   []interface{}{float64(1.01), nil},
-			expect: nil,
-		},
-		{
-			args:   []interface{}{nil, nil},
-			expect: nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		sig, err := funcs[ast.Div].getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))
-		c.Assert(err, IsNil)
-		c.Assert(sig, NotNil)
-		switch sig.(type) {
-		case *builtinArithmeticIntDivideIntSig:
-			c.Assert(sig.PbCode(), Equals, tipb.ScalarFuncSig_IntDivideInt)
-		case *builtinArithmeticIntDivideDecimalSig:
-			c.Assert(sig.PbCode(), Equals, tipb.ScalarFuncSig_IntDivideDecimal)
-		}
 		val, err := evalBuiltinFunc(sig, chunk.Row{})
 		c.Assert(err, IsNil)
 		c.Assert(val, testutil.DatumEquals, types.NewDatum(tc.expect))

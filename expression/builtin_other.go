@@ -32,7 +32,6 @@ var (
 	_ functionClass = &setVarFunctionClass{}
 	_ functionClass = &getVarFunctionClass{}
 	_ functionClass = &valuesFunctionClass{}
-	_ functionClass = &bitCountFunctionClass{}
 )
 
 var (
@@ -53,7 +52,6 @@ var (
 	_ builtinFunc = &builtinValuesTimeSig{}
 	_ builtinFunc = &builtinValuesDurationSig{}
 	_ builtinFunc = &builtinValuesJSONSig{}
-	_ builtinFunc = &builtinBitCountSig{}
 )
 
 type inFunctionClass struct {
@@ -719,41 +717,4 @@ func (b *builtinValuesJSONSig) evalJSON(_ chunk.Row) (json.BinaryJSON, bool, err
 		return row.GetJSON(b.offset), false, nil
 	}
 	return json.BinaryJSON{}, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
-}
-
-type bitCountFunctionClass struct {
-	baseFunctionClass
-}
-
-func (c *bitCountFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
-	if err := c.verifyArgs(args); err != nil {
-		return nil, err
-	}
-	bf := newBaseBuiltinFuncWithTp(ctx, args, types.ETInt, types.ETInt)
-	bf.tp.Flen = 2
-	sig := &builtinBitCountSig{bf}
-	return sig, nil
-}
-
-type builtinBitCountSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinBitCountSig) Clone() builtinFunc {
-	newSig := &builtinBitCountSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalInt evals BIT_COUNT(N).
-// See https://dev.mysql.com/doc/refman/5.7/en/bit-functions.html#function_bit-count
-func (b *builtinBitCountSig) evalInt(row chunk.Row) (int64, bool, error) {
-	n, isNull, err := b.args[0].EvalInt(b.ctx, row)
-	if err != nil || isNull {
-		if err != nil && types.ErrOverflow.Equal(err) {
-			return 64, false, nil
-		}
-		return 0, true, err
-	}
-	return bitCount(n), false, nil
 }
