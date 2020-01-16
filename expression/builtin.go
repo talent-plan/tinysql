@@ -384,9 +384,6 @@ var funcs = map[string]functionClass{
 	ast.OctetLength: &lengthFunctionClass{baseFunctionClass{ast.OctetLength, 1, 1}},
 	ast.Strcmp:      &strcmpFunctionClass{baseFunctionClass{ast.Strcmp, 2, 2}},
 
-	// information functions
-	ast.ConnectionID: &connectionIDFunctionClass{baseFunctionClass{ast.ConnectionID, 0, 0}},
-
 	// control functions
 	ast.If:     &ifFunctionClass{baseFunctionClass{ast.If, 3, 3}},
 	ast.Ifnull: &ifNullFunctionClass{baseFunctionClass{ast.Ifnull, 2, 2}},
