@@ -249,52 +249,6 @@ func (s *Server) onConn(conn *clientConn) {
 	conn.Run(ctx)
 }
 
-// ShowProcessList implements the SessionManager interface.
-func (s *Server) ShowProcessList() map[uint64]*util.ProcessInfo {
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
-	rs := make(map[uint64]*util.ProcessInfo, len(s.clients))
-	for _, client := range s.clients {
-		if atomic.LoadInt32(&client.status) == connStatusWaitShutdown {
-			continue
-		}
-		if pi := client.ctx.ShowProcess(); pi != nil {
-			rs[pi.ID] = pi
-		}
-	}
-	return rs
-}
-
-// GetProcessInfo implements the SessionManager interface.
-func (s *Server) GetProcessInfo(id uint64) (*util.ProcessInfo, bool) {
-	s.rwlock.RLock()
-	conn, ok := s.clients[uint32(id)]
-	s.rwlock.RUnlock()
-	if !ok || atomic.LoadInt32(&conn.status) == connStatusWaitShutdown {
-		return &util.ProcessInfo{}, false
-	}
-	return conn.ctx.ShowProcess(), ok
-}
-
-// Kill implements the SessionManager interface.
-func (s *Server) Kill(connectionID uint64, query bool) {
-	logutil.BgLogger().Info("kill", zap.Uint64("connID", connectionID), zap.Bool("query", query))
-
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
-	conn, ok := s.clients[uint32(connectionID)]
-	if !ok {
-		return
-	}
-
-	if !query {
-		// Mark the client connection status as WaitShutdown, when the goroutine detect
-		// this, it will end the dispatch loop and exit.
-		atomic.StoreInt32(&conn.status, connStatusWaitShutdown)
-	}
-	killConn(conn)
-}
-
 func killConn(conn *clientConn) {
 	sessVars := conn.ctx.GetSessionVars()
 	atomic.CompareAndSwapUint32(&sessVars.Killed, 0, 1)

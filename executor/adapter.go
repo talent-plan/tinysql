@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
-	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
@@ -31,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -39,11 +36,6 @@ import (
 	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 )
-
-// processinfoSetter is the interface use to set current running process info.
-type processinfoSetter interface {
-	SetProcessInfo(string, time.Time, byte, uint64)
-}
 
 // recordSet wraps an executor, implements sqlexec.RecordSet interface
 type recordSet struct {
@@ -204,23 +196,6 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	}()
 
 	sctx := a.Ctx
-	if _, ok := a.Plan.(*plannercore.Analyze); ok && sctx.GetSessionVars().InRestrictedSQL {
-		oriStats, _ := sctx.GetSessionVars().GetSystemVar(variable.TiDBBuildStatsConcurrency)
-		oriScan := sctx.GetSessionVars().DistSQLScanConcurrency
-		oriIndex := sctx.GetSessionVars().IndexSerialScanConcurrency
-		oriIso, _ := sctx.GetSessionVars().GetSystemVar(variable.TxnIsolation)
-		terror.Log(sctx.GetSessionVars().SetSystemVar(variable.TiDBBuildStatsConcurrency, "1"))
-		sctx.GetSessionVars().DistSQLScanConcurrency = 1
-		sctx.GetSessionVars().IndexSerialScanConcurrency = 1
-		terror.Log(sctx.GetSessionVars().SetSystemVar(variable.TxnIsolation, ast.ReadCommitted))
-		defer func() {
-			terror.Log(sctx.GetSessionVars().SetSystemVar(variable.TiDBBuildStatsConcurrency, oriStats))
-			sctx.GetSessionVars().DistSQLScanConcurrency = oriScan
-			sctx.GetSessionVars().IndexSerialScanConcurrency = oriIndex
-			terror.Log(sctx.GetSessionVars().SetSystemVar(variable.TxnIsolation, oriIso))
-		}()
-	}
-
 	e, err := a.buildExecutor()
 	if err != nil {
 		return nil, err
@@ -229,23 +204,6 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	if err = e.Open(ctx); err != nil {
 		terror.Call(e.Close)
 		return nil, err
-	}
-
-	cmd32 := atomic.LoadUint32(&sctx.GetSessionVars().CommandValue)
-	cmd := byte(cmd32)
-	var pi processinfoSetter
-	if raw, ok := sctx.(processinfoSetter); ok {
-		pi = raw
-		sql := a.OriginText()
-		if simple, ok := a.Plan.(*plannercore.Simple); ok && simple.Statement != nil {
-			if ss, ok := simple.Statement.(ast.SensitiveStmtNode); ok {
-				// Use SecureText to avoid leak password information.
-				sql = ss.SecureText()
-			}
-		}
-		maxExecutionTime := getMaxExecutionTime(sctx, a.StmtNode)
-		// Update processinfo, ShowProcess() will use it.
-		pi.SetProcessInfo(sql, time.Now(), cmd, maxExecutionTime)
 	}
 
 	if handled, result, err := a.handleNoDelay(ctx, e); handled {
@@ -288,20 +246,6 @@ func (a *ExecStmt) handleNoDelay(ctx context.Context, e Executor) (bool, sqlexec
 	}
 
 	return false, nil, nil
-}
-
-// getMaxExecutionTime get the max execution timeout value.
-func getMaxExecutionTime(sctx sessionctx.Context, stmtNode ast.StmtNode) uint64 {
-	ret := sctx.GetSessionVars().MaxExecutionTime
-	if sel, ok := stmtNode.(*ast.SelectStmt); ok {
-		for _, hint := range sel.TableHints {
-			if hint.HintName.L == variable.MaxExecutionTime {
-				ret = hint.MaxExecutionTime
-				break
-			}
-		}
-	}
-	return ret
 }
 
 func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlexec.RecordSet, error) {

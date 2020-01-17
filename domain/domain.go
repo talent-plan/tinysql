@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -52,7 +51,6 @@ type Domain struct {
 	statsHandle     unsafe.Pointer
 	statsLease      time.Duration
 	ddl             ddl.DDL
-	info            *infosync.InfoSyncer
 	m               sync.Mutex
 	SchemaValidator SchemaValidator
 	sysSessionPool  *sessionPool
@@ -270,11 +268,6 @@ func (do *Domain) DDL() ddl.DDL {
 	return do.ddl
 }
 
-// InfoSyncer gets infoSyncer from domain.
-func (do *Domain) InfoSyncer() *infosync.InfoSyncer {
-	return do.info
-}
-
 // Store gets KV store from domain.
 func (do *Domain) Store() kv.Storage {
 	return do.store
@@ -341,27 +334,6 @@ func (do *Domain) Reload() error {
 	}
 
 	return nil
-}
-
-func (do *Domain) infoSyncerKeeper() {
-	defer do.wg.Done()
-	defer recoverInDomain("infoSyncerKeeper", false)
-	ticker := time.NewTicker(infosync.ReportInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			do.info.ReportMinStartTS(do.Store())
-		case <-do.info.Done():
-			logutil.BgLogger().Info("server info syncer need to restart")
-			if err := do.info.Restart(context.Background()); err != nil {
-				logutil.BgLogger().Error("server restart failed", zap.Error(err))
-			}
-			logutil.BgLogger().Info("server info syncer restarted")
-		case <-do.exit:
-			return
-		}
-	}
 }
 
 func (do *Domain) loadSchemaInLoop(lease time.Duration) {
@@ -475,10 +447,6 @@ func (do *Domain) Close() {
 	if do.ddl != nil {
 		terror.Log(do.ddl.Stop())
 	}
-	if do.info != nil {
-		do.info.RemoveServerInfo()
-		do.info.RemoveMinStartTS()
-	}
 	close(do.exit)
 	if do.etcdClient != nil {
 		terror.Log(errors.Trace(do.etcdClient.Close()))
@@ -582,10 +550,6 @@ func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.R
 	if err != nil {
 		return err
 	}
-	do.info, err = infosync.GlobalInfoSyncerInit(ctx, do.ddl.GetID(), do.etcdClient)
-	if err != nil {
-		return err
-	}
 	err = do.Reload()
 	if err != nil {
 		return err
@@ -598,8 +562,6 @@ func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.R
 		// Local store needs to get the change information for every DDL state in each session.
 		go do.loadSchemaInLoop(ddlLease)
 	}
-	do.wg.Add(1)
-	go do.infoSyncerKeeper()
 	return nil
 }
 

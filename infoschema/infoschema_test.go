@@ -251,57 +251,6 @@ func (testSuite) TestConcurrent(c *C) {
 	wg.Wait()
 }
 
-// TestInfoTables makes sure that all tables of information_schema could be found in infoschema handle.
-func (*testSuite) TestInfoTables(c *C) {
-	defer testleak.AfterTest(c)()
-	store, err := mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-	defer store.Close()
-	handle := infoschema.NewHandle(store)
-	builder, err := infoschema.NewBuilder(handle).InitWithDBInfos(nil, 0)
-	c.Assert(err, IsNil)
-	builder.Build()
-	is := handle.Get()
-	c.Assert(is, NotNil)
-
-	infoTables := []string{
-		"SCHEMATA",
-		"TABLES",
-		"COLUMNS",
-		"STATISTICS",
-		"CHARACTER_SETS",
-		"COLLATIONS",
-		"FILES",
-		"PROFILING",
-		"PARTITIONS",
-		"KEY_COLUMN_USAGE",
-		"REFERENTIAL_CONSTRAINTS",
-		"SESSION_VARIABLES",
-		"TABLE_CONSTRAINTS",
-		"TRIGGERS",
-		"USER_PRIVILEGES",
-		"ENGINES",
-		"ROUTINES",
-		"SCHEMA_PRIVILEGES",
-		"COLUMN_PRIVILEGES",
-		"TABLE_PRIVILEGES",
-		"PARAMETERS",
-		"EVENTS",
-		"GLOBAL_STATUS",
-		"GLOBAL_VARIABLES",
-		"SESSION_STATUS",
-		"OPTIMIZER_TRACE",
-		"TABLESPACES",
-		"COLLATION_CHARACTER_SET_APPLICABILITY",
-		"PROCESSLIST",
-	}
-	for _, t := range infoTables {
-		tb, err1 := is.TableByName(model.NewCIStr(infoschema.Name), model.NewCIStr(t))
-		c.Assert(err1, IsNil)
-		c.Assert(tb, NotNil)
-	}
-}
-
 func genGlobalID(store kv.Storage) (int64, error) {
 	var globalID int64
 	err := kv.RunInNewTxn(store, true, func(txn kv.Transaction) error {

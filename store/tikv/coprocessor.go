@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,9 +29,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/distsql"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/logutil"
@@ -221,10 +218,6 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv
 		tableStart, tableEnd = keyRange[0].StartKey, keyRange[0].EndKey
 	}
 
-	if req.StoreType == kv.TiDB {
-		return buildTiDBMemCopTasks(ranges, req)
-	}
-
 	rangesLen := ranges.len()
 	var tasks []*copTask
 	appendTask := func(regionWithRangeInfo *KeyLocation, ranges *copRanges) {
@@ -282,25 +275,6 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv
 			zap.Duration("elapsed", elapsed),
 			zap.Int("range len", rangesLen),
 			zap.Int("task len", len(tasks)))
-	}
-	return tasks, nil
-}
-
-func buildTiDBMemCopTasks(ranges *copRanges, req *kv.Request) ([]*copTask, error) {
-	servers, err := infosync.GetAllServerInfo(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	tasks := make([]*copTask, 0, len(servers))
-	for _, ser := range servers {
-		addr := ser.IP + ":" + strconv.FormatUint(uint64(ser.StatusPort), 10)
-		tasks = append(tasks, &copTask{
-			ranges:    ranges,
-			respChan:  make(chan *copResponse, 2),
-			cmdType:   tikvrpc.CmdCop,
-			storeType: req.StoreType,
-			storeAddr: addr,
-		})
 	}
 	return tasks, nil
 }

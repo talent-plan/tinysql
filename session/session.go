@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/owner"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -71,12 +70,9 @@ type Session interface {
 	SetClientCapability(uint32) // Set client capability flags.
 	SetConnectionID(uint64)
 	SetCommandValue(byte)
-	SetProcessInfo(string, time.Time, byte, uint64)
 	SetTLSState(*tls.ConnectionState)
 	SetCollation(coID int) error
-	SetSessionManager(util.SessionManager)
 	Close()
-	ShowProcess() *util.ProcessInfo
 	// PrePareTxnCtx is exported for test.
 	PrepareTxnCtx(context.Context)
 	// FieldList returns fields list of a table.
@@ -112,23 +108,18 @@ func (h *StmtHistory) Count() int {
 }
 
 type session struct {
-	// processInfo is used by ShowProcess(), and should be modified atomically.
-	processInfo atomic.Value
-	txn         TxnState
+	txn TxnState
 
 	mu struct {
 		sync.RWMutex
 		values map[fmt.Stringer]interface{}
 	}
 
-	currentPlan plannercore.Plan
-
 	store kv.Storage
 
 	parser *parser.Parser
 
-	sessionVars    *variable.SessionVars
-	sessionManager util.SessionManager
+	sessionVars *variable.SessionVars
 
 	// ddlOwnerChecker is used in `select tidb_is_ddl_owner()` statement;
 	ddlOwnerChecker owner.DDLOwnerChecker
@@ -203,14 +194,6 @@ func (s *session) SetCollation(coID int) error {
 	}
 	terror.Log(s.sessionVars.SetSystemVar(variable.CollationConnection, co))
 	return nil
-}
-
-func (s *session) SetSessionManager(sm util.SessionManager) {
-	s.sessionManager = sm
-}
-
-func (s *session) GetSessionManager() util.SessionManager {
-	return s.sessionManager
 }
 
 // FieldList returns fields list of a table.
@@ -767,33 +750,6 @@ func (s *session) ParseSQL(ctx context.Context, sql, charset, collation string) 
 	return s.parser.Parse(sql, charset, collation)
 }
 
-func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecutionTime uint64) {
-	// If command == mysql.ComSleep, it means the SQL execution is finished. The processinfo is reset to SLEEP.
-	// If the SQL finished and the session is not in transaction, the current start timestamp need to reset to 0.
-	// Otherwise, it should be set to the transaction start timestamp.
-	// Why not reset the transaction start timestamp to 0 when transaction committed?
-	// Because the select statement and other statements need this timestamp to read data,
-	// after the transaction is committed. e.g. SHOW MASTER STATUS;
-	var curTxnStartTS uint64
-	if command != mysql.ComSleep || s.GetSessionVars().InTxn() {
-		curTxnStartTS = s.sessionVars.TxnCtx.StartTS
-	}
-	pi := util.ProcessInfo{
-		ID:               s.sessionVars.ConnectionID,
-		DB:               s.sessionVars.CurrentDB,
-		Command:          command,
-		Plan:             s.currentPlan,
-		Time:             t,
-		State:            s.Status(),
-		Info:             sql,
-		CurTxnStartTS:    curTxnStartTS,
-		StmtCtx:          s.sessionVars.StmtCtx,
-		StatsInfo:        plannercore.GetStatsInfo,
-		MaxExecutionTime: maxExecutionTime,
-	}
-	s.processInfo.Store(&pi)
-}
-
 func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode ast.StmtNode, stmt sqlexec.Statement, recordSets []sqlexec.RecordSet, inMulitQuery bool) ([]sqlexec.RecordSet, error) {
 	s.SetValue(sessionctx.QueryString, stmt.OriginText())
 	if _, ok := stmtNode.(ast.DDLNode); ok {
@@ -885,7 +841,6 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		}
 		durCompile := time.Since(s.sessionVars.StartTime)
 		s.GetSessionVars().DurationCompile = durCompile
-		s.currentPlan = stmt.Plan
 
 		// Step3: Execute the physical plan.
 		if recordSets, err = s.executeStatement(ctx, connID, stmtNode, stmt, recordSets, multiQuery); err != nil {
@@ -1390,15 +1345,6 @@ func (s *session) InitTxnWithStartTS(startTS uint64) error {
 // GetStore gets the store of session.
 func (s *session) GetStore() kv.Storage {
 	return s.store
-}
-
-func (s *session) ShowProcess() *util.ProcessInfo {
-	var pi *util.ProcessInfo
-	tmp := s.processInfo.Load()
-	if tmp != nil {
-		pi = tmp.(*util.ProcessInfo)
-	}
-	return pi
 }
 
 type multiQueryNoDelayRecordSet struct {

@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/sqlexec"
 )
 
@@ -40,7 +39,6 @@ type Context struct {
 	sessionVars *variable.SessionVars
 	ctx         context.Context
 	cancel      context.CancelFunc
-	sm          util.SessionManager
 }
 
 type wrapTxn struct {
@@ -162,16 +160,6 @@ func (c *Context) InitTxnWithStartTS(startTS uint64) error {
 // GetStore gets the store of session.
 func (c *Context) GetStore() kv.Storage {
 	return c.Store
-}
-
-// GetSessionManager implements the sessionctx.Context interface.
-func (c *Context) GetSessionManager() util.SessionManager {
-	return c.sm
-}
-
-// SetSessionManager set the session manager.
-func (c *Context) SetSessionManager(sm util.SessionManager) {
-	c.sm = sm
 }
 
 // Cancel implements the Session interface.

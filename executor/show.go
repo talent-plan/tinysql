@@ -129,8 +129,6 @@ func (e *ShowExec) fetchAll(ctx context.Context) error {
 		return e.fetchShowWarnings(false)
 	case ast.ShowErrors:
 		return e.fetchShowWarnings(true)
-	case ast.ShowProcessList:
-		return e.fetchShowProcessList()
 	case ast.ShowEvents:
 		// empty result
 	case ast.ShowProfiles:
@@ -178,20 +176,6 @@ func (e *ShowExec) fetchShowDatabases() error {
 		e.appendRow([]interface{}{
 			d,
 		})
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowProcessList() error {
-	sm := e.ctx.GetSessionManager()
-	if sm == nil {
-		return nil
-	}
-
-	pl := sm.ShowProcessList()
-	for _, pi := range pl {
-		row := pi.ToRowForShow(e.Full)
-		e.appendRow(row)
 	}
 	return nil
 }

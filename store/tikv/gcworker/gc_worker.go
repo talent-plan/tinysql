@@ -30,11 +30,9 @@ import (
 	"github.com/pingcap/parser/terror"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/ddl/util"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -316,30 +314,6 @@ func (w *GCWorker) checkPrepare(ctx context.Context) (bool, uint64, error) {
 	return true, oracle.ComposeTS(oracle.GetPhysical(*newSafePoint), 0), nil
 }
 
-// calculateNewSafePoint uses the current global transaction min start timestamp to calculate the new safe point.
-func (w *GCWorker) calSafePointByMinStartTS(safePoint time.Time) time.Time {
-	kvs, err := w.store.GetSafePointKV().GetWithPrefix(infosync.ServerMinStartTSPath)
-	if err != nil {
-		logutil.BgLogger().Warn("get all minStartTS failed", zap.Error(err))
-		return safePoint
-	}
-
-	safePointTS := variable.GoTimeToTS(safePoint)
-	for _, v := range kvs {
-		minStartTS, err := strconv.ParseUint(string(v.Value), 10, 64)
-		if err != nil {
-			logutil.BgLogger().Warn("parse minStartTS failed", zap.Error(err))
-			continue
-		}
-		if minStartTS < safePointTS {
-			safePointTS = minStartTS
-		}
-	}
-	safePoint = time.Unix(0, oracle.ExtractPhysical(safePointTS)*1e6)
-	logutil.BgLogger().Debug("calSafePointByMinStartTS", zap.Time("safePoint", safePoint))
-	return safePoint
-}
-
 func (w *GCWorker) getOracleTime() (time.Time, error) {
 	currentVer, err := w.store.CurrentVersion()
 	if err != nil {
@@ -465,7 +439,7 @@ func (w *GCWorker) calculateNewSafePoint(now time.Time) (*time.Time, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	safePoint := w.calSafePointByMinStartTS(now.Add(-*lifeTime))
+	safePoint := now.Add(-*lifeTime)
 	// We should never decrease safePoint.
 	if lastSafePoint != nil && safePoint.Before(*lastSafePoint) {
 		logutil.BgLogger().Info("[gc worker] last safe point is later than current one."+

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -29,7 +28,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -282,17 +280,9 @@ func (e *ShowDDLExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		}
 	}
 
-	serverInfo, err := infosync.GetServerInfoByID(ctx, e.ddlOwnerID)
-	if err != nil {
-		return err
-	}
-
-	serverAddress := serverInfo.IP + ":" +
-		strconv.FormatUint(uint64(serverInfo.Port), 10)
-
 	req.AppendInt64(0, e.ddlInfo.SchemaVer)
 	req.AppendString(1, e.ddlOwnerID)
-	req.AppendString(2, serverAddress)
+	req.AppendString(2, "")
 	req.AppendString(3, ddlJobs)
 	req.AppendString(4, e.selfID)
 	req.AppendString(5, query)

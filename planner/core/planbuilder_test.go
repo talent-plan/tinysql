@@ -51,7 +51,6 @@ func (s *testPlanBuilderSuite) TestShow(c *C) {
 		ast.ShowTriggers,
 		ast.ShowProcedureStatus,
 		ast.ShowIndex,
-		ast.ShowProcessList,
 		ast.ShowCreateDatabase,
 		ast.ShowEvents,
 		ast.ShowMasterStatus,

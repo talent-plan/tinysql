@@ -516,7 +516,6 @@ func (cc *clientConn) openSessionAndDoAuth() error {
 			return err
 		}
 	}
-	cc.ctx.SetSessionManager(cc.server)
 	return nil
 }
 
@@ -669,15 +668,10 @@ func errStrForLog(err error) string {
 func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	span := opentracing.StartSpan("server.dispatch")
 
-	t := time.Now()
 	cc.lastPacket = data
 	cmd := data[0]
 	data = data[1:]
 	defer func() {
-		// if handleChangeUser failed, cc.ctx may be nil
-		if cc.ctx != nil {
-			cc.ctx.SetProcessInfo("", t, mysql.ComSleep, 0)
-		}
 		span.Finish()
 	}()
 
@@ -688,13 +682,6 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	}
 
 	dataStr := string(hack.String(data))
-	switch cmd {
-	case mysql.ComPing, mysql.ComStmtClose, mysql.ComStmtSendLongData, mysql.ComStmtReset,
-		mysql.ComSetOption:
-		cc.ctx.SetProcessInfo("", t, cmd, 0)
-	case mysql.ComInitDB:
-		cc.ctx.SetProcessInfo("use "+dataStr, t, cmd, 0)
-	}
 
 	switch cmd {
 	case mysql.ComSleep:

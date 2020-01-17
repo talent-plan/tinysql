@@ -18,7 +18,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/charset"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/sqlexec"
 )
@@ -96,11 +94,6 @@ func (tc *TiDBContext) CommitTxn(ctx context.Context) error {
 	return tc.session.CommitTxn(ctx)
 }
 
-// SetProcessInfo implements QueryCtx SetProcessInfo method.
-func (tc *TiDBContext) SetProcessInfo(sql string, t time.Time, command byte, maxExecutionTime uint64) {
-	tc.session.SetProcessInfo(sql, t, command, maxExecutionTime)
-}
-
 // RollbackTxn implements QueryCtx RollbackTxn method.
 func (tc *TiDBContext) RollbackTxn() {
 	tc.session.RollbackTxn(context.TODO())
@@ -144,11 +137,6 @@ func (tc *TiDBContext) Execute(ctx context.Context, sql string) (rs []ResultSet,
 	return
 }
 
-// SetSessionManager implements the QueryCtx interface.
-func (tc *TiDBContext) SetSessionManager(sm util.SessionManager) {
-	tc.session.SetSessionManager(sm)
-}
-
 // SetClientCapability implements QueryCtx SetClientCapability method.
 func (tc *TiDBContext) SetClientCapability(flags uint32) {
 	tc.session.SetClientCapability(flags)
@@ -171,11 +159,6 @@ func (tc *TiDBContext) FieldList(table string) (columns []*ColumnInfo, err error
 		columns = append(columns, convertColumnInfo(f))
 	}
 	return columns, nil
-}
-
-// ShowProcess implements QueryCtx ShowProcess method.
-func (tc *TiDBContext) ShowProcess() *util.ProcessInfo {
-	return tc.session.ShowProcess()
 }
 
 // SetCommandValue implements QueryCtx SetCommandValue method.

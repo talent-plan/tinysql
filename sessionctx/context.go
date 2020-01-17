@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util"
 )
 
 // Context is an interface for transaction and executive args environment.
@@ -49,8 +48,6 @@ type Context interface {
 	ClearValue(key fmt.Stringer)
 
 	GetSessionVars() *variable.SessionVars
-
-	GetSessionManager() util.SessionManager
 
 	// RefreshTxnCtx commits old transaction without retry,
 	// and creates a new transaction.

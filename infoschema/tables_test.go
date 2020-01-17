@@ -14,22 +14,14 @@
 package infoschema_test
 
 import (
-	"context"
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
 )
@@ -139,139 +131,12 @@ func (s *testTableSuite) TestCharacterSetCollations(c *C) {
 	tk.MustExec("DROP DATABASE charset_collate_test")
 }
 
-type mockSessionManager struct {
-	processInfoMap map[uint64]*util.ProcessInfo
-}
-
-func (sm *mockSessionManager) ShowProcessList() map[uint64]*util.ProcessInfo { return sm.processInfoMap }
-
-func (sm *mockSessionManager) GetProcessInfo(id uint64) (*util.ProcessInfo, bool) {
-	rs, ok := sm.processInfoMap[id]
-	return rs, ok
-}
-
-func (sm *mockSessionManager) Kill(connectionID uint64, query bool) {}
-
-func (s *testTableSuite) TestSomeTables(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustQuery("select * from information_schema.COLLATION_CHARACTER_SET_APPLICABILITY where COLLATION_NAME='utf8mb4_bin';").Check(
-		testkit.Rows("utf8mb4_bin utf8mb4"))
-	tk.MustQuery("select * from information_schema.SESSION_VARIABLES where VARIABLE_NAME='tidb_retry_limit';").Check(testkit.Rows("tidb_retry_limit 10"))
-	tk.MustQuery("select * from information_schema.ENGINES;").Check(testkit.Rows("InnoDB DEFAULT Supports transactions, row-level locking, and foreign keys YES YES YES"))
-	tk.MustQuery("select * from information_schema.TABLE_CONSTRAINTS where TABLE_NAME='gc_delete_range';").Check(testkit.Rows("def mysql delete_range_index mysql gc_delete_range UNIQUE"))
-
-	sm := &mockSessionManager{make(map[uint64]*util.ProcessInfo, 2)}
-	sm.processInfoMap[1] = &util.ProcessInfo{
-		ID:      1,
-		User:    "user-1",
-		Host:    "localhost",
-		DB:      "information_schema",
-		Command: byte(1),
-		State:   1,
-		Info:    "do something",
-		StmtCtx: tk.Se.GetSessionVars().StmtCtx,
-	}
-	sm.processInfoMap[2] = &util.ProcessInfo{
-		ID:      2,
-		User:    "user-2",
-		Host:    "localhost",
-		DB:      "test",
-		Command: byte(2),
-		State:   2,
-		Info:    strings.Repeat("x", 101),
-		StmtCtx: tk.Se.GetSessionVars().StmtCtx,
-	}
-	tk.Se.SetSessionManager(sm)
-	tk.MustQuery("select * from information_schema.PROCESSLIST order by ID;").Sort().Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s 0 ", "do something"),
-			fmt.Sprintf("2 user-2 localhost test Init DB 9223372036 2 %s 0 ", strings.Repeat("x", 101)),
-		))
-	tk.MustQuery("SHOW PROCESSLIST;").Sort().Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s", "do something"),
-			fmt.Sprintf("2 user-2 localhost test Init DB 9223372036 2 %s", strings.Repeat("x", 100)),
-		))
-	tk.MustQuery("SHOW FULL PROCESSLIST;").Sort().Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s", "do something"),
-			fmt.Sprintf("2 user-2 localhost test Init DB 9223372036 2 %s", strings.Repeat("x", 101)),
-		))
-
-	sm = &mockSessionManager{make(map[uint64]*util.ProcessInfo, 2)}
-	sm.processInfoMap[1] = &util.ProcessInfo{
-		ID:      1,
-		User:    "user-1",
-		Host:    "localhost",
-		DB:      "information_schema",
-		Command: byte(1),
-		State:   1,
-		StmtCtx: tk.Se.GetSessionVars().StmtCtx,
-	}
-	sm.processInfoMap[2] = &util.ProcessInfo{
-		ID:            2,
-		User:          "user-2",
-		Host:          "localhost",
-		Command:       byte(2),
-		State:         2,
-		Info:          strings.Repeat("x", 101),
-		StmtCtx:       tk.Se.GetSessionVars().StmtCtx,
-		CurTxnStartTS: 410090409861578752,
-	}
-	tk.Se.SetSessionManager(sm)
-	tk.Se.GetSessionVars().TimeZone = time.UTC
-	tk.MustQuery("select * from information_schema.PROCESSLIST order by ID;").Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s 0 ", "<nil>"),
-			fmt.Sprintf("2 user-2 localhost <nil> Init DB 9223372036 2 %s 0 07-29 03:26:05.158(410090409861578752)", strings.Repeat("x", 101)),
-		))
-	tk.MustQuery("SHOW PROCESSLIST;").Sort().Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s", "<nil>"),
-			fmt.Sprintf("2 user-2 localhost <nil> Init DB 9223372036 2 %s", strings.Repeat("x", 100)),
-		))
-	tk.MustQuery("SHOW FULL PROCESSLIST;").Sort().Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s", "<nil>"),
-			fmt.Sprintf("2 user-2 localhost <nil> Init DB 9223372036 2 %s", strings.Repeat("x", 101)),
-		))
-	tk.MustQuery("select * from information_schema.PROCESSLIST where db is null;").Check(
-		testkit.Rows(
-			fmt.Sprintf("2 user-2 localhost <nil> Init DB 9223372036 2 %s 0 07-29 03:26:05.158(410090409861578752)", strings.Repeat("x", 101)),
-		))
-	tk.MustQuery("select * from information_schema.PROCESSLIST where Info is null;").Check(
-		testkit.Rows(
-			fmt.Sprintf("1 user-1 localhost information_schema Quit 9223372036 1 %s 0 ", "<nil>"),
-		))
-}
-
 func (s *testTableSuite) TestSchemataCharacterSet(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("CREATE DATABASE `foo` DEFAULT CHARACTER SET = 'utf8mb4'")
 	tk.MustQuery("select default_character_set_name, default_collation_name FROM information_schema.SCHEMATA  WHERE schema_name = 'foo'").Check(
 		testkit.Rows("utf8mb4 utf8mb4_bin"))
 	tk.MustExec("drop database `foo`")
-}
-
-func (s *testTableSuite) TestForServersInfo(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	result := tk.MustQuery("select * from information_schema.TIDB_SERVERS_INFO")
-	c.Assert(len(result.Rows()), Equals, 1)
-
-	serversInfo, err := infosync.GetAllServerInfo(context.Background())
-	c.Assert(err, IsNil)
-	c.Assert(len(serversInfo), Equals, 1)
-
-	for _, info := range serversInfo {
-		c.Assert(result.Rows()[0][0], Equals, info.ID)
-		c.Assert(result.Rows()[0][1], Equals, info.IP)
-		c.Assert(result.Rows()[0][2], Equals, strconv.FormatInt(int64(info.Port), 10))
-		c.Assert(result.Rows()[0][3], Equals, strconv.FormatInt(int64(info.StatusPort), 10))
-		c.Assert(result.Rows()[0][4], Equals, info.Lease)
-		c.Assert(result.Rows()[0][5], Equals, info.Version)
-		c.Assert(result.Rows()[0][6], Equals, info.GitHash)
-	}
 }
 
 func (s *testTableSuite) TestColumnStatistics(c *C) {

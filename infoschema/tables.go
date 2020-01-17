@@ -14,7 +14,6 @@
 package infoschema
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -24,7 +23,6 @@ import (
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx"
@@ -67,10 +65,6 @@ const (
 	tableOptimizerTrace                     = "OPTIMIZER_TRACE"
 	tableTableSpaces                        = "TABLESPACES"
 	tableCollationCharacterSetApplicability = "COLLATION_CHARACTER_SET_APPLICABILITY"
-	tableProcesslist                        = "PROCESSLIST"
-	tableTiDBIndexes                        = "TIDB_INDEXES"
-	tableAnalyzeStatus                      = "ANALYZE_STATUS"
-	tableTiDBServersInfo                    = "TIDB_SERVERS_INFO"
 )
 
 var tableIDMap = map[string]int64{
@@ -105,10 +99,6 @@ var tableIDMap = map[string]int64{
 	tableOptimizerTrace:                     autoid.InformationSchemaDBID + 30,
 	tableTableSpaces:                        autoid.InformationSchemaDBID + 31,
 	tableCollationCharacterSetApplicability: autoid.InformationSchemaDBID + 32,
-	tableProcesslist:                        autoid.InformationSchemaDBID + 33,
-	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
-	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 35,
-	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 36,
 }
 
 type columnInfo struct {
@@ -543,52 +533,6 @@ var tableCollationCharacterSetApplicabilityCols = []columnInfo{
 	{"CHARACTER_SET_NAME", mysql.TypeVarchar, 32, mysql.NotNullFlag, nil, nil},
 }
 
-var tableProcesslistCols = []columnInfo{
-	{"ID", mysql.TypeLonglong, 21, mysql.NotNullFlag, 0, nil},
-	{"USER", mysql.TypeVarchar, 16, mysql.NotNullFlag, "", nil},
-	{"HOST", mysql.TypeVarchar, 64, mysql.NotNullFlag, "", nil},
-	{"DB", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"COMMAND", mysql.TypeVarchar, 16, mysql.NotNullFlag, "", nil},
-	{"TIME", mysql.TypeLong, 7, mysql.NotNullFlag, 0, nil},
-	{"STATE", mysql.TypeVarchar, 7, 0, nil, nil},
-	{"INFO", mysql.TypeString, 512, 0, nil, nil},
-	{"MEM", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"TxnStart", mysql.TypeVarchar, 64, mysql.NotNullFlag, "", nil},
-}
-
-var tableTiDBIndexesCols = []columnInfo{
-	{"TABLE_SCHEMA", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"NON_UNIQUE", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"KEY_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"SEQ_IN_INDEX", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"COLUMN_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"SUB_PART", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"INDEX_COMMENT", mysql.TypeVarchar, 2048, 0, nil, nil},
-	{"INDEX_ID", mysql.TypeLonglong, 21, 0, nil, nil},
-}
-
-var tableAnalyzeStatusCols = []columnInfo{
-	{"TABLE_SCHEMA", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"TABLE_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PARTITION_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"JOB_INFO", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PROCESSED_ROWS", mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
-	{"START_TIME", mysql.TypeDatetime, 0, 0, nil, nil},
-	{"STATE", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
-var tableTiDBServersInfoCols = []columnInfo{
-	{"DDL_ID", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"IP", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"PORT", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"STATUS_PORT", mysql.TypeLonglong, 21, 0, nil, nil},
-	{"LEASE", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"VERSION", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"GIT_HASH", mysql.TypeVarchar, 64, 0, nil, nil},
-	{"BINLOG_STATUS", mysql.TypeVarchar, 64, 0, nil, nil},
-}
-
 func dataForCharacterSets() (records [][]types.Datum) {
 
 	charsets := charset.GetSupportedCharsets()
@@ -658,22 +602,6 @@ func dataForSessionVar(ctx sessionctx.Context) (records [][]types.Datum, err err
 
 func dataForUserPrivileges(ctx sessionctx.Context) [][]types.Datum {
 	return [][]types.Datum{}
-}
-
-func dataForProcesslist(ctx sessionctx.Context) [][]types.Datum {
-	sm := ctx.GetSessionManager()
-	if sm == nil {
-		return nil
-	}
-
-	pl := sm.ShowProcessList()
-	records := make([][]types.Datum, 0, len(pl))
-	for _, pi := range pl {
-		rows := pi.ToRow(ctx.GetSessionVars().StmtCtx.TimeZone)
-		record := types.MakeDatums(rows...)
-		records = append(records, record)
-	}
-	return records
 }
 
 func dataForEngines() (records [][]types.Datum) {
@@ -984,63 +912,6 @@ func GetShardingInfo(dbInfo *model.DBInfo, tableInfo *model.TableInfo) interface
 		}
 	}
 	return shardingInfo
-}
-
-func dataForIndexes(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.Datum, error) {
-	var rows [][]types.Datum
-	for _, schema := range schemas {
-		for _, tb := range schema.Tables {
-			if tb.PKIsHandle {
-				var pkCol *model.ColumnInfo
-				for _, col := range tb.Cols() {
-					if mysql.HasPriKeyFlag(col.Flag) {
-						pkCol = col
-						break
-					}
-				}
-				record := types.MakeDatums(
-					schema.Name.O, // TABLE_SCHEMA
-					tb.Name.O,     // TABLE_NAME
-					0,             // NON_UNIQUE
-					"PRIMARY",     // KEY_NAME
-					1,             // SEQ_IN_INDEX
-					pkCol.Name.O,  // COLUMN_NAME
-					nil,           // SUB_PART
-					"",            // INDEX_COMMENT
-					0,             // INDEX_ID
-				)
-				rows = append(rows, record)
-			}
-			for _, idxInfo := range tb.Indices {
-				if idxInfo.State != model.StatePublic {
-					continue
-				}
-				for i, col := range idxInfo.Columns {
-					nonUniq := 1
-					if idxInfo.Unique {
-						nonUniq = 0
-					}
-					var subPart interface{}
-					if col.Length != types.UnspecifiedLength {
-						subPart = col.Length
-					}
-					record := types.MakeDatums(
-						schema.Name.O,   // TABLE_SCHEMA
-						tb.Name.O,       // TABLE_NAME
-						nonUniq,         // NON_UNIQUE
-						idxInfo.Name.O,  // KEY_NAME
-						i+1,             // SEQ_IN_INDEX
-						col.Name.O,      // COLUMN_NAME
-						subPart,         // SUB_PART
-						idxInfo.Comment, // INDEX_COMMENT
-						idxInfo.ID,      // INDEX_ID
-					)
-					rows = append(rows, record)
-				}
-			}
-		}
-	}
-	return rows, nil
 }
 
 func dataForColumns(ctx sessionctx.Context, schemas []*model.DBInfo) [][]types.Datum {
@@ -1364,28 +1235,6 @@ func keyColumnUsageInTable(schema *model.DBInfo, table *model.TableInfo) [][]typ
 	return rows
 }
 
-func dataForServersInfo() ([][]types.Datum, error) {
-	serversInfo, err := infosync.GetAllServerInfo(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	rows := make([][]types.Datum, 0, len(serversInfo))
-	for _, info := range serversInfo {
-		row := types.MakeDatums(
-			info.ID,              // DDL_ID
-			info.IP,              // IP
-			int(info.Port),       // PORT
-			int(info.StatusPort), // STATUS_PORT
-			info.Lease,           // LEASE
-			info.Version,         // VERSION
-			info.GitHash,         // GIT_HASH
-			"",                   // BINLOG_STATUS
-		)
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
 // ServerInfo represents the basic server information of single cluster component
 type ServerInfo struct {
 	ServerType string
@@ -1425,10 +1274,6 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableOptimizerTrace:                     tableOptimizerTraceCols,
 	tableTableSpaces:                        tableTableSpacesCols,
 	tableCollationCharacterSetApplicability: tableCollationCharacterSetApplicabilityCols,
-	tableProcesslist:                        tableProcesslistCols,
-	tableTiDBIndexes:                        tableTiDBIndexesCols,
-	tableAnalyzeStatus:                      tableAnalyzeStatusCols,
-	tableTiDBServersInfo:                    tableTiDBServersInfoCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocator, meta *model.TableInfo) (table.Table, error) {
@@ -1470,8 +1315,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForSchemata(ctx, dbs)
 	case tableTables:
 		fullRows, err = dataForTables(ctx, dbs)
-	case tableTiDBIndexes:
-		fullRows, err = dataForIndexes(ctx, dbs)
 	case tableColumns:
 		fullRows = dataForColumns(ctx, dbs)
 	case tableStatistics:
@@ -1512,10 +1355,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 	case tableTableSpaces:
 	case tableCollationCharacterSetApplicability:
 		fullRows = dataForCollationCharacterSetApplicability()
-	case tableProcesslist:
-		fullRows = dataForProcesslist(ctx)
-	case tableTiDBServersInfo:
-		fullRows, err = dataForServersInfo()
 	}
 	if err != nil {
 		return nil, err

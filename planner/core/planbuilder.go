@@ -295,8 +295,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildDelete(ctx, x)
 	case *ast.ExplainStmt:
 		return b.buildExplain(ctx, x)
-	case *ast.ExplainForStmt:
-		return b.buildExplainFor(x)
 	case *ast.InsertStmt:
 		return b.buildInsert(ctx, x)
 	case *ast.SelectStmt:
@@ -1431,22 +1429,6 @@ func (b *PlanBuilder) buildExplainPlan(targetPlan Plan, format string, execStmt 
 	return p, p.prepareSchema()
 }
 
-// buildExplainFor gets *last* (maybe running or finished) query plan from connection #connection id.
-// See https://dev.mysql.com/doc/refman/8.0/en/explain-for-connection.html.
-func (b *PlanBuilder) buildExplainFor(explainFor *ast.ExplainForStmt) (Plan, error) {
-	processInfo, ok := b.ctx.GetSessionManager().GetProcessInfo(explainFor.ConnectionID)
-	if !ok {
-		return nil, ErrNoSuchThread.GenWithStackByArgs(explainFor.ConnectionID)
-	}
-
-	targetPlan, ok := processInfo.Plan.(Plan)
-	if !ok || targetPlan == nil {
-		return &Explain{Format: explainFor.Format}, nil
-	}
-
-	return b.buildExplainPlan(targetPlan, explainFor.Format, nil)
-}
-
 func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt) (Plan, error) {
 	if show, ok := explain.Stmt.(*ast.ShowStmt); ok {
 		return b.buildShow(ctx, show)
@@ -1595,10 +1577,6 @@ func buildShowSchema(s *ast.ShowStmt) (schema *expression.Schema, outputNames []
 		ftypes = []byte{mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeLonglong,
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeLonglong,
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowProcessList:
-		names = []string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}
-		ftypes = []byte{mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeVarchar,
-			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLong, mysql.TypeVarchar, mysql.TypeString}
 	case ast.ShowPumpStatus:
 		names = []string{"NodeID", "Address", "State", "Max_Commit_Ts", "Update_Time"}
 		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar}
