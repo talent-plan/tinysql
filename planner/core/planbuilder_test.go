@@ -97,7 +97,7 @@ func (s *testPlanBuilderSuite) TestGetPathByIndexName(c *C) {
 }
 
 func (s *testPlanBuilderSuite) TestRewriterPool(c *C) {
-	builder := NewPlanBuilder(MockContext(), nil, &BlockHintProcessor{})
+	builder := NewPlanBuilder(MockContext(), nil)
 
 	// Make sure PlanBuilder.getExpressionRewriter() provides clean rewriter from pool.
 	// First, pick one rewriter from the pool and make it dirty.

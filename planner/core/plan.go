@@ -58,8 +58,6 @@ type Plan interface {
 
 	// SetOutputNames sets the outputting name by the given slice.
 	SetOutputNames(names types.NameSlice)
-
-	SelectBlockOffset() int
 }
 
 func enforceProperty(p *property.PhysicalProperty, tsk task, ctx sessionctx.Context) task {
@@ -68,7 +66,7 @@ func enforceProperty(p *property.PhysicalProperty, tsk task, ctx sessionctx.Cont
 	}
 	tsk = finishCopTask(ctx, tsk)
 	sortReqProp := &property.PhysicalProperty{TaskTp: property.RootTaskType, Items: p.Items, ExpectedCnt: math.MaxFloat64}
-	sort := PhysicalSort{ByItems: make([]*ByItems, 0, len(p.Items))}.Init(ctx, tsk.plan().statsInfo(), tsk.plan().SelectBlockOffset(), sortReqProp)
+	sort := PhysicalSort{ByItems: make([]*ByItems, 0, len(p.Items))}.Init(ctx, tsk.plan().statsInfo(), sortReqProp)
 	for _, col := range p.Items {
 		sort.ByItems = append(sort.ByItems, &ByItems{col.Col, col.Desc})
 	}
@@ -259,28 +257,27 @@ func (p *logicalSchemaProducer) BuildKeyInfo(selfSchema *expression.Schema, chil
 	p.baseLogicalPlan.BuildKeyInfo(selfSchema, childSchema)
 }
 
-func newBasePlan(ctx sessionctx.Context, tp string, offset int) basePlan {
+func newBasePlan(ctx sessionctx.Context, tp string) basePlan {
 	ctx.GetSessionVars().PlanID++
 	id := ctx.GetSessionVars().PlanID
 	return basePlan{
-		tp:          tp,
-		id:          id,
-		ctx:         ctx,
-		blockOffset: offset,
+		tp:  tp,
+		id:  id,
+		ctx: ctx,
 	}
 }
 
-func newBaseLogicalPlan(ctx sessionctx.Context, tp string, self LogicalPlan, offset int) baseLogicalPlan {
+func newBaseLogicalPlan(ctx sessionctx.Context, tp string, self LogicalPlan) baseLogicalPlan {
 	return baseLogicalPlan{
 		taskMap:  make(map[string]task),
-		basePlan: newBasePlan(ctx, tp, offset),
+		basePlan: newBasePlan(ctx, tp),
 		self:     self,
 	}
 }
 
-func newBasePhysicalPlan(ctx sessionctx.Context, tp string, self PhysicalPlan, offset int) basePhysicalPlan {
+func newBasePhysicalPlan(ctx sessionctx.Context, tp string, self PhysicalPlan) basePhysicalPlan {
 	return basePhysicalPlan{
-		basePlan: newBasePlan(ctx, tp, offset),
+		basePlan: newBasePlan(ctx, tp),
 		self:     self,
 	}
 }
@@ -304,11 +301,10 @@ func (p *baseLogicalPlan) PruneColumns(parentUsedCols []*expression.Column) erro
 // basePlan implements base Plan interface.
 // Should be used as embedded struct in Plan implementations.
 type basePlan struct {
-	tp          string
-	id          int
-	ctx         sessionctx.Context
-	stats       *property.StatsInfo
-	blockOffset int
+	tp    string
+	id    int
+	ctx   sessionctx.Context
+	stats *property.StatsInfo
 }
 
 // OutputNames returns the outputting names of each column.
@@ -346,10 +342,6 @@ func (p *basePlan) ExplainID() fmt.Stringer {
 // TP implements Plan interface.
 func (p *basePlan) TP() string {
 	return p.tp
-}
-
-func (p *basePlan) SelectBlockOffset() int {
-	return p.blockOffset
 }
 
 // Stats implements Plan Stats interface.

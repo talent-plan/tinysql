@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
@@ -375,8 +374,6 @@ type SessionVars struct {
 
 	// isolationReadEngines is used to isolation read, tidb only read from the stores whose engine type is in the engines.
 	isolationReadEngines map[kv.StoreType]struct{}
-
-	PlannerSelectBlockAsName []ast.HintTable
 }
 
 // ConnectionInfo present connection used by audit.

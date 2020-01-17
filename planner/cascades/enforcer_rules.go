@@ -63,7 +63,7 @@ func (e *OrderEnforcer) OnEnforce(reqProp *property.PhysicalProperty, child memo
 	childPlan := child.GetPlan()
 	sort := plannercore.PhysicalSort{
 		ByItems: make([]*plannercore.ByItems, 0, len(reqProp.Items)),
-	}.Init(childPlan.SCtx(), childPlan.Stats(), childPlan.SelectBlockOffset(), &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64})
+	}.Init(childPlan.SCtx(), childPlan.Stats(), &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64})
 	for _, item := range reqProp.Items {
 		item := &plannercore.ByItems{
 			Expr: item.Col,
@@ -79,7 +79,7 @@ func (e *OrderEnforcer) OnEnforce(reqProp *property.PhysicalProperty, child memo
 func (e *OrderEnforcer) GetEnforceCost(g *memo.Group) float64 {
 	// We need a SessionCtx to calculate the cost of a sort.
 	sctx := g.Equivalents.Front().Value.(*memo.GroupExpr).ExprNode.SCtx()
-	sort := plannercore.PhysicalSort{}.Init(sctx, nil, 0, nil)
+	sort := plannercore.PhysicalSort{}.Init(sctx, nil, nil)
 	cost := sort.GetCost(g.Prop.Stats.RowCount)
 	return cost
 }

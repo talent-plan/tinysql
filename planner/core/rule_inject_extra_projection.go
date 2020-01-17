@@ -113,7 +113,7 @@ func InjectProjBelowAgg(aggPlan PhysicalPlan, aggFuncs []*aggregation.AggFuncDes
 	proj := PhysicalProjection{
 		Exprs:                projExprs,
 		AvoidColumnEvaluator: false,
-	}.Init(aggPlan.SCtx(), child.statsInfo().ScaleByExpectCnt(prop.ExpectedCnt), aggPlan.SelectBlockOffset(), prop)
+	}.Init(aggPlan.SCtx(), child.statsInfo().ScaleByExpectCnt(prop.ExpectedCnt), prop)
 	proj.SetSchema(expression.NewSchema(projSchemaCols...))
 	proj.SetChildren(child)
 
@@ -147,7 +147,7 @@ func InjectProjBelowSort(p PhysicalPlan, orderByItems []*ByItems) PhysicalPlan {
 	topProj := PhysicalProjection{
 		Exprs:                topProjExprs,
 		AvoidColumnEvaluator: false,
-	}.Init(p.SCtx(), p.statsInfo(), p.SelectBlockOffset(), nil)
+	}.Init(p.SCtx(), p.statsInfo(), nil)
 	topProj.SetSchema(p.Schema().Clone())
 	topProj.SetChildren(p)
 
@@ -180,7 +180,7 @@ func InjectProjBelowSort(p PhysicalPlan, orderByItems []*ByItems) PhysicalPlan {
 	bottomProj := PhysicalProjection{
 		Exprs:                bottomProjExprs,
 		AvoidColumnEvaluator: false,
-	}.Init(p.SCtx(), childPlan.statsInfo().ScaleByExpectCnt(childProp.ExpectedCnt), p.SelectBlockOffset(), childProp)
+	}.Init(p.SCtx(), childPlan.statsInfo().ScaleByExpectCnt(childProp.ExpectedCnt), childProp)
 	bottomProj.SetSchema(expression.NewSchema(bottomProjSchemaCols...))
 	bottomProj.SetChildren(childPlan)
 	p.SetChildren(bottomProj)

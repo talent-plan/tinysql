@@ -56,10 +56,9 @@ type tableHintInfo struct {
 }
 
 type hintTableInfo struct {
-	dbName       model.CIStr
-	tblName      model.CIStr
-	selectOffset int
-	matched      bool
+	dbName  model.CIStr
+	tblName model.CIStr
+	matched bool
 }
 
 type indexHintInfo struct {
@@ -73,14 +72,14 @@ type aggHintInfo struct {
 	preferAggToCop bool
 }
 
-func tableNames2HintTableInfo(ctx sessionctx.Context, hintTables []ast.HintTable, p *BlockHintProcessor, nodeType nodeType, currentOffset int) []hintTableInfo {
+func tableNames2HintTableInfo(ctx sessionctx.Context, hintTables []ast.HintTable) []hintTableInfo {
 	if len(hintTables) == 0 {
 		return nil
 	}
 	hintTableInfos := make([]hintTableInfo, len(hintTables))
 	defaultDBName := model.NewCIStr(ctx.GetSessionVars().CurrentDB)
 	for i, hintTable := range hintTables {
-		tableInfo := hintTableInfo{tblName: hintTable.TableName, selectOffset: p.getHintOffset(hintTable.QBName, nodeType, currentOffset)}
+		tableInfo := hintTableInfo{tblName: hintTable.TableName}
 		if tableInfo.dbName.L == "" {
 			tableInfo.dbName = defaultDBName
 		}
@@ -124,7 +123,7 @@ func (info *tableHintInfo) matchTableName(tables []*hintTableInfo, hintTables []
 			if table == nil {
 				continue
 			}
-			if curEntry.dbName.L == table.dbName.L && curEntry.tblName.L == table.tblName.L && table.selectOffset == curEntry.selectOffset {
+			if curEntry.dbName.L == table.dbName.L && curEntry.tblName.L == table.tblName.L {
 				hintTables[i].matched = true
 				hintMatched = true
 				break
@@ -231,10 +230,6 @@ type PlanBuilder struct {
 	//   If it's a join, we pop its children's out then merge them and push the new map to stack.
 	//   If we meet a subquery, it's clearly that it's a independent problem so we just pop one map out when we finish building the subquery.
 	handleHelper *handleColHelper
-
-	hintProcessor *BlockHintProcessor
-	// selectOffset is the offsets of current processing select stmts.
-	selectOffset []int
 }
 
 type handleColHelper struct {
@@ -280,34 +275,13 @@ func (b *PlanBuilder) GetOptFlag() uint64 {
 	return b.optFlag
 }
 
-func (b *PlanBuilder) getSelectOffset() int {
-	if len(b.selectOffset) > 0 {
-		return b.selectOffset[len(b.selectOffset)-1]
-	}
-	return -1
-}
-
-func (b *PlanBuilder) pushSelectOffset(offset int) {
-	b.selectOffset = append(b.selectOffset, offset)
-}
-
-func (b *PlanBuilder) popSelectOffset() {
-	b.selectOffset = b.selectOffset[:len(b.selectOffset)-1]
-}
-
 // NewPlanBuilder creates a new PlanBuilder.
-func NewPlanBuilder(sctx sessionctx.Context, is infoschema.InfoSchema, processor *BlockHintProcessor) *PlanBuilder {
-	if processor == nil {
-		sctx.GetSessionVars().PlannerSelectBlockAsName = nil
-	} else {
-		sctx.GetSessionVars().PlannerSelectBlockAsName = make([]ast.HintTable, processor.MaxSelectStmtOffset()+1)
-	}
+func NewPlanBuilder(sctx sessionctx.Context, is infoschema.InfoSchema) *PlanBuilder {
 	return &PlanBuilder{
-		ctx:           sctx,
-		is:            is,
-		colMapper:     make(map[*ast.ColumnNameExpr]int),
-		handleHelper:  &handleColHelper{id2HandleMapStack: make([]map[int64][]*expression.Column, 0)},
-		hintProcessor: processor,
+		ctx:          sctx,
+		is:           is,
+		colMapper:    make(map[*ast.ColumnNameExpr]int),
+		handleHelper: &handleColHelper{id2HandleMapStack: make([]map[int64][]*expression.Column, 0)},
 	}
 }
 
@@ -349,10 +323,10 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 
 func (b *PlanBuilder) buildDo(ctx context.Context, v *ast.DoStmt) (Plan, error) {
 	var p LogicalPlan
-	dual := LogicalTableDual{RowCount: 1}.Init(b.ctx, b.getSelectOffset())
+	dual := LogicalTableDual{RowCount: 1}.Init(b.ctx)
 	dual.SetSchema(expression.NewSchema())
 	p = dual
-	proj := LogicalProjection{Exprs: make([]expression.Expression, 0, len(v.Exprs))}.Init(b.ctx, b.getSelectOffset())
+	proj := LogicalProjection{Exprs: make([]expression.Expression, 0, len(v.Exprs))}.Init(b.ctx)
 	proj.names = make([]*types.FieldName, len(v.Exprs))
 	schema := expression.NewSchema(make([]*expression.Column, 0, len(v.Exprs))...)
 	for _, astExpr := range v.Exprs {
@@ -387,7 +361,7 @@ func (b *PlanBuilder) buildSet(ctx context.Context, v *ast.SetStmt) (Plan, error
 				// Convert column name expression to string value expression.
 				vars.Value = ast.NewValueExpr(cn.Name.Name.O)
 			}
-			mockTablePlan := LogicalTableDual{}.Init(b.ctx, b.getSelectOffset())
+			mockTablePlan := LogicalTableDual{}.Init(b.ctx)
 			var err error
 			assign.Expr, _, err = b.rewrite(ctx, vars.Value, mockTablePlan, nil, true)
 			if err != nil {
@@ -998,7 +972,7 @@ func (b *PlanBuilder) buildShow(ctx context.Context, show *ast.ShowStmt) (Plan, 
 	if np != p {
 		b.optFlag |= flagEliminateProjection
 		fieldsLen := len(p.schema.Columns)
-		proj := LogicalProjection{Exprs: make([]expression.Expression, 0, fieldsLen)}.Init(b.ctx, 0)
+		proj := LogicalProjection{Exprs: make([]expression.Expression, 0, fieldsLen)}.Init(b.ctx)
 		schema := expression.NewSchema(make([]*expression.Column, 0, fieldsLen)...)
 		for _, col := range p.schema.Columns {
 			proj.Exprs = append(proj.Exprs, col)
@@ -1105,7 +1079,7 @@ func (b *PlanBuilder) buildInsert(ctx context.Context, insert *ast.InsertStmt) (
 		IsReplace:     insert.IsReplace,
 	}.Init(b.ctx)
 
-	mockTablePlan := LogicalTableDual{}.Init(b.ctx, b.getSelectOffset())
+	mockTablePlan := LogicalTableDual{}.Init(b.ctx)
 	mockTablePlan.SetSchema(insertPlan.tableSchema)
 	mockTablePlan.names = insertPlan.tableColNames
 

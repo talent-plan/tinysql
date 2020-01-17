@@ -223,7 +223,7 @@ func buildHashAggExecutor(ctx sessionctx.Context, src Executor, schema *expressi
 	plan.AggFuncs = aggFuncs
 	plan.GroupByItems = groupItems
 	plan.SetSchema(schema)
-	plan.Init(ctx, nil, 0)
+	plan.Init(ctx, nil)
 	plan.SetChildren(nil)
 	b := newExecutorBuilder(ctx, nil)
 	exec := b.build(plan)
@@ -238,7 +238,7 @@ func buildStreamAggExecutor(ctx sessionctx.Context, src Executor, schema *expres
 	plan.AggFuncs = aggFuncs
 	plan.GroupByItems = groupItems
 	plan.SetSchema(schema)
-	plan.Init(ctx, nil, 0)
+	plan.Init(ctx, nil)
 	plan.SetChildren(nil)
 	b := newExecutorBuilder(ctx, nil)
 	exec := b.build(plan)

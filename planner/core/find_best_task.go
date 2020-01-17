@@ -77,7 +77,7 @@ func (p *LogicalTableDual) findBestTask(prop *property.PhysicalProperty) (task, 
 	}
 	dual := PhysicalTableDual{
 		RowCount: p.RowCount,
-	}.Init(p.ctx, p.stats, p.blockOffset)
+	}.Init(p.ctx, p.stats)
 	dual.SetSchema(p.schema)
 	return &rootTask{p: dual}, nil
 }
@@ -185,7 +185,7 @@ func (p *LogicalMemTable) findBestTask(prop *property.PhysicalProperty) (t task,
 		DBName:  p.dbName,
 		Table:   p.tableInfo,
 		Columns: p.tableInfo.Columns,
-	}.Init(p.ctx, p.stats, p.blockOffset)
+	}.Init(p.ctx, p.stats)
 	memTable.SetSchema(p.schema)
 	return &rootTask{p: memTable}, nil
 }
@@ -199,7 +199,7 @@ func (ds *DataSource) tryToGetDualTask() (task, error) {
 				return nil, err
 			}
 			if !result {
-				dual := PhysicalTableDual{}.Init(ds.ctx, ds.stats, ds.blockOffset)
+				dual := PhysicalTableDual{}.Init(ds.ctx, ds.stats)
 				dual.SetSchema(ds.schema)
 				return &rootTask{
 					p: dual,
@@ -405,7 +405,7 @@ func (ds *DataSource) findBestTask(prop *property.PhysicalProperty) (t task, err
 		path := candidate.path
 		// if we already know the range of the scan is empty, just return a TableDual
 		if len(path.Ranges) == 0 {
-			dual := PhysicalTableDual{}.Init(ds.ctx, ds.stats, ds.blockOffset)
+			dual := PhysicalTableDual{}.Init(ds.ctx, ds.stats)
 			dual.SetSchema(ds.schema)
 			return &rootTask{
 				p: dual,
@@ -509,7 +509,7 @@ func (ds *DataSource) convertToIndexScan(prop *property.PhysicalProperty, candid
 			TableAsName:     ds.TableAsName,
 			isPartition:     ds.isPartition,
 			physicalTableID: ds.physicalTableID,
-		}.Init(ds.ctx, is.blockOffset)
+		}.Init(ds.ctx)
 		ts.SetSchema(ds.schema.Clone())
 		ts.ExpandVirtualColumn()
 		cop.tablePlan = ts
@@ -606,14 +606,14 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 		}
 		count := is.stats.RowCount * selectivity
 		stats := p.tableStats.ScaleByExpectCnt(count)
-		indexSel := PhysicalSelection{Conditions: indexConds}.Init(is.ctx, stats, is.blockOffset)
+		indexSel := PhysicalSelection{Conditions: indexConds}.Init(is.ctx, stats)
 		indexSel.SetChildren(is)
 		copTask.indexPlan = indexSel
 	}
 	if len(tableConds) > 0 {
 		copTask.finishIndexPlan()
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
-		tableSel := PhysicalSelection{Conditions: tableConds}.Init(is.ctx, finalStats, is.blockOffset)
+		tableSel := PhysicalSelection{Conditions: tableConds}.Init(is.ctx, finalStats)
 		tableSel.SetChildren(copTask.tablePlan)
 		copTask.tablePlan = tableSel
 	}
@@ -668,7 +668,7 @@ func (s *LogicalTableScan) GetPhysicalScan(schema *expression.Schema, stats *pro
 		physicalTableID: ds.physicalTableID,
 		Ranges:          s.Ranges,
 		AccessCondition: s.AccessConds,
-	}.Init(s.ctx, s.blockOffset)
+	}.Init(s.ctx)
 	ts.stats = stats
 	ts.SetSchema(schema.Clone())
 	return ts
@@ -690,7 +690,7 @@ func (s *LogicalIndexScan) GetPhysicalIndexScan(schema *expression.Schema, stats
 		dataSourceSchema: ds.schema,
 		isPartition:      ds.isPartition,
 		physicalTableID:  ds.physicalTableID,
-	}.Init(ds.ctx, ds.blockOffset)
+	}.Init(ds.ctx)
 	is.stats = stats
 	is.initSchema(s.Index, s.FullIdxCols, s.IsDoubleRead)
 	return is
@@ -732,7 +732,7 @@ func (ts *PhysicalTableScan) addPushedDownSelection(copTask *copTask, stats *pro
 	sessVars := ts.ctx.GetSessionVars()
 	if len(ts.filterCondition) > 0 {
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
-		sel := PhysicalSelection{Conditions: ts.filterCondition}.Init(ts.ctx, stats, ts.blockOffset)
+		sel := PhysicalSelection{Conditions: ts.filterCondition}.Init(ts.ctx, stats)
 		sel.SetChildren(ts)
 		copTask.tablePlan = sel
 	}
@@ -750,7 +750,7 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 		AccessCondition: path.AccessConds,
 		filterCondition: path.TableFilters,
 		StoreType:       path.StoreType,
-	}.Init(ds.ctx, ds.blockOffset)
+	}.Init(ds.ctx)
 	if ts.StoreType == kv.TiFlash {
 		// Append the AccessCondition to filterCondition because TiFlash only support full range scan for each
 		// region, do not reset ts.Ranges as it will help prune regions during `buildCopTasks`
@@ -813,7 +813,7 @@ func (ds *DataSource) getOriginalPhysicalIndexScan(prop *property.PhysicalProper
 		dataSourceSchema: ds.schema,
 		isPartition:      ds.isPartition,
 		physicalTableID:  ds.physicalTableID,
-	}.Init(ds.ctx, ds.blockOffset)
+	}.Init(ds.ctx)
 	rowCount := path.CountAfterAccess
 	is.initSchema(idx, path.FullIdxCols, !isSingleScan)
 	// Only use expectedCnt when it's smaller than the count we calculated.

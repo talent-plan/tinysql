@@ -21,8 +21,6 @@ import (
 const (
 	// TypeSel is the type of Selection.
 	TypeSel = "Selection"
-	// TypeSet is the type of Set.
-	TypeSet = "Set"
 	// TypeProj is the type of Projection.
 	TypeProj = "Projection"
 	// TypeAgg is the type of Aggregation.
@@ -59,16 +57,10 @@ const (
 	TypeMergeJoin = "MergeJoin"
 	// TypeIndexJoin is the type of index look up join.
 	TypeIndexJoin = "IndexJoin"
-	// TypeIndexMergeJoin is the type of index look up merge join.
-	TypeIndexMergeJoin = "IndexMergeJoin"
-	// TypeIndexHashJoin is the type of index nested loop hash join.
-	TypeIndexHashJoin = "IndexHashJoin"
 	// TypeApply is the type of Apply.
 	TypeApply = "Apply"
 	// TypeMaxOneRow is the type of MaxOneRow.
 	TypeMaxOneRow = "MaxOneRow"
-	// TypeExists is the type of Exists.
-	TypeExists = "Exists"
 	// TypeDual is the type of TableDual.
 	TypeDual = "TableDual"
 	// TypeInsert is the type of Insert
@@ -90,166 +82,166 @@ const (
 )
 
 // Init initializes LogicalAggregation.
-func (la LogicalAggregation) Init(ctx sessionctx.Context, offset int) *LogicalAggregation {
-	la.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeAgg, &la, offset)
+func (la LogicalAggregation) Init(ctx sessionctx.Context) *LogicalAggregation {
+	la.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeAgg, &la)
 	return &la
 }
 
 // Init initializes LogicalJoin.
-func (p LogicalJoin) Init(ctx sessionctx.Context, offset int) *LogicalJoin {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeJoin, &p, offset)
+func (p LogicalJoin) Init(ctx sessionctx.Context) *LogicalJoin {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeJoin, &p)
 	return &p
 }
 
 // Init initializes DataSource.
-func (ds DataSource) Init(ctx sessionctx.Context, offset int) *DataSource {
-	ds.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTableScan, &ds, offset)
+func (ds DataSource) Init(ctx sessionctx.Context) *DataSource {
+	ds.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTableScan, &ds)
 	return &ds
 }
 
 // Init initializes TiKVSingleGather.
-func (sg TiKVSingleGather) Init(ctx sessionctx.Context, offset int) *TiKVSingleGather {
-	sg.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTiKVSingleGather, &sg, offset)
+func (sg TiKVSingleGather) Init(ctx sessionctx.Context) *TiKVSingleGather {
+	sg.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTiKVSingleGather, &sg)
 	return &sg
 }
 
 // Init initializes LogicalTableScan.
-func (ts LogicalTableScan) Init(ctx sessionctx.Context, offset int) *LogicalTableScan {
-	ts.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTableScan, &ts, offset)
+func (ts LogicalTableScan) Init(ctx sessionctx.Context) *LogicalTableScan {
+	ts.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTableScan, &ts)
 	return &ts
 }
 
 // Init initializes LogicalIndexScan.
-func (is LogicalIndexScan) Init(ctx sessionctx.Context, offset int) *LogicalIndexScan {
-	is.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeIdxScan, &is, offset)
+func (is LogicalIndexScan) Init(ctx sessionctx.Context) *LogicalIndexScan {
+	is.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeIdxScan, &is)
 	return &is
 }
 
 // Init initializes LogicalApply.
-func (la LogicalApply) Init(ctx sessionctx.Context, offset int) *LogicalApply {
-	la.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeApply, &la, offset)
+func (la LogicalApply) Init(ctx sessionctx.Context) *LogicalApply {
+	la.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeApply, &la)
 	return &la
 }
 
 // Init initializes LogicalSelection.
-func (p LogicalSelection) Init(ctx sessionctx.Context, offset int) *LogicalSelection {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSel, &p, offset)
+func (p LogicalSelection) Init(ctx sessionctx.Context) *LogicalSelection {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSel, &p)
 	return &p
 }
 
 // Init initializes PhysicalSelection.
-func (p PhysicalSelection) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalSelection {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSel, &p, offset)
+func (p PhysicalSelection) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalSelection {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSel, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalUnionScan.
-func (p LogicalUnionScan) Init(ctx sessionctx.Context, offset int) *LogicalUnionScan {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeUnionScan, &p, offset)
+func (p LogicalUnionScan) Init(ctx sessionctx.Context) *LogicalUnionScan {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeUnionScan, &p)
 	return &p
 }
 
 // Init initializes LogicalProjection.
-func (p LogicalProjection) Init(ctx sessionctx.Context, offset int) *LogicalProjection {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeProj, &p, offset)
+func (p LogicalProjection) Init(ctx sessionctx.Context) *LogicalProjection {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeProj, &p)
 	return &p
 }
 
 // Init initializes PhysicalProjection.
-func (p PhysicalProjection) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalProjection {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeProj, &p, offset)
+func (p PhysicalProjection) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalProjection {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeProj, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalUnionAll.
-func (p LogicalUnionAll) Init(ctx sessionctx.Context, offset int) *LogicalUnionAll {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeUnion, &p, offset)
+func (p LogicalUnionAll) Init(ctx sessionctx.Context) *LogicalUnionAll {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeUnion, &p)
 	return &p
 }
 
 // Init initializes PhysicalUnionAll.
-func (p PhysicalUnionAll) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalUnionAll {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeUnion, &p, offset)
+func (p PhysicalUnionAll) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalUnionAll {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeUnion, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalSort.
-func (ls LogicalSort) Init(ctx sessionctx.Context, offset int) *LogicalSort {
-	ls.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSort, &ls, offset)
+func (ls LogicalSort) Init(ctx sessionctx.Context) *LogicalSort {
+	ls.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSort, &ls)
 	return &ls
 }
 
 // Init initializes PhysicalSort.
-func (p PhysicalSort) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalSort {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSort, &p, offset)
+func (p PhysicalSort) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalSort {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSort, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes NominalSort.
-func (p NominalSort) Init(ctx sessionctx.Context, offset int, props ...*property.PhysicalProperty) *NominalSort {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSort, &p, offset)
+func (p NominalSort) Init(ctx sessionctx.Context, props ...*property.PhysicalProperty) *NominalSort {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeSort, &p)
 	p.childrenReqProps = props
 	return &p
 }
 
 // Init initializes LogicalTopN.
-func (lt LogicalTopN) Init(ctx sessionctx.Context, offset int) *LogicalTopN {
-	lt.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTopN, &lt, offset)
+func (lt LogicalTopN) Init(ctx sessionctx.Context) *LogicalTopN {
+	lt.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeTopN, &lt)
 	return &lt
 }
 
 // Init initializes PhysicalTopN.
-func (p PhysicalTopN) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalTopN {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTopN, &p, offset)
+func (p PhysicalTopN) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalTopN {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTopN, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalLimit.
-func (p LogicalLimit) Init(ctx sessionctx.Context, offset int) *LogicalLimit {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeLimit, &p, offset)
+func (p LogicalLimit) Init(ctx sessionctx.Context) *LogicalLimit {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeLimit, &p)
 	return &p
 }
 
 // Init initializes PhysicalLimit.
-func (p PhysicalLimit) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalLimit {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeLimit, &p, offset)
+func (p PhysicalLimit) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalLimit {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeLimit, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalTableDual.
-func (p LogicalTableDual) Init(ctx sessionctx.Context, offset int) *LogicalTableDual {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeDual, &p, offset)
+func (p LogicalTableDual) Init(ctx sessionctx.Context) *LogicalTableDual {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeDual, &p)
 	return &p
 }
 
 // Init initializes PhysicalTableDual.
-func (p PhysicalTableDual) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int) *PhysicalTableDual {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeDual, &p, offset)
+func (p PhysicalTableDual) Init(ctx sessionctx.Context, stats *property.StatsInfo) *PhysicalTableDual {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeDual, &p)
 	p.stats = stats
 	return &p
 }
 
 // Init initializes LogicalMaxOneRow.
-func (p LogicalMaxOneRow) Init(ctx sessionctx.Context, offset int) *LogicalMaxOneRow {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeMaxOneRow, &p, offset)
+func (p LogicalMaxOneRow) Init(ctx sessionctx.Context) *LogicalMaxOneRow {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeMaxOneRow, &p)
 	return &p
 }
 
 // Init initializes PhysicalMaxOneRow.
-func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalMaxOneRow {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMaxOneRow, &p, offset)
+func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalMaxOneRow {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMaxOneRow, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
@@ -257,37 +249,37 @@ func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInf
 
 // Init initializes Update.
 func (p Update) Init(ctx sessionctx.Context) *Update {
-	p.basePlan = newBasePlan(ctx, TypeUpdate, 0)
+	p.basePlan = newBasePlan(ctx, TypeUpdate)
 	return &p
 }
 
 // Init initializes Delete.
 func (p Delete) Init(ctx sessionctx.Context) *Delete {
-	p.basePlan = newBasePlan(ctx, TypeDelete, 0)
+	p.basePlan = newBasePlan(ctx, TypeDelete)
 	return &p
 }
 
 // Init initializes Insert.
 func (p Insert) Init(ctx sessionctx.Context) *Insert {
-	p.basePlan = newBasePlan(ctx, TypeInsert, 0)
+	p.basePlan = newBasePlan(ctx, TypeInsert)
 	return &p
 }
 
 // Init initializes LogicalShow.
 func (p LogicalShow) Init(ctx sessionctx.Context) *LogicalShow {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeShow, &p, 0)
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeShow, &p)
 	return &p
 }
 
 // Init initializes LogicalShowDDLJobs.
 func (p LogicalShowDDLJobs) Init(ctx sessionctx.Context) *LogicalShowDDLJobs {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeShowDDLJobs, &p, 0)
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeShowDDLJobs, &p)
 	return &p
 }
 
 // Init initializes PhysicalShow.
 func (p PhysicalShow) Init(ctx sessionctx.Context) *PhysicalShow {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeShow, &p, 0)
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeShow, &p)
 	// Just use pseudo stats to avoid panic.
 	p.stats = &property.StatsInfo{RowCount: 1}
 	return &p
@@ -295,98 +287,98 @@ func (p PhysicalShow) Init(ctx sessionctx.Context) *PhysicalShow {
 
 // Init initializes PhysicalShowDDLJobs.
 func (p PhysicalShowDDLJobs) Init(ctx sessionctx.Context) *PhysicalShowDDLJobs {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeShowDDLJobs, &p, 0)
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeShowDDLJobs, &p)
 	// Just use pseudo stats to avoid panic.
 	p.stats = &property.StatsInfo{RowCount: 1}
 	return &p
 }
 
 // Init initializes PhysicalTableScan.
-func (p PhysicalTableScan) Init(ctx sessionctx.Context, offset int) *PhysicalTableScan {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTableScan, &p, offset)
+func (p PhysicalTableScan) Init(ctx sessionctx.Context) *PhysicalTableScan {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTableScan, &p)
 	return &p
 }
 
 // Init initializes PhysicalIndexScan.
-func (p PhysicalIndexScan) Init(ctx sessionctx.Context, offset int) *PhysicalIndexScan {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIdxScan, &p, offset)
+func (p PhysicalIndexScan) Init(ctx sessionctx.Context) *PhysicalIndexScan {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIdxScan, &p)
 	return &p
 }
 
 // Init initializes LogicalMemTable.
-func (p LogicalMemTable) Init(ctx sessionctx.Context, offset int) *LogicalMemTable {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeMemTableScan, &p, offset)
+func (p LogicalMemTable) Init(ctx sessionctx.Context) *LogicalMemTable {
+	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeMemTableScan, &p)
 	return &p
 }
 
 // Init initializes PhysicalMemTable.
-func (p PhysicalMemTable) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int) *PhysicalMemTable {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMemTableScan, &p, offset)
+func (p PhysicalMemTable) Init(ctx sessionctx.Context, stats *property.StatsInfo) *PhysicalMemTable {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMemTableScan, &p)
 	p.stats = stats
 	return &p
 }
 
 // Init initializes PhysicalHashJoin.
-func (p PhysicalHashJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalHashJoin {
+func (p PhysicalHashJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalHashJoin {
 	tp := TypeHashRightJoin
 	if p.InnerChildIdx == 1 {
 		tp = TypeHashLeftJoin
 	}
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, tp, &p, offset)
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, tp, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes PhysicalMergeJoin.
-func (p PhysicalMergeJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int) *PhysicalMergeJoin {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMergeJoin, &p, offset)
+func (p PhysicalMergeJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo) *PhysicalMergeJoin {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMergeJoin, &p)
 	p.stats = stats
 	return &p
 }
 
 // Init initializes basePhysicalAgg.
-func (base basePhysicalAgg) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int) *basePhysicalAgg {
-	base.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeHashAgg, &base, offset)
+func (base basePhysicalAgg) Init(ctx sessionctx.Context, stats *property.StatsInfo) *basePhysicalAgg {
+	base.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeHashAgg, &base)
 	base.stats = stats
 	return &base
 }
 
-func (base basePhysicalAgg) initForHash(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalHashAgg {
+func (base basePhysicalAgg) initForHash(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalHashAgg {
 	p := &PhysicalHashAgg{base}
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeHashAgg, p, offset)
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeHashAgg, p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return p
 }
 
-func (base basePhysicalAgg) initForStream(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalStreamAgg {
+func (base basePhysicalAgg) initForStream(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalStreamAgg {
 	p := &PhysicalStreamAgg{base}
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeStreamAgg, p, offset)
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeStreamAgg, p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return p
 }
 
 // Init initializes PhysicalApply.
-func (p PhysicalApply) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalApply {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeApply, &p, offset)
+func (p PhysicalApply) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalApply {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeApply, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes PhysicalUnionScan.
-func (p PhysicalUnionScan) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalUnionScan {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeUnionScan, &p, offset)
+func (p PhysicalUnionScan) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalUnionScan {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeUnionScan, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p
 }
 
 // Init initializes PhysicalIndexLookUpReader.
-func (p PhysicalIndexLookUpReader) Init(ctx sessionctx.Context, offset int) *PhysicalIndexLookUpReader {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexLookUp, &p, offset)
+func (p PhysicalIndexLookUpReader) Init(ctx sessionctx.Context) *PhysicalIndexLookUpReader {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexLookUp, &p)
 	p.TablePlans = flattenPushDownPlan(p.tablePlan)
 	p.IndexPlans = flattenPushDownPlan(p.indexPlan)
 	p.schema = p.tablePlan.Schema()
@@ -394,8 +386,8 @@ func (p PhysicalIndexLookUpReader) Init(ctx sessionctx.Context, offset int) *Phy
 }
 
 // Init initializes PhysicalTableReader.
-func (p PhysicalTableReader) Init(ctx sessionctx.Context, offset int) *PhysicalTableReader {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTableReader, &p, offset)
+func (p PhysicalTableReader) Init(ctx sessionctx.Context) *PhysicalTableReader {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeTableReader, &p)
 	if p.tablePlan != nil {
 		p.TablePlans = flattenPushDownPlan(p.tablePlan)
 		p.schema = p.tablePlan.Schema()
@@ -404,15 +396,15 @@ func (p PhysicalTableReader) Init(ctx sessionctx.Context, offset int) *PhysicalT
 }
 
 // Init initializes PhysicalIndexReader.
-func (p PhysicalIndexReader) Init(ctx sessionctx.Context, offset int) *PhysicalIndexReader {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexReader, &p, offset)
+func (p PhysicalIndexReader) Init(ctx sessionctx.Context) *PhysicalIndexReader {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexReader, &p)
 	p.SetSchema(nil)
 	return &p
 }
 
 // Init initializes PhysicalIndexJoin.
-func (p PhysicalIndexJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, offset int, props ...*property.PhysicalProperty) *PhysicalIndexJoin {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexJoin, &p, offset)
+func (p PhysicalIndexJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalIndexJoin {
+	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexJoin, &p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return &p

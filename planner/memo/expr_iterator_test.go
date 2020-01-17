@@ -19,17 +19,17 @@ import (
 )
 
 func (s *testMemoSuite) TestNewExprIterFromGroupElem(c *C) {
-	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema)
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema)
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 
-	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema)
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema)
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 
-	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx, 0))
+	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx))
 	expr.Children = append(expr.Children, g0)
 	expr.Children = append(expr.Children, g1)
 	g2 := NewGroupWithSchema(expr, s.schema)
@@ -58,19 +58,19 @@ func (s *testMemoSuite) TestNewExprIterFromGroupElem(c *C) {
 }
 
 func (s *testMemoSuite) TestExprIterNext(c *C) {
-	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)), s.schema)
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
+	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)), s.schema)
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
 
-	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema)
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)))
+	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema)
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)))
 
-	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx, 0))
+	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx))
 	expr.Children = append(expr.Children, g0)
 	expr.Children = append(expr.Children, g1)
 	g2 := NewGroupWithSchema(expr, s.schema)
@@ -102,29 +102,29 @@ func (s *testMemoSuite) TestExprIterNext(c *C) {
 }
 
 func (s *testMemoSuite) TestExprIterReset(c *C) {
-	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)), s.schema)
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
+	g0 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)), s.schema)
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g0.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
 
-	sel1 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0))
-	sel2 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0))
-	sel3 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0))
+	sel1 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx))
+	sel2 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx))
+	sel3 := NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx))
 	g1 := NewGroupWithSchema(sel1, s.schema)
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 	g1.Insert(sel2)
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 	g1.Insert(sel3)
 
-	g2 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema)
-	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g2.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)))
-	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g2.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)))
+	g2 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema)
+	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g2.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)))
+	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g2.Insert(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)))
 
 	// link join with Group 0 and 1
-	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx, 0))
+	expr := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx))
 	expr.Children = append(expr.Children, g0)
 	expr.Children = append(expr.Children, g1)
 	g3 := NewGroupWithSchema(expr, s.schema)
@@ -185,25 +185,25 @@ func countMatchedIter(group *Group, pattern *Pattern) int {
 }
 
 func (s *testMemoSuite) TestExprIterWithEngineType(c *C) {
-	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema).SetEngineType(EngineTiFlash)
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g1 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema).SetEngineType(EngineTiFlash)
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g1.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 
-	g2 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx, 0)), s.schema).SetEngineType(EngineTiKV)
-	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
-	g2.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx, 0)))
-	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx, 0)))
+	g2 := NewGroupWithSchema(NewGroupExpr(plannercore.LogicalSelection{}.Init(s.sctx)), s.schema).SetEngineType(EngineTiKV)
+	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
+	g2.Insert(NewGroupExpr(plannercore.LogicalProjection{}.Init(s.sctx)))
+	g2.Insert(NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx)))
 
-	flashGather := NewGroupExpr(plannercore.TiKVSingleGather{}.Init(s.sctx, 0))
+	flashGather := NewGroupExpr(plannercore.TiKVSingleGather{}.Init(s.sctx))
 	flashGather.Children = append(flashGather.Children, g1)
 	g3 := NewGroupWithSchema(flashGather, s.schema).SetEngineType(EngineTiDB)
 
-	tikvGather := NewGroupExpr(plannercore.TiKVSingleGather{}.Init(s.sctx, 0))
+	tikvGather := NewGroupExpr(plannercore.TiKVSingleGather{}.Init(s.sctx))
 	tikvGather.Children = append(tikvGather.Children, g2)
 	g3.Insert(tikvGather)
 
-	join := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx, 0))
+	join := NewGroupExpr(plannercore.LogicalJoin{}.Init(s.sctx))
 	join.Children = append(join.Children, g3, g3)
 	g4 := NewGroupWithSchema(join, s.schema).SetEngineType(EngineTiDB)
 

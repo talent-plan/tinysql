@@ -89,7 +89,7 @@ func (b *PBPlanBuilder) pbToTableScan(e *tipb.Executor) (PhysicalPlan, error) {
 	p := PhysicalMemTable{
 		Table:   tbl.Meta(),
 		Columns: columns,
-	}.Init(b.sctx, nil, 0)
+	}.Init(b.sctx, nil)
 	p.SetSchema(schema)
 	return p, nil
 }
@@ -119,7 +119,7 @@ func (b *PBPlanBuilder) pbToSelection(e *tipb.Executor) (PhysicalPlan, error) {
 	}
 	p := PhysicalSelection{
 		Conditions: conds,
-	}.Init(b.sctx, nil, 0)
+	}.Init(b.sctx, nil)
 	return p, nil
 }
 
@@ -137,14 +137,14 @@ func (b *PBPlanBuilder) pbToTopN(e *tipb.Executor) (PhysicalPlan, error) {
 	p := PhysicalTopN{
 		ByItems: byItems,
 		Count:   topN.Limit,
-	}.Init(b.sctx, nil, 0)
+	}.Init(b.sctx, nil)
 	return p, nil
 }
 
 func (b *PBPlanBuilder) pbToLimit(e *tipb.Executor) (PhysicalPlan, error) {
 	p := PhysicalLimit{
 		Count: e.Limit.Limit,
-	}.Init(b.sctx, nil, 0)
+	}.Init(b.sctx, nil)
 	return p, nil
 }
 
@@ -161,9 +161,9 @@ func (b *PBPlanBuilder) pbToAgg(e *tipb.Executor, isStreamAgg bool) (PhysicalPla
 	baseAgg.schema = schema
 	var partialAgg PhysicalPlan
 	if isStreamAgg {
-		partialAgg = baseAgg.initForHash(b.sctx, nil, 0)
+		partialAgg = baseAgg.initForHash(b.sctx, nil)
 	} else {
-		partialAgg = baseAgg.initForStream(b.sctx, nil, 0)
+		partialAgg = baseAgg.initForStream(b.sctx, nil)
 	}
 	return partialAgg, nil
 }

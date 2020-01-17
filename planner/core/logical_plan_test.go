@@ -487,8 +487,8 @@ func (s *testPlanSuite) TestProjectionEliminator(c *C) {
 
 func (s *testPlanSuite) TestAllocID(c *C) {
 	ctx := MockContext()
-	pA := DataSource{}.Init(ctx, 0)
-	pB := DataSource{}.Init(ctx, 0)
+	pA := DataSource{}.Init(ctx)
+	pB := DataSource{}.Init(ctx)
 	c.Assert(pA.id+1, Equals, pB.id)
 }
 
@@ -767,7 +767,7 @@ func (s *testPlanSuite) TestUnion(c *C) {
 		stmt, err := s.ParseOneStmt(tt, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
+		builder := NewPlanBuilder(MockContext(), s.is)
 		plan, err := builder.Build(ctx, stmt)
 		s.testData.OnRecord(func() {
 			output[i].Err = err != nil
@@ -799,7 +799,7 @@ func (s *testPlanSuite) TestTopNPushDown(c *C) {
 		stmt, err := s.ParseOneStmt(tt, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
+		builder := NewPlanBuilder(MockContext(), s.is)
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
@@ -870,7 +870,7 @@ func (s *testPlanSuite) TestOuterJoinEliminator(c *C) {
 		stmt, err := s.ParseOneStmt(tt, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
+		builder := NewPlanBuilder(MockContext(), s.is)
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
@@ -952,7 +952,7 @@ func (s *testPlanSuite) TestSkylinePruning(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
+		builder := NewPlanBuilder(MockContext(), s.is)
 		p, err := builder.Build(ctx, stmt)
 		if err != nil {
 			c.Assert(err.Error(), Equals, tt.result, comment)
@@ -1010,7 +1010,7 @@ func (s *testPlanSuite) TestUpdateEQCond(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
+		builder := NewPlanBuilder(MockContext(), s.is)
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))

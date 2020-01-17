@@ -98,7 +98,7 @@ func (r *ImplTableDual) Match(expr *memo.GroupExpr, prop *property.PhysicalPrope
 func (r *ImplTableDual) OnImplement(expr *memo.GroupExpr, reqProp *property.PhysicalProperty) (memo.Implementation, error) {
 	logicProp := expr.Group.Prop
 	logicDual := expr.ExprNode.(*plannercore.LogicalTableDual)
-	dual := plannercore.PhysicalTableDual{RowCount: logicDual.RowCount}.Init(logicDual.SCtx(), logicProp.Stats, logicDual.SelectBlockOffset())
+	dual := plannercore.PhysicalTableDual{RowCount: logicDual.RowCount}.Init(logicDual.SCtx(), logicProp.Stats)
 	dual.SetSchema(logicProp.Schema)
 	return impl.NewTableDualImpl(dual), nil
 }
@@ -124,7 +124,7 @@ func (r *ImplProjection) OnImplement(expr *memo.GroupExpr, reqProp *property.Phy
 		Exprs:                logicProj.Exprs,
 		CalculateNoDelay:     logicProj.CalculateNoDelay,
 		AvoidColumnEvaluator: logicProj.AvoidColumnEvaluator,
-	}.Init(logicProj.SCtx(), logicProp.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt), logicProj.SelectBlockOffset(), childProp)
+	}.Init(logicProj.SCtx(), logicProp.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt), childProp)
 	proj.SetSchema(logicProp.Schema)
 	return impl.NewProjectionImpl(proj), nil
 }
@@ -236,7 +236,7 @@ func (r *ImplSelection) OnImplement(expr *memo.GroupExpr, reqProp *property.Phys
 	logicalSel := expr.ExprNode.(*plannercore.LogicalSelection)
 	physicalSel := plannercore.PhysicalSelection{
 		Conditions: logicalSel.Conditions,
-	}.Init(logicalSel.SCtx(), expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt), logicalSel.SelectBlockOffset(), reqProp.Clone())
+	}.Init(logicalSel.SCtx(), expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt), reqProp.Clone())
 	switch expr.Group.EngineType {
 	case memo.EngineTiDB:
 		return impl.NewTiDBSelectionImpl(physicalSel), nil
@@ -265,13 +265,12 @@ func (r *ImplSort) OnImplement(expr *memo.GroupExpr, reqProp *property.PhysicalP
 	ls := expr.ExprNode.(*plannercore.LogicalSort)
 	if newProp, canUseNominal := plannercore.GetPropByOrderByItems(ls.ByItems); canUseNominal {
 		newProp.ExpectedCnt = reqProp.ExpectedCnt
-		ns := plannercore.NominalSort{}.Init(ls.SCtx(), ls.SelectBlockOffset(), newProp)
+		ns := plannercore.NominalSort{}.Init(ls.SCtx(), newProp)
 		return impl.NewNominalSortImpl(ns), nil
 	}
 	ps := plannercore.PhysicalSort{ByItems: ls.ByItems}.Init(
 		ls.SCtx(),
 		expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt),
-		ls.SelectBlockOffset(),
 		&property.PhysicalProperty{ExpectedCnt: math.MaxFloat64},
 	)
 	return impl.NewSortImpl(ps), nil
@@ -324,7 +323,7 @@ func (r *ImplLimit) OnImplement(expr *memo.GroupExpr, reqProp *property.Physical
 	physicalLimit := plannercore.PhysicalLimit{
 		Offset: logicalLimit.Offset,
 		Count:  logicalLimit.Count,
-	}.Init(logicalLimit.SCtx(), expr.Group.Prop.Stats, logicalLimit.SelectBlockOffset(), newProp)
+	}.Init(logicalLimit.SCtx(), expr.Group.Prop.Stats, newProp)
 	return impl.NewLimitImpl(physicalLimit), nil
 }
 
@@ -347,7 +346,7 @@ func (r *ImplTopN) OnImplement(expr *memo.GroupExpr, reqProp *property.PhysicalP
 		ByItems: lt.ByItems,
 		Count:   lt.Count,
 		Offset:  lt.Offset,
-	}.Init(lt.SCtx(), expr.Group.Prop.Stats, lt.SelectBlockOffset(), resultProp)
+	}.Init(lt.SCtx(), expr.Group.Prop.Stats, resultProp)
 	switch expr.Group.EngineType {
 	case memo.EngineTiDB:
 		return impl.NewTiDBTopNImpl(topN), nil
@@ -381,7 +380,7 @@ func (r *ImplTopNAsLimit) OnImplement(expr *memo.GroupExpr, reqProp *property.Ph
 	physicalLimit := plannercore.PhysicalLimit{
 		Offset: lt.Offset,
 		Count:  lt.Count,
-	}.Init(lt.SCtx(), expr.Group.Prop.Stats, lt.SelectBlockOffset(), newProp)
+	}.Init(lt.SCtx(), expr.Group.Prop.Stats, newProp)
 	return impl.NewLimitImpl(physicalLimit), nil
 }
 
@@ -467,7 +466,6 @@ func (r *ImplUnionAll) OnImplement(expr *memo.GroupExpr, reqProp *property.Physi
 	physicalUnion := plannercore.PhysicalUnionAll{}.Init(
 		logicalUnion.SCtx(),
 		expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt),
-		logicalUnion.SelectBlockOffset(),
 		chReqProps...,
 	)
 	physicalUnion.SetSchema(expr.Group.Prop.Schema)
@@ -493,7 +491,6 @@ func (r *ImplApply) OnImplement(expr *memo.GroupExpr, reqProp *property.Physical
 	}.Init(
 		la.SCtx(),
 		expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt),
-		la.SelectBlockOffset(),
 		&property.PhysicalProperty{ExpectedCnt: math.MaxFloat64, Items: reqProp.Items},
 		&property.PhysicalProperty{ExpectedCnt: math.MaxFloat64})
 	physicalApply.SetSchema(expr.Group.Prop.Schema)
@@ -515,7 +512,6 @@ func (r *ImplMaxOneRow) OnImplement(expr *memo.GroupExpr, reqProp *property.Phys
 	physicalMaxOneRow := plannercore.PhysicalMaxOneRow{}.Init(
 		mor.SCtx(),
 		expr.Group.Prop.Stats,
-		mor.SelectBlockOffset(),
 		&property.PhysicalProperty{ExpectedCnt: 2})
 	return impl.NewMaxOneRowImpl(physicalMaxOneRow), nil
 }

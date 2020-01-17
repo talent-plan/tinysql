@@ -475,9 +475,9 @@ func getTablePath(paths []*util.AccessPath) *util.AccessPath {
 }
 
 func (ds *DataSource) buildTableGather() LogicalPlan {
-	ts := LogicalTableScan{Source: ds, Handle: ds.getHandleCol()}.Init(ds.ctx, ds.blockOffset)
+	ts := LogicalTableScan{Source: ds, Handle: ds.getHandleCol()}.Init(ds.ctx)
 	ts.SetSchema(ds.Schema())
-	sg := TiKVSingleGather{Source: ds, IsIndexGather: false}.Init(ds.ctx, ds.blockOffset)
+	sg := TiKVSingleGather{Source: ds, IsIndexGather: false}.Init(ds.ctx)
 	sg.SetSchema(ds.Schema())
 	sg.SetChildren(ts)
 	return sg
@@ -492,7 +492,7 @@ func (ds *DataSource) buildIndexGather(path *util.AccessPath) LogicalPlan {
 		FullIdxColLens: path.FullIdxColLens,
 		IdxCols:        path.IdxCols,
 		IdxColLens:     path.IdxColLens,
-	}.Init(ds.ctx, ds.blockOffset)
+	}.Init(ds.ctx)
 
 	is.Columns = make([]*model.ColumnInfo, len(ds.Columns))
 	copy(is.Columns, ds.Columns)
@@ -503,7 +503,7 @@ func (ds *DataSource) buildIndexGather(path *util.AccessPath) LogicalPlan {
 		Source:        ds,
 		IsIndexGather: true,
 		Index:         path.Index,
-	}.Init(ds.ctx, ds.blockOffset)
+	}.Init(ds.ctx)
 	sg.SetSchema(ds.Schema())
 	sg.SetChildren(is)
 	return sg

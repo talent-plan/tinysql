@@ -224,9 +224,8 @@ func (s *testPlanSuite) TestDAGPlanBuilderBasePhysicalPlan(c *C) {
 
 	var input []string
 	var output []struct {
-		SQL   string
-		Best  string
-		Hints string
+		SQL  string
+		Best string
 	}
 	s.testData.GetTestCases(c, &input, &output)
 	for i, tt := range input {
@@ -240,10 +239,8 @@ func (s *testPlanSuite) TestDAGPlanBuilderBasePhysicalPlan(c *C) {
 		s.testData.OnRecord(func() {
 			output[i].SQL = tt
 			output[i].Best = core.ToString(p)
-			output[i].Hints = core.GenHintsFromPhysicalPlan(p)
 		})
 		c.Assert(core.ToString(p), Equals, output[i].Best, Commentf("for %s", tt))
-		c.Assert(core.GenHintsFromPhysicalPlan(p), Equals, output[i].Hints, Commentf("for %s", tt))
 	}
 }
 
@@ -632,43 +629,6 @@ func (s *testPlanSuite) TestUnmatchedTableInHint(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestHintScope(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-
-	var input []string
-	var output []struct {
-		SQL  string
-		Best string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, test := range input {
-		comment := Commentf("case:%v sql:%s", i, test)
-		stmt, err := s.ParseOneStmt(test, "", "")
-		c.Assert(err, IsNil, comment)
-
-		p, _, err := planner.Optimize(context.Background(), se, stmt, s.is)
-		c.Assert(err, IsNil)
-		s.testData.OnRecord(func() {
-			output[i].SQL = test
-			output[i].Best = core.ToString(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Best)
-
-		warnings := se.GetSessionVars().StmtCtx.GetWarnings()
-		c.Assert(warnings, HasLen, 0, comment)
-	}
-}
-
 func (s *testPlanSuite) TestJoinHints(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()
@@ -687,7 +647,6 @@ func (s *testPlanSuite) TestJoinHints(c *C) {
 		SQL     string
 		Best    string
 		Warning string
-		Hints   string
 	}
 	s.testData.GetTestCases(c, &input, &output)
 	ctx := context.Background()
@@ -707,7 +666,6 @@ func (s *testPlanSuite) TestJoinHints(c *C) {
 			if len(warnings) > 0 {
 				output[i].Warning = warnings[0].Err.Error()
 			}
-			output[i].Hints = core.GenHintsFromPhysicalPlan(p)
 		})
 		c.Assert(core.ToString(p), Equals, output[i].Best)
 		if output[i].Warning == "" {
@@ -717,7 +675,6 @@ func (s *testPlanSuite) TestJoinHints(c *C) {
 			c.Assert(warnings[0].Level, Equals, stmtctx.WarnLevelWarning)
 			c.Assert(warnings[0].Err.Error(), Equals, output[i].Warning)
 		}
-		c.Assert(core.GenHintsFromPhysicalPlan(p), Equals, output[i].Hints, comment)
 	}
 }
 
@@ -844,7 +801,6 @@ func (s *testPlanSuite) TestIndexHint(c *C) {
 		SQL     string
 		Best    string
 		HasWarn bool
-		Hints   string
 	}
 	s.testData.GetTestCases(c, &input, &output)
 	ctx := context.Background()
@@ -861,7 +817,6 @@ func (s *testPlanSuite) TestIndexHint(c *C) {
 			output[i].SQL = test
 			output[i].Best = core.ToString(p)
 			output[i].HasWarn = len(se.GetSessionVars().StmtCtx.GetWarnings()) > 0
-			output[i].Hints = core.GenHintsFromPhysicalPlan(p)
 		})
 		c.Assert(core.ToString(p), Equals, output[i].Best, comment)
 		warnings := se.GetSessionVars().StmtCtx.GetWarnings()
@@ -870,45 +825,6 @@ func (s *testPlanSuite) TestIndexHint(c *C) {
 		} else {
 			c.Assert(warnings, HasLen, 0, comment)
 		}
-		c.Assert(core.GenHintsFromPhysicalPlan(p), Equals, output[i].Hints, comment)
-	}
-}
-
-func (s *testPlanSuite) TestQueryBlockHint(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-
-	var input []string
-	var output []struct {
-		SQL   string
-		Plan  string
-		Hints string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	ctx := context.TODO()
-	for i, tt := range input {
-		comment := Commentf("case:%v sql: %s", i, tt)
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil, comment)
-
-		p, _, err := planner.Optimize(ctx, se, stmt, s.is)
-		c.Assert(err, IsNil, comment)
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Plan = core.ToString(p)
-			output[i].Hints = core.GenHintsFromPhysicalPlan(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Plan, comment)
-		c.Assert(core.GenHintsFromPhysicalPlan(p), Equals, output[i].Hints, comment)
 	}
 }
 

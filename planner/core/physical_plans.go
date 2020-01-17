@@ -63,7 +63,7 @@ type PhysicalTableReader struct {
 
 // GetPhysicalTableReader returns PhysicalTableReader for logical TiKVSingleGather.
 func (sg *TiKVSingleGather) GetPhysicalTableReader(schema *expression.Schema, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalTableReader {
-	reader := PhysicalTableReader{}.Init(sg.ctx, sg.blockOffset)
+	reader := PhysicalTableReader{}.Init(sg.ctx)
 	reader.stats = stats
 	reader.SetSchema(schema)
 	reader.childrenReqProps = props
@@ -72,7 +72,7 @@ func (sg *TiKVSingleGather) GetPhysicalTableReader(schema *expression.Schema, st
 
 // GetPhysicalIndexReader returns PhysicalIndexReader for logical TiKVSingleGather.
 func (sg *TiKVSingleGather) GetPhysicalIndexReader(schema *expression.Schema, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalIndexReader {
-	reader := PhysicalIndexReader{}.Init(sg.ctx, sg.blockOffset)
+	reader := PhysicalIndexReader{}.Init(sg.ctx)
 	reader.stats = stats
 	reader.SetSchema(schema)
 	reader.childrenReqProps = props
@@ -304,7 +304,7 @@ func NewPhysicalHashJoin(p *LogicalJoin, innerIdx int, newStats *property.StatsI
 		basePhysicalJoin: baseJoin,
 		EqualConditions:  p.EqualConditions,
 		Concurrency:      uint(p.ctx.GetSessionVars().HashJoinConcurrency),
-	}.Init(p.ctx, newStats, p.blockOffset, prop...)
+	}.Init(p.ctx, newStats, prop...)
 	return hashJoin
 }
 
@@ -389,7 +389,7 @@ func NewPhysicalHashAgg(la *LogicalAggregation, newStats *property.StatsInfo, pr
 	agg := basePhysicalAgg{
 		GroupByItems: la.GroupByItems,
 		AggFuncs:     la.AggFuncs,
-	}.initForHash(la.ctx, newStats, la.blockOffset, prop)
+	}.initForHash(la.ctx, newStats, prop)
 	return agg
 }
 
@@ -511,5 +511,5 @@ func BuildMergeJoinPlan(ctx sessionctx.Context, joinType JoinType, leftKeys, rig
 		LeftJoinKeys:  leftKeys,
 		RightJoinKeys: rightKeys,
 	}
-	return PhysicalMergeJoin{basePhysicalJoin: baseJoin}.Init(ctx, nil, 0)
+	return PhysicalMergeJoin{basePhysicalJoin: baseJoin}.Init(ctx, nil)
 }

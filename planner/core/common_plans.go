@@ -233,8 +233,6 @@ func (e *Explain) RenderResult() error {
 		}
 	case ast.ExplainFormatDOT:
 		e.prepareDotInfo(e.TargetPlan.(PhysicalPlan))
-	case ast.ExplainFormatHint:
-		e.Rows = append(e.Rows, []string{GenHintsFromPhysicalPlan(e.TargetPlan)})
 	default:
 		return errors.Errorf("explain format '%s' is not supported now", e.Format)
 	}
