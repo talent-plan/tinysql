@@ -14,31 +14,17 @@
 package expression
 
 import (
-	"math"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/hack"
+	"math"
 )
 
 func (s *testEvaluatorSuite) TestInFunc(c *C) {
 	fc := funcs[ast.In]
-	decimal1 := types.NewDecFromFloatForTest(123.121)
-	decimal2 := types.NewDecFromFloatForTest(123.122)
-	decimal3 := types.NewDecFromFloatForTest(123.123)
-	decimal4 := types.NewDecFromFloatForTest(123.124)
-	time1 := types.Time{Time: types.FromGoTime(time.Date(2017, 1, 1, 1, 1, 1, 1, time.UTC)), Fsp: 6, Type: mysql.TypeDatetime}
-	time2 := types.Time{Time: types.FromGoTime(time.Date(2017, 1, 2, 1, 1, 1, 1, time.UTC)), Fsp: 6, Type: mysql.TypeDatetime}
-	time3 := types.Time{Time: types.FromGoTime(time.Date(2017, 1, 3, 1, 1, 1, 1, time.UTC)), Fsp: 6, Type: mysql.TypeDatetime}
-	time4 := types.Time{Time: types.FromGoTime(time.Date(2017, 1, 4, 1, 1, 1, 1, time.UTC)), Fsp: 6, Type: mysql.TypeDatetime}
-	duration1 := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Minute + 1*time.Second)}
-	duration2 := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Minute)}
-	duration3 := types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Second)}
-	duration4 := types.Duration{Duration: time.Duration(12 * time.Hour)}
 	testCases := []struct {
 		args []interface{}
 		res  interface{}
@@ -54,15 +40,9 @@ func (s *testEvaluatorSuite) TestInFunc(c *C) {
 		{[]interface{}{1, 0, 2, 3}, int64(0)},
 		{[]interface{}{1.1, 1.2, 1.3}, int64(0)},
 		{[]interface{}{1.1, 1.1, 1.2, 1.3}, int64(1)},
-		{[]interface{}{decimal1, decimal2, decimal3, decimal4}, int64(0)},
-		{[]interface{}{decimal1, decimal2, decimal3, decimal1}, int64(1)},
 		{[]interface{}{"1.1", "1.1", "1.2", "1.3"}, int64(1)},
 		{[]interface{}{"1.1", hack.Slice("1.1"), "1.2", "1.3"}, int64(1)},
 		{[]interface{}{hack.Slice("1.1"), "1.1", "1.2", "1.3"}, int64(1)},
-		{[]interface{}{time1, time2, time3, time1}, int64(1)},
-		{[]interface{}{time1, time2, time3, time4}, int64(0)},
-		{[]interface{}{duration1, duration2, duration3, duration4}, int64(0)},
-		{[]interface{}{duration1, duration2, duration1, duration4}, int64(1)},
 	}
 	for _, tc := range testCases {
 		fn, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(tc.args...)))

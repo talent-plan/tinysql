@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -867,7 +866,6 @@ func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {
 }
 
 func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
-	_, offset := timeutil.Zone(b.ctx.GetSessionVars().Location())
 	sc := b.ctx.GetSessionVars().StmtCtx
 	e := &AnalyzeIndexExec{
 		ctx:             b.ctx,
@@ -875,9 +873,8 @@ func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeInde
 		idxInfo:         task.IndexInfo,
 		concurrency:     b.ctx.GetSessionVars().IndexSerialScanConcurrency,
 		analyzePB: &tipb.AnalyzeReq{
-			Tp:             tipb.AnalyzeType_TypeIndex,
-			Flags:          sc.PushDownFlags(),
-			TimeZoneOffset: offset,
+			Tp:    tipb.AnalyzeType_TypeIndex,
+			Flags: sc.PushDownFlags(),
 		},
 		opts: opts,
 	}
@@ -898,7 +895,6 @@ func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeCo
 		cols = append([]*model.ColumnInfo{task.PKInfo}, cols...)
 	}
 
-	_, offset := timeutil.Zone(b.ctx.GetSessionVars().Location())
 	sc := b.ctx.GetSessionVars().StmtCtx
 	e := &AnalyzeColumnsExec{
 		ctx:             b.ctx,
@@ -907,9 +903,8 @@ func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeCo
 		pkInfo:          task.PKInfo,
 		concurrency:     b.ctx.GetSessionVars().DistSQLScanConcurrency,
 		analyzePB: &tipb.AnalyzeReq{
-			Tp:             tipb.AnalyzeType_TypeColumn,
-			Flags:          sc.PushDownFlags(),
-			TimeZoneOffset: offset,
+			Tp:    tipb.AnalyzeType_TypeColumn,
+			Flags: sc.PushDownFlags(),
 		},
 		opts: opts,
 	}
@@ -962,7 +957,6 @@ func constructDistExec(sctx sessionctx.Context, plans []plannercore.PhysicalPlan
 
 func (b *executorBuilder) constructDAGReq(plans []plannercore.PhysicalPlan) (dagReq *tipb.DAGRequest, err error) {
 	dagReq = &tipb.DAGRequest{}
-	dagReq.TimeZoneName, dagReq.TimeZoneOffset = timeutil.Zone(b.ctx.GetSessionVars().Location())
 	sc := b.ctx.GetSessionVars().StmtCtx
 	dagReq.Flags = sc.PushDownFlags()
 	dagReq.Executors, err = constructDistExec(b.ctx, plans)

@@ -778,9 +778,6 @@ func (b *PlanBuilder) buildProjectionFieldNameFromExpressions(ctx context.Contex
 	case types.KindNull:
 		// See #4053, #3685
 		return model.NewCIStr("NULL"), nil
-	case types.KindBinaryLiteral:
-		// Don't rewrite BIT literal or HEX literals
-		return model.NewCIStr(field.Text()), nil
 	case types.KindInt64:
 		// See #9683
 		// TRUE or FALSE can be a int64

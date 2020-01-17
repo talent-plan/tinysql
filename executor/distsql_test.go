@@ -74,7 +74,7 @@ func (s *testSuite3) TestCopClientSend(c *C) {
 	req := rs.NewChunk()
 	err = rs.Next(ctx, req)
 	c.Assert(err, IsNil)
-	c.Assert(req.GetRow(0).GetMyDecimal(0).String(), Equals, "499500")
+	c.Assert(req.GetRow(0).GetInt64(0), Equals, int64(499500))
 	rs.Close()
 
 	// Split one region.
@@ -89,7 +89,7 @@ func (s *testSuite3) TestCopClientSend(c *C) {
 	req = rs.NewChunk()
 	err = rs.Next(ctx, req)
 	c.Assert(err, IsNil)
-	c.Assert(req.GetRow(0).GetMyDecimal(0).String(), Equals, "499500")
+	c.Assert(req.GetRow(0).GetInt64(0), Equals, int64(499500))
 	rs.Close()
 
 	// Check there is no goroutine leak.

@@ -54,7 +54,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -1054,48 +1053,19 @@ func CreateSession(store kv.Storage) (Session, error) {
 	return s, nil
 }
 
-// loadSystemTZ loads systemTZ from mysql.tidb
-func loadSystemTZ(se *session) (string, error) {
-	sql := `select variable_value from mysql.tidb where variable_name = 'system_tz'`
-	rss, errLoad := se.Execute(context.Background(), sql)
-	if errLoad != nil {
-		return "", errLoad
-	}
-	// the record of mysql.tidb under where condition: variable_name = "system_tz" should shall only be one.
-	defer func() {
-		if err := rss[0].Close(); err != nil {
-			logutil.BgLogger().Error("close result set error", zap.Error(err))
-		}
-	}()
-	req := rss[0].NewChunk()
-	if err := rss[0].Next(context.Background(), req); err != nil {
-		return "", err
-	}
-	return req.GetRow(0).GetString(0), nil
-}
-
 // BootstrapSession runs the first time when the TiDB server start.
 func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 	initLoadCommonGlobalVarsSQL()
 
-	ver := getStoreBootstrapVersion(store)
-	if ver == notBootstrapped {
+	if !getStoreBootstrap(store) {
 		runInBootstrapSession(store, bootstrap)
-	} else if ver < currentBootstrapVersion {
-		runInBootstrapSession(store, upgrade)
 	}
 
 	se, err := createSession(store)
 	if err != nil {
 		return nil, err
 	}
-	// get system tz from mysql.tidb
-	tz, err := loadSystemTZ(se)
-	if err != nil {
-		return nil, err
-	}
 
-	timeutil.SetSystemTZ(tz)
 	dom := domain.GetDomain(se)
 
 	se1, err := createSession(store)
@@ -1182,17 +1152,17 @@ func CreateSessionWithDomain(store kv.Storage, dom *domain.Domain) (*session, er
 }
 
 const (
-	notBootstrapped         = 0
-	currentBootstrapVersion = version36
+	notBootstrapped = 0
+	bootstrapped    = 1
 )
 
-func getStoreBootstrapVersion(store kv.Storage) int64 {
+func getStoreBootstrap(store kv.Storage) bool {
 	storeBootstrappedLock.Lock()
 	defer storeBootstrappedLock.Unlock()
 	// check in memory
 	_, ok := storeBootstrapped[store.UUID()]
 	if ok {
-		return currentBootstrapVersion
+		return true
 	}
 
 	var ver int64
@@ -1209,12 +1179,12 @@ func getStoreBootstrapVersion(store kv.Storage) int64 {
 			zap.Error(err))
 	}
 
-	if ver > notBootstrapped {
+	if ver != notBootstrapped {
 		// here mean memory is not ok, but other server has already finished it
 		storeBootstrapped[store.UUID()] = true
 	}
 
-	return ver
+	return ver != notBootstrapped
 }
 
 func finishBootstrap(store kv.Storage) {
@@ -1222,7 +1192,7 @@ func finishBootstrap(store kv.Storage) {
 
 	err := kv.RunInNewTxn(store, true, func(txn kv.Transaction) error {
 		t := meta.NewMeta(txn)
-		err := t.FinishBootstrap(currentBootstrapVersion)
+		err := t.FinishBootstrap(bootstrapped)
 		return err
 	})
 	if err != nil {

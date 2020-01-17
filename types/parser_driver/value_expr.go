@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/parser/format"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/hack"
 )
 
 // The purpose of driver package is to decompose the dependency of the parser and
@@ -43,9 +42,8 @@ func init() {
 	ast.NewValueExpr = newValueExpr
 	ast.NewParamMarkerExpr = newParamMarkerExpr
 	ast.NewDecimal = func(str string) (interface{}, error) {
-		dec := new(types.MyDecimal)
-		err := dec.FromString(hack.Slice(str))
-		return dec, err
+		n, err := strconv.ParseFloat(str, 64)
+		return n, err
 	}
 	ast.NewHexLiteral = func(str string) (interface{}, error) {
 		h, err := types.NewHexLiteral(str)
@@ -98,18 +96,8 @@ func (n *ValueExpr) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteString(n.GetString())
 	case types.KindBytes:
 		ctx.WriteString(n.GetString())
-	case types.KindMysqlDecimal:
-		ctx.WritePlain(n.GetMysqlDecimal().String())
-	case types.KindBinaryLiteral:
-		if n.Type.Flag&mysql.UnsignedFlag != 0 {
-			ctx.WritePlainf("x'%x'", n.GetBytes())
-		} else {
-			ctx.WritePlain(n.GetBinaryLiteral().ToBitLiteralString(true))
-		}
-	case types.KindMysqlDuration, types.KindMysqlEnum,
-		types.KindMysqlBit, types.KindMysqlSet, types.KindMysqlTime,
-		types.KindInterface, types.KindMinNotNull, types.KindMaxValue,
-		types.KindRaw, types.KindMysqlJSON:
+	case types.KindInterface, types.KindMinNotNull, types.KindMaxValue,
+		types.KindRaw:
 		// TODO implement Restore function
 		return errors.New("Not implemented")
 	default:
@@ -147,14 +135,6 @@ func (n *ValueExpr) Format(w io.Writer) {
 		s = strconv.FormatFloat(n.GetFloat64(), 'e', -1, 64)
 	case types.KindString, types.KindBytes:
 		s = strconv.Quote(n.GetString())
-	case types.KindMysqlDecimal:
-		s = n.GetMysqlDecimal().String()
-	case types.KindBinaryLiteral:
-		if n.Type.Flag&mysql.UnsignedFlag != 0 {
-			s = fmt.Sprintf("x'%x'", n.GetBytes())
-		} else {
-			s = n.GetBinaryLiteral().ToBitLiteralString(true)
-		}
 	default:
 		panic("Can't format to string")
 	}

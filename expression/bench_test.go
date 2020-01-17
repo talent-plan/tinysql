@@ -71,14 +71,6 @@ func (h *benchHelper) init() {
 		Charset: charset.CharsetBin,
 		Collate: charset.CollationBin,
 	})
-	h.inputTypes = append(h.inputTypes, &types.FieldType{
-		Tp:      mysql.TypeNewDecimal,
-		Flen:    11,
-		Decimal: 0,
-		Flag:    mysql.BinaryFlag,
-		Charset: charset.CharsetBin,
-		Collate: charset.CollationBin,
-	})
 
 	// Use 20 string columns to show the cache performance.
 	for i := 0; i < 20; i++ {
@@ -95,9 +87,8 @@ func (h *benchHelper) init() {
 	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
 		h.inputChunk.AppendInt64(0, 4)
 		h.inputChunk.AppendFloat64(1, 2.019)
-		h.inputChunk.AppendMyDecimal(2, types.NewDecFromFloatForTest(5.9101))
 		for i := 0; i < 20; i++ {
-			h.inputChunk.AppendString(3+i, `abcdefughasfjsaljal1321798273528791!&(*#&@&^%&%^&!)sadfashqwer`)
+			h.inputChunk.AppendString(2+i, `abcdefughasfjsaljal1321798273528791!&(*#&@&^%&%^&!)sadfashqwer`)
 		}
 	}
 
@@ -110,54 +101,6 @@ func (h *benchHelper) init() {
 		})
 	}
 
-	h.exprs = make([]Expression, 0, 10)
-	if expr, err := NewFunction(h.ctx, ast.Substr, h.inputTypes[3], []Expression{cols[3], cols[2]}...); err != nil {
-		panic("create SUBSTR function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.Plus, h.inputTypes[0], []Expression{cols[1], cols[2]}...); err != nil {
-		panic("create PLUS function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.GT, h.inputTypes[2], []Expression{cols[11], cols[8]}...); err != nil {
-		panic("create GT function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.GT, h.inputTypes[2], []Expression{cols[19], cols[10]}...); err != nil {
-		panic("create GT function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.GT, h.inputTypes[2], []Expression{cols[17], cols[4]}...); err != nil {
-		panic("create GT function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.GT, h.inputTypes[2], []Expression{cols[18], cols[5]}...); err != nil {
-		panic("create GT function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.LE, h.inputTypes[2], []Expression{cols[19], cols[4]}...); err != nil {
-		panic("create LE function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
-
-	if expr, err := NewFunction(h.ctx, ast.EQ, h.inputTypes[2], []Expression{cols[20], cols[3]}...); err != nil {
-		panic("create EQ function failed.")
-	} else {
-		h.exprs = append(h.exprs, expr)
-	}
 	h.exprs = append(h.exprs, cols[2])
 	h.exprs = append(h.exprs, cols[2])
 
@@ -196,12 +139,6 @@ func BenchmarkScalarFunctionClone(b *testing.B) {
 	b.ReportAllocs()
 }
 
-func getRandomTime() types.MysqlTime {
-	return types.FromDate(rand.Intn(2200), rand.Intn(10)+1, rand.Intn(20)+1,
-		rand.Intn(12), rand.Intn(60), rand.Intn(60), rand.Intn(1000000))
-
-}
-
 // dataGenerator is used to generate data for test.
 type dataGenerator interface {
 	gen() interface{}
@@ -227,28 +164,6 @@ func (g *defaultGener) gen() interface{} {
 			return -rand.Float64() * 1000000
 		}
 		return rand.Float64() * 1000000
-	case types.ETDecimal:
-		d := new(types.MyDecimal)
-		var f float64
-		if rand.Float64() < 0.5 {
-			f = rand.Float64() * 100000
-		} else {
-			f = -rand.Float64() * 100000
-		}
-		if err := d.FromFloat64(f); err != nil {
-			panic(err)
-		}
-		return d
-	case types.ETDatetime, types.ETTimestamp:
-		gt := getRandomTime()
-		t := types.Time{Time: gt, Type: convertETType(g.eType)}
-		return t
-	case types.ETDuration:
-		d := types.Duration{
-			// use rand.Int32() to make it not overflow when AddDuration
-			Duration: time.Duration(rand.Int31()),
-		}
-		return d
 	case types.ETString:
 		return randString()
 	}
@@ -284,30 +199,6 @@ func (g *rangeRealGener) gen() interface{} {
 		g.end = 100
 	}
 	return rand.Float64()*(g.end-g.begin) + g.begin
-}
-
-// rangeDecimalGener is used to generate decimal items in [begin, end].
-type rangeDecimalGener struct {
-	begin float64
-	end   float64
-
-	nullRation float64
-}
-
-func (g *rangeDecimalGener) gen() interface{} {
-	if rand.Float64() < g.nullRation {
-		return nil
-	}
-	if g.end < g.begin {
-		g.begin = -100000
-		g.end = 100000
-	}
-	d := new(types.MyDecimal)
-	f := rand.Float64()*(g.end-g.begin) + g.begin
-	if err := d.FromFloat64(f); err != nil {
-		panic(err)
-	}
-	return d
 }
 
 // rangeInt64Gener is used to generate int64 items in [begin, end).
@@ -406,12 +297,6 @@ func fillColumnWithGener(eType types.EvalType, chk *chunk.Chunk, colIdx int, gen
 			col.AppendInt64(v.(int64))
 		case types.ETReal:
 			col.AppendFloat64(v.(float64))
-		case types.ETDecimal:
-			col.AppendMyDecimal(v.(*types.MyDecimal))
-		case types.ETDatetime, types.ETTimestamp:
-			col.AppendTime(v.(types.Time))
-		case types.ETDuration:
-			col.AppendDuration(v.(types.Duration))
 		case types.ETString:
 			col.AppendString(v.(string))
 		}
@@ -440,12 +325,6 @@ func eType2FieldType(eType types.EvalType) *types.FieldType {
 		return types.NewFieldType(mysql.TypeLonglong)
 	case types.ETReal:
 		return types.NewFieldType(mysql.TypeDouble)
-	case types.ETDecimal:
-		return types.NewFieldType(mysql.TypeNewDecimal)
-	case types.ETDatetime, types.ETTimestamp:
-		return types.NewFieldType(mysql.TypeDatetime)
-	case types.ETDuration:
-		return types.NewFieldType(mysql.TypeDuration)
 	case types.ETString:
 		return types.NewFieldType(mysql.TypeVarString)
 	default:
@@ -515,27 +394,6 @@ func testVectorizedEvalOneVec(c *C, vecExprCases vecExprBenchCases) {
 					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
 					if !c1.IsNull(i) {
 						c.Assert(c1.GetFloat64(i), Equals, c2.GetFloat64(i), commentf(i))
-					}
-				}
-			case types.ETDecimal:
-				for i := 0; i < input.NumRows(); i++ {
-					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
-					if !c1.IsNull(i) {
-						c.Assert(c1.GetDecimal(i), DeepEquals, c2.GetDecimal(i), commentf(i))
-					}
-				}
-			case types.ETDatetime, types.ETTimestamp:
-				for i := 0; i < input.NumRows(); i++ {
-					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
-					if !c1.IsNull(i) {
-						c.Assert(c1.GetTime(i), DeepEquals, c2.GetTime(i), commentf(i))
-					}
-				}
-			case types.ETDuration:
-				for i := 0; i < input.NumRows(); i++ {
-					c.Assert(c1.IsNull(i), Equals, c2.IsNull(i), commentf(i))
-					if !c1.IsNull(i) {
-						c.Assert(c1.GetDuration(i, 0), Equals, c2.GetDuration(i, 0), commentf(i))
 					}
 				}
 			case types.ETString:
@@ -706,54 +564,6 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 					}
 					i++
 				}
-			case types.ETDecimal:
-				err := baseFunc.vecEvalDecimal(input, output)
-				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
-				// do not forget to call ResizeXXX/ReserveXXX
-				c.Assert(getColumnLen(output, testCase.retEvalType), Equals, input.NumRows())
-				vecWarnCnt = ctx.GetSessionVars().StmtCtx.WarningCount()
-				d64s := output.Decimals()
-				for row := it.Begin(); row != it.End(); row = it.Next() {
-					val, isNull, err := baseFunc.evalDecimal(row)
-					c.Assert(err, IsNil, commentf(i))
-					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
-					if !isNull {
-						c.Assert(*val, Equals, d64s[i], commentf(i))
-					}
-					i++
-				}
-			case types.ETDatetime, types.ETTimestamp:
-				err := baseFunc.vecEvalTime(input, output)
-				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
-				// do not forget to call ResizeXXX/ReserveXXX
-				c.Assert(getColumnLen(output, testCase.retEvalType), Equals, input.NumRows())
-				vecWarnCnt = ctx.GetSessionVars().StmtCtx.WarningCount()
-				t64s := output.Times()
-				for row := it.Begin(); row != it.End(); row = it.Next() {
-					val, isNull, err := baseFunc.evalTime(row)
-					c.Assert(err, IsNil, commentf(i))
-					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
-					if !isNull {
-						c.Assert(val, Equals, t64s[i], commentf(i))
-					}
-					i++
-				}
-			case types.ETDuration:
-				err := baseFunc.vecEvalDuration(input, output)
-				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
-				// do not forget to call ResizeXXX/ReserveXXX
-				c.Assert(getColumnLen(output, testCase.retEvalType), Equals, input.NumRows())
-				vecWarnCnt = ctx.GetSessionVars().StmtCtx.WarningCount()
-				d64s := output.GoDurations()
-				for row := it.Begin(); row != it.End(); row = it.Next() {
-					val, isNull, err := baseFunc.evalDuration(row)
-					c.Assert(err, IsNil, commentf(i))
-					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
-					if !isNull {
-						c.Assert(val.Duration, Equals, d64s[i], commentf(i))
-					}
-					i++
-				}
 			case types.ETString:
 				err := baseFunc.vecEvalString(input, output)
 				c.Assert(err, IsNil, Commentf("func: %v, case: %+v", baseFuncName, testCase))
@@ -824,24 +634,6 @@ func benchmarkVectorizedBuiltinFunc(b *testing.B, vecExprCases vecExprBenchCases
 							b.Fatal(err)
 						}
 					}
-				case types.ETDecimal:
-					for i := 0; i < b.N; i++ {
-						if err := baseFunc.vecEvalDecimal(input, output); err != nil {
-							b.Fatal(err)
-						}
-					}
-				case types.ETDatetime, types.ETTimestamp:
-					for i := 0; i < b.N; i++ {
-						if err := baseFunc.vecEvalTime(input, output); err != nil {
-							b.Fatal(err)
-						}
-					}
-				case types.ETDuration:
-					for i := 0; i < b.N; i++ {
-						if err := baseFunc.vecEvalDuration(input, output); err != nil {
-							b.Fatal(err)
-						}
-					}
 				case types.ETString:
 					for i := 0; i < b.N; i++ {
 						if err := baseFunc.vecEvalString(input, output); err != nil {
@@ -883,51 +675,6 @@ func benchmarkVectorizedBuiltinFunc(b *testing.B, vecExprCases vecExprBenchCases
 								output.AppendNull()
 							} else {
 								output.AppendFloat64(v)
-							}
-						}
-					}
-				case types.ETDecimal:
-					for i := 0; i < b.N; i++ {
-						output.Reset(testCase.retEvalType)
-						for row := it.Begin(); row != it.End(); row = it.Next() {
-							v, isNull, err := baseFunc.evalDecimal(row)
-							if err != nil {
-								b.Fatal(err)
-							}
-							if isNull {
-								output.AppendNull()
-							} else {
-								output.AppendMyDecimal(v)
-							}
-						}
-					}
-				case types.ETDatetime, types.ETTimestamp:
-					for i := 0; i < b.N; i++ {
-						output.Reset(testCase.retEvalType)
-						for row := it.Begin(); row != it.End(); row = it.Next() {
-							v, isNull, err := baseFunc.evalTime(row)
-							if err != nil {
-								b.Fatal(err)
-							}
-							if isNull {
-								output.AppendNull()
-							} else {
-								output.AppendTime(v)
-							}
-						}
-					}
-				case types.ETDuration:
-					for i := 0; i < b.N; i++ {
-						output.Reset(testCase.retEvalType)
-						for row := it.Begin(); row != it.End(); row = it.Next() {
-							v, isNull, err := baseFunc.evalDuration(row)
-							if err != nil {
-								b.Fatal(err)
-							}
-							if isNull {
-								output.AppendNull()
-							} else {
-								output.AppendDuration(v)
 							}
 						}
 					}
@@ -1018,7 +765,7 @@ func generateRandomSel() []int {
 
 func (s *testEvaluatorSuite) TestVecEvalBool(c *C) {
 	ctx := mock.NewContext()
-	eTypes := []types.EvalType{types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
+	eTypes := []types.EvalType{types.ETReal, types.ETString}
 	for numCols := 1; numCols <= 5; numCols++ {
 		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
@@ -1041,7 +788,7 @@ func BenchmarkVecEvalBool(b *testing.B) {
 	ctx := mock.NewContext()
 	selected := make([]bool, 0, 1024)
 	nulls := make([]bool, 0, 1024)
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	tNames := []string{"int", "real", "decimal", "string", "timestamp", "datetime", "duration"}
 	for numCols := 1; numCols <= 2; numCols++ {
 		typeCombination := make([]types.EvalType, numCols)
@@ -1092,7 +839,7 @@ func BenchmarkVecEvalBool(b *testing.B) {
 
 func (s *testEvaluatorSuite) TestRowBasedFilterAndVectorizedFilter(c *C) {
 	ctx := mock.NewContext()
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal,types.ETString}
 	for numCols := 1; numCols <= 5; numCols++ {
 		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
@@ -1115,8 +862,8 @@ func BenchmarkRowBasedFilterAndVectorizedFilter(b *testing.B) {
 	ctx := mock.NewContext()
 	selected := make([]bool, 0, 1024)
 	nulls := make([]bool, 0, 1024)
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
-	tNames := []string{"int", "real", "decimal", "string", "timestamp", "datetime", "duration"}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
+	tNames := []string{"int", "real","string"}
 	for numCols := 1; numCols <= 2; numCols++ {
 		typeCombination := make([]types.EvalType, numCols)
 		var combFunc func(nCols int)
@@ -1190,7 +937,7 @@ func BenchmarkRowBasedFilterAndVectorizedFilter(b *testing.B) {
 func (s *testEvaluatorSuite) TestVectorizedFilterConsiderNull(c *C) {
 	ctx := mock.NewContext()
 	dafaultEnableVectorizedExpressionVar := ctx.GetSessionVars().EnableVectorizedExpression
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal,types.ETString}
 	for numCols := 1; numCols <= 5; numCols++ {
 		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)

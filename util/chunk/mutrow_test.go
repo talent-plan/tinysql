@@ -14,13 +14,11 @@
 package chunk
 
 import (
-	"testing"
-	"time"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
+	"testing"
 )
 
 var allTypes = []*types.FieldType{
@@ -109,17 +107,6 @@ func (s *testChunkSuite) TestMutRow(c *check.C) {
 	row = mutRow.ToRow()
 	c.Assert(row.IsNull(0), check.IsTrue)
 	c.Assert(row.IsNull(1), check.IsFalse)
-
-	retTypes := []*types.FieldType{types.NewFieldType(mysql.TypeDuration)}
-	chk := New(retTypes, 1, 1)
-	dur, err := types.ParseDuration(sc, "01:23:45", 0)
-	c.Assert(err, check.IsNil)
-	chk.AppendDuration(0, dur)
-	mutRow = MutRowFromTypes(retTypes)
-	mutRow.SetValue(0, dur)
-	c.Assert(chk.columns[0].data, check.BytesEquals, mutRow.c.columns[0].data)
-	mutRow.SetDatum(0, types.NewDurationDatum(dur))
-	c.Assert(chk.columns[0].data, check.BytesEquals, mutRow.c.columns[0].data)
 }
 
 func BenchmarkMutRowSetDatums(b *testing.B) {
@@ -170,27 +157,21 @@ func (s *testChunkSuite) TestMutRowShallowCopyPartialRow(c *check.C) {
 	colTypes := make([]*types.FieldType, 0, 3)
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarString})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeLonglong})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeTimestamp})
 
 	mutRow := MutRowFromTypes(colTypes)
-	row := MutRowFromValues("abc", 123, types.ZeroTimestamp).ToRow()
+	row := MutRowFromValues("abc", 123).ToRow()
 	mutRow.ShallowCopyPartialRow(0, row)
 	c.Assert(row.GetString(0), check.Equals, mutRow.ToRow().GetString(0))
 	c.Assert(row.GetInt64(1), check.Equals, mutRow.ToRow().GetInt64(1))
-	c.Assert(row.GetTime(2), check.DeepEquals, mutRow.ToRow().GetTime(2))
 
 	row.c.Reset()
 	d := types.NewStringDatum("dfg")
 	row.c.AppendDatum(0, &d)
 	d = types.NewIntDatum(567)
 	row.c.AppendDatum(1, &d)
-	d = types.NewTimeDatum(types.Time{Time: types.FromGoTime(time.Now()), Fsp: 6, Type: mysql.TypeTimestamp})
-	row.c.AppendDatum(2, &d)
 
-	c.Assert(d.GetMysqlTime(), check.DeepEquals, mutRow.ToRow().GetTime(2))
 	c.Assert(row.GetString(0), check.Equals, mutRow.ToRow().GetString(0))
 	c.Assert(row.GetInt64(1), check.Equals, mutRow.ToRow().GetInt64(1))
-	c.Assert(row.GetTime(2), check.DeepEquals, mutRow.ToRow().GetTime(2))
 }
 
 var rowsNum = 1024
@@ -202,10 +183,9 @@ func BenchmarkMutRowShallowCopyPartialRow(b *testing.B) {
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarString})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeLonglong})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeLonglong})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeDatetime})
 
 	mutRow := MutRowFromTypes(colTypes)
-	row := MutRowFromValues("abc", "abcdefg", 123, 456, types.ZeroDatetime).ToRow()
+	row := MutRowFromValues("abc", "abcdefg", 123, 456).ToRow()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < rowsNum; j++ {

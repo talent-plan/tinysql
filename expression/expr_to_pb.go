@@ -130,7 +130,7 @@ func (pc *PbConverter) encodeDatum(ft *types.FieldType, d types.Datum) (tipb.Exp
 	case types.KindUint64:
 		tp = tipb.ExprType_Uint64
 		val = codec.EncodeUint(nil, d.GetUint64())
-	case types.KindString, types.KindBinaryLiteral:
+	case types.KindString:
 		tp = tipb.ExprType_String
 		val = d.GetBytes()
 	case types.KindBytes:
@@ -142,28 +142,6 @@ func (pc *PbConverter) encodeDatum(ft *types.FieldType, d types.Datum) (tipb.Exp
 	case types.KindFloat64:
 		tp = tipb.ExprType_Float64
 		val = codec.EncodeFloat(nil, d.GetFloat64())
-	case types.KindMysqlDuration:
-		tp = tipb.ExprType_MysqlDuration
-		val = codec.EncodeInt(nil, int64(d.GetMysqlDuration().Duration))
-	case types.KindMysqlDecimal:
-		tp = tipb.ExprType_MysqlDecimal
-		var err error
-		val, err = codec.EncodeDecimal(nil, d.GetMysqlDecimal(), d.Length(), d.Frac())
-		if err != nil {
-			logutil.BgLogger().Error("encode decimal", zap.Error(err))
-			return tp, nil, false
-		}
-	case types.KindMysqlTime:
-		if pc.client.IsRequestTypeSupported(kv.ReqTypeDAG, int64(tipb.ExprType_MysqlTime)) {
-			tp = tipb.ExprType_MysqlTime
-			val, err := codec.EncodeMySQLTime(pc.sc, d.GetMysqlTime(), ft.Tp, nil)
-			if err != nil {
-				logutil.BgLogger().Error("encode mysql time", zap.Error(err))
-				return tp, nil, false
-			}
-			return tp, val, true
-		}
-		return tp, nil, false
 	default:
 		return tp, nil, false
 	}

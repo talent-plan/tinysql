@@ -1098,56 +1098,6 @@ func (e *vecGroupChecker) evalGroupItemsAndResolveGroups(item expression.Express
 		}
 		firstRowDatum.SetFloat64(vals[0])
 		lastRowDatum.SetFloat64(vals[numRows-1])
-	case types.ETDecimal:
-		vals := col.Decimals()
-		for i := 1; i < numRows; i++ {
-			isNull := col.IsNull(i)
-			switch e.sameGroup[i] {
-			case !previousIsNull && !isNull:
-				if vals[i].Compare(&vals[i-1]) != 0 {
-					e.sameGroup[i] = false
-				}
-			case isNull != previousIsNull:
-				e.sameGroup[i] = false
-			}
-			previousIsNull = isNull
-		}
-		// make a copy to avoid DATA RACE
-		firstDatum, lastDatum := vals[0], vals[numRows-1]
-		firstRowDatum.SetMysqlDecimal(&firstDatum)
-		lastRowDatum.SetMysqlDecimal(&lastDatum)
-	case types.ETDatetime, types.ETTimestamp:
-		vals := col.Times()
-		for i := 1; i < numRows; i++ {
-			isNull := col.IsNull(i)
-			switch e.sameGroup[i] {
-			case !previousIsNull && !isNull:
-				if vals[i].Compare(vals[i-1]) != 0 {
-					e.sameGroup[i] = false
-				}
-			case isNull != previousIsNull:
-				e.sameGroup[i] = false
-			}
-			previousIsNull = isNull
-		}
-		firstRowDatum.SetMysqlTime(vals[0])
-		lastRowDatum.SetMysqlTime(vals[numRows-1])
-	case types.ETDuration:
-		vals := col.GoDurations()
-		for i := 1; i < numRows; i++ {
-			isNull := col.IsNull(i)
-			switch e.sameGroup[i] {
-			case !previousIsNull && !isNull:
-				if vals[i] != vals[i-1] {
-					e.sameGroup[i] = false
-				}
-			case isNull != previousIsNull:
-				e.sameGroup[i] = false
-			}
-			previousIsNull = isNull
-		}
-		firstRowDatum.SetMysqlDuration(types.Duration{Duration: vals[0], Fsp: int8(item.GetType().Decimal)})
-		lastRowDatum.SetMysqlDuration(types.Duration{Duration: vals[numRows-1], Fsp: int8(item.GetType().Decimal)})
 	case types.ETString:
 		previousKey := col.GetString(0)
 		for i := 1; i < numRows; i++ {

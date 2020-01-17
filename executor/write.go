@@ -15,12 +15,8 @@ package executor
 
 import (
 	"context"
-	"strings"
-
 	"github.com/opentracing/opentracing-go"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
@@ -125,19 +121,7 @@ func updateRecord(ctx context.Context, sctx sessionctx.Context, h int64, oldData
 		return false, false, 0, nil
 	}
 
-	// 4. Fill values into on-update-now fields, only if they are really changed.
-	for i, col := range t.Cols() {
-		if mysql.HasOnUpdateNowFlag(col.Flag) && !modified[i] && !onUpdateSpecified[i] {
-			if v, err := expression.GetTimeValue(sctx, strings.ToUpper(ast.CurrentTimestamp), col.Tp, int8(col.Decimal)); err == nil {
-				newData[i] = v
-				modified[i] = true
-			} else {
-				return false, false, 0, err
-			}
-		}
-	}
-
-	// 5. If handle changed, remove the old then add the new record, otherwise update the record.
+	// 4. If handle changed, remove the old then add the new record, otherwise update the record.
 	var err error
 	if handleChanged {
 		if sc.DupKeyAsWarning {

@@ -40,7 +40,6 @@
       "TableReader(Table(t))->Insert",
       "Dual->Projection",
       "Join{DataScan(t1)->DataScan(t2)}->Projection",
-      "Join{DataScan(t1)->DataScan(t2)}->Projection",
       "LeftHashJoin{LeftHashJoin{TableReader(Table(t))->IndexLookUp(Index(t.c_d_e)[[666,666]], Table(t))}(test.t.a,test.t.b)->IndexReader(Index(t.c_d_e)[[42,42]])}(test.t.b,test.t.a)->Sel([or(Column#25, Column#38)])->Projection->Delete",
       "LeftHashJoin{TableReader(Table(t))->IndexReader(Index(t.c_d_e)[[NULL,+inf]])->HashAgg}(test.t.b,test.t.c)->Projection->Update"
     ]
@@ -727,8 +726,7 @@
       "DataScan(t2)->Projection",
       "Join{Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->DataScan(t3)->TopN([test.t.b true],0,1)}(test.t.b,test.t.b)->TopN([test.t.b true],0,1)->Aggr(max(test.t.b))->Projection",
       "DataScan(t1)->Projection",
-      "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Sort->Projection",
-      "DataScan(a)->Projection"
+      "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Sort->Projection"
     ]
   },
   {

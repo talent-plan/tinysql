@@ -26,32 +26,26 @@ import (
 var vecGeneratedBuiltinCompareCases = map[string][]vecExprBenchCase{
 	ast.LT: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 	ast.LE: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 	ast.GT: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 	ast.GE: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 	ast.EQ: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 	ast.NE: {
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
-		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
 		{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
 	},
 }

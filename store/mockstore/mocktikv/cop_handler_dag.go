@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/timeutil"
+
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -118,7 +118,7 @@ func (h *rpcHandler) buildDAGExecutor(req *coprocessor.Request) (*dagContext, ex
 // is set, the daylight saving problem must be considered. Otherwise the
 // timezone offset in seconds east of UTC is used to constructed the timezone.
 func constructTimeZone(name string, offset int) (*time.Location, error) {
-	return timeutil.ConstructTimeZone(name, offset)
+	return time.Local, nil
 }
 
 func (h *rpcHandler) buildExec(ctx *dagContext, curr *tipb.Executor) (executor, error) {

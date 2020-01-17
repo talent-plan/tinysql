@@ -1,7 +1,6 @@
 package aggfuncs
 
 import (
-	"encoding/binary"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -66,72 +65,6 @@ func (e *countOriginal4Real) UpdatePartialResult(sctx sessionctx.Context, rowsIn
 
 	for _, row := range rowsInGroup {
 		_, isNull, err := e.args[0].EvalReal(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-
-		*p++
-	}
-
-	return nil
-}
-
-type countOriginal4Decimal struct {
-	baseCount
-}
-
-func (e *countOriginal4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4Count)(pr)
-
-	for _, row := range rowsInGroup {
-		_, isNull, err := e.args[0].EvalDecimal(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-
-		*p++
-	}
-
-	return nil
-}
-
-type countOriginal4Time struct {
-	baseCount
-}
-
-func (e *countOriginal4Time) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4Count)(pr)
-
-	for _, row := range rowsInGroup {
-		_, isNull, err := e.args[0].EvalTime(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-
-		*p++
-	}
-
-	return nil
-}
-
-type countOriginal4Duration struct {
-	baseCount
-}
-
-func (e *countOriginal4Duration) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4Count)(pr)
-
-	for _, row := range rowsInGroup {
-		_, isNull, err := e.args[0].EvalDuration(sctx, row)
 		if err != nil {
 			return err
 		}
@@ -226,8 +159,7 @@ func (e *countOriginalWithDistinct) UpdatePartialResult(sctx sessionctx.Context,
 	p := (*partialResult4CountWithDistinct)(pr)
 
 	encodedBytes := make([]byte, 0)
-	// Decimal struct is the biggest type we will use.
-	buf := make([]byte, types.MyDecimalStructSize)
+	buf := make([]byte, 8)
 
 	for _, row := range rowsInGroup {
 		var hasNull, isNull bool
@@ -274,27 +206,6 @@ func (e *countOriginalWithDistinct) evalAndEncode(
 			break
 		}
 		encodedBytes = appendFloat64(encodedBytes, buf, val)
-	case types.ETDecimal:
-		var val *types.MyDecimal
-		val, isNull, err = arg.EvalDecimal(sctx, row)
-		if err != nil || isNull {
-			break
-		}
-		encodedBytes, err = appendDecimal(encodedBytes, val)
-	case types.ETTimestamp, types.ETDatetime:
-		var val types.Time
-		val, isNull, err = arg.EvalTime(sctx, row)
-		if err != nil || isNull {
-			break
-		}
-		encodedBytes = appendTime(encodedBytes, buf, val)
-	case types.ETDuration:
-		var val types.Duration
-		val, isNull, err = arg.EvalDuration(sctx, row)
-		if err != nil || isNull {
-			break
-		}
-		encodedBytes = appendDuration(encodedBytes, buf, val)
 	case types.ETString:
 		var val string
 		val, isNull, err = arg.EvalString(sctx, row)
@@ -318,38 +229,6 @@ func appendInt64(encodedBytes, buf []byte, val int64) []byte {
 func appendFloat64(encodedBytes, buf []byte, val float64) []byte {
 	*(*float64)(unsafe.Pointer(&buf[0])) = val
 	buf = buf[:8]
-	encodedBytes = append(encodedBytes, buf...)
-	return encodedBytes
-}
-
-func appendDecimal(encodedBytes []byte, val *types.MyDecimal) ([]byte, error) {
-	hash, err := val.ToHashKey()
-	encodedBytes = append(encodedBytes, hash...)
-	return encodedBytes, err
-}
-
-func writeTime(buf []byte, t types.Time) {
-	binary.BigEndian.PutUint16(buf, uint16(t.Time.Year()))
-	buf[2] = uint8(t.Time.Month())
-	buf[3] = uint8(t.Time.Day())
-	buf[4] = uint8(t.Time.Hour())
-	buf[5] = uint8(t.Time.Minute())
-	buf[6] = uint8(t.Time.Second())
-	binary.BigEndian.PutUint32(buf[8:], uint32(t.Time.Microsecond()))
-	buf[12] = t.Type
-	buf[13] = uint8(t.Fsp)
-}
-
-func appendTime(encodedBytes, buf []byte, val types.Time) []byte {
-	writeTime(buf, val)
-	buf = buf[:16]
-	encodedBytes = append(encodedBytes, buf...)
-	return encodedBytes
-}
-
-func appendDuration(encodedBytes, buf []byte, val types.Duration) []byte {
-	*(*types.Duration)(unsafe.Pointer(&buf[0])) = val
-	buf = buf[:16]
 	encodedBytes = append(encodedBytes, buf...)
 	return encodedBytes
 }

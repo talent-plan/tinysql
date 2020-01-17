@@ -20,7 +20,6 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
@@ -59,188 +58,17 @@ type column struct {
 	tp *types.FieldType
 }
 
-func (s *testTableCodecSuite) TestRowCodec(c *C) {
-	defer testleak.AfterTest(c)()
-
-	c1 := &column{id: 1, tp: types.NewFieldType(mysql.TypeLonglong)}
-	c2 := &column{id: 2, tp: types.NewFieldType(mysql.TypeVarchar)}
-	c3 := &column{id: 3, tp: types.NewFieldType(mysql.TypeNewDecimal)}
-	c4 := &column{id: 4, tp: &types.FieldType{Tp: mysql.TypeEnum, Elems: []string{"a"}}}
-	c5 := &column{id: 5, tp: &types.FieldType{Tp: mysql.TypeSet, Elems: []string{"a"}}}
-	c6 := &column{id: 6, tp: &types.FieldType{Tp: mysql.TypeBit, Flen: 8}}
-	cols := []*column{c1, c2, c3, c4, c5, c6}
-
-	row := make([]types.Datum, 6)
-	row[0] = types.NewIntDatum(100)
-	row[1] = types.NewBytesDatum([]byte("abc"))
-	row[2] = types.NewDecimalDatum(types.NewDecFromInt(1))
-	row[3] = types.NewMysqlEnumDatum(types.Enum{Name: "a", Value: 0})
-	row[4] = types.NewDatum(types.Set{Name: "a", Value: 0})
-	row[5] = types.NewDatum(types.BinaryLiteral{100})
-	// Encode
-	colIDs := make([]int64, 0, len(row))
-	for _, col := range cols {
-		colIDs = append(colIDs, col.id)
-	}
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	bs, err := EncodeRow(sc, row, colIDs, nil, nil)
-	c.Assert(err, IsNil)
-	c.Assert(bs, NotNil)
-
-	// Decode
-	colMap := make(map[int64]*types.FieldType, len(row))
-	for _, col := range cols {
-		colMap[col.id] = col.tp
-	}
-	r, err := DecodeRow(bs, colMap, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, len(row))
-	// Compare decoded row and original row
-	for i, col := range cols {
-		v, ok := r[col.id]
-		c.Assert(ok, IsTrue)
-		equal, err1 := v.CompareDatum(sc, &row[i])
-		c.Assert(err1, IsNil)
-		c.Assert(equal, Equals, 0)
-	}
-
-	// colMap may contains more columns than encoded row.
-	colMap[4] = types.NewFieldType(mysql.TypeFloat)
-	r, err = DecodeRow(bs, colMap, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, len(row))
-	for i, col := range cols {
-		v, ok := r[col.id]
-		c.Assert(ok, IsTrue)
-		equal, err1 := v.CompareDatum(sc, &row[i])
-		c.Assert(err1, IsNil)
-		c.Assert(equal, Equals, 0)
-	}
-
-	// colMap may contains less columns than encoded row.
-	delete(colMap, 3)
-	delete(colMap, 4)
-	r, err = DecodeRow(bs, colMap, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, len(row)-2)
-	for i, col := range cols {
-		if i > 1 {
-			break
-		}
-		v, ok := r[col.id]
-		c.Assert(ok, IsTrue)
-		equal, err1 := v.CompareDatum(sc, &row[i])
-		c.Assert(err1, IsNil)
-		c.Assert(equal, Equals, 0)
-	}
-
-	// Make sure empty row return not nil value.
-	bs, err = EncodeRow(sc, []types.Datum{}, []int64{}, nil, nil)
-	c.Assert(err, IsNil)
-	c.Assert(bs, HasLen, 1)
-
-	r, err = DecodeRow(bs, colMap, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(len(r), Equals, 0)
-}
-
-func (s *testTableCodecSuite) TestDecodeColumnValue(c *C) {
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	d := types.NewTimeDatum(types.Time{
-		Time: types.FromGoTime(time.Now()),
-		Type: mysql.TypeTimestamp,
-	})
-	bs, err := EncodeRow(sc, []types.Datum{d}, []int64{1}, nil, nil)
-	c.Assert(err, IsNil)
-	c.Assert(bs, NotNil)
-	_, bs, err = codec.CutOne(bs) // ignore colID
-	c.Assert(err, IsNil)
-
-	tp := types.NewFieldType(mysql.TypeTimestamp)
-	d1, err := DecodeColumnValue(bs, tp, sc.TimeZone)
-	c.Assert(err, IsNil)
-	cmp, err := d1.CompareDatum(sc, &d)
-	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-}
-
-func (s *testTableCodecSuite) TestUnflattenDatums(c *C) {
-	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
-	input := types.MakeDatums(int64(1))
-	tps := []*types.FieldType{types.NewFieldType(mysql.TypeLonglong)}
-	output, err := UnflattenDatums(input, tps, sc.TimeZone)
-	c.Assert(err, IsNil)
-	cmp, err := input[0].CompareDatum(sc, &output[0])
-	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-}
-
-func (s *testTableCodecSuite) TestTimeCodec(c *C) {
-	defer testleak.AfterTest(c)()
-
-	c1 := &column{id: 1, tp: types.NewFieldType(mysql.TypeLonglong)}
-	c2 := &column{id: 2, tp: types.NewFieldType(mysql.TypeVarchar)}
-	c3 := &column{id: 3, tp: types.NewFieldType(mysql.TypeTimestamp)}
-	c4 := &column{id: 4, tp: types.NewFieldType(mysql.TypeDuration)}
-	cols := []*column{c1, c2, c3, c4}
-	colLen := len(cols)
-
-	row := make([]types.Datum, colLen)
-	row[0] = types.NewIntDatum(100)
-	row[1] = types.NewBytesDatum([]byte("abc"))
-	ts, err := types.ParseTimestamp(&stmtctx.StatementContext{TimeZone: time.UTC},
-		"2016-06-23 11:30:45")
-	c.Assert(err, IsNil)
-	row[2] = types.NewDatum(ts)
-	du, err := types.ParseDuration(nil, "12:59:59.999999", 6)
-	c.Assert(err, IsNil)
-	row[3] = types.NewDatum(du)
-
-	// Encode
-	colIDs := make([]int64, 0, colLen)
-	for _, col := range cols {
-		colIDs = append(colIDs, col.id)
-	}
-	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
-	bs, err := EncodeRow(sc, row, colIDs, nil, nil)
-	c.Assert(err, IsNil)
-	c.Assert(bs, NotNil)
-
-	// Decode
-	colMap := make(map[int64]*types.FieldType, colLen)
-	for _, col := range cols {
-		colMap[col.id] = col.tp
-	}
-	r, err := DecodeRow(bs, colMap, time.UTC)
-	c.Assert(err, IsNil)
-	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, colLen)
-	// Compare decoded row and original row
-	for i, col := range cols {
-		v, ok := r[col.id]
-		c.Assert(ok, IsTrue)
-		equal, err1 := v.CompareDatum(sc, &row[i])
-		c.Assert(err1, IsNil)
-		c.Assert(equal, Equals, 0)
-	}
-}
-
 func (s *testTableCodecSuite) TestCutRow(c *C) {
 	defer testleak.AfterTest(c)()
 
 	var err error
 	c1 := &column{id: 1, tp: types.NewFieldType(mysql.TypeLonglong)}
 	c2 := &column{id: 2, tp: types.NewFieldType(mysql.TypeVarchar)}
-	c3 := &column{id: 3, tp: types.NewFieldType(mysql.TypeNewDecimal)}
-	cols := []*column{c1, c2, c3}
+	cols := []*column{c1, c2}
 
-	row := make([]types.Datum, 3)
+	row := make([]types.Datum, 2)
 	row[0] = types.NewIntDatum(100)
 	row[1] = types.NewBytesDatum([]byte("abc"))
-	row[2] = types.NewDecimalDatum(types.NewDecFromInt(1))
 
 	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
 	data := make([][]byte, 3)
@@ -248,10 +76,8 @@ func (s *testTableCodecSuite) TestCutRow(c *C) {
 	c.Assert(err, IsNil)
 	data[1], err = EncodeValue(sc, nil, row[1])
 	c.Assert(err, IsNil)
-	data[2], err = EncodeValue(sc, nil, row[2])
-	c.Assert(err, IsNil)
 	// Encode
-	colIDs := make([]int64, 0, 3)
+	colIDs := make([]int64, 0, 2)
 	for _, col := range cols {
 		colIDs = append(colIDs, col.id)
 	}
@@ -260,14 +86,14 @@ func (s *testTableCodecSuite) TestCutRow(c *C) {
 	c.Assert(bs, NotNil)
 
 	// Decode
-	colMap := make(map[int64]int, 3)
+	colMap := make(map[int64]int, 2)
 	for i, col := range cols {
 		colMap[col.id] = i
 	}
 	r, err := CutRowNew(bs, colMap)
 	c.Assert(err, IsNil)
 	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, 3)
+	c.Assert(r, HasLen, 2)
 	// Compare cut row and original row
 	for i := range colIDs {
 		c.Assert(r[i], DeepEquals, data[i])
@@ -317,19 +143,6 @@ func (s *testTableCodecSuite) TestCutKey(c *C) {
 	}
 	_, handleVal, _ := codec.DecodeOne(handleBytes)
 	c.Assert(handleVal, DeepEquals, types.NewIntDatum(100))
-}
-
-func (s *testTableCodecSuite) TestDecodeBadDecical(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/util/codec/errorInDecodeDecimal", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/util/codec/errorInDecodeDecimal"), IsNil)
-	}()
-	dec := types.NewDecFromStringForTest("0.111")
-	b, err := codec.EncodeDecimal(nil, dec, 0, 0)
-	c.Assert(err, IsNil)
-	// Expect no panic.
-	_, _, err = codec.DecodeOne(b)
-	c.Assert(err, NotNil)
 }
 
 func (s *testTableCodecSuite) TestIndexKey(c *C) {
@@ -506,11 +319,7 @@ func BenchmarkEncodeValue(b *testing.B) {
 	row := make([]types.Datum, 7)
 	row[0] = types.NewIntDatum(100)
 	row[1] = types.NewBytesDatum([]byte("abc"))
-	row[2] = types.NewDecimalDatum(types.NewDecFromInt(1))
-	row[3] = types.NewMysqlEnumDatum(types.Enum{Name: "a", Value: 0})
-	row[4] = types.NewDatum(types.Set{Name: "a", Value: 0})
-	row[5] = types.NewDatum(types.BinaryLiteral{100})
-	row[6] = types.NewFloat32Datum(1.5)
+	row[2] = types.NewFloat32Datum(1.5)
 	b.ResetTimer()
 	encodedCol := make([]byte, 0, 16)
 	for i := 0; i < b.N; i++ {

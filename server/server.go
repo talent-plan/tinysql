@@ -49,10 +49,8 @@ import (
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -128,7 +126,6 @@ func NewServer(cfg *config.Config, driver IDriver) (*Server, error) {
 		clients:        make(map[uint32]*clientConn),
 		stopListenerCh: make(chan struct{}, 1),
 	}
-	setSystemTimeZoneVariable()
 
 	s.capability = defaultCapability
 	if s.tlsConfig != nil {
@@ -379,18 +376,6 @@ func (s *Server) kickIdleConnection() {
 			logutil.BgLogger().Error("close connection", zap.Error(err))
 		}
 	}
-}
-
-func setSystemTimeZoneVariable() {
-	tz, err := timeutil.GetSystemTZ()
-	if err != nil {
-		logutil.BgLogger().Error(
-			"Error getting SystemTZ, use default value instead",
-			zap.Error(err),
-			zap.String("default system_time_zone", variable.SysVars["system_time_zone"].Value))
-		return
-	}
-	variable.SysVars["system_time_zone"].Value = tz
 }
 
 func init() {

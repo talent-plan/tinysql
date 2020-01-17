@@ -90,7 +90,7 @@ var defaultConf = Config{
 	Port:             4000,
 	Cors:             "",
 	Store:            "mocktikv",
-	Path:             "/tmp/tidb",
+	Path:             "/tmp/tinysql",
 	Lease:            "45s",
 	Log: Log{
 		Level: "info",

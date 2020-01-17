@@ -52,18 +52,6 @@ func IsTypePrefixable(tp byte) bool {
 	return IsTypeBlob(tp) || IsTypeChar(tp)
 }
 
-// IsTypeFractionable returns a boolean indicating
-// whether the tp can has time fraction.
-func IsTypeFractionable(tp byte) bool {
-	return tp == mysql.TypeDatetime || tp == mysql.TypeDuration || tp == mysql.TypeTimestamp
-}
-
-// IsTypeTime returns a boolean indicating
-// whether the tp is time type like datetime, date or timestamp.
-func IsTypeTime(tp byte) bool {
-	return tp == mysql.TypeDatetime || tp == mysql.TypeDate || tp == mysql.TypeTimestamp
-}
-
 // IsTypeNumeric returns a boolean indicating whether the tp is numeric type.
 func IsTypeNumeric(tp byte) bool {
 	switch tp {
@@ -72,12 +60,6 @@ func IsTypeNumeric(tp byte) bool {
 		return true
 	}
 	return false
-}
-
-// IsTemporalWithDate returns a boolean indicating
-// whether the tp is time type with date.
-func IsTemporalWithDate(tp byte) bool {
-	return IsTypeTime(tp)
 }
 
 // IsBinaryStr returns a boolean indicating
@@ -102,25 +84,17 @@ func IsString(tp byte) bool {
 }
 
 var kind2Str = map[byte]string{
-	KindNull:          "null",
-	KindInt64:         "bigint",
-	KindUint64:        "unsigned bigint",
-	KindFloat32:       "float",
-	KindFloat64:       "double",
-	KindString:        "char",
-	KindBytes:         "bytes",
-	KindBinaryLiteral: "bit/hex literal",
-	KindMysqlDecimal:  "decimal",
-	KindMysqlDuration: "time",
-	KindMysqlEnum:     "enum",
-	KindMysqlBit:      "bit",
-	KindMysqlSet:      "set",
-	KindMysqlTime:     "datetime",
-	KindInterface:     "interface",
-	KindMinNotNull:    "min_not_null",
-	KindMaxValue:      "max_value",
-	KindRaw:           "raw",
-	KindMysqlJSON:     "json",
+	KindNull:       "null",
+	KindInt64:      "bigint",
+	KindUint64:     "unsigned bigint",
+	KindFloat32:    "float",
+	KindFloat64:    "double",
+	KindString:     "char",
+	KindBytes:      "bytes",
+	KindInterface:  "interface",
+	KindMinNotNull: "min_not_null",
+	KindMaxValue:   "max_value",
+	KindRaw:        "raw",
 }
 
 // TypeStr converts tp to a string.

@@ -54,21 +54,6 @@ func (col *CorrelatedColumn) VecEvalString(ctx sessionctx.Context, input *chunk.
 	return genVecFromConstExpr(ctx, col, types.ETString, input, result)
 }
 
-// VecEvalDecimal evaluates this expression in a vectorized manner.
-func (col *CorrelatedColumn) VecEvalDecimal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, col, types.ETDecimal, input, result)
-}
-
-// VecEvalTime evaluates this expression in a vectorized manner.
-func (col *CorrelatedColumn) VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, col, types.ETTimestamp, input, result)
-}
-
-// VecEvalDuration evaluates this expression in a vectorized manner.
-func (col *CorrelatedColumn) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, col, types.ETDuration, input, result)
-}
-
 // Eval implements Expression interface.
 func (col *CorrelatedColumn) Eval(row chunk.Row) (types.Datum, error) {
 	return *col.Data, nil
@@ -105,30 +90,6 @@ func (col *CorrelatedColumn) EvalString(ctx sessionctx.Context, row chunk.Row) (
 		res = res + strings.Repeat(" ", col.RetType.Flen-resLen)
 	}
 	return res, err != nil, err
-}
-
-// EvalDecimal returns decimal representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalDecimal(ctx sessionctx.Context, row chunk.Row) (*types.MyDecimal, bool, error) {
-	if col.Data.IsNull() {
-		return nil, true, nil
-	}
-	return col.Data.GetMysqlDecimal(), false, nil
-}
-
-// EvalTime returns DATE/DATETIME/TIMESTAMP representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalTime(ctx sessionctx.Context, row chunk.Row) (types.Time, bool, error) {
-	if col.Data.IsNull() {
-		return types.Time{}, true, nil
-	}
-	return col.Data.GetMysqlTime(), false, nil
-}
-
-// EvalDuration returns Duration representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalDuration(ctx sessionctx.Context, row chunk.Row) (types.Duration, bool, error) {
-	if col.Data.IsNull() {
-		return types.Duration{}, true, nil
-	}
-	return col.Data.GetMysqlDuration(), false, nil
 }
 
 // Equal implements Expression interface.
@@ -274,30 +235,6 @@ func (col *Column) VecEvalString(ctx sessionctx.Context, input *chunk.Chunk, res
 	return nil
 }
 
-// VecEvalDecimal evaluates this expression in a vectorized manner.
-func (col *Column) VecEvalDecimal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	input.Column(col.Index).CopyReconstruct(input.Sel(), result)
-	return nil
-}
-
-// VecEvalTime evaluates this expression in a vectorized manner.
-func (col *Column) VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	input.Column(col.Index).CopyReconstruct(input.Sel(), result)
-	return nil
-}
-
-// VecEvalDuration evaluates this expression in a vectorized manner.
-func (col *Column) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	input.Column(col.Index).CopyReconstruct(input.Sel(), result)
-	return nil
-}
-
-// VecEvalJSON evaluates this expression in a vectorized manner.
-func (col *Column) VecEvalJSON(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	input.Column(col.Index).CopyReconstruct(input.Sel(), result)
-	return nil
-}
-
 const columnPrefix = "Column#"
 
 // String implements Stringer interface.
@@ -373,31 +310,6 @@ func (col *Column) EvalString(ctx sessionctx.Context, row chunk.Row) (string, bo
 		}
 	}
 	return val, false, nil
-}
-
-// EvalDecimal returns decimal representation of Column.
-func (col *Column) EvalDecimal(ctx sessionctx.Context, row chunk.Row) (*types.MyDecimal, bool, error) {
-	if row.IsNull(col.Index) {
-		return nil, true, nil
-	}
-	return row.GetMyDecimal(col.Index), false, nil
-}
-
-// EvalTime returns DATE/DATETIME/TIMESTAMP representation of Column.
-func (col *Column) EvalTime(ctx sessionctx.Context, row chunk.Row) (types.Time, bool, error) {
-	if row.IsNull(col.Index) {
-		return types.Time{}, true, nil
-	}
-	return row.GetTime(col.Index), false, nil
-}
-
-// EvalDuration returns Duration representation of Column.
-func (col *Column) EvalDuration(ctx sessionctx.Context, row chunk.Row) (types.Duration, bool, error) {
-	if row.IsNull(col.Index) {
-		return types.Duration{}, true, nil
-	}
-	duration := row.GetDuration(col.Index, col.RetType.Decimal)
-	return duration, false, nil
 }
 
 // Clone implements Expression interface.
@@ -558,19 +470,4 @@ idLoop:
 // EvalVirtualColumn evals the virtual column
 func (col *Column) EvalVirtualColumn(row chunk.Row) (types.Datum, error) {
 	return col.VirtualExpr.Eval(row)
-}
-
-// SupportReverseEval checks whether the builtinFunc support reverse evaluation.
-func (col *Column) SupportReverseEval() bool {
-	switch col.RetType.Tp {
-	case mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong,
-		mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-		return true
-	}
-	return false
-}
-
-// ReverseEval evaluates the only one column value with given function result.
-func (col *Column) ReverseEval(sc *stmtctx.StatementContext, res types.Datum, rType types.RoundingType) (val types.Datum, err error) {
-	return types.ChangeReverseResultByUpperLowerBound(sc, col.RetType, res, rType)
 }

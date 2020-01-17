@@ -14,8 +14,6 @@
 package expression
 
 import (
-	"fmt"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -58,34 +56,11 @@ func (s *testEvaluatorSuite) TestColumn(c *C) {
 	c.Assert(isNull, IsFalse)
 	c.Assert(err, IsNil)
 
-	decimalDatum := types.NewDecimalDatum(types.NewDecFromStringForTest("1.2"))
-	decimalCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeNewDecimal)},
-		Data: &decimalDatum}
-	decVal, isNull, err := decimalCorCol.EvalDecimal(s.ctx, chunk.Row{})
-	c.Assert(decVal.Compare(types.NewDecFromStringForTest("1.2")), Equals, 0)
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-
 	stringDatum := types.NewStringDatum("abc")
 	stringCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeVarchar)},
 		Data: &stringDatum}
 	strVal, isNull, err := stringCorCol.EvalString(s.ctx, chunk.Row{})
 	c.Assert(strVal, Equals, "abc")
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-
-	durationCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeDuration)},
-		Data: &durationDatum}
-	durationVal, isNull, err := durationCorCol.EvalDuration(s.ctx, chunk.Row{})
-	c.Assert(durationVal.Compare(duration), Equals, 0)
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-
-	timeDatum := types.NewTimeDatum(tm)
-	timeCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeDatetime)},
-		Data: &timeDatum}
-	timeVal, isNull, err := timeCorCol.EvalTime(s.ctx, chunk.Row{})
-	c.Assert(timeVal.Compare(tm), Equals, 0)
 	c.Assert(isNull, IsFalse)
 	c.Assert(err, IsNil)
 }
@@ -154,76 +129,6 @@ func (s *testEvaluatorSuite) TestIndexInfo2Cols(c *C) {
 	c.Assert(len(lengths), Equals, 2)
 	c.Assert(resCols[0].Equal(nil, col0), IsTrue)
 	c.Assert(resCols[1].Equal(nil, col1), IsTrue)
-}
-
-func (s *testEvaluatorSuite) TestColHybird(c *C) {
-	ctx := mock.NewContext()
-
-	// bit
-	ft := types.NewFieldType(mysql.TypeBit)
-	col := &Column{RetType: ft, Index: 0}
-	input := chunk.New([]*types.FieldType{ft}, 1024, 1024)
-	for i := 0; i < 1024; i++ {
-		num, err := types.ParseBitStr(fmt.Sprintf("0b%b", i))
-		c.Assert(err, IsNil)
-		input.AppendBytes(0, num)
-	}
-	result, err := newBuffer(types.ETInt, 1024)
-	c.Assert(err, IsNil)
-	c.Assert(col.VecEvalInt(ctx, input, result), IsNil)
-
-	it := chunk.NewIterator4Chunk(input)
-	for row, i := it.Begin(), 0; row != it.End(); row, i = it.Next(), i+1 {
-		v, _, err := col.EvalInt(ctx, row)
-		c.Assert(err, IsNil)
-		c.Assert(v, Equals, result.GetInt64(i))
-	}
-
-	// use a container which has the different field type with bit
-	result, err = newBuffer(types.ETString, 1024)
-	c.Assert(err, IsNil)
-	c.Assert(col.VecEvalInt(ctx, input, result), IsNil)
-	for row, i := it.Begin(), 0; row != it.End(); row, i = it.Next(), i+1 {
-		v, _, err := col.EvalInt(ctx, row)
-		c.Assert(err, IsNil)
-		c.Assert(v, Equals, result.GetInt64(i))
-	}
-
-	// enum
-	ft = types.NewFieldType(mysql.TypeEnum)
-	col.RetType = ft
-	input = chunk.New([]*types.FieldType{ft}, 1024, 1024)
-	for i := 0; i < 1024; i++ {
-		input.AppendEnum(0, types.Enum{Name: fmt.Sprintf("%v", i), Value: uint64(i)})
-	}
-	result, err = newBuffer(types.ETString, 1024)
-	c.Assert(err, IsNil)
-	c.Assert(col.VecEvalString(ctx, input, result), IsNil)
-
-	it = chunk.NewIterator4Chunk(input)
-	for row, i := it.Begin(), 0; row != it.End(); row, i = it.Next(), i+1 {
-		v, _, err := col.EvalString(ctx, row)
-		c.Assert(err, IsNil)
-		c.Assert(v, Equals, result.GetString(i))
-	}
-
-	// set
-	ft = types.NewFieldType(mysql.TypeSet)
-	col.RetType = ft
-	input = chunk.New([]*types.FieldType{ft}, 1024, 1024)
-	for i := 0; i < 1024; i++ {
-		input.AppendSet(0, types.Set{Name: fmt.Sprintf("%v", i), Value: uint64(i)})
-	}
-	result, err = newBuffer(types.ETString, 1024)
-	c.Assert(err, IsNil)
-	c.Assert(col.VecEvalString(ctx, input, result), IsNil)
-
-	it = chunk.NewIterator4Chunk(input)
-	for row, i := it.Begin(), 0; row != it.End(); row, i = it.Next(), i+1 {
-		v, _, err := col.EvalString(ctx, row)
-		c.Assert(err, IsNil)
-		c.Assert(v, Equals, result.GetString(i))
-	}
 }
 
 func (s *testEvaluatorSuite) TestPadCharToFullLength(c *C) {

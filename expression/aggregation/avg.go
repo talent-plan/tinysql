@@ -14,9 +14,6 @@
 package aggregation
 
 import (
-	"github.com/cznic/mathutil"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -75,19 +72,10 @@ func (af *avgFunction) GetResult(evalCtx *AggEvaluateContext) (d types.Datum) {
 		sum := evalCtx.Value.GetFloat64()
 		d.SetFloat64(sum / float64(evalCtx.Count))
 		return
-	case types.KindMysqlDecimal:
-		x := evalCtx.Value.GetMysqlDecimal()
-		y := types.NewDecFromInt(evalCtx.Count)
-		to := new(types.MyDecimal)
-		err := types.DecimalDiv(x, y, to, types.DivFracIncr)
-		terror.Log(err)
-		frac := af.RetTp.Decimal
-		if frac == -1 {
-			frac = mysql.MaxDecimalScale
-		}
-		err = to.Round(to, mathutil.Min(frac, mysql.MaxDecimalScale), types.ModeHalfEven)
-		terror.Log(err)
-		d.SetMysqlDecimal(to)
+	case types.KindInt64:
+		sum := evalCtx.Value.GetInt64()
+		d.SetInt64(sum/evalCtx.Count)
+		return
 	}
 	return
 }

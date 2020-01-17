@@ -140,46 +140,6 @@ func (s *testTableSuite) TestCharacterSetCollations(c *C) {
 	tk.MustExec("DROP DATABASE charset_collate_test")
 }
 
-func (s *testTableSuite) TestCurrentTimestampAsDefault(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("DROP DATABASE IF EXISTS default_time_test")
-	tk.MustExec("CREATE DATABASE default_time_test; USE default_time_test")
-
-	tk.MustExec(`CREATE TABLE default_time_table(
-					c_datetime datetime,
-					c_datetime_default datetime default current_timestamp,
-					c_datetime_default_2 datetime(2) default current_timestamp(2),
-					c_timestamp timestamp,
-					c_timestamp_default timestamp default current_timestamp,
-					c_timestamp_default_3 timestamp(3) default current_timestamp(3),
-					c_varchar_default varchar(20) default "current_timestamp",
-					c_varchar_default_3 varchar(20) default "current_timestamp(3)",
-					c_varchar_default_on_update datetime default current_timestamp on update current_timestamp,
-					c_varchar_default_on_update_fsp datetime(3) default current_timestamp(3) on update current_timestamp(3),
-					c_varchar_default_with_case varchar(20) default "cUrrent_tImestamp"
-				);`)
-
-	tk.MustQuery(`SELECT column_name, column_default, extra
-					FROM information_schema.COLUMNS
-					WHERE table_schema = "default_time_test" AND table_name = "default_time_table"
-					ORDER BY column_name`,
-	).Check(testkit.Rows(
-		"c_datetime <nil> ",
-		"c_datetime_default CURRENT_TIMESTAMP ",
-		"c_datetime_default_2 CURRENT_TIMESTAMP(2) ",
-		"c_timestamp <nil> ",
-		"c_timestamp_default CURRENT_TIMESTAMP ",
-		"c_timestamp_default_3 CURRENT_TIMESTAMP(3) ",
-		"c_varchar_default current_timestamp ",
-		"c_varchar_default_3 current_timestamp(3) ",
-		"c_varchar_default_on_update CURRENT_TIMESTAMP DEFAULT_GENERATED on update CURRENT_TIMESTAMP",
-		"c_varchar_default_on_update_fsp CURRENT_TIMESTAMP(3) DEFAULT_GENERATED on update CURRENT_TIMESTAMP(3)",
-		"c_varchar_default_with_case cUrrent_tImestamp ",
-	))
-	tk.MustExec("DROP DATABASE default_time_test")
-}
-
 type mockSessionManager struct {
 	processInfoMap map[uint64]*util.ProcessInfo
 }
@@ -295,61 +255,6 @@ func (s *testTableSuite) TestSchemataCharacterSet(c *C) {
 	tk.MustExec("drop database `foo`")
 }
 
-func (s *testTableSuite) TestProfiling(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery("select * from information_schema.profiling").Check(testkit.Rows())
-	tk.MustExec("set @@profiling=1")
-	tk.MustQuery("select * from information_schema.profiling").Check(testkit.Rows("0 0  0 0 0 0 0 0 0 0 0 0 0 0   0"))
-}
-
-func (s *testTableSuite) TestTableIDAndIndexID(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("drop table if exists test.t")
-	tk.MustExec("create table test.t (a int, b int, primary key(a), key k1(b))")
-	tblID, err := strconv.Atoi(tk.MustQuery("select tidb_table_id from information_schema.tables where table_schema = 'test' and table_name = 't'").Rows()[0][0].(string))
-	c.Assert(err, IsNil)
-	c.Assert(tblID, Greater, 0)
-	tk.MustQuery("select * from information_schema.tidb_indexes where table_schema = 'test' and table_name = 't'").Check(testkit.Rows("test t 0 PRIMARY 1 a <nil>  0", "test t 1 k1 1 b <nil>  1"))
-}
-
-func (s *testTableSuite) TestTableRowIDShardingInfo(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("DROP DATABASE IF EXISTS `sharding_info_test_db`")
-	tk.MustExec("CREATE DATABASE `sharding_info_test_db`")
-
-	assertShardingInfo := func(tableName string, expectInfo interface{}) {
-		querySQL := fmt.Sprintf("select tidb_row_id_sharding_info from information_schema.tables where table_schema = 'sharding_info_test_db' and table_name = '%s'", tableName)
-		info := tk.MustQuery(querySQL).Rows()[0][0]
-		if expectInfo == nil {
-			c.Assert(info, Equals, "<nil>")
-		} else {
-			c.Assert(info, Equals, expectInfo)
-		}
-	}
-	tk.MustExec("CREATE TABLE `sharding_info_test_db`.`t1` (a int)")
-	assertShardingInfo("t1", "NOT_SHARDED")
-
-	tk.MustExec("CREATE TABLE `sharding_info_test_db`.`t2` (a int key)")
-	assertShardingInfo("t2", "NOT_SHARDED(PK_IS_HANDLE)")
-
-	tk.MustExec("CREATE TABLE `sharding_info_test_db`.`t3` (a int) SHARD_ROW_ID_BITS=4")
-	assertShardingInfo("t3", "SHARD_BITS=4")
-
-	testFunc := func(dbName string, expectInfo interface{}) {
-		dbInfo := model.DBInfo{Name: model.NewCIStr(dbName)}
-		tableInfo := model.TableInfo{}
-
-		info := infoschema.GetShardingInfo(&dbInfo, &tableInfo)
-		c.Assert(info, Equals, expectInfo)
-	}
-
-	testFunc("information_schema", nil)
-	testFunc("mysql", nil)
-	testFunc("uucc", "NOT_SHARDED")
-
-	tk.MustExec("DROP DATABASE `sharding_info_test_db`")
-}
-
 func (s *testTableSuite) TestForServersInfo(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	result := tk.MustQuery("select * from information_schema.TIDB_SERVERS_INFO")
@@ -391,11 +296,6 @@ func (s *testTableSuite) TestReloadDropDatabase(c *C) {
 	c.Assert(terror.ErrorEqual(infoschema.ErrTableNotExists, err), IsTrue)
 	_, ok := is.TableByID(t2.Meta().ID)
 	c.Assert(ok, IsFalse)
-}
-
-func (s *testTableSuite) TestSystemSchemaID(c *C) {
-	uniqueIDMap := make(map[int64]string)
-	s.checkSystemSchemaTableID(c, "information_schema", autoid.SystemSchemaIDFlag|1, 1, 10000, uniqueIDMap)
 }
 
 func (s *testTableSuite) checkSystemSchemaTableID(c *C, dbName string, dbID, start, end int64, uniqueIDMap map[int64]string) {

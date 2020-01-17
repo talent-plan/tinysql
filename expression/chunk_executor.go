@@ -93,24 +93,6 @@ func evalOneVec(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, out
 		if err := expr.VecEvalInt(ctx, input, result); err != nil {
 			return err
 		}
-		if ft.Tp == mysql.TypeBit {
-			i64s := result.Int64s()
-			buf := chunk.NewColumn(ft, input.NumRows())
-			buf.ReserveBytes(input.NumRows())
-			uintBuf := make([]byte, 8)
-			for i := range i64s {
-				if result.IsNull(i) {
-					buf.AppendNull()
-				} else {
-					buf.AppendBytes(strconv.AppendUint(uintBuf[:0], uint64(i64s[i]), 10))
-				}
-			}
-			// TODO: recycle all old Columns returned here.
-			output.SetCol(colIdx, buf)
-		} else if mysql.HasUnsignedFlag(ft.Flag) {
-			// the underlying memory formats of int64 and uint64 are the same in Golang,
-			// so we can do a no-op here.
-		}
 	case types.ETReal:
 		if err := expr.VecEvalReal(ctx, input, result); err != nil {
 			return err
@@ -130,40 +112,9 @@ func evalOneVec(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, out
 			}
 			output.SetCol(colIdx, buf)
 		}
-	case types.ETDecimal:
-		return expr.VecEvalDecimal(ctx, input, result)
-	case types.ETDatetime, types.ETTimestamp:
-		return expr.VecEvalTime(ctx, input, result)
-	case types.ETDuration:
-		return expr.VecEvalDuration(ctx, input, result)
 	case types.ETString:
 		if err := expr.VecEvalString(ctx, input, result); err != nil {
 			return err
-		}
-		if ft.Tp == mysql.TypeEnum {
-			n := input.NumRows()
-			buf := chunk.NewColumn(ft, n)
-			buf.ReserveEnum(n)
-			for i := 0; i < n; i++ {
-				if result.IsNull(i) {
-					buf.AppendNull()
-				} else {
-					buf.AppendEnum(types.Enum{Value: 0, Name: result.GetString(i)})
-				}
-			}
-			output.SetCol(colIdx, buf)
-		} else if ft.Tp == mysql.TypeSet {
-			n := input.NumRows()
-			buf := chunk.NewColumn(ft, n)
-			buf.ReserveSet(n)
-			for i := 0; i < n; i++ {
-				if result.IsNull(i) {
-					buf.AppendNull()
-				} else {
-					buf.AppendSet(types.Set{Value: 0, Name: result.GetString(i)})
-				}
-			}
-			output.SetCol(colIdx, buf)
 		}
 	}
 	return nil
@@ -179,18 +130,6 @@ func evalOneColumn(ctx sessionctx.Context, expr Expression, iterator *chunk.Iter
 		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
 			err = executeToReal(ctx, expr, fieldType, row, output, colID)
 		}
-	case types.ETDecimal:
-		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
-			err = executeToDecimal(ctx, expr, fieldType, row, output, colID)
-		}
-	case types.ETDatetime, types.ETTimestamp:
-		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
-			err = executeToDatetime(ctx, expr, fieldType, row, output, colID)
-		}
-	case types.ETDuration:
-		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
-			err = executeToDuration(ctx, expr, fieldType, row, output, colID)
-		}
 	case types.ETString:
 		for row := iterator.Begin(); err == nil && row != iterator.End(); row = iterator.Next() {
 			err = executeToString(ctx, expr, fieldType, row, output, colID)
@@ -205,12 +144,6 @@ func evalOneCell(ctx sessionctx.Context, expr Expression, row chunk.Row, output 
 		err = executeToInt(ctx, expr, fieldType, row, output, colID)
 	case types.ETReal:
 		err = executeToReal(ctx, expr, fieldType, row, output, colID)
-	case types.ETDecimal:
-		err = executeToDecimal(ctx, expr, fieldType, row, output, colID)
-	case types.ETDatetime, types.ETTimestamp:
-		err = executeToDatetime(ctx, expr, fieldType, row, output, colID)
-	case types.ETDuration:
-		err = executeToDuration(ctx, expr, fieldType, row, output, colID)
 	case types.ETString:
 		err = executeToString(ctx, expr, fieldType, row, output, colID)
 	}
@@ -255,45 +188,6 @@ func executeToReal(ctx sessionctx.Context, expr Expression, fieldType *types.Fie
 	return nil
 }
 
-func executeToDecimal(ctx sessionctx.Context, expr Expression, fieldType *types.FieldType, row chunk.Row, output *chunk.Chunk, colID int) error {
-	res, isNull, err := expr.EvalDecimal(ctx, row)
-	if err != nil {
-		return err
-	}
-	if isNull {
-		output.AppendNull(colID)
-		return nil
-	}
-	output.AppendMyDecimal(colID, res)
-	return nil
-}
-
-func executeToDatetime(ctx sessionctx.Context, expr Expression, fieldType *types.FieldType, row chunk.Row, output *chunk.Chunk, colID int) error {
-	res, isNull, err := expr.EvalTime(ctx, row)
-	if err != nil {
-		return err
-	}
-	if isNull {
-		output.AppendNull(colID)
-	} else {
-		output.AppendTime(colID, res)
-	}
-	return nil
-}
-
-func executeToDuration(ctx sessionctx.Context, expr Expression, fieldType *types.FieldType, row chunk.Row, output *chunk.Chunk, colID int) error {
-	res, isNull, err := expr.EvalDuration(ctx, row)
-	if err != nil {
-		return err
-	}
-	if isNull {
-		output.AppendNull(colID)
-	} else {
-		output.AppendDuration(colID, res)
-	}
-	return nil
-}
-
 func executeToString(ctx sessionctx.Context, expr Expression, fieldType *types.FieldType, row chunk.Row, output *chunk.Chunk, colID int) error {
 	res, isNull, err := expr.EvalString(ctx, row)
 	if err != nil {
@@ -301,12 +195,6 @@ func executeToString(ctx sessionctx.Context, expr Expression, fieldType *types.F
 	}
 	if isNull {
 		output.AppendNull(colID)
-	} else if fieldType.Tp == mysql.TypeEnum {
-		val := types.Enum{Value: uint64(0), Name: res}
-		output.AppendEnum(colID, val)
-	} else if fieldType.Tp == mysql.TypeSet {
-		val := types.Set{Value: uint64(0), Name: res}
-		output.AppendSet(colID, val)
 	} else {
 		output.AppendString(colID, res)
 	}

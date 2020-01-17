@@ -239,12 +239,6 @@ func (sf *ScalarFunction) Eval(row chunk.Row) (d types.Datum, err error) {
 		}
 	case types.ETReal:
 		res, isNull, err = sf.EvalReal(sf.GetCtx(), row)
-	case types.ETDecimal:
-		res, isNull, err = sf.EvalDecimal(sf.GetCtx(), row)
-	case types.ETDatetime, types.ETTimestamp:
-		res, isNull, err = sf.EvalTime(sf.GetCtx(), row)
-	case types.ETDuration:
-		res, isNull, err = sf.EvalDuration(sf.GetCtx(), row)
 	case types.ETString:
 		res, isNull, err = sf.EvalString(sf.GetCtx(), row)
 	}
@@ -267,24 +261,9 @@ func (sf *ScalarFunction) EvalReal(ctx sessionctx.Context, row chunk.Row) (float
 	return sf.Function.evalReal(row)
 }
 
-// EvalDecimal implements Expression interface.
-func (sf *ScalarFunction) EvalDecimal(ctx sessionctx.Context, row chunk.Row) (*types.MyDecimal, bool, error) {
-	return sf.Function.evalDecimal(row)
-}
-
 // EvalString implements Expression interface.
 func (sf *ScalarFunction) EvalString(ctx sessionctx.Context, row chunk.Row) (string, bool, error) {
 	return sf.Function.evalString(row)
-}
-
-// EvalTime implements Expression interface.
-func (sf *ScalarFunction) EvalTime(ctx sessionctx.Context, row chunk.Row) (types.Time, bool, error) {
-	return sf.Function.evalTime(row)
-}
-
-// EvalDuration implements Expression interface.
-func (sf *ScalarFunction) EvalDuration(ctx sessionctx.Context, row chunk.Row) (types.Duration, bool, error) {
-	return sf.Function.evalDuration(row)
 }
 
 // HashCode implements Expression interface.

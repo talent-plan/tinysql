@@ -93,40 +93,8 @@ func TruncateFloat(f float64, flen int, decimal int) (float64, error) {
 	return f, errors.Trace(err)
 }
 
-func isSpace(c byte) bool {
-	return c == ' ' || c == '\t'
-}
-
 func isDigit(c byte) bool {
 	return c >= '0' && c <= '9'
-}
-
-func myMax(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func myMaxInt8(a, b int8) int8 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func myMin(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func myMinInt8(a, b int8) int8 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 const (

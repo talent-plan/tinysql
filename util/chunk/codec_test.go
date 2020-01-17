@@ -27,7 +27,7 @@ var _ = check.Suite(&testCodecSuite{})
 type testCodecSuite struct{}
 
 func (s *testCodecSuite) TestCodec(c *check.C) {
-	numCols := 5
+	numCols := 4
 	numRows := 10
 
 	colTypes := make([]*types.FieldType, 0, numCols)
@@ -35,7 +35,6 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeLonglong})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeNewDecimal})
 
 	oldChk := NewChunkWithCapacity(colTypes, numRows)
 	for i := 0; i < numRows; i++ {
@@ -44,7 +43,6 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 		oldChk.AppendInt64(1, int64(i))
 		oldChk.AppendString(2, str)
 		oldChk.AppendString(3, str)
-		oldChk.AppendMyDecimal(4, types.NewDecFromStringForTest(str))
 	}
 
 	codec := NewCodec(colTypes)
@@ -63,12 +61,10 @@ func (s *testCodecSuite) TestCodec(c *check.C) {
 		c.Assert(row.IsNull(1), check.IsFalse)
 		c.Assert(row.IsNull(2), check.IsFalse)
 		c.Assert(row.IsNull(3), check.IsFalse)
-		c.Assert(row.IsNull(4), check.IsFalse)
 
 		c.Assert(row.GetInt64(1), check.Equals, int64(i))
 		c.Assert(row.GetString(2), check.Equals, str)
 		c.Assert(row.GetString(3), check.Equals, str)
-		c.Assert(row.GetMyDecimal(4).String(), check.Equals, str)
 	}
 }
 
@@ -177,7 +173,6 @@ func BenchmarkDecodeToChunkWithVariableType(b *testing.B) {
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeLonglong})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeVarchar})
-	colTypes = append(colTypes, &types.FieldType{Tp: mysql.TypeNewDecimal})
 
 	chk := NewChunkWithCapacity(colTypes, numRows)
 	for i := 0; i < numRows; i++ {
@@ -186,7 +181,6 @@ func BenchmarkDecodeToChunkWithVariableType(b *testing.B) {
 		chk.AppendInt64(1, int64(i))
 		chk.AppendString(2, str)
 		chk.AppendString(3, str)
-		chk.AppendMyDecimal(4, types.NewDecFromStringForTest(str))
 	}
 	codec := &Codec{colTypes}
 	buffer := codec.Encode(chk)

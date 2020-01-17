@@ -53,12 +53,6 @@ func newBuffer(evalType types.EvalType, capacity int) (*chunk.Column, error) {
 		return chunk.NewColumn(types.NewFieldType(mysql.TypeLonglong), capacity), nil
 	case types.ETReal:
 		return chunk.NewColumn(types.NewFieldType(mysql.TypeDouble), capacity), nil
-	case types.ETDecimal:
-		return chunk.NewColumn(types.NewFieldType(mysql.TypeNewDecimal), capacity), nil
-	case types.ETDuration:
-		return chunk.NewColumn(types.NewFieldType(mysql.TypeDuration), capacity), nil
-	case types.ETDatetime, types.ETTimestamp:
-		return chunk.NewColumn(types.NewFieldType(mysql.TypeDatetime), capacity), nil
 	case types.ETString:
 		return chunk.NewColumn(types.NewFieldType(mysql.TypeString), capacity), nil
 	}

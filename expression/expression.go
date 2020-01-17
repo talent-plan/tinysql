@@ -52,15 +52,6 @@ type VecExpr interface {
 
 	// VecEvalString evaluates this expression in a vectorized manner.
 	VecEvalString(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
-
-	// VecEvalDecimal evaluates this expression in a vectorized manner.
-	VecEvalDecimal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
-
-	// VecEvalTime evaluates this expression in a vectorized manner.
-	VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
-
-	// VecEvalDuration evaluates this expression in a vectorized manner.
-	VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error
 }
 
 // Expression represents all scalar expression in SQL.
@@ -80,15 +71,6 @@ type Expression interface {
 
 	// EvalString returns the string representation of expression.
 	EvalString(ctx sessionctx.Context, row chunk.Row) (val string, isNull bool, err error)
-
-	// EvalDecimal returns the decimal representation of expression.
-	EvalDecimal(ctx sessionctx.Context, row chunk.Row) (val *types.MyDecimal, isNull bool, err error)
-
-	// EvalTime returns the DATE/DATETIME/TIMESTAMP representation of expression.
-	EvalTime(ctx sessionctx.Context, row chunk.Row) (val types.Time, isNull bool, err error)
-
-	// EvalDuration returns the duration representation of expression.
-	EvalDuration(ctx sessionctx.Context, row chunk.Row) (val types.Duration, isNull bool, err error)
 
 	// GetType gets the type that the expression returns.
 	GetType() *types.FieldType
@@ -122,9 +104,6 @@ type Expression interface {
 
 	// ExplainInfo returns operator information to be explained.
 	ExplainInfo() string
-
-	// ExplainNormalizedInfo returns operator normalized information for generating digest.
-	ExplainNormalizedInfo() string
 
 	// HashCode creates the hashcode for expression which can be used to identify itself from other expression.
 	// It generated as the following:
@@ -353,32 +332,6 @@ func toBool(sc *stmtctx.StatementContext, eType types.EvalType, buf *chunk.Colum
 				}
 			}
 		}
-	case types.ETDuration:
-		d64s := buf.GoDurations()
-		for i := range sel {
-			if buf.IsNull(i) {
-				isZero[i] = -1
-			} else {
-				if d64s[i] == 0 {
-					isZero[i] = 0
-				} else {
-					isZero[i] = 1
-				}
-			}
-		}
-	case types.ETDatetime, types.ETTimestamp:
-		t64s := buf.Times()
-		for i := range sel {
-			if buf.IsNull(i) {
-				isZero[i] = -1
-			} else {
-				if t64s[i].IsZero() {
-					isZero[i] = 0
-				} else {
-					isZero[i] = 1
-				}
-			}
-		}
 	case types.ETString:
 		for i := range sel {
 			if buf.IsNull(i) {
@@ -387,21 +340,6 @@ func toBool(sc *stmtctx.StatementContext, eType types.EvalType, buf *chunk.Colum
 				iVal, err1 := types.StrToInt(sc, buf.GetString(i))
 				err = err1
 				if iVal == 0 {
-					isZero[i] = 0
-				} else {
-					isZero[i] = 1
-				}
-			}
-		}
-	case types.ETDecimal:
-		d64s := buf.Decimals()
-		for i := range sel {
-			if buf.IsNull(i) {
-				isZero[i] = -1
-			} else {
-				v, err1 := d64s[i].ToFloat64()
-				err = err1
-				if types.RoundFloat(v) == 0 {
 					isZero[i] = 0
 				} else {
 					isZero[i] = 1
@@ -419,14 +357,8 @@ func VecEval(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, result
 		err = expr.VecEvalInt(ctx, input, result)
 	case types.ETReal:
 		err = expr.VecEvalReal(ctx, input, result)
-	case types.ETDuration:
-		err = expr.VecEvalDuration(ctx, input, result)
-	case types.ETDatetime, types.ETTimestamp:
-		err = expr.VecEvalTime(ctx, input, result)
 	case types.ETString:
 		err = expr.VecEvalString(ctx, input, result)
-	case types.ETDecimal:
-		err = expr.VecEvalDecimal(ctx, input, result)
 	default:
 		err = errors.New(fmt.Sprintf("invalid eval type %v", expr.GetType().EvalType()))
 	}
@@ -629,12 +561,6 @@ func NewValuesFunc(ctx sessionctx.Context, offset int, retTp *types.FieldType) *
 		RetType:  retTp,
 		Function: bt,
 	}
-}
-
-// IsBinaryLiteral checks whether an expression is a binary literal
-func IsBinaryLiteral(expr Expression) bool {
-	con, ok := expr.(*Constant)
-	return ok && con.Value.Kind() == types.KindBinaryLiteral
 }
 
 // CheckExprPushFlash checks a expr list whether each expr can be pushed to flash storage.

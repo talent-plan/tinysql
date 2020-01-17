@@ -14,7 +14,6 @@
 package types
 
 import (
-	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/opcode"
 )
@@ -50,15 +49,6 @@ func ComputePlus(a, b Datum) (d Datum, err error) {
 			r := a.GetFloat64() + b.GetFloat64()
 			d.SetFloat64(r)
 			return d, nil
-		}
-	case KindMysqlDecimal:
-		switch b.Kind() {
-		case KindMysqlDecimal:
-			r := new(MyDecimal)
-			err = DecimalAdd(a.GetMysqlDecimal(), b.GetMysqlDecimal(), r)
-			d.SetMysqlDecimal(r)
-			d.SetFrac(mathutil.Max(a.Frac(), b.Frac()))
-			return d, err
 		}
 	}
 	_, err = InvOp2(a.GetValue(), b.GetValue(), opcode.Plus)

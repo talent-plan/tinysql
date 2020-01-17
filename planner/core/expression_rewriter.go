@@ -1473,39 +1473,12 @@ func (er *expressionRewriter) evalDefaultExpr(v *ast.DefaultExpr) {
 		er.err = ErrUnknownColumn.GenWithStackByArgs(v.Name, "field_list")
 		return
 	}
-	isCurrentTimestamp := hasCurrentDatetimeDefault(col)
 	var val *expression.Constant
-	switch {
-	case isCurrentTimestamp && col.Tp == mysql.TypeDatetime:
-		// for DATETIME column with current_timestamp, use NULL to be compatible with MySQL 5.7
-		val = expression.Null
-	case isCurrentTimestamp && col.Tp == mysql.TypeTimestamp:
-		// for TIMESTAMP column with current_timestamp, use 0 to be compatible with MySQL 5.7
-		zero := types.Time{
-			Time: types.ZeroTime,
-			Type: mysql.TypeTimestamp,
-			Fsp:  int8(col.Decimal),
-		}
-		val = &expression.Constant{
-			Value:   types.NewDatum(zero),
-			RetType: types.NewFieldType(mysql.TypeTimestamp),
-		}
-	default:
-		// for other columns, just use what it is
-		val, er.err = er.b.getDefaultValue(col)
-	}
+	// for other columns, just use what it is
+	val, er.err = er.b.getDefaultValue(col)
 	if er.err != nil {
 		return
 	}
 	er.ctxStackPop(1)
 	er.ctxStackAppend(val, types.EmptyName)
-}
-
-// hasCurrentDatetimeDefault checks if column has current_timestamp default value
-func hasCurrentDatetimeDefault(col *table.Column) bool {
-	x, ok := col.DefaultValue.(string)
-	if !ok {
-		return false
-	}
-	return strings.ToLower(x) == ast.CurrentTimestamp
 }

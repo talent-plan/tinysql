@@ -33,21 +33,20 @@ var _ = check.Suite(&testUtilSuite{})
 type testUtilSuite struct {
 }
 
-func (s *testUtilSuite) TestBaseBuiltin(c *check.C) {
-	ctx := mock.NewContext()
-	bf := newBaseBuiltinFuncWithTp(ctx, nil, types.ETTimestamp)
-	_, _, err := bf.evalInt(chunk.Row{})
-	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalReal(chunk.Row{})
-	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalString(chunk.Row{})
-	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalDecimal(chunk.Row{})
-	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalTime(chunk.Row{})
-	c.Assert(err, check.NotNil)
-	_, _, err = bf.evalDuration(chunk.Row{})
-	c.Assert(err, check.NotNil)
+func newIntFieldType() *types.FieldType {
+	return &types.FieldType{
+		Tp:      mysql.TypeLonglong,
+		Flen:    mysql.MaxIntWidth,
+		Decimal: 0,
+		Flag:    mysql.BinaryFlag,
+	}
+}
+
+func newStringFieldType() *types.FieldType {
+	return &types.FieldType{
+		Tp:   mysql.TypeVarString,
+		Flen: types.UnspecifiedLength,
+	}
 }
 
 func (s *testUtilSuite) TestGetUint64FromConstant(c *check.C) {
@@ -158,13 +157,10 @@ func (s *testUtilSuite) TestFilterOutInPlace(c *check.C) {
 func (s *testUtilSuite) TestHashGroupKey(c *check.C) {
 	ctx := mock.NewContext()
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
-	tNames := []string{"int", "real", "decimal", "string", "timestamp", "datetime", "duration"}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
+	tNames := []string{"int", "real", "string"}
 	for i := 0; i < len(tNames); i++ {
 		ft := eType2FieldType(eTypes[i])
-		if eTypes[i] == types.ETDecimal {
-			ft.Flen = 0
-		}
 		colExpr := &Column{Index: 0, RetType: ft}
 		input := chunk.New([]*types.FieldType{ft}, 1024, 1024)
 		fillColumnWithGener(eTypes[i], input, 0, nil)

@@ -120,17 +120,6 @@ func (rd *RowDecoder) DecodeAndEvalRowWithMap(ctx sessionctx.Context, handle int
 		if err != nil {
 			return nil, err
 		}
-
-		if val.Kind() == types.KindMysqlTime && sysLoc != time.UTC {
-			t := val.GetMysqlTime()
-			if t.Type == mysql.TypeTimestamp {
-				err := t.ConvertTimeZone(sysLoc, time.UTC)
-				if err != nil {
-					return nil, err
-				}
-				val.SetMysqlTime(t)
-			}
-		}
 		row[id] = val
 	}
 	return row, nil

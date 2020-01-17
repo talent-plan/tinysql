@@ -94,15 +94,6 @@ var builtinInTmpl = template.Must(template.New("builtinInTmpl").Parse(`
 					compareResult = 0
 				}
 		}
-	{{- else if eq .Input.TypeName "Decimal" -}}
-		compareResult = 1
-		if arg0 == arg1 {
-			compareResult = 0
-		}
-	{{- else if eq .Input.TypeName "Time" -}}
-		compareResult = arg0.Compare(arg1)
-	{{- else if eq .Input.TypeName "Duration" -}}
-		compareResult = types.CompareDuration(arg0, arg1)
 	{{- else -}}
 		compareResult = types.Compare{{ .Input.TypeNameInColumn }}(arg0, arg1)
 	{{- end -}}
@@ -194,7 +185,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
@@ -221,19 +211,6 @@ func (g inGener) gen() interface{} {
 			return -float64(randNum)
 		}
 		return float64(randNum)
-	case types.ETDecimal:
-		d := new(types.MyDecimal)
-		f := float64(randNum * 100000)
-		if err := d.FromFloat64(f); err != nil {
-			panic(err)
-		}
-		return d
-	case types.ETDatetime, types.ETTimestamp:
-		gt := types.FromDate(2019, 11, 2, 22, 00, int(randNum), rand.Intn(1000000))
-		t := types.Time{Time: gt, Type: convertETType(g.eType)}
-		return t
-	case types.ETDuration:
-		return types.Duration{ Duration: time.Duration(randNum) }
 	case types.ETString:
 		return fmt.Sprint(randNum)
 	}
@@ -291,10 +268,7 @@ type sig struct {
 var inSigsTmpl = []sig{
 	{SigName: "builtinInIntSig", Input: TypeInt, Output: TypeInt},
 	{SigName: "builtinInStringSig", Input: TypeString, Output: TypeInt},
-	{SigName: "builtinInDecimalSig", Input: TypeDecimal, Output: TypeInt},
 	{SigName: "builtinInRealSig", Input: TypeReal, Output: TypeInt},
-	{SigName: "builtinInTimeSig", Input: TypeDatetime, Output: TypeInt},
-	{SigName: "builtinInDurationSig", Input: TypeDuration, Output: TypeInt},
 }
 
 type function struct {

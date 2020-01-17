@@ -14,11 +14,8 @@
 package chunk
 
 import (
-	"unsafe"
-
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/hack"
 )
 
 // Row represents a row of data, can be used to access values.
@@ -77,42 +74,6 @@ func (r Row) GetBytes(colIdx int) []byte {
 	return r.c.columns[colIdx].GetBytes(r.idx)
 }
 
-// GetTime returns the Time value with the colIdx.
-func (r Row) GetTime(colIdx int) types.Time {
-	return r.c.columns[colIdx].GetTime(r.idx)
-}
-
-// GetDuration returns the Duration value with the colIdx.
-func (r Row) GetDuration(colIdx int, fillFsp int) types.Duration {
-	return r.c.columns[colIdx].GetDuration(r.idx, fillFsp)
-}
-
-func (r Row) getNameValue(colIdx int) (string, uint64) {
-	col := r.c.columns[colIdx]
-	start, end := col.offsets[r.idx], col.offsets[r.idx+1]
-	if start == end {
-		return "", 0
-	}
-	val := *(*uint64)(unsafe.Pointer(&col.data[start]))
-	name := string(hack.String(col.data[start+8 : end]))
-	return name, val
-}
-
-// GetEnum returns the Enum value with the colIdx.
-func (r Row) GetEnum(colIdx int) types.Enum {
-	return r.c.columns[colIdx].GetEnum(r.idx)
-}
-
-// GetSet returns the Set value with the colIdx.
-func (r Row) GetSet(colIdx int) types.Set {
-	return r.c.columns[colIdx].GetSet(r.idx)
-}
-
-// GetMyDecimal returns the MyDecimal value with the colIdx.
-func (r Row) GetMyDecimal(colIdx int) *types.MyDecimal {
-	return r.c.columns[colIdx].GetDecimal(r.idx)
-}
-
 // GetDatumRow converts chunk.Row to types.DatumRow.
 // Keep in mind that GetDatumRow has a reference to r.c, which is a chunk,
 // this function works only if the underlying chunk is valid or unchanged.
@@ -154,41 +115,6 @@ func (r Row) GetDatum(colIdx int, tp *types.FieldType) types.Datum {
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		if !r.IsNull(colIdx) {
 			d.SetBytes(r.GetBytes(colIdx))
-		}
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlTime(r.GetTime(colIdx))
-		}
-	case mysql.TypeDuration:
-		if !r.IsNull(colIdx) {
-			duration := r.GetDuration(colIdx, tp.Decimal)
-			d.SetMysqlDuration(duration)
-		}
-	case mysql.TypeNewDecimal:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlDecimal(r.GetMyDecimal(colIdx))
-			d.SetLength(tp.Flen)
-			// If tp.Decimal is unspecified(-1), we should set it to the real
-			// fraction length of the decimal value, if not, the d.Frac will
-			// be set to MAX_UINT16 which will cause unexpected BadNumber error
-			// when encoding.
-			if tp.Decimal == types.UnspecifiedLength {
-				d.SetFrac(d.Frac())
-			} else {
-				d.SetFrac(tp.Decimal)
-			}
-		}
-	case mysql.TypeEnum:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlEnum(r.GetEnum(colIdx))
-		}
-	case mysql.TypeSet:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlSet(r.GetSet(colIdx))
-		}
-	case mysql.TypeBit:
-		if !r.IsNull(colIdx) {
-			d.SetMysqlBit(r.GetBytes(colIdx))
 		}
 	}
 	return d

@@ -32,11 +32,7 @@ func (expr *ScalarFunction) explainInfo(normalized bool) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s(", expr.FuncName.L)
 	for i, arg := range expr.GetArgs() {
-		if normalized {
-			buffer.WriteString(arg.ExplainNormalizedInfo())
-		} else {
-			buffer.WriteString(arg.ExplainInfo())
-		}
+		buffer.WriteString(arg.ExplainInfo())
 		if i+1 < len(expr.GetArgs()) {
 			buffer.WriteString(", ")
 		}
@@ -78,8 +74,7 @@ func (expr *Constant) format(dt types.Datum) string {
 	switch dt.Kind() {
 	case types.KindNull:
 		return "NULL"
-	case types.KindString, types.KindBytes, types.KindMysqlEnum, types.KindMysqlSet,
-		types.KindMysqlJSON, types.KindBinaryLiteral, types.KindMysqlBit:
+	case types.KindString, types.KindBytes:
 		return fmt.Sprintf("\"%v\"", dt.GetValue())
 	}
 	return fmt.Sprintf("%v", dt.GetValue())
@@ -113,11 +108,7 @@ func sortedExplainExpressionList(exprs []Expression, normalized bool) []byte {
 	buffer := bytes.NewBufferString("")
 	exprInfos := make([]string, 0, len(exprs))
 	for _, expr := range exprs {
-		if normalized {
-			exprInfos = append(exprInfos, expr.ExplainNormalizedInfo())
-		} else {
-			exprInfos = append(exprInfos, expr.ExplainInfo())
-		}
+		exprInfos = append(exprInfos, expr.ExplainInfo())
 	}
 	sort.Strings(exprInfos)
 	for i, info := range exprInfos {

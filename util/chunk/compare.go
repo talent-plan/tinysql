@@ -38,16 +38,6 @@ func GetCompareFunc(tp *types.FieldType) CompareFunc {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		return cmpString
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return cmpTime
-	case mysql.TypeDuration:
-		return cmpDuration
-	case mysql.TypeNewDecimal:
-		return cmpMyDecimal
-	case mysql.TypeSet, mysql.TypeEnum:
-		return cmpNameValue
-	case mysql.TypeBit:
-		return cmpBit
 	}
 	return nil
 }
@@ -102,53 +92,6 @@ func cmpFloat64(l Row, lCol int, r Row, rCol int) int {
 	return types.CompareFloat64(l.GetFloat64(lCol), r.GetFloat64(rCol))
 }
 
-func cmpMyDecimal(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	lDec, rDec := l.GetMyDecimal(lCol), r.GetMyDecimal(rCol)
-	return lDec.Compare(rDec)
-}
-
-func cmpTime(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	lTime, rTime := l.GetTime(lCol), r.GetTime(rCol)
-	return lTime.Compare(rTime)
-}
-
-func cmpDuration(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	lDur, rDur := l.GetDuration(lCol, 0).Duration, r.GetDuration(rCol, 0).Duration
-	return types.CompareInt64(int64(lDur), int64(rDur))
-}
-
-func cmpNameValue(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	_, lVal := l.getNameValue(lCol)
-	_, rVal := r.getNameValue(rCol)
-	return types.CompareUint64(lVal, rVal)
-}
-
-func cmpBit(l Row, lCol int, r Row, rCol int) int {
-	lNull, rNull := l.IsNull(lCol), r.IsNull(rCol)
-	if lNull || rNull {
-		return cmpNull(lNull, rNull)
-	}
-	lBit := types.BinaryLiteral(l.GetBytes(lCol))
-	rBit := types.BinaryLiteral(r.GetBytes(rCol))
-	return lBit.Compare(rBit)
-}
-
 // Compare compares the value with ad.
 func Compare(row Row, colIdx int, ad *types.Datum) int {
 	switch ad.Kind() {
@@ -172,23 +115,8 @@ func Compare(row Row, colIdx int, ad *types.Datum) int {
 		return types.CompareFloat64(float64(row.GetFloat32(colIdx)), float64(ad.GetFloat32()))
 	case types.KindFloat64:
 		return types.CompareFloat64(row.GetFloat64(colIdx), ad.GetFloat64())
-	case types.KindString, types.KindBytes, types.KindBinaryLiteral, types.KindMysqlBit:
+	case types.KindString, types.KindBytes:
 		return types.CompareString(row.GetString(colIdx), ad.GetString())
-	case types.KindMysqlDecimal:
-		l, r := row.GetMyDecimal(colIdx), ad.GetMysqlDecimal()
-		return l.Compare(r)
-	case types.KindMysqlDuration:
-		l, r := row.GetDuration(colIdx, 0).Duration, ad.GetMysqlDuration().Duration
-		return types.CompareInt64(int64(l), int64(r))
-	case types.KindMysqlEnum:
-		l, r := row.GetEnum(colIdx).Value, ad.GetMysqlEnum().Value
-		return types.CompareUint64(l, r)
-	case types.KindMysqlSet:
-		l, r := row.GetSet(colIdx).Value, ad.GetMysqlSet().Value
-		return types.CompareUint64(l, r)
-	case types.KindMysqlTime:
-		l, r := row.GetTime(colIdx), ad.GetMysqlTime()
-		return l.Compare(r)
 	default:
 		return 0
 	}

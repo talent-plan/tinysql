@@ -42,7 +42,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/rowDecoder"
-	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -684,8 +683,7 @@ func (w *addIndexWorker) getIndexRecord(handle int64, recordKey []byte, rawRecor
 	t := w.table
 	cols := t.Cols()
 	idxInfo := w.index.Meta()
-	sysZone := timeutil.SystemLocation()
-	_, err := w.rowDecoder.DecodeAndEvalRowWithMap(w.sessCtx, handle, rawRecord, time.UTC, sysZone, w.rowMap)
+	_, err := w.rowDecoder.DecodeAndEvalRowWithMap(w.sessCtx, handle, rawRecord, time.UTC, time.Local, w.rowMap)
 	if err != nil {
 		return nil, errors.Trace(errCantDecodeIndex.GenWithStackByArgs(err))
 	}
@@ -712,16 +710,6 @@ func (w *addIndexWorker) getIndexRecord(handle int64, recordKey []byte, rawRecor
 			return nil, errors.Trace(err)
 		}
 
-		if idxColumnVal.Kind() == types.KindMysqlTime {
-			t := idxColumnVal.GetMysqlTime()
-			if t.Type == mysql.TypeTimestamp && sysZone != time.UTC {
-				err := t.ConvertTimeZone(sysZone, time.UTC)
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
-				idxColumnVal.SetMysqlTime(t)
-			}
-		}
 		idxVal[j] = idxColumnVal
 	}
 	// If there are generated column, rowDecoder will use column value that not in idxInfo.Columns to calculate

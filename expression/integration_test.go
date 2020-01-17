@@ -67,13 +67,6 @@ func (s *testIntegrationSuite) TearDownSuite(c *C) {
 	s.store.Close()
 }
 
-func (s *testIntegrationSuite) TestLiterals(c *C) {
-	defer s.cleanEnv(c)
-	tk := testkit.NewTestKit(c, s.store)
-	r := tk.MustQuery("SELECT LENGTH(b''), LENGTH(B''), b''+1, b''-1, B''+1;")
-	r.Check(testkit.Rows("0 0 1 -1 1"))
-}
-
 func (s *testIntegrationSuite) TestInPredicate4UnsignedInt(c *C) {
 	// for issue #6661
 	tk := testkit.NewTestKit(c, s.store)
@@ -166,21 +159,6 @@ func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 	return store, dom, err
 }
 
-func (s *testIntegrationSuite) TestTwoDecimalTruncate(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	defer s.cleanEnv(c)
-	tk.MustExec("use test")
-	tk.MustExec("set sql_mode=''")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t1(a decimal(10,5), b decimal(10,1))")
-	tk.MustExec("insert into t1 values(123.12345, 123.12345)")
-	tk.MustExec("update t1 set b = a")
-	res := tk.MustQuery("select a, b from t1")
-	res.Check(testkit.Rows("123.12345 123.1"))
-	res = tk.MustQuery("select 2.00000000000000000000000000000001 * 1.000000000000000000000000000000000000000000002")
-	res.Check(testkit.Rows("2.000000000000000000000000000000"))
-}
-
 func (s *testIntegrationSuite) TestPrefixIndex(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	defer s.cleanEnv(c)
@@ -208,15 +186,6 @@ func (s *testIntegrationSuite) TestPrefixIndex(c *C) {
 	res.Check(testkit.Rows("8 ÿÿ", "9 ÿÿ0"))
 }
 
-func (s *testIntegrationSuite) TestDecimalMul(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("USE test")
-	tk.MustExec("create table t(a decimal(38, 17));")
-	tk.MustExec("insert into t select 0.5999991229316*0.918755041726043;")
-	res := tk.MustQuery("select * from t;")
-	res.Check(testkit.Rows("0.55125221922461136"))
-}
-
 func (s *testIntegrationSuite) TestUnknowHintIgnore(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("USE test")
@@ -233,28 +202,6 @@ func (s *testIntegrationSuite) TestForeignKeyVar(c *C) {
 
 	tk.MustExec("SET FOREIGN_KEY_CHECKS=1")
 	tk.MustQuery("SHOW WARNINGS").Check(testkit.Rows("Warning 8047 variable 'foreign_key_checks' does not yet support value: 1"))
-}
-
-func (s *testIntegrationSuite) TestValuesFloat32(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t (i int key, j float);`)
-	tk.MustExec(`insert into t values (1, 0.01);`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 0.01`))
-	tk.MustExec(`insert into t values (1, 0.02) on duplicate key update j = values (j);`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 0.02`))
-}
-
-func (s *testIntegrationSuite) TestValuesEnum(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t (a bigint primary key, b enum('a','b','c'));`)
-	tk.MustExec(`insert into t values (1, "a");`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 a`))
-	tk.MustExec(`insert into t values (1, "b") on duplicate key update b = values(b);`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(`1 b`))
 }
 
 func (s *testIntegrationSuite) TestIssue10804(c *C) {
@@ -298,22 +245,6 @@ func (s *testIntegrationSuite) TestIssue10675(c *C) {
 	tk.MustQuery(`select * from t where a < 184467440737095516167.1;`).Check(
 		testkit.Rows("1"))
 	tk.MustQuery(`select * from t where a > 184467440737095516167.1;`).Check(testkit.Rows())
-
-	// issue 11647
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(b bit(1));`)
-	tk.MustExec(`insert into t values(b'1');`)
-	tk.MustQuery(`select count(*) from t where b = 1;`).Check(testkit.Rows("1"))
-	tk.MustQuery(`select count(*) from t where b = '1';`).Check(testkit.Rows("1"))
-	tk.MustQuery(`select count(*) from t where b = b'1';`).Check(testkit.Rows("1"))
-
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(b bit(63));`)
-	// Not 64, because the behavior of mysql is amazing. I have no idea to fix it.
-	tk.MustExec(`insert into t values(b'111111111111111111111111111111111111111111111111111111111111111');`)
-	tk.MustQuery(`select count(*) from t where b = 9223372036854775807;`).Check(testkit.Rows("1"))
-	tk.MustQuery(`select count(*) from t where b = '9223372036854775807';`).Check(testkit.Rows("1"))
-	tk.MustQuery(`select count(*) from t where b = b'111111111111111111111111111111111111111111111111111111111111111';`).Check(testkit.Rows("1"))
 }
 
 func (s *testIntegrationSuite) TestDefEnableVectorizedEvaluation(c *C) {

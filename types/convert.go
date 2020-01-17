@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 )
 
@@ -47,12 +46,6 @@ func IntergerUnsignedUpperBound(intType byte) uint64 {
 	case mysql.TypeLong:
 		return math.MaxUint32
 	case mysql.TypeLonglong:
-		return math.MaxUint64
-	case mysql.TypeBit:
-		return math.MaxUint64
-	case mysql.TypeEnum:
-		return math.MaxUint64
-	case mysql.TypeSet:
 		return math.MaxUint64
 	default:
 		panic("Input byte is not a mysql type")
@@ -227,52 +220,6 @@ func convertScientificNotation(str string) (string, error) {
 	}
 }
 
-func convertDecimalStrToUint(sc *stmtctx.StatementContext, str string, upperBound uint64, tp byte) (uint64, error) {
-	str, err := convertScientificNotation(str)
-	if err != nil {
-		return 0, err
-	}
-
-	var intStr, fracStr string
-	p := strings.Index(str, ".")
-	if p == -1 {
-		intStr = str
-	} else {
-		intStr = str[:p]
-		fracStr = str[p+1:]
-	}
-	intStr = strings.TrimLeft(intStr, "0")
-	if intStr == "" {
-		intStr = "0"
-	}
-	if sc.ShouldClipToZero() && intStr[0] == '-' {
-		return 0, overflow(str, tp)
-	}
-
-	var round uint64
-	if fracStr != "" && fracStr[0] >= '5' {
-		round++
-	}
-
-	upperBound -= round
-	upperStr := strconv.FormatUint(upperBound, 10)
-	if len(intStr) > len(upperStr) ||
-		(len(intStr) == len(upperStr) && intStr > upperStr) {
-		return upperBound, overflow(str, tp)
-	}
-
-	val, err := strconv.ParseUint(intStr, 10, 64)
-	if err != nil {
-		return val, err
-	}
-	return val + round, nil
-}
-
-// ConvertDecimalToUint converts a decimal to a uint by converting it to a string first to avoid float overflow (#10181).
-func ConvertDecimalToUint(sc *stmtctx.StatementContext, d *MyDecimal, upperBound uint64, tp byte) (uint64, error) {
-	return convertDecimalStrToUint(sc, string(d.ToString()), upperBound, tp)
-}
-
 // StrToInt converts a string to an integer at the best-effort.
 func StrToInt(sc *stmtctx.StatementContext, str string) (int64, error) {
 	str = strings.TrimSpace(str)
@@ -296,75 +243,6 @@ func StrToUint(sc *stmtctx.StatementContext, str string) (uint64, error) {
 		return uVal, ErrOverflow.GenWithStackByArgs("BIGINT UNSIGNED", validPrefix)
 	}
 	return uVal, errors.Trace(err)
-}
-
-// StrToDateTime converts str to MySQL DateTime.
-func StrToDateTime(sc *stmtctx.StatementContext, str string, fsp int8) (Time, error) {
-	return ParseTime(sc, str, mysql.TypeDatetime, fsp)
-}
-
-// StrToDuration converts str to Duration. It returns Duration in normal case,
-// and returns Time when str is in datetime format.
-// when isDuration is true, the d is returned, when it is false, the t is returned.
-// See https://dev.mysql.com/doc/refman/5.5/en/date-and-time-literals.html.
-func StrToDuration(sc *stmtctx.StatementContext, str string, fsp int8) (d Duration, t Time, isDuration bool, err error) {
-	str = strings.TrimSpace(str)
-	length := len(str)
-	if length > 0 && str[0] == '-' {
-		length--
-	}
-	// Timestamp format is 'YYYYMMDDHHMMSS' or 'YYMMDDHHMMSS', which length is 12.
-	// See #3923, it explains what we do here.
-	if length >= 12 {
-		t, err = StrToDateTime(sc, str, fsp)
-		if err == nil {
-			return d, t, false, nil
-		}
-	}
-
-	d, err = ParseDuration(sc, str, fsp)
-	if ErrTruncatedWrongVal.Equal(err) {
-		err = sc.HandleTruncate(err)
-	}
-	return d, t, true, errors.Trace(err)
-}
-
-// NumberToDuration converts number to Duration.
-func NumberToDuration(number int64, fsp int8) (Duration, error) {
-	if number > TimeMaxValue {
-		// Try to parse DATETIME.
-		if number >= 10000000000 { // '2001-00-00 00-00-00'
-			if t, err := ParseDatetimeFromNum(nil, number); err == nil {
-				dur, err1 := t.ConvertToDuration()
-				return dur, errors.Trace(err1)
-			}
-		}
-		dur, err1 := MaxMySQLTime(fsp).ConvertToDuration()
-		terror.Log(err1)
-		return dur, ErrOverflow.GenWithStackByArgs("Duration", strconv.Itoa(int(number)))
-	} else if number < -TimeMaxValue {
-		dur, err1 := MaxMySQLTime(fsp).ConvertToDuration()
-		terror.Log(err1)
-		dur.Duration = -dur.Duration
-		return dur, ErrOverflow.GenWithStackByArgs("Duration", strconv.Itoa(int(number)))
-	}
-	var neg bool
-	if neg = number < 0; neg {
-		number = -number
-	}
-
-	if number/10000 > TimeMaxHour || number%100 >= 60 || (number/100)%100 >= 60 {
-		return ZeroDuration, errors.Trace(ErrWrongValue.GenWithStackByArgs(TimeStr, strconv.FormatInt(number, 10)))
-	}
-	t := Time{Time: FromDate(0, 0, 0, int(number/10000), int((number/100)%100), int(number%100), 0), Type: mysql.TypeDuration, Fsp: fsp}
-	dur, err := t.ConvertToDuration()
-	if err != nil {
-		return ZeroDuration, errors.Trace(err)
-	}
-	if neg {
-		dur.Duration = -dur.Duration
-	}
-	return dur, nil
 }
 
 // getValidIntPrefix gets prefix of the string which can be successfully parsed as int.
@@ -621,18 +499,6 @@ func ToString(value interface{}) (string, error) {
 		return v, nil
 	case []byte:
 		return string(v), nil
-	case Time:
-		return v.String(), nil
-	case Duration:
-		return v.String(), nil
-	case *MyDecimal:
-		return v.String(), nil
-	case BinaryLiteral:
-		return v.ToString(), nil
-	case Enum:
-		return v.String(), nil
-	case Set:
-		return v.String(), nil
 	default:
 		return "", errors.Errorf("cannot convert %v(type %T) to string", value, value)
 	}

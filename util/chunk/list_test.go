@@ -78,18 +78,16 @@ func (s *testChunkSuite) TestList(c *check.C) {
 }
 
 func (s *testChunkSuite) TestListPrePreAlloc4RowAndInsert(c *check.C) {
-	fieldTypes := make([]*types.FieldType, 0, 4)
+	fieldTypes := make([]*types.FieldType, 0, 3)
 	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeFloat})
 	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeLonglong})
-	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeNewDecimal})
 	fieldTypes = append(fieldTypes, &types.FieldType{Tp: mysql.TypeVarchar})
 
 	srcChk := NewChunkWithCapacity(fieldTypes, 10)
 	for i := int64(0); i < 10; i++ {
 		srcChk.AppendFloat32(0, float32(i))
 		srcChk.AppendInt64(1, i)
-		srcChk.AppendMyDecimal(2, types.NewDecFromInt(i))
-		srcChk.AppendString(3, strings.Repeat(strconv.FormatInt(i, 10), int(i)))
+		srcChk.AppendString(2, strings.Repeat(strconv.FormatInt(i, 10), int(i)))
 	}
 
 	srcList := NewList(fieldTypes, 3, 3)
@@ -113,8 +111,7 @@ func (s *testChunkSuite) TestListPrePreAlloc4RowAndInsert(c *check.C) {
 	for ; srcRow != iter4Src.End(); srcRow, destRow = iter4Src.Next(), iter4Dest.Next() {
 		c.Assert(srcRow.GetFloat32(0), check.Equals, destRow.GetFloat32(0))
 		c.Assert(srcRow.GetInt64(1), check.Equals, destRow.GetInt64(1))
-		c.Assert(srcRow.GetMyDecimal(2).Compare(destRow.GetMyDecimal(2)) == 0, check.IsTrue)
-		c.Assert(srcRow.GetString(3), check.Equals, destRow.GetString(3))
+		c.Assert(srcRow.GetString(2), check.Equals, destRow.GetString(2))
 	}
 }
 

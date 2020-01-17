@@ -155,16 +155,10 @@ func getDataGenFunc(ft *types.FieldType) func(i int) types.Datum {
 		return func(i int) types.Datum { return types.NewIntDatum(int64(i)) }
 	case mysql.TypeFloat:
 		return func(i int) types.Datum { return types.NewFloat32Datum(float32(i)) }
-	case mysql.TypeNewDecimal:
-		return func(i int) types.Datum { return types.NewDecimalDatum(types.NewDecFromInt(int64(i))) }
 	case mysql.TypeDouble:
 		return func(i int) types.Datum { return types.NewFloat64Datum(float64(i)) }
 	case mysql.TypeString:
 		return func(i int) types.Datum { return types.NewStringDatum(fmt.Sprintf("%d", i)) }
-	case mysql.TypeDate:
-		return func(i int) types.Datum { return types.NewTimeDatum(types.TimeFromDays(int64(i + 365))) }
-	case mysql.TypeDuration:
-		return func(i int) types.Datum { return types.NewDurationDatum(types.Duration{Duration: time.Duration(i)}) }
 	}
 	return nil
 }

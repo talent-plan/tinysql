@@ -14,6 +14,8 @@
 package aggregation
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
@@ -26,6 +28,11 @@ import (
 )
 
 var _ = Suite(&testAggFuncSuit{})
+
+func TestT(t *testing.T) {
+	CustomVerboseFlag = true
+	TestingT(t)
+}
 
 type testAggFuncSuit struct {
 	ctx     sessionctx.Context
@@ -69,12 +76,11 @@ func (s *testAggFuncSuit) TestAvg(c *C) {
 		c.Assert(err, IsNil)
 	}
 	result = avgFunc.GetResult(evalCtx)
-	needed := types.NewDecFromStringForTest("67.000000000000000000000000000000")
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(67))
 	err = avgFunc.Update(evalCtx, s.ctx.GetSessionVars().StmtCtx, s.nullRow)
 	c.Assert(err, IsNil)
 	result = avgFunc.GetResult(evalCtx)
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(67))
 
 	desc, err = NewAggFuncDesc(s.ctx, ast.AggFuncAvg, []expression.Expression{col}, true)
 	c.Assert(err, IsNil)
@@ -85,18 +91,16 @@ func (s *testAggFuncSuit) TestAvg(c *C) {
 		c.Assert(err, IsNil)
 	}
 	result = distinctAvgFunc.GetResult(evalCtx)
-	needed = types.NewDecFromStringForTest("50.500000000000000000000000000000")
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(50))
 	partialResult := distinctAvgFunc.GetPartialResult(evalCtx)
 	c.Assert(partialResult[0].GetInt64(), Equals, int64(100))
-	needed = types.NewDecFromStringForTest("5050")
-	c.Assert(partialResult[1].GetMysqlDecimal().Compare(needed) == 0, IsTrue, Commentf("%v, %v ", result.GetMysqlDecimal(), needed))
+	c.Assert(partialResult[1].GetInt64(), Equals, int64(5050))
 }
 
 func (s *testAggFuncSuit) TestAvgFinalMode(c *C) {
 	rows := make([][]types.Datum, 0, 100)
 	for i := 1; i <= 100; i++ {
-		rows = append(rows, types.MakeDatums(i, types.NewDecFromInt(int64(i*i))))
+		rows = append(rows, types.MakeDatums(i, int64(i*i)))
 	}
 	ctx := mock.NewContext()
 	cntCol := &expression.Column{
@@ -105,7 +109,7 @@ func (s *testAggFuncSuit) TestAvgFinalMode(c *C) {
 	}
 	sumCol := &expression.Column{
 		Index:   1,
-		RetType: types.NewFieldType(mysql.TypeNewDecimal),
+		RetType: types.NewFieldType(mysql.TypeLonglong),
 	}
 	aggFunc, err := NewAggFuncDesc(s.ctx, ast.AggFuncAvg, []expression.Expression{cntCol, sumCol}, false)
 	c.Assert(err, IsNil)
@@ -118,8 +122,7 @@ func (s *testAggFuncSuit) TestAvgFinalMode(c *C) {
 		c.Assert(err, IsNil)
 	}
 	result := avgFunc.GetResult(evalCtx)
-	needed := types.NewDecFromStringForTest("67.000000000000000000000000000000")
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(67))
 }
 
 func (s *testAggFuncSuit) TestSum(c *C) {
@@ -141,14 +144,13 @@ func (s *testAggFuncSuit) TestSum(c *C) {
 		c.Assert(err, IsNil)
 	}
 	result = sumFunc.GetResult(evalCtx)
-	needed := types.NewDecFromStringForTest("338350")
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(338350))
 	err = sumFunc.Update(evalCtx, s.ctx.GetSessionVars().StmtCtx, s.nullRow)
 	c.Assert(err, IsNil)
 	result = sumFunc.GetResult(evalCtx)
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(338350))
 	partialResult := sumFunc.GetPartialResult(evalCtx)
-	c.Assert(partialResult[0].GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(partialResult[0].GetInt64(), Equals, int64(338350))
 
 	desc, err = NewAggFuncDesc(s.ctx, ast.AggFuncSum, []expression.Expression{col}, true)
 	c.Assert(err, IsNil)
@@ -159,8 +161,7 @@ func (s *testAggFuncSuit) TestSum(c *C) {
 		c.Assert(err, IsNil)
 	}
 	result = distinctSumFunc.GetResult(evalCtx)
-	needed = types.NewDecFromStringForTest("5050")
-	c.Assert(result.GetMysqlDecimal().Compare(needed) == 0, IsTrue)
+	c.Assert(result.GetInt64(), Equals, int64(5050))
 }
 
 func (s *testAggFuncSuit) TestCount(c *C) {

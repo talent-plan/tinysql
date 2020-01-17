@@ -17,12 +17,11 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/types"
 )
 
 func (s *testSuite) TestMergePartialResult4Sum(c *C) {
 	tests := []aggTest{
-		buildAggTester(ast.AggFuncSum, mysql.TypeNewDecimal, 5, types.NewDecFromInt(10), types.NewDecFromInt(9), types.NewDecFromInt(19)),
+		buildAggTester(ast.AggFuncSum, mysql.TypeLonglong, 5, int64(10), int64(9), int64(19)),
 		buildAggTester(ast.AggFuncSum, mysql.TypeDouble, 5, 10.0, 9.0, 19.0),
 	}
 	for _, test := range tests {
@@ -32,7 +31,7 @@ func (s *testSuite) TestMergePartialResult4Sum(c *C) {
 
 func (s *testSuite) TestSum(c *C) {
 	tests := []aggTest{
-		buildAggTester(ast.AggFuncSum, mysql.TypeNewDecimal, 5, nil, types.NewDecFromInt(10)),
+		buildAggTester(ast.AggFuncSum, mysql.TypeLonglong, 5, nil, int64(10)),
 		buildAggTester(ast.AggFuncSum, mysql.TypeDouble, 5, nil, 10.0),
 	}
 	for _, test := range tests {

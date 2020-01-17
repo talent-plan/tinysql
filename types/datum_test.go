@@ -15,9 +15,7 @@ package types
 
 import (
 	"fmt"
-	"math"
 	"reflect"
-	"strconv"
 	"testing"
 	"time"
 
@@ -75,28 +73,6 @@ func (ts *testDatumSuite) TestToBool(c *C) {
 	testDatumToBool(c, "0.1", 0)
 	testDatumToBool(c, []byte{}, 0)
 	testDatumToBool(c, []byte("0.1"), 0)
-	testDatumToBool(c, NewBinaryLiteralFromUint(0, -1), 0)
-	testDatumToBool(c, Enum{Name: "a", Value: 1}, 1)
-	testDatumToBool(c, Set{Name: "a", Value: 1}, 1)
-
-	t, err := ParseTime(&stmtctx.StatementContext{TimeZone: time.UTC}, "2011-11-10 11:11:11.999999", mysql.TypeTimestamp, 6)
-	c.Assert(err, IsNil)
-	testDatumToBool(c, t, 1)
-
-	td, err := ParseDuration(nil, "11:11:11.999999", 6)
-	c.Assert(err, IsNil)
-	testDatumToBool(c, td, 1)
-
-	ft := NewFieldType(mysql.TypeNewDecimal)
-	ft.Decimal = 5
-	v, err := Convert(0.1415926, ft)
-	c.Assert(err, IsNil)
-	testDatumToBool(c, v, 0)
-	d := NewDatum(&invalidMockType{})
-	sc := new(stmtctx.StatementContext)
-	sc.IgnoreTruncate = true
-	_, err = d.ToBool(sc)
-	c.Assert(err, NotNil)
 }
 
 func (ts *testDatumSuite) TestEqualDatums(c *C) {
@@ -151,29 +127,6 @@ func (ts *testTypeConvertSuite) TestToInt64(c *C) {
 	testDatumToInt64(c, uint64(0), int64(0))
 	testDatumToInt64(c, float32(3.1), int64(3))
 	testDatumToInt64(c, float64(3.1), int64(3))
-	testDatumToInt64(c, NewBinaryLiteralFromUint(100, -1), int64(100))
-	testDatumToInt64(c, Enum{Name: "a", Value: 1}, int64(1))
-	testDatumToInt64(c, Set{Name: "a", Value: 1}, int64(1))
-
-	t, err := ParseTime(&stmtctx.StatementContext{
-		TimeZone: time.UTC,
-	}, "2011-11-10 11:11:11.999999", mysql.TypeTimestamp, 0)
-	c.Assert(err, IsNil)
-	testDatumToInt64(c, t, int64(20111110111112))
-
-	td, err := ParseDuration(nil, "11:11:11.999999", 6)
-	c.Assert(err, IsNil)
-	testDatumToInt64(c, td, int64(111112))
-
-	ft := NewFieldType(mysql.TypeNewDecimal)
-	ft.Decimal = 5
-	v, err := Convert(3.1415926, ft)
-	c.Assert(err, IsNil)
-	testDatumToInt64(c, v, int64(3))
-
-	binLit, err := ParseHexStr("0x9999999999999999999999999999999999999999999")
-	c.Assert(err, IsNil)
-	testDatumToInt64(c, binLit, -1)
 }
 
 func (ts *testTypeConvertSuite) TestToFloat32(c *C) {
@@ -258,7 +211,6 @@ func (ts *testDatumSuite) TestToBytes(c *C) {
 		out []byte
 	}{
 		{NewIntDatum(1), []byte("1")},
-		{NewDecimalDatum(NewDecFromInt(1)), []byte("1")},
 		{NewFloat64Datum(1.23), []byte("1.23")},
 		{NewStringDatum("abc"), []byte("abc")},
 	}
@@ -285,7 +237,6 @@ func (ts *testDatumSuite) TestComputePlusAndMinus(c *C) {
 		{NewUintDatum(72), NewUintDatum(28), NewUintDatum(100), NewUintDatum(44), false},
 		{NewUintDatum(72), NewIntDatum(28), NewUintDatum(100), NewUintDatum(44), false},
 		{NewFloat64Datum(72.0), NewFloat64Datum(28.0), NewFloat64Datum(100.0), NewFloat64Datum(44.0), false},
-		{NewDecimalDatum(NewDecFromStringForTest("72.5")), NewDecimalDatum(NewDecFromInt(3)), NewDecimalDatum(NewDecFromStringForTest("75.5")), NewDecimalDatum(NewDecFromStringForTest("69.5")), false},
 		{NewIntDatum(72), NewFloat64Datum(42), Datum{}, Datum{}, true},
 		{NewStringDatum("abcd"), NewIntDatum(42), Datum{}, Datum{}, true},
 	}
@@ -324,138 +275,16 @@ func (ts *testDatumSuite) TestCloneDatum(c *C) {
 	}
 }
 
-func newTypeWithFlag(tp byte, flag uint) *FieldType {
-	t := NewFieldType(tp)
-	t.Flag |= flag
-	return t
-}
-
-func newMyDecimal(val string, c *C) *MyDecimal {
-	t := MyDecimal{}
-	err := t.FromString([]byte(val))
-	c.Assert(err, IsNil)
-	return &t
-}
-
-func newRetTypeWithFlenDecimal(tp byte, flen int, decimal int) *FieldType {
-	return &FieldType{
-		Tp:      tp,
-		Flen:    flen,
-		Decimal: decimal,
-	}
-}
-
-func (ts *testDatumSuite) TestChangeReverseResultByUpperLowerBound(c *C) {
-	sc := new(stmtctx.StatementContext)
-	sc.IgnoreTruncate = true
-	sc.OverflowAsWarning = true
-	// TODO: add more reserve convert tests for each pair of convert type.
-	testData := []struct {
-		a         Datum
-		res       Datum
-		retType   *FieldType
-		roundType RoundingType
-	}{
-		// int64 reserve to uint64
-		{
-			NewIntDatum(1),
-			NewUintDatum(2),
-			newTypeWithFlag(mysql.TypeLonglong, mysql.UnsignedFlag),
-			Ceiling,
-		},
-		{
-			NewIntDatum(1),
-			NewUintDatum(1),
-			newTypeWithFlag(mysql.TypeLonglong, mysql.UnsignedFlag),
-			Floor,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			NewUintDatum(math.MaxUint64),
-			newTypeWithFlag(mysql.TypeLonglong, mysql.UnsignedFlag),
-			Ceiling,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			NewUintDatum(math.MaxInt64),
-			newTypeWithFlag(mysql.TypeLonglong, mysql.UnsignedFlag),
-			Floor,
-		},
-		// int64 reserve to float64
-		{
-			NewIntDatum(1),
-			NewFloat64Datum(2),
-			newRetTypeWithFlenDecimal(mysql.TypeDouble, mysql.MaxRealWidth, UnspecifiedLength),
-			Ceiling,
-		},
-		{
-			NewIntDatum(1),
-			NewFloat64Datum(1),
-			newRetTypeWithFlenDecimal(mysql.TypeDouble, mysql.MaxRealWidth, UnspecifiedLength),
-			Floor,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			GetMaxValue(newRetTypeWithFlenDecimal(mysql.TypeDouble, mysql.MaxRealWidth, UnspecifiedLength)),
-			newRetTypeWithFlenDecimal(mysql.TypeDouble, mysql.MaxRealWidth, UnspecifiedLength),
-			Ceiling,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			NewFloat64Datum(float64(math.MaxInt64)),
-			newRetTypeWithFlenDecimal(mysql.TypeDouble, mysql.MaxRealWidth, UnspecifiedLength),
-			Floor,
-		},
-		// int64 reserve to Decimal
-		{
-			NewIntDatum(1),
-			NewDecimalDatum(newMyDecimal("2", c)),
-			newRetTypeWithFlenDecimal(mysql.TypeNewDecimal, 30, 3),
-			Ceiling,
-		},
-		{
-			NewIntDatum(1),
-			NewDecimalDatum(newMyDecimal("1", c)),
-			newRetTypeWithFlenDecimal(mysql.TypeNewDecimal, 30, 3),
-			Floor,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			GetMaxValue(newRetTypeWithFlenDecimal(mysql.TypeNewDecimal, 30, 3)),
-			newRetTypeWithFlenDecimal(mysql.TypeNewDecimal, 30, 3),
-			Ceiling,
-		},
-		{
-			NewIntDatum(math.MaxInt64),
-			NewDecimalDatum(newMyDecimal(strconv.FormatInt(math.MaxInt64, 10), c)),
-			newRetTypeWithFlenDecimal(mysql.TypeNewDecimal, 30, 3),
-			Floor,
-		},
-	}
-	for ith, test := range testData {
-		reverseRes, err := ChangeReverseResultByUpperLowerBound(sc, test.retType, test.a, test.roundType)
-		c.Assert(err, IsNil)
-		var cmp int
-		cmp, err = reverseRes.CompareDatum(sc, &test.res)
-		c.Assert(err, IsNil)
-		c.Assert(cmp, Equals, 0, Commentf("%dth got:%#v, expect:%#v", ith, reverseRes, test.res))
-	}
-}
-
 func prepareCompareDatums() ([]Datum, []Datum) {
 	vals := make([]Datum, 0, 5)
 	vals = append(vals, NewIntDatum(1))
 	vals = append(vals, NewFloat64Datum(1.23))
 	vals = append(vals, NewStringDatum("abcde"))
-	vals = append(vals, NewDecimalDatum(NewDecFromStringForTest("1.2345")))
-	vals = append(vals, NewTimeDatum(Time{Time: FromGoTime(time.Date(2018, 3, 8, 16, 1, 0, 315313000, time.UTC)), Fsp: 6, Type: mysql.TypeTimestamp}))
 
 	vals1 := make([]Datum, 0, 5)
 	vals1 = append(vals1, NewIntDatum(1))
 	vals1 = append(vals1, NewFloat64Datum(1.23))
 	vals1 = append(vals1, NewStringDatum("abcde"))
-	vals1 = append(vals1, NewDecimalDatum(NewDecFromStringForTest("1.2345")))
-	vals1 = append(vals1, NewTimeDatum(Time{Time: FromGoTime(time.Date(2018, 3, 8, 16, 1, 0, 315313000, time.UTC)), Fsp: 6, Type: mysql.TypeTimestamp}))
 	return vals, vals1
 }
 

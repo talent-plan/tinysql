@@ -15,16 +15,14 @@ package expression
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"testing"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
+	"math/rand"
+	"sync"
+	"testing"
 )
 
 type mockVecPlusIntBuiltinFunc struct {
@@ -219,49 +217,6 @@ func (p *mockBuiltinDouble) vecEvalString(input *chunk.Chunk, result *chunk.Colu
 	return nil
 }
 
-func (p *mockBuiltinDouble) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	if err := p.args[0].VecEvalDecimal(p.ctx, input, result); err != nil {
-		return err
-	}
-	ds := result.Decimals()
-	for i := range ds {
-		r := new(types.MyDecimal)
-		if err := types.DecimalAdd(&ds[i], &ds[i], r); err != nil {
-			return err
-		}
-		ds[i] = *r
-	}
-	return nil
-}
-
-func (p *mockBuiltinDouble) vecEvalTime(input *chunk.Chunk, result *chunk.Column) error {
-	if err := p.args[0].VecEvalTime(p.ctx, input, result); err != nil {
-		return err
-	}
-	ts := result.Times()
-	for i := range ts {
-		d, err := ts[i].ConvertToDuration()
-		if err != nil {
-			return err
-		}
-		if ts[i], err = ts[i].Add(p.ctx.GetSessionVars().StmtCtx, d); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p *mockBuiltinDouble) vecEvalDuration(input *chunk.Chunk, result *chunk.Column) error {
-	if err := p.args[0].VecEvalDuration(p.ctx, input, result); err != nil {
-		return err
-	}
-	ds := result.GoDurations()
-	for i := range ds {
-		ds[i] *= 2
-	}
-	return nil
-}
-
 func (p *mockBuiltinDouble) evalInt(row chunk.Row) (int64, bool, error) {
 	v, isNull, err := p.args[0].EvalInt(p.ctx, row)
 	if err != nil {
@@ -286,54 +241,14 @@ func (p *mockBuiltinDouble) evalString(row chunk.Row) (string, bool, error) {
 	return v + v, isNull, nil
 }
 
-func (p *mockBuiltinDouble) evalDecimal(row chunk.Row) (*types.MyDecimal, bool, error) {
-	v, isNull, err := p.args[0].EvalDecimal(p.ctx, row)
-	if err != nil {
-		return nil, false, err
-	}
-	r := new(types.MyDecimal)
-	if err := types.DecimalAdd(v, v, r); err != nil {
-		return nil, false, err
-	}
-	return r, isNull, nil
-}
-
-func (p *mockBuiltinDouble) evalTime(row chunk.Row) (types.Time, bool, error) {
-	v, isNull, err := p.args[0].EvalTime(p.ctx, row)
-	if err != nil {
-		return types.Time{}, false, err
-	}
-	d, err := v.ConvertToDuration()
-	if err != nil {
-		return types.Time{}, false, err
-	}
-	v, err = v.Add(p.ctx.GetSessionVars().StmtCtx, d)
-	return v, isNull, err
-}
-
-func (p *mockBuiltinDouble) evalDuration(row chunk.Row) (types.Duration, bool, error) {
-	v, isNull, err := p.args[0].EvalDuration(p.ctx, row)
-	if err != nil {
-		return types.Duration{}, false, err
-	}
-	v, err = v.Add(v)
-	return v, isNull, err
-}
-
 func convertETType(eType types.EvalType) (mysqlType byte) {
 	switch eType {
 	case types.ETInt:
 		mysqlType = mysql.TypeLonglong
 	case types.ETReal:
 		mysqlType = mysql.TypeDouble
-	case types.ETDecimal:
-		mysqlType = mysql.TypeNewDecimal
-	case types.ETDuration:
-		mysqlType = mysql.TypeDuration
 	case types.ETString:
 		mysqlType = mysql.TypeVarString
-	case types.ETDatetime:
-		mysqlType = mysql.TypeDatetime
 	}
 	return
 }
@@ -354,19 +269,8 @@ func genMockRowDouble(eType types.EvalType, enableVec bool) (builtinFunc, *chunk
 			input.AppendInt64(0, int64(i))
 		case types.ETReal:
 			input.AppendFloat64(0, float64(i))
-		case types.ETDecimal:
-			dec := new(types.MyDecimal)
-			if err := dec.FromFloat64(float64(i)); err != nil {
-				return nil, nil, nil, err
-			}
-			input.AppendMyDecimal(0, dec)
-		case types.ETDuration:
-			input.AppendDuration(0, types.Duration{Duration: time.Duration(i)})
 		case types.ETString:
 			input.AppendString(0, fmt.Sprintf("%v", i))
-		case types.ETDatetime:
-			t := types.FromDate(i, 0, 0, 0, 0, 0, 0)
-			input.AppendTime(0, types.Time{Time: t, Type: mysqlType})
 		}
 	}
 	return rowDouble, input, buf, nil
@@ -391,34 +295,6 @@ func (s *testEvaluatorSuite) checkVecEval(c *C, eType types.EvalType, sel []int,
 		for i, j := range sel {
 			c.Assert(f64s[i], Equals, float64(j*2))
 		}
-	case types.ETDecimal:
-		ds := result.Decimals()
-		c.Assert(len(ds), Equals, len(sel))
-		for i, j := range sel {
-			dec := new(types.MyDecimal)
-			c.Assert(dec.FromFloat64(float64(j)), IsNil)
-			rst := new(types.MyDecimal)
-			c.Assert(types.DecimalAdd(dec, dec, rst), IsNil)
-			c.Assert(rst.Compare(&ds[i]), Equals, 0)
-		}
-	case types.ETDuration:
-		ds := result.GoDurations()
-		c.Assert(len(ds), Equals, len(sel))
-		for i, j := range sel {
-			c.Assert(ds[i], Equals, time.Duration(j+j))
-		}
-	case types.ETDatetime:
-		ds := result.Times()
-		c.Assert(len(ds), Equals, len(sel))
-		for i, j := range sel {
-			gt := types.FromDate(j, 0, 0, 0, 0, 0, 0)
-			t := types.Time{Time: gt, Type: convertETType(eType)}
-			d, err := t.ConvertToDuration()
-			c.Assert(err, IsNil)
-			v, err := t.Add(mock.NewContext().GetSessionVars().StmtCtx, d)
-			c.Assert(err, IsNil)
-			c.Assert(v.Compare(ds[i]), Equals, 0)
-		}
 	case types.ETString:
 		for i, j := range sel {
 			c.Assert(result.GetString(i), Equals, fmt.Sprintf("%v%v", j, j))
@@ -432,20 +308,14 @@ func vecEvalType(f builtinFunc, eType types.EvalType, input *chunk.Chunk, result
 		return f.vecEvalInt(input, result)
 	case types.ETReal:
 		return f.vecEvalReal(input, result)
-	case types.ETDecimal:
-		return f.vecEvalDecimal(input, result)
-	case types.ETDuration:
-		return f.vecEvalDuration(input, result)
 	case types.ETString:
 		return f.vecEvalString(input, result)
-	case types.ETDatetime:
-		return f.vecEvalTime(input, result)
 	}
 	panic("not implement")
 }
 
 func (s *testEvaluatorSuite) TestDoubleRow2Vec(c *C) {
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for _, eType := range eTypes {
 		rowDouble, input, result, err := genMockRowDouble(eType, false)
 		c.Assert(err, IsNil)
@@ -469,7 +339,7 @@ func (s *testEvaluatorSuite) TestDoubleRow2Vec(c *C) {
 }
 
 func (s *testEvaluatorSuite) TestDoubleVec2Row(c *C) {
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for _, eType := range eTypes {
 		rowDouble, input, result, err := genMockRowDouble(eType, true)
 		result.Reset(eType)
@@ -485,22 +355,10 @@ func (s *testEvaluatorSuite) TestDoubleVec2Row(c *C) {
 				v, _, err := rowDouble.evalReal(row)
 				c.Assert(err, IsNil)
 				result.AppendFloat64(v)
-			case types.ETDecimal:
-				v, _, err := rowDouble.evalDecimal(row)
-				c.Assert(err, IsNil)
-				result.AppendMyDecimal(v)
-			case types.ETDuration:
-				v, _, err := rowDouble.evalDuration(row)
-				c.Assert(err, IsNil)
-				result.AppendDuration(v)
 			case types.ETString:
 				v, _, err := rowDouble.evalString(row)
 				c.Assert(err, IsNil)
 				result.AppendString(v)
-			case types.ETDatetime:
-				v, _, err := rowDouble.evalTime(row)
-				c.Assert(err, IsNil)
-				result.AppendTime(v)
 			}
 		}
 		s.checkVecEval(c, eType, nil, result)
@@ -539,36 +397,6 @@ func evalRows(b *testing.B, it *chunk.Iterator4Chunk, eType types.EvalType, resu
 				}
 			}
 		}
-	case types.ETDecimal:
-		for i := 0; i < b.N; i++ {
-			result.Reset(eType)
-			for r := it.Begin(); r != it.End(); r = it.Next() {
-				v, isNull, err := rowDouble.evalDecimal(r)
-				if err != nil {
-					b.Fatal(err)
-				}
-				if isNull {
-					result.AppendNull()
-				} else {
-					result.AppendMyDecimal(v)
-				}
-			}
-		}
-	case types.ETDuration:
-		for i := 0; i < b.N; i++ {
-			result.Reset(eType)
-			for r := it.Begin(); r != it.End(); r = it.Next() {
-				v, isNull, err := rowDouble.evalDuration(r)
-				if err != nil {
-					b.Fatal(err)
-				}
-				if isNull {
-					result.AppendNull()
-				} else {
-					result.AppendDuration(v)
-				}
-			}
-		}
 	case types.ETString:
 		for i := 0; i < b.N; i++ {
 			result.Reset(eType)
@@ -584,27 +412,12 @@ func evalRows(b *testing.B, it *chunk.Iterator4Chunk, eType types.EvalType, resu
 				}
 			}
 		}
-	case types.ETDatetime:
-		for i := 0; i < b.N; i++ {
-			result.Reset(eType)
-			for r := it.Begin(); r != it.End(); r = it.Next() {
-				v, isNull, err := rowDouble.evalTime(r)
-				if err != nil {
-					b.Fatal(err)
-				}
-				if isNull {
-					result.AppendNull()
-				} else {
-					result.AppendTime(v)
-				}
-			}
-		}
 	}
 }
 
 func BenchmarkMockDoubleRow(b *testing.B) {
-	typeNames := []string{"Int", "Real", "Decimal", "Duration", "String", "Datetime", "JSON"}
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
+	typeNames := []string{"Int", "Real","String"}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {
 			rowDouble, input, result, _ := genMockRowDouble(eType, false)
@@ -616,8 +429,8 @@ func BenchmarkMockDoubleRow(b *testing.B) {
 }
 
 func BenchmarkMockDoubleVec(b *testing.B) {
-	typeNames := []string{"Int", "Real", "Decimal", "Duration", "String", "Datetime", "JSON"}
-	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETDuration, types.ETString, types.ETDatetime}
+	typeNames := []string{"Int", "Real","String"}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {
 			rowDouble, input, result, _ := genMockRowDouble(eType, true)

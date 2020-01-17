@@ -18,12 +18,9 @@
 package ddl
 
 import (
-	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
@@ -41,11 +38,8 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/set"
-	"go.uber.org/zap"
 )
 
 func (d *ddl) CreateSchema(ctx sessionctx.Context, schema model.CIStr, charsetInfo *ast.CharsetOpt) (err error) {
@@ -418,47 +412,7 @@ func checkColumnDefaultValue(ctx sessionctx.Context, col *table.Column, value in
 		// In strict SQL mode or default value is not an empty string.
 		return hasDefaultValue, value, errBlobCantHaveDefault.GenWithStackByArgs(col.Name.O)
 	}
-	if value != nil && ctx.GetSessionVars().SQLMode.HasNoZeroDateMode() &&
-		ctx.GetSessionVars().SQLMode.HasStrictMode() && types.IsTypeTime(col.Tp) {
-		if vv, ok := value.(string); ok {
-			timeValue, err := expression.GetTimeValue(ctx, vv, col.Tp, int8(col.Decimal))
-			if err != nil {
-				return hasDefaultValue, value, errors.Trace(err)
-			}
-			if timeValue.GetMysqlTime().Time == types.ZeroTime {
-				return hasDefaultValue, value, types.ErrInvalidDefault.GenWithStackByArgs(col.Name.O)
-			}
-		}
-	}
 	return hasDefaultValue, value, nil
-}
-
-func convertTimestampDefaultValToUTC(ctx sessionctx.Context, defaultVal interface{}, col *table.Column) (interface{}, error) {
-	if defaultVal == nil || col.Tp != mysql.TypeTimestamp {
-		return defaultVal, nil
-	}
-	if vv, ok := defaultVal.(string); ok {
-		if vv != types.ZeroDatetimeStr && !strings.EqualFold(vv, ast.CurrentTimestamp) {
-			t, err := types.ParseTime(ctx.GetSessionVars().StmtCtx, vv, col.Tp, int8(col.Decimal))
-			if err != nil {
-				return defaultVal, errors.Trace(err)
-			}
-			err = t.ConvertTimeZone(ctx.GetSessionVars().Location(), time.UTC)
-			if err != nil {
-				return defaultVal, errors.Trace(err)
-			}
-			defaultVal = t.String()
-		}
-	}
-	return defaultVal, nil
-}
-
-// isExplicitTimeStamp is used to check if explicit_defaults_for_timestamp is on or off.
-// Check out this link for more details.
-// https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_explicit_defaults_for_timestamp
-func isExplicitTimeStamp() bool {
-	// TODO: implement the behavior as MySQL when explicit_defaults_for_timestamp = off, then this function could return false.
-	return true
 }
 
 // columnDefToCol converts ColumnDef to Col and TableConstraints.
@@ -473,16 +427,7 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 		Version: model.CurrLatestColumnInfoVersion,
 	})
 
-	if !isExplicitTimeStamp() {
-		// Check and set TimestampFlag, OnUpdateNowFlag and NotNullFlag.
-		if col.Tp == mysql.TypeTimestamp {
-			col.Flag |= mysql.TimestampFlag
-			col.Flag |= mysql.OnUpdateNowFlag
-			col.Flag |= mysql.NotNullFlag
-		}
-	}
 	var err error
-	setOnUpdateNow := false
 	hasDefaultValue := false
 	hasNullFlag := false
 	if colDef.Options != nil {
@@ -530,17 +475,6 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 					return nil, nil, errors.Trace(err)
 				}
 				removeOnUpdateNowFlag(col)
-			case ast.ColumnOptionOnUpdate:
-				// TODO: Support other time functions.
-				if col.Tp == mysql.TypeTimestamp || col.Tp == mysql.TypeDatetime {
-					if !expression.IsValidCurrentTimestampExpr(v.Expr, colDef.Tp) {
-						return nil, nil, ErrInvalidOnUpdate.GenWithStackByArgs(col.Name)
-					}
-				} else {
-					return nil, nil, ErrInvalidOnUpdate.GenWithStackByArgs(col.Name)
-				}
-				col.Flag |= mysql.OnUpdateNowFlag
-				setOnUpdateNow = true
 			case ast.ColumnOptionComment:
 				err := setColumnComment(ctx, col, v)
 				if err != nil {
@@ -565,8 +499,6 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 			}
 		}
 	}
-
-	setTimestampDefaultValue(col, hasDefaultValue, setOnUpdateNow)
 
 	// Set `NoDefaultValueFlag` if this field doesn't have a default value and
 	// it is `not null` and not an `AUTO_INCREMENT` field or `TIMESTAMP` field.
@@ -611,40 +543,6 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 }
 
 func getDefaultValue(ctx sessionctx.Context, col *table.Column, c *ast.ColumnOption) (interface{}, error) {
-	tp, fsp := col.FieldType.Tp, col.FieldType.Decimal
-	if tp == mysql.TypeTimestamp || tp == mysql.TypeDatetime {
-		switch x := c.Expr.(type) {
-		case *ast.FuncCallExpr:
-			if x.FnName.L == ast.CurrentTimestamp {
-				defaultFsp := 0
-				if len(x.Args) == 1 {
-					if val := x.Args[0].(*driver.ValueExpr); val != nil {
-						defaultFsp = int(val.GetInt64())
-					}
-				}
-				if defaultFsp != fsp {
-					return nil, ErrInvalidDefaultValue.GenWithStackByArgs(col.Name.O)
-				}
-			}
-		}
-		vd, err := expression.GetTimeValue(ctx, c.Expr, tp, int8(fsp))
-		value := vd.GetValue()
-		if err != nil {
-			return nil, ErrInvalidDefaultValue.GenWithStackByArgs(col.Name.O)
-		}
-
-		// Value is nil means `default null`.
-		if value == nil {
-			return nil, nil
-		}
-
-		// If value is types.Time, convert it to string.
-		if vv, ok := value.(types.Time); ok {
-			return vv.String(), nil
-		}
-
-		return value, nil
-	}
 	v, err := expression.EvalAstExpr(ctx, c.Expr)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -654,88 +552,6 @@ func getDefaultValue(ctx sessionctx.Context, col *table.Column, c *ast.ColumnOpt
 		return nil, nil
 	}
 
-	if v.Kind() == types.KindBinaryLiteral || v.Kind() == types.KindMysqlBit {
-		if tp == mysql.TypeBit ||
-			tp == mysql.TypeString || tp == mysql.TypeVarchar || tp == mysql.TypeVarString ||
-			tp == mysql.TypeBlob || tp == mysql.TypeLongBlob || tp == mysql.TypeMediumBlob || tp == mysql.TypeTinyBlob {
-			// For BinaryLiteral / string fields, when getting default value we cast the value into BinaryLiteral{}, thus we return
-			// its raw string content here.
-			return v.GetBinaryLiteral().ToString(), nil
-		}
-		// For other kind of fields (e.g. INT), we supply its integer as string value.
-		value, err := v.GetBinaryLiteral().ToInt(ctx.GetSessionVars().StmtCtx)
-		if err != nil {
-			return nil, err
-		}
-		return strconv.FormatUint(value, 10), nil
-	}
-
-	switch tp {
-	case mysql.TypeSet:
-		return setSetDefaultValue(v, col)
-	case mysql.TypeDuration:
-		if v, err = v.ConvertTo(ctx.GetSessionVars().StmtCtx, &col.FieldType); err != nil {
-			return "", errors.Trace(err)
-		}
-	case mysql.TypeBit:
-		if v.Kind() == types.KindInt64 || v.Kind() == types.KindUint64 {
-			// For BIT fields, convert int into BinaryLiteral.
-			return types.NewBinaryLiteralFromUint(v.GetUint64(), -1).ToString(), nil
-		}
-	}
-
-	return v.ToString()
-}
-
-// setSetDefaultValue sets the default value for the set type. See https://dev.mysql.com/doc/refman/5.7/en/set.html.
-func setSetDefaultValue(v types.Datum, col *table.Column) (string, error) {
-	if v.Kind() == types.KindInt64 {
-		setCnt := len(col.Elems)
-		maxLimit := int64(1<<uint(setCnt) - 1)
-		val := v.GetInt64()
-		if val < 1 || val > maxLimit {
-			return "", ErrInvalidDefaultValue.GenWithStackByArgs(col.Name.O)
-		}
-		setVal, err := types.ParseSetValue(col.Elems, uint64(val))
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		v.SetMysqlSet(setVal)
-		return v.ToString()
-	}
-
-	str, err := v.ToString()
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if str == "" {
-		return str, nil
-	}
-
-	valMap := make(map[string]struct{}, len(col.Elems))
-	dVals := strings.Split(strings.ToLower(str), ",")
-	for _, dv := range dVals {
-		valMap[dv] = struct{}{}
-	}
-	var existCnt int
-	for dv := range valMap {
-		for i := range col.Elems {
-			e := strings.ToLower(col.Elems[i])
-			if e == dv {
-				existCnt++
-				break
-			}
-		}
-	}
-	if existCnt != len(valMap) {
-		return "", ErrInvalidDefaultValue.GenWithStackByArgs(col.Name.O)
-	}
-	setVal, err := types.ParseSetName(col.Elems, str)
-	if err != nil {
-		return "", ErrInvalidDefaultValue.GenWithStackByArgs(col.Name.O)
-	}
-	v.SetMysqlSet(setVal)
-
 	return v.ToString()
 }
 
@@ -744,26 +560,6 @@ func removeOnUpdateNowFlag(c *table.Column) {
 	// OnUpdateNowFlag should be removed.
 	if mysql.HasTimestampFlag(c.Flag) {
 		c.Flag &= ^mysql.OnUpdateNowFlag
-	}
-}
-
-func setTimestampDefaultValue(c *table.Column, hasDefaultValue bool, setOnUpdateNow bool) {
-	if hasDefaultValue {
-		return
-	}
-
-	// For timestamp Col, if is not set default value or not set null, use current timestamp.
-	if mysql.HasTimestampFlag(c.Flag) && mysql.HasNotNullFlag(c.Flag) {
-		if setOnUpdateNow {
-			if err := c.SetDefaultValue(types.ZeroDatetimeStr); err != nil {
-				context.Background()
-				logutil.BgLogger().Error("set default value failed", zap.Error(err))
-			}
-		} else {
-			if err := c.SetDefaultValue(strings.ToUpper(ast.CurrentTimestamp)); err != nil {
-				logutil.BgLogger().Error("set default value failed", zap.Error(err))
-			}
-		}
 	}
 }
 
@@ -1837,7 +1633,6 @@ func setDefaultValue(ctx sessionctx.Context, col *table.Column, option *ast.Colu
 	if hasDefaultValue, value, err = checkColumnDefaultValue(ctx, col, value); err != nil {
 		return hasDefaultValue, errors.Trace(err)
 	}
-	value, err = convertTimestampDefaultValToUTC(ctx, value, col)
 	if err != nil {
 		return hasDefaultValue, errors.Trace(err)
 	}
@@ -1864,7 +1659,7 @@ func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*
 		format.RestoreSpacesAroundBinaryOperation
 	restoreCtx := format.NewRestoreCtx(restoreFlags, &sb)
 
-	var hasDefaultValue, setOnUpdateNow bool
+	var hasDefaultValue bool
 	var err error
 	for _, opt := range options {
 		switch opt.Tp {
@@ -1886,17 +1681,6 @@ func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*
 			col.Flag |= mysql.AutoIncrementFlag
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
 			return errUnsupportedModifyColumn.GenWithStack("can't change column constraint - %v", opt.Tp)
-		case ast.ColumnOptionOnUpdate:
-			// TODO: Support other time functions.
-			if col.Tp == mysql.TypeTimestamp || col.Tp == mysql.TypeDatetime {
-				if !expression.IsValidCurrentTimestampExpr(opt.Expr, &col.FieldType) {
-					return ErrInvalidOnUpdate.GenWithStackByArgs(col.Name)
-				}
-			} else {
-				return ErrInvalidOnUpdate.GenWithStackByArgs(col.Name)
-			}
-			col.Flag |= mysql.OnUpdateNowFlag
-			setOnUpdateNow = true
 		case ast.ColumnOptionGenerated:
 			sb.Reset()
 			err = opt.Expr.Restore(restoreCtx)
@@ -1920,8 +1704,6 @@ func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*
 			return errors.Trace(errUnsupportedModifyColumn.GenWithStackByArgs(fmt.Sprintf("unknown column option type: %d", opt.Tp)))
 		}
 	}
-
-	setTimestampDefaultValue(col, hasDefaultValue, setOnUpdateNow)
 
 	// Set `NoDefaultValueFlag` if this field doesn't have a default value and
 	// it is `not null` and not an `AUTO_INCREMENT` field or `TIMESTAMP` field.

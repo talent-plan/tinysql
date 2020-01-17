@@ -44,8 +44,6 @@ func (s *testValueExprRestoreSuite) TestValueExprRestore(c *C) {
 		{types.NewFloat64Datum(1.1), "1.1e+00"},
 		{types.NewStringDatum("test `s't\"r."), "'test `s''t\"r.'"},
 		{types.NewBytesDatum([]byte("test `s't\"r.")), "'test `s''t\"r.'"},
-		{types.NewBinaryLiteralDatum([]byte("test `s't\"r.")), "b'11101000110010101110011011101000010000001100000011100110010011101110100001000100111001000101110'"},
-		{types.NewDecimalDatum(types.NewDecFromInt(321)), "321"},
 	}
 	// Run Test
 	var sb strings.Builder

@@ -36,19 +36,13 @@ var (
 var (
 	_ builtinFunc = &builtinInIntSig{}
 	_ builtinFunc = &builtinInStringSig{}
-	_ builtinFunc = &builtinInDecimalSig{}
 	_ builtinFunc = &builtinInRealSig{}
-	_ builtinFunc = &builtinInTimeSig{}
-	_ builtinFunc = &builtinInDurationSig{}
 	_ builtinFunc = &builtinRowSig{}
 	_ builtinFunc = &builtinSetVarSig{}
 	_ builtinFunc = &builtinGetVarSig{}
 	_ builtinFunc = &builtinValuesIntSig{}
 	_ builtinFunc = &builtinValuesRealSig{}
-	_ builtinFunc = &builtinValuesDecimalSig{}
 	_ builtinFunc = &builtinValuesStringSig{}
-	_ builtinFunc = &builtinValuesTimeSig{}
-	_ builtinFunc = &builtinValuesDurationSig{}
 )
 
 type inFunctionClass struct {
@@ -75,15 +69,6 @@ func (c *inFunctionClass) getFunction(ctx sessionctx.Context, args []Expression)
 	case types.ETReal:
 		sig = &builtinInRealSig{baseBuiltinFunc: bf}
 		sig.setPbCode(tipb.ScalarFuncSig_InReal)
-	case types.ETDecimal:
-		sig = &builtinInDecimalSig{baseBuiltinFunc: bf}
-		sig.setPbCode(tipb.ScalarFuncSig_InDecimal)
-	case types.ETDatetime, types.ETTimestamp:
-		sig = &builtinInTimeSig{baseBuiltinFunc: bf}
-		sig.setPbCode(tipb.ScalarFuncSig_InTime)
-	case types.ETDuration:
-		sig = &builtinInDurationSig{baseBuiltinFunc: bf}
-		sig.setPbCode(tipb.ScalarFuncSig_InDuration)
 	}
 	return sig, nil
 }
@@ -197,105 +182,6 @@ func (b *builtinInRealSig) evalInt(row chunk.Row) (int64, bool, error) {
 			continue
 		}
 		if arg0 == evaledArg {
-			return 1, false, nil
-		}
-	}
-	return 0, hasNull, nil
-}
-
-// builtinInDecimalSig see https://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_in
-type builtinInDecimalSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinInDecimalSig) Clone() builtinFunc {
-	newSig := &builtinInDecimalSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinInDecimalSig) evalInt(row chunk.Row) (int64, bool, error) {
-	arg0, isNull0, err := b.args[0].EvalDecimal(b.ctx, row)
-	if isNull0 || err != nil {
-		return 0, isNull0, err
-	}
-	var hasNull bool
-	for _, arg := range b.args[1:] {
-		evaledArg, isNull, err := arg.EvalDecimal(b.ctx, row)
-		if err != nil {
-			return 0, true, err
-		}
-		if isNull {
-			hasNull = true
-			continue
-		}
-		if arg0.Compare(evaledArg) == 0 {
-			return 1, false, nil
-		}
-	}
-	return 0, hasNull, nil
-}
-
-// builtinInTimeSig see https://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_in
-type builtinInTimeSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinInTimeSig) Clone() builtinFunc {
-	newSig := &builtinInTimeSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinInTimeSig) evalInt(row chunk.Row) (int64, bool, error) {
-	arg0, isNull0, err := b.args[0].EvalTime(b.ctx, row)
-	if isNull0 || err != nil {
-		return 0, isNull0, err
-	}
-	var hasNull bool
-	for _, arg := range b.args[1:] {
-		evaledArg, isNull, err := arg.EvalTime(b.ctx, row)
-		if err != nil {
-			return 0, true, err
-		}
-		if isNull {
-			hasNull = true
-			continue
-		}
-		if arg0.Compare(evaledArg) == 0 {
-			return 1, false, nil
-		}
-	}
-	return 0, hasNull, nil
-}
-
-// builtinInDurationSig see https://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_in
-type builtinInDurationSig struct {
-	baseBuiltinFunc
-}
-
-func (b *builtinInDurationSig) Clone() builtinFunc {
-	newSig := &builtinInDurationSig{}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-func (b *builtinInDurationSig) evalInt(row chunk.Row) (int64, bool, error) {
-	arg0, isNull0, err := b.args[0].EvalDuration(b.ctx, row)
-	if isNull0 || err != nil {
-		return 0, isNull0, err
-	}
-	var hasNull bool
-	for _, arg := range b.args[1:] {
-		evaledArg, isNull, err := arg.EvalDuration(b.ctx, row)
-		if err != nil {
-			return 0, true, err
-		}
-		if isNull {
-			hasNull = true
-			continue
-		}
-		if arg0.Compare(evaledArg) == 0 {
 			return 1, false, nil
 		}
 	}
@@ -435,14 +321,8 @@ func (c *valuesFunctionClass) getFunction(ctx sessionctx.Context, args []Express
 		sig = &builtinValuesIntSig{bf, c.offset}
 	case types.ETReal:
 		sig = &builtinValuesRealSig{bf, c.offset}
-	case types.ETDecimal:
-		sig = &builtinValuesDecimalSig{bf, c.offset}
 	case types.ETString:
 		sig = &builtinValuesStringSig{bf, c.offset}
-	case types.ETDatetime, types.ETTimestamp:
-		sig = &builtinValuesTimeSig{bf, c.offset}
-	case types.ETDuration:
-		sig = &builtinValuesDurationSig{bf, c.offset}
 	}
 	return sig, nil
 }
@@ -512,37 +392,6 @@ func (b *builtinValuesRealSig) evalReal(_ chunk.Row) (float64, bool, error) {
 	return 0, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
 }
 
-type builtinValuesDecimalSig struct {
-	baseBuiltinFunc
-
-	offset int
-}
-
-func (b *builtinValuesDecimalSig) Clone() builtinFunc {
-	newSig := &builtinValuesDecimalSig{offset: b.offset}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalDecimal evals a builtinValuesDecimalSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-func (b *builtinValuesDecimalSig) evalDecimal(_ chunk.Row) (*types.MyDecimal, bool, error) {
-	if !b.ctx.GetSessionVars().StmtCtx.InInsertStmt {
-		return nil, true, nil
-	}
-	row := b.ctx.GetSessionVars().CurrInsertValues
-	if row.IsEmpty() {
-		return nil, true, errors.New("Session current insert values is nil")
-	}
-	if b.offset < row.Len() {
-		if row.IsNull(b.offset) {
-			return nil, true, nil
-		}
-		return row.GetMyDecimal(b.offset), false, nil
-	}
-	return nil, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
-}
-
 type builtinValuesStringSig struct {
 	baseBuiltinFunc
 
@@ -581,67 +430,4 @@ func (b *builtinValuesStringSig) evalString(_ chunk.Row) (string, bool, error) {
 	}
 
 	return row.GetString(b.offset), false, nil
-}
-
-type builtinValuesTimeSig struct {
-	baseBuiltinFunc
-
-	offset int
-}
-
-func (b *builtinValuesTimeSig) Clone() builtinFunc {
-	newSig := &builtinValuesTimeSig{offset: b.offset}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalTime evals a builtinValuesTimeSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-func (b *builtinValuesTimeSig) evalTime(_ chunk.Row) (types.Time, bool, error) {
-	if !b.ctx.GetSessionVars().StmtCtx.InInsertStmt {
-		return types.Time{}, true, nil
-	}
-	row := b.ctx.GetSessionVars().CurrInsertValues
-	if row.IsEmpty() {
-		return types.Time{}, true, errors.New("Session current insert values is nil")
-	}
-	if b.offset < row.Len() {
-		if row.IsNull(b.offset) {
-			return types.Time{}, true, nil
-		}
-		return row.GetTime(b.offset), false, nil
-	}
-	return types.Time{}, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
-}
-
-type builtinValuesDurationSig struct {
-	baseBuiltinFunc
-
-	offset int
-}
-
-func (b *builtinValuesDurationSig) Clone() builtinFunc {
-	newSig := &builtinValuesDurationSig{offset: b.offset}
-	newSig.cloneFrom(&b.baseBuiltinFunc)
-	return newSig
-}
-
-// evalDuration evals a builtinValuesDurationSig.
-// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-func (b *builtinValuesDurationSig) evalDuration(_ chunk.Row) (types.Duration, bool, error) {
-	if !b.ctx.GetSessionVars().StmtCtx.InInsertStmt {
-		return types.Duration{}, true, nil
-	}
-	row := b.ctx.GetSessionVars().CurrInsertValues
-	if row.IsEmpty() {
-		return types.Duration{}, true, errors.New("Session current insert values is nil")
-	}
-	if b.offset < row.Len() {
-		if row.IsNull(b.offset) {
-			return types.Duration{}, true, nil
-		}
-		duration := row.GetDuration(b.offset, b.getRetTp().Decimal)
-		return duration, false, nil
-	}
-	return types.Duration{}, true, errors.Errorf("Session current insert values len %d and column's offset %v don't match", row.Len(), b.offset)
 }

@@ -105,8 +105,6 @@ func mergeEvalType(lhs, rhs EvalType, lft, rft *FieldType, isLHSUnsigned, isRHSU
 		return ETString
 	} else if lhs == ETReal || rhs == ETReal {
 		return ETReal
-	} else if lhs == ETDecimal || rhs == ETDecimal || isLHSUnsigned != isRHSUnsigned {
-		return ETDecimal
 	}
 	return ETInt
 }
@@ -197,61 +195,6 @@ func DefaultTypeForValue(value interface{}, tp *FieldType) {
 	case []byte:
 		tp.Tp = mysql.TypeBlob
 		tp.Flen = len(x)
-		tp.Decimal = UnspecifiedLength
-		SetBinChsClnFlag(tp)
-	case BitLiteral:
-		tp.Tp = mysql.TypeVarString
-		tp.Flen = len(x)
-		tp.Decimal = 0
-		SetBinChsClnFlag(tp)
-	case HexLiteral:
-		tp.Tp = mysql.TypeVarString
-		tp.Flen = len(x) * 3
-		tp.Decimal = 0
-		tp.Flag |= mysql.UnsignedFlag
-		SetBinChsClnFlag(tp)
-	case BinaryLiteral:
-		tp.Tp = mysql.TypeBit
-		tp.Flen = len(x) * 8
-		tp.Decimal = 0
-		SetBinChsClnFlag(tp)
-		tp.Flag &= ^mysql.BinaryFlag
-		tp.Flag |= mysql.UnsignedFlag
-	case Time:
-		tp.Tp = x.Type
-		switch x.Type {
-		case mysql.TypeDate:
-			tp.Flen = mysql.MaxDateWidth
-			tp.Decimal = UnspecifiedLength
-		case mysql.TypeDatetime, mysql.TypeTimestamp:
-			tp.Flen = mysql.MaxDatetimeWidthNoFsp
-			if x.Fsp > DefaultFsp { // consider point('.') and the fractional part.
-				tp.Flen += int(x.Fsp) + 1
-			}
-			tp.Decimal = int(x.Fsp)
-		}
-		SetBinChsClnFlag(tp)
-	case Duration:
-		tp.Tp = mysql.TypeDuration
-		tp.Flen = len(x.String())
-		if x.Fsp > DefaultFsp { // consider point('.') and the fractional part.
-			tp.Flen = int(x.Fsp) + 1
-		}
-		tp.Decimal = int(x.Fsp)
-		SetBinChsClnFlag(tp)
-	case *MyDecimal:
-		tp.Tp = mysql.TypeNewDecimal
-		tp.Flen = len(x.ToString())
-		tp.Decimal = int(x.digitsFrac)
-		SetBinChsClnFlag(tp)
-	case Enum:
-		tp.Tp = mysql.TypeEnum
-		tp.Flen = len(x.Name)
-		tp.Decimal = UnspecifiedLength
-		SetBinChsClnFlag(tp)
-	case Set:
-		tp.Tp = mysql.TypeSet
-		tp.Flen = len(x.Name)
 		tp.Decimal = UnspecifiedLength
 		SetBinChsClnFlag(tp)
 	default:

@@ -114,39 +114,11 @@ func newBaseBuiltinFuncWithTp(ctx sessionctx.Context, args []Expression, retType
 			Decimal: types.UnspecifiedLength,
 			Flag:    mysql.BinaryFlag,
 		}
-	case types.ETDecimal:
-		fieldType = &types.FieldType{
-			Tp:      mysql.TypeNewDecimal,
-			Flen:    11,
-			Decimal: 0,
-			Flag:    mysql.BinaryFlag,
-		}
 	case types.ETString:
 		fieldType = &types.FieldType{
 			Tp:      mysql.TypeVarString,
 			Flen:    0,
 			Decimal: types.UnspecifiedLength,
-		}
-	case types.ETDatetime:
-		fieldType = &types.FieldType{
-			Tp:      mysql.TypeDatetime,
-			Flen:    mysql.MaxDatetimeWidthWithFsp,
-			Decimal: int(types.MaxFsp),
-			Flag:    mysql.BinaryFlag,
-		}
-	case types.ETTimestamp:
-		fieldType = &types.FieldType{
-			Tp:      mysql.TypeTimestamp,
-			Flen:    mysql.MaxDatetimeWidthWithFsp,
-			Decimal: int(types.MaxFsp),
-			Flag:    mysql.BinaryFlag,
-		}
-	case types.ETDuration:
-		fieldType = &types.FieldType{
-			Tp:      mysql.TypeDuration,
-			Flen:    mysql.MaxDurationWidthWithFsp,
-			Decimal: int(types.MaxFsp),
-			Flag:    mysql.BinaryFlag,
 		}
 	}
 	if mysql.HasBinaryFlag(fieldType.Flag) {
@@ -206,18 +178,6 @@ func (b *baseBuiltinFunc) evalReal(row chunk.Row) (float64, bool, error) {
 
 func (b *baseBuiltinFunc) evalString(row chunk.Row) (string, bool, error) {
 	return "", false, errors.Errorf("baseBuiltinFunc.evalString() should never be called, please contact the TiDB team for help")
-}
-
-func (b *baseBuiltinFunc) evalDecimal(row chunk.Row) (*types.MyDecimal, bool, error) {
-	return nil, false, errors.Errorf("baseBuiltinFunc.evalDecimal() should never be called, please contact the TiDB team for help")
-}
-
-func (b *baseBuiltinFunc) evalTime(row chunk.Row) (types.Time, bool, error) {
-	return types.Time{}, false, errors.Errorf("baseBuiltinFunc.evalTime() should never be called, please contact the TiDB team for help")
-}
-
-func (b *baseBuiltinFunc) evalDuration(row chunk.Row) (types.Duration, bool, error) {
-	return types.Duration{}, false, errors.Errorf("baseBuiltinFunc.evalDuration() should never be called, please contact the TiDB team for help")
 }
 
 func (b *baseBuiltinFunc) vectorized() bool {
@@ -325,12 +285,6 @@ type builtinFunc interface {
 	evalReal(row chunk.Row) (val float64, isNull bool, err error)
 	// evalString evaluates string representation of builtinFunc by given row.
 	evalString(row chunk.Row) (val string, isNull bool, err error)
-	// evalDecimal evaluates decimal representation of builtinFunc by given row.
-	evalDecimal(row chunk.Row) (val *types.MyDecimal, isNull bool, err error)
-	// evalTime evaluates DATE/DATETIME/TIMESTAMP representation of builtinFunc by given row.
-	evalTime(row chunk.Row) (val types.Time, isNull bool, err error)
-	// evalDuration evaluates duration representation of builtinFunc by given row.
-	evalDuration(row chunk.Row) (val types.Duration, isNull bool, err error)
 	// getArgs returns the arguments expressions.
 	getArgs() []Expression
 	// equal check if this function equals to another function.

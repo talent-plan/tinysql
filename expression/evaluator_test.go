@@ -20,7 +20,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
@@ -91,24 +90,8 @@ func (s *testEvaluatorSuite) kindToFieldType(kind byte) types.FieldType {
 		ft.Tp = mysql.TypeVarString
 	case types.KindBytes:
 		ft.Tp = mysql.TypeVarString
-	case types.KindMysqlEnum:
-		ft.Tp = mysql.TypeEnum
-	case types.KindMysqlSet:
-		ft.Tp = mysql.TypeSet
 	case types.KindInterface:
 		ft.Tp = mysql.TypeVarString
-	case types.KindMysqlDecimal:
-		ft.Tp = mysql.TypeNewDecimal
-	case types.KindMysqlDuration:
-		ft.Tp = mysql.TypeDuration
-	case types.KindMysqlTime:
-		ft.Tp = mysql.TypeDatetime
-	case types.KindBinaryLiteral:
-		ft.Tp = mysql.TypeVarString
-		ft.Charset = charset.CharsetBin
-		ft.Collate = charset.CollationBin
-	case types.KindMysqlBit:
-		ft.Tp = mysql.TypeBit
 	}
 	return ft
 }
@@ -151,29 +134,5 @@ func (s *testEvaluatorSuite) TestUnaryOp(c *C) {
 		result, err := evalBuiltinFunc(f, chunk.Row{})
 		c.Assert(err, IsNil)
 		c.Assert(result, testutil.DatumEquals, types.NewDatum(t.result), Commentf("%d", i))
-	}
-
-	tbl = []struct {
-		arg    interface{}
-		op     string
-		result interface{}
-	}{
-		{types.NewDecFromInt(1), ast.UnaryMinus, types.NewDecFromInt(-1)},
-		{types.ZeroDuration, ast.UnaryMinus, new(types.MyDecimal)},
-		{types.Time{Time: types.FromGoTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)), Type: mysql.TypeDatetime, Fsp: 0}, ast.UnaryMinus, types.NewDecFromInt(-20091110230000)},
-	}
-
-	for _, t := range tbl {
-		fc := funcs[t.op]
-		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.arg)))
-		c.Assert(err, IsNil)
-		c.Assert(f, NotNil)
-		result, err := evalBuiltinFunc(f, chunk.Row{})
-		c.Assert(err, IsNil)
-
-		expect := types.NewDatum(t.result)
-		ret, err := result.CompareDatum(s.ctx.GetSessionVars().StmtCtx, &expect)
-		c.Assert(err, IsNil)
-		c.Assert(ret, Equals, 0, Commentf("%v %s", t.arg, t.op))
 	}
 }

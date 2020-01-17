@@ -404,13 +404,6 @@ func (p *PhysicalTopN) ExplainInfo() string {
 	return buffer.String()
 }
 
-// ExplainNormalizedInfo implements Plan interface.
-func (p *PhysicalTopN) ExplainNormalizedInfo() string {
-	buffer := bytes.NewBufferString("")
-	buffer = explainNormalizedByItems(buffer, p.ByItems)
-	return buffer.String()
-}
-
 // ExplainInfo implements Plan interface.
 func (p *LogicalJoin) ExplainInfo() string {
 	buffer := bytes.NewBufferString(p.JoinType.String())
@@ -504,20 +497,6 @@ func explainByItems(buffer *bytes.Buffer, byItems []*ByItems) *bytes.Buffer {
 			order = "desc"
 		}
 		fmt.Fprintf(buffer, "%s:%s", item.Expr.ExplainInfo(), order)
-		if i+1 < len(byItems) {
-			buffer.WriteString(", ")
-		}
-	}
-	return buffer
-}
-
-func explainNormalizedByItems(buffer *bytes.Buffer, byItems []*ByItems) *bytes.Buffer {
-	for i, item := range byItems {
-		order := "asc"
-		if item.Desc {
-			order = "desc"
-		}
-		fmt.Fprintf(buffer, "%s:%s", item.Expr.ExplainNormalizedInfo(), order)
 		if i+1 < len(byItems) {
 			buffer.WriteString(", ")
 		}

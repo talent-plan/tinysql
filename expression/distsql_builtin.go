@@ -15,8 +15,6 @@ package expression
 
 import (
 	"fmt"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -49,96 +47,52 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinLTIntSig{base}
 	case tipb.ScalarFuncSig_LTReal:
 		f = &builtinLTRealSig{base}
-	case tipb.ScalarFuncSig_LTDecimal:
-		f = &builtinLTDecimalSig{base}
 	case tipb.ScalarFuncSig_LTString:
 		f = &builtinLTStringSig{base}
-	case tipb.ScalarFuncSig_LTTime:
-		f = &builtinLTTimeSig{base}
-	case tipb.ScalarFuncSig_LTDuration:
-		f = &builtinLTDurationSig{base}
 	case tipb.ScalarFuncSig_LEInt:
 		f = &builtinLEIntSig{base}
 	case tipb.ScalarFuncSig_LEReal:
 		f = &builtinLERealSig{base}
-	case tipb.ScalarFuncSig_LEDecimal:
-		f = &builtinLEDecimalSig{base}
 	case tipb.ScalarFuncSig_LEString:
 		f = &builtinLEStringSig{base}
-	case tipb.ScalarFuncSig_LETime:
-		f = &builtinLETimeSig{base}
-	case tipb.ScalarFuncSig_LEDuration:
-		f = &builtinLEDurationSig{base}
 	case tipb.ScalarFuncSig_GTInt:
 		f = &builtinGTIntSig{base}
 	case tipb.ScalarFuncSig_GTReal:
 		f = &builtinGTRealSig{base}
-	case tipb.ScalarFuncSig_GTDecimal:
-		f = &builtinGTDecimalSig{base}
 	case tipb.ScalarFuncSig_GTString:
 		f = &builtinGTStringSig{base}
-	case tipb.ScalarFuncSig_GTTime:
-		f = &builtinGTTimeSig{base}
-	case tipb.ScalarFuncSig_GTDuration:
-		f = &builtinGTDurationSig{base}
 	case tipb.ScalarFuncSig_GEInt:
 		f = &builtinGEIntSig{base}
 	case tipb.ScalarFuncSig_GEReal:
 		f = &builtinGERealSig{base}
-	case tipb.ScalarFuncSig_GEDecimal:
-		f = &builtinGEDecimalSig{base}
 	case tipb.ScalarFuncSig_GEString:
 		f = &builtinGEStringSig{base}
-	case tipb.ScalarFuncSig_GETime:
-		f = &builtinGETimeSig{base}
-	case tipb.ScalarFuncSig_GEDuration:
-		f = &builtinGEDurationSig{base}
 	case tipb.ScalarFuncSig_EQInt:
 		f = &builtinEQIntSig{base}
 	case tipb.ScalarFuncSig_EQReal:
 		f = &builtinEQRealSig{base}
-	case tipb.ScalarFuncSig_EQDecimal:
-		f = &builtinEQDecimalSig{base}
 	case tipb.ScalarFuncSig_EQString:
 		f = &builtinEQStringSig{base}
-	case tipb.ScalarFuncSig_EQTime:
-		f = &builtinEQTimeSig{base}
-	case tipb.ScalarFuncSig_EQDuration:
-		f = &builtinEQDurationSig{base}
 	case tipb.ScalarFuncSig_NEInt:
 		f = &builtinNEIntSig{base}
 	case tipb.ScalarFuncSig_NEReal:
 		f = &builtinNERealSig{base}
-	case tipb.ScalarFuncSig_NEDecimal:
-		f = &builtinNEDecimalSig{base}
 	case tipb.ScalarFuncSig_NEString:
 		f = &builtinNEStringSig{base}
-	case tipb.ScalarFuncSig_NETime:
-		f = &builtinNETimeSig{base}
-	case tipb.ScalarFuncSig_NEDuration:
-		f = &builtinNEDurationSig{base}
 	case tipb.ScalarFuncSig_PlusReal:
 		f = &builtinArithmeticPlusRealSig{base}
-	case tipb.ScalarFuncSig_PlusDecimal:
-		f = &builtinArithmeticPlusDecimalSig{base}
 	case tipb.ScalarFuncSig_PlusInt:
 		f = &builtinArithmeticPlusIntSig{base}
 	case tipb.ScalarFuncSig_MinusReal:
 		f = &builtinArithmeticMinusRealSig{base}
-	case tipb.ScalarFuncSig_MinusDecimal:
-		f = &builtinArithmeticMinusDecimalSig{base}
 	case tipb.ScalarFuncSig_MinusInt:
 		f = &builtinArithmeticMinusIntSig{base}
 	case tipb.ScalarFuncSig_MultiplyReal:
 		f = &builtinArithmeticMultiplyRealSig{base}
-	case tipb.ScalarFuncSig_MultiplyDecimal:
-		f = &builtinArithmeticMultiplyDecimalSig{base}
 	case tipb.ScalarFuncSig_MultiplyInt:
 		f = &builtinArithmeticMultiplyIntSig{base}
 	case tipb.ScalarFuncSig_DivideReal:
 		f = &builtinArithmeticDivideRealSig{base}
-	case tipb.ScalarFuncSig_DivideDecimal:
-		f = &builtinArithmeticDivideDecimalSig{base}
 	case tipb.ScalarFuncSig_MultiplyIntUnsigned:
 		f = &builtinArithmeticMultiplyIntUnsignedSig{base}
 	case tipb.ScalarFuncSig_LogicalAnd:
@@ -147,26 +101,16 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinLogicOrSig{base}
 	case tipb.ScalarFuncSig_UnaryNotInt:
 		f = &builtinUnaryNotIntSig{base}
-	case tipb.ScalarFuncSig_UnaryNotDecimal:
-		f = &builtinUnaryNotDecimalSig{base}
 	case tipb.ScalarFuncSig_UnaryNotReal:
 		f = &builtinUnaryNotRealSig{base}
 	case tipb.ScalarFuncSig_UnaryMinusInt:
 		f = &builtinUnaryMinusIntSig{base}
 	case tipb.ScalarFuncSig_UnaryMinusReal:
 		f = &builtinUnaryMinusRealSig{base}
-	case tipb.ScalarFuncSig_UnaryMinusDecimal:
-		f = &builtinUnaryMinusDecimalSig{base, false}
-	case tipb.ScalarFuncSig_DecimalIsNull:
-		f = &builtinDecimalIsNullSig{base}
-	case tipb.ScalarFuncSig_DurationIsNull:
-		f = &builtinDurationIsNullSig{base}
 	case tipb.ScalarFuncSig_RealIsNull:
 		f = &builtinRealIsNullSig{base}
 	case tipb.ScalarFuncSig_StringIsNull:
 		f = &builtinStringIsNullSig{base}
-	case tipb.ScalarFuncSig_TimeIsNull:
-		f = &builtinTimeIsNullSig{base}
 	case tipb.ScalarFuncSig_IntIsNull:
 		f = &builtinIntIsNullSig{base}
 	case tipb.ScalarFuncSig_GetVar:
@@ -177,38 +121,20 @@ func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *ti
 		f = &builtinInIntSig{base}
 	case tipb.ScalarFuncSig_InReal:
 		f = &builtinInRealSig{base}
-	case tipb.ScalarFuncSig_InDecimal:
-		f = &builtinInDecimalSig{base}
 	case tipb.ScalarFuncSig_InString:
 		f = &builtinInStringSig{base}
-	case tipb.ScalarFuncSig_InTime:
-		f = &builtinInTimeSig{base}
-	case tipb.ScalarFuncSig_InDuration:
-		f = &builtinInDurationSig{base}
 	case tipb.ScalarFuncSig_IfNullInt:
 		f = &builtinIfNullIntSig{base}
 	case tipb.ScalarFuncSig_IfNullReal:
 		f = &builtinIfNullRealSig{base}
-	case tipb.ScalarFuncSig_IfNullDecimal:
-		f = &builtinIfNullDecimalSig{base}
 	case tipb.ScalarFuncSig_IfNullString:
 		f = &builtinIfNullStringSig{base}
-	case tipb.ScalarFuncSig_IfNullTime:
-		f = &builtinIfNullTimeSig{base}
-	case tipb.ScalarFuncSig_IfNullDuration:
-		f = &builtinIfNullDurationSig{base}
 	case tipb.ScalarFuncSig_IfInt:
 		f = &builtinIfIntSig{base}
 	case tipb.ScalarFuncSig_IfReal:
 		f = &builtinIfRealSig{base}
-	case tipb.ScalarFuncSig_IfDecimal:
-		f = &builtinIfDecimalSig{base}
 	case tipb.ScalarFuncSig_IfString:
 		f = &builtinIfStringSig{base}
-	case tipb.ScalarFuncSig_IfTime:
-		f = &builtinIfTimeSig{base}
-	case tipb.ScalarFuncSig_IfDuration:
-		f = &builtinIfDurationSig{base}
 	case tipb.ScalarFuncSig_Length:
 		f = &builtinLengthSig{base}
 	case tipb.ScalarFuncSig_Strcmp:
@@ -275,12 +201,6 @@ func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementCont
 		return convertFloat(expr.Val, true)
 	case tipb.ExprType_Float64:
 		return convertFloat(expr.Val, false)
-	case tipb.ExprType_MysqlDecimal:
-		return convertDecimal(expr.Val)
-	case tipb.ExprType_MysqlDuration:
-		return convertDuration(expr.Val)
-	case tipb.ExprType_MysqlTime:
-		return convertTime(expr.Val, expr.FieldType, sc.TimeZone)
 	}
 	if expr.Tp != tipb.ExprType_ScalarFunc {
 		panic("should be a tipb.ExprType_ScalarFunc")
@@ -306,28 +226,6 @@ func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementCont
 		args = append(args, arg)
 	}
 	return newDistSQLFunctionBySig(sc, expr.Sig, expr.FieldType, args)
-}
-
-func convertTime(data []byte, ftPB *tipb.FieldType, tz *time.Location) (*Constant, error) {
-	ft := PbTypeToFieldType(ftPB)
-	_, v, err := codec.DecodeUint(data)
-	if err != nil {
-		return nil, err
-	}
-	var t types.Time
-	t.Type = ft.Tp
-	t.Fsp = int8(ft.Decimal)
-	err = t.FromPackedUint(v)
-	if err != nil {
-		return nil, err
-	}
-	if ft.Tp == mysql.TypeTimestamp && tz != time.UTC {
-		err = t.ConvertTimeZone(time.UTC, tz)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &Constant{Value: types.NewTimeDatum(t), RetType: ft}, nil
 }
 
 func decodeValueList(data []byte) ([]Expression, error) {
@@ -383,26 +281,4 @@ func convertFloat(val []byte, f32 bool) (*Constant, error) {
 		d.SetFloat64(f)
 	}
 	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeDouble)}, nil
-}
-
-func convertDecimal(val []byte) (*Constant, error) {
-	_, dec, precision, frac, err := codec.DecodeDecimal(val)
-	var d types.Datum
-	d.SetMysqlDecimal(dec)
-	d.SetLength(precision)
-	d.SetFrac(frac)
-	if err != nil {
-		return nil, errors.Errorf("invalid decimal % x", val)
-	}
-	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeNewDecimal)}, nil
-}
-
-func convertDuration(val []byte) (*Constant, error) {
-	var d types.Datum
-	_, i, err := codec.DecodeInt(val)
-	if err != nil {
-		return nil, errors.Errorf("invalid duration %d", i)
-	}
-	d.SetMysqlDuration(types.Duration{Duration: time.Duration(i), Fsp: types.MaxFsp})
-	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeDuration)}, nil
 }

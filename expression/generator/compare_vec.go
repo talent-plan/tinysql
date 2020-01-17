@@ -86,14 +86,8 @@ func (b *builtin{{ .compare.CompareName }}{{ .type.TypeName }}Sig) vecEvalInt(in
 		}
 {{- if eq .type.ETName "Real" }}
 		val := types.CompareFloat64(arg0[i], arg1[i])
-{{- else if eq .type.ETName "String" }}
+{{- else }}
 		val := types.CompareString(buf0.GetString(i), buf1.GetString(i))
-{{- else if eq .type.ETName "Duration" }}
-		val := types.CompareDuration(arg0[i], arg1[i])
-{{- else if eq .type.ETName "Datetime" }}
-		val := arg0[i].Compare(arg1[i])
-{{- else if eq .type.ETName "Decimal" }}
-		val := arg0[i].Compare(&arg1[i])
 {{- end }}
 		if val {{ .compare.Operator }} 0 {
 			i64s[i] = 1
@@ -167,7 +161,6 @@ var comparesMap = []CompareContext{
 var typesMap = []TypeContext{
 	TypeInt,
 	TypeReal,
-	TypeDecimal,
 	TypeString,
 }
 

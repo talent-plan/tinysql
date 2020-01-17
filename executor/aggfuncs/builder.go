@@ -67,12 +67,6 @@ func buildCount(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 			return &countOriginal4Int{baseCount{base}}
 		case types.ETReal:
 			return &countOriginal4Real{baseCount{base}}
-		case types.ETDecimal:
-			return &countOriginal4Decimal{baseCount{base}}
-		case types.ETTimestamp, types.ETDatetime:
-			return &countOriginal4Time{baseCount{base}}
-		case types.ETDuration:
-			return &countOriginal4Duration{baseCount{base}}
 		case types.ETString:
 			return &countOriginal4String{baseCount{base}}
 		}
@@ -96,11 +90,11 @@ func buildSum(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 		return nil
 	default:
 		switch aggFuncDesc.RetTp.EvalType() {
-		case types.ETDecimal:
+		case types.ETInt:
 			if aggFuncDesc.HasDistinct {
-				return &sum4DistinctDecimal{base}
+				return &sum4DistinctInt64{base}
 			}
-			return &sum4Decimal{base}
+			return &sum4Int64{base}
 		default:
 			if aggFuncDesc.HasDistinct {
 				return &sum4DistinctFloat64{base}
@@ -126,11 +120,11 @@ func buildAvg(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	// partial results.
 	case aggregation.CompleteMode, aggregation.Partial1Mode:
 		switch aggFuncDesc.RetTp.EvalType() {
-		case types.ETDecimal:
+		case types.ETInt:
 			if aggFuncDesc.HasDistinct {
-				return &avgOriginal4DistinctDecimal{base}
+				return &avgOriginal4DistinctInt64{base}
 			}
-			return &avgOriginal4Decimal{baseAvgDecimal{base}}
+			return &avgOriginal4Int64{baseAvgInt64{base}}
 		default:
 			if aggFuncDesc.HasDistinct {
 				return &avgOriginal4DistinctFloat64{base}
@@ -142,8 +136,8 @@ func buildAvg(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	// functions and update their partial results.
 	case aggregation.Partial2Mode, aggregation.FinalMode:
 		switch aggFuncDesc.RetTp.Tp {
-		case mysql.TypeNewDecimal:
-			return &avgPartial4Decimal{baseAvgDecimal{base}}
+		case mysql.TypeLonglong:
+			return &avgPartial4Int64{baseAvgInt64{base}}
 		case mysql.TypeDouble:
 			return &avgPartial4Float64{baseAvgFloat64{base}}
 		}
@@ -175,12 +169,6 @@ func buildFirstRow(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 			case mysql.TypeDouble:
 				return &firstRow4Float64{base}
 			}
-		case types.ETDecimal:
-			return &firstRow4Decimal{base}
-		case types.ETDatetime, types.ETTimestamp:
-			return &firstRow4Time{base}
-		case types.ETDuration:
-			return &firstRow4Duration{base}
 		case types.ETString:
 			return &firstRow4String{base}
 		}
@@ -218,14 +206,8 @@ func buildMaxMin(aggFuncDesc *aggregation.AggFuncDesc, ordinal int, isMax bool) 
 			case mysql.TypeDouble:
 				return &maxMin4Float64{base}
 			}
-		case types.ETDecimal:
-			return &maxMin4Decimal{base}
 		case types.ETString:
 			return &maxMin4String{base}
-		case types.ETDatetime, types.ETTimestamp:
-			return &maxMin4Time{base}
-		case types.ETDuration:
-			return &maxMin4Duration{base}
 		}
 	}
 	return nil
