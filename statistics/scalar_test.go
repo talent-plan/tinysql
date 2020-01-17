@@ -23,38 +23,6 @@ import (
 
 const eps = 1e-9
 
-func getDecimal(value float64) *types.MyDecimal {
-	dec := &types.MyDecimal{}
-	dec.FromFloat64(value)
-	return dec
-}
-
-func getDuration(value string) types.Duration {
-	dur, _ := types.ParseDuration(nil, value, 0)
-	return dur
-}
-
-func getTime(year, month, day int, timeType byte) types.Time {
-	ret := types.Time{
-		Time: types.FromDate(year, int(month), day, 0, 0, 0, 0),
-		Type: timeType,
-		Fsp:  types.DefaultFsp}
-	return ret
-}
-
-func getTimeStamp(hour, min, sec int, timeType byte) types.Time {
-	ret := types.Time{
-		Time: types.FromDate(2017, int(1), 1, hour, min, sec, 0),
-		Type: timeType,
-		Fsp:  0}
-	return ret
-}
-
-func getBinaryLiteral(value string) types.BinaryLiteral {
-	b, _ := types.ParseBitStr(value)
-	return b
-}
-
 func getUnsignedFieldType() *types.FieldType {
 	tp := types.NewFieldType(mysql.TypeLonglong)
 	tp.Flag |= mysql.UnsignedFlag
@@ -112,48 +80,6 @@ func (s *testStatisticsSuite) TestCalcFraction(c *C) {
 			tp:       types.NewFieldType(mysql.TypeFloat),
 		},
 		{
-			lower:    types.NewDecimalDatum(getDecimal(0)),
-			upper:    types.NewDecimalDatum(getDecimal(4)),
-			value:    types.NewDecimalDatum(getDecimal(1)),
-			fraction: 0.25,
-			tp:       types.NewFieldType(mysql.TypeNewDecimal),
-		},
-		{
-			lower:    types.NewMysqlBitDatum(getBinaryLiteral("0b0")),
-			upper:    types.NewMysqlBitDatum(getBinaryLiteral("0b100")),
-			value:    types.NewMysqlBitDatum(getBinaryLiteral("0b1")),
-			fraction: 0.5,
-			tp:       types.NewFieldType(mysql.TypeBit),
-		},
-		{
-			lower:    types.NewDurationDatum(getDuration("0:00:00")),
-			upper:    types.NewDurationDatum(getDuration("4:00:00")),
-			value:    types.NewDurationDatum(getDuration("1:00:00")),
-			fraction: 0.25,
-			tp:       types.NewFieldType(mysql.TypeDuration),
-		},
-		{
-			lower:    types.NewTimeDatum(getTime(2017, 1, 1, mysql.TypeTimestamp)),
-			upper:    types.NewTimeDatum(getTime(2017, 4, 1, mysql.TypeTimestamp)),
-			value:    types.NewTimeDatum(getTime(2017, 2, 1, mysql.TypeTimestamp)),
-			fraction: 0.34444444444444444,
-			tp:       types.NewFieldType(mysql.TypeTimestamp),
-		},
-		{
-			lower:    types.NewTimeDatum(getTime(2017, 1, 1, mysql.TypeDatetime)),
-			upper:    types.NewTimeDatum(getTime(2017, 4, 1, mysql.TypeDatetime)),
-			value:    types.NewTimeDatum(getTime(2017, 2, 1, mysql.TypeDatetime)),
-			fraction: 0.34444444444444444,
-			tp:       types.NewFieldType(mysql.TypeDatetime),
-		},
-		{
-			lower:    types.NewTimeDatum(getTime(2017, 1, 1, mysql.TypeDate)),
-			upper:    types.NewTimeDatum(getTime(2017, 4, 1, mysql.TypeDate)),
-			value:    types.NewTimeDatum(getTime(2017, 2, 1, mysql.TypeDate)),
-			fraction: 0.34444444444444444,
-			tp:       types.NewFieldType(mysql.TypeDate),
-		},
-		{
 			lower:    types.NewStringDatum("aasad"),
 			upper:    types.NewStringDatum("addad"),
 			value:    types.NewStringDatum("abfsd"),
@@ -205,41 +131,6 @@ func (s *testStatisticsSuite) TestEnumRangeValues(c *C) {
 			lowExclude:  false,
 			highExclude: true,
 			res:         "(0, 1, 2, 3, 4)",
-		},
-		{
-			low:         types.NewDurationDatum(getDuration("0:00:00")),
-			high:        types.NewDurationDatum(getDuration("0:00:05")),
-			lowExclude:  false,
-			highExclude: true,
-			res:         "(00:00:00, 00:00:01, 00:00:02, 00:00:03, 00:00:04)",
-		},
-		{
-			low:         types.NewDurationDatum(getDuration("0:00:00")),
-			high:        types.NewDurationDatum(getDuration("0:00:05")),
-			lowExclude:  false,
-			highExclude: true,
-			res:         "(00:00:00, 00:00:01, 00:00:02, 00:00:03, 00:00:04)",
-		},
-		{
-			low:         types.NewTimeDatum(getTime(2017, 1, 1, mysql.TypeDate)),
-			high:        types.NewTimeDatum(getTime(2017, 1, 5, mysql.TypeDate)),
-			lowExclude:  false,
-			highExclude: true,
-			res:         "(2017-01-01, 2017-01-02, 2017-01-03, 2017-01-04)",
-		},
-		{
-			low:         types.NewTimeDatum(getTimeStamp(0, 0, 0, mysql.TypeTimestamp)),
-			high:        types.NewTimeDatum(getTimeStamp(0, 0, 5, mysql.TypeTimestamp)),
-			lowExclude:  false,
-			highExclude: true,
-			res:         "(2017-01-01 00:00:00, 2017-01-01 00:00:01, 2017-01-01 00:00:02, 2017-01-01 00:00:03, 2017-01-01 00:00:04)",
-		},
-		{
-			low:         types.NewTimeDatum(getTimeStamp(0, 0, 0, mysql.TypeDatetime)),
-			high:        types.NewTimeDatum(getTimeStamp(0, 0, 5, mysql.TypeDatetime)),
-			lowExclude:  false,
-			highExclude: true,
-			res:         "(2017-01-01 00:00:00, 2017-01-01 00:00:01, 2017-01-01 00:00:02, 2017-01-01 00:00:03, 2017-01-01 00:00:04)",
 		},
 		// fix issue 11610
 		{

@@ -173,44 +173,12 @@ func (t *testTableSuite) TestGetZeroValue(c *C) {
 			types.NewFloat64Datum(0),
 		},
 		{
-			types.NewFieldType(mysql.TypeNewDecimal),
-			types.NewDecimalDatum(types.NewDecFromInt(0)),
-		},
-		{
 			types.NewFieldType(mysql.TypeVarchar),
 			types.NewStringDatum(""),
 		},
 		{
 			types.NewFieldType(mysql.TypeBlob),
 			types.NewBytesDatum([]byte{}),
-		},
-		{
-			types.NewFieldType(mysql.TypeDuration),
-			types.NewDurationDatum(types.ZeroDuration),
-		},
-		{
-			types.NewFieldType(mysql.TypeDatetime),
-			types.NewDatum(types.ZeroDatetime),
-		},
-		{
-			types.NewFieldType(mysql.TypeTimestamp),
-			types.NewDatum(types.ZeroTimestamp),
-		},
-		{
-			types.NewFieldType(mysql.TypeDate),
-			types.NewDatum(types.ZeroDate),
-		},
-		{
-			types.NewFieldType(mysql.TypeBit),
-			types.NewMysqlBitDatum(types.ZeroBinaryLiteral),
-		},
-		{
-			types.NewFieldType(mysql.TypeSet),
-			types.NewDatum(types.Set{}),
-		},
-		{
-			types.NewFieldType(mysql.TypeEnum),
-			types.NewDatum(types.Enum{}),
 		},
 		{
 			&types.FieldType{
@@ -244,11 +212,6 @@ func (t *testTableSuite) TestGetZeroValue(c *C) {
 
 func (t *testTableSuite) TestGetDefaultValue(c *C) {
 	ctx := mock.NewContext()
-	zeroTimestamp := types.ZeroTimestamp
-	timestampValue := types.Time{
-		Time: types.FromDate(2019, 5, 6, 12, 48, 49, 0),
-		Type: mysql.TypeTimestamp,
-	}
 	tests := []struct {
 		colInfo *model.ColumnInfo
 		strict  bool
@@ -288,68 +251,6 @@ func (t *testTableSuite) TestGetDefaultValue(c *C) {
 			false,
 			types.Datum{},
 			nil,
-		},
-		{
-			&model.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:    mysql.TypeEnum,
-					Flag:  mysql.NotNullFlag,
-					Elems: []string{"abc", "def"},
-				},
-			},
-			false,
-			types.NewMysqlEnumDatum(types.Enum{Name: "abc", Value: 1}),
-			nil,
-		},
-		{
-			&model.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeTimestamp,
-					Flag: mysql.TimestampFlag,
-				},
-				OriginDefaultValue: "0000-00-00 00:00:00",
-				DefaultValue:       "0000-00-00 00:00:00",
-			},
-			false,
-			types.NewDatum(zeroTimestamp),
-			nil,
-		},
-		{
-			&model.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeTimestamp,
-					Flag: mysql.TimestampFlag,
-				},
-				OriginDefaultValue: timestampValue.String(),
-				DefaultValue:       timestampValue.String(),
-			},
-			true,
-			types.NewDatum(timestampValue),
-			nil,
-		},
-		{
-			&model.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeTimestamp,
-					Flag: mysql.TimestampFlag,
-				},
-				OriginDefaultValue: "not valid date",
-				DefaultValue:       "not valid date",
-			},
-			true,
-			types.NewDatum(zeroTimestamp),
-			errGetDefaultFailed,
-		},
-		{
-			&model.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeLonglong,
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			true,
-			types.NewDatum(zeroTimestamp),
-			ErrNoDefaultValue,
 		},
 		{
 			&model.ColumnInfo{

@@ -1304,6 +1304,7 @@ func (b *PlanBuilder) buildValuesListOfInsert(ctx context.Context, insert *ast.I
 	if len(insert.Columns) > 0 || len(insert.Lists[0]) > 0 {
 		// If value_list or col_list is not empty, the length of value_list should be the same with that of col_list.
 		if len(insert.Lists[0]) != len(affectedValuesCols) {
+			fmt.Printf("%v %v\n", len(insert.Lists[0]), affectedValuesCols)
 			return ErrWrongValueCountOnRow.GenWithStackByArgs(1)
 		}
 	}

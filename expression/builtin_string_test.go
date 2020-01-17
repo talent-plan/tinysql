@@ -14,12 +14,9 @@
 package expression
 
 import (
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 )
@@ -35,11 +32,6 @@ func (s *testEvaluatorSuite) TestLengthAndOctetLength(c *C) {
 		{"你好", 6, false, false},
 		{1, 1, false, false},
 		{3.14, 4, false, false},
-		{types.NewDecFromFloatForTest(123.123), 7, false, false},
-		{types.Time{Time: types.FromGoTime(time.Now()), Fsp: 6, Type: mysql.TypeDatetime}, 26, false, false},
-		{types.NewBinaryLiteralFromUint(0x01, -1), 1, false, false},
-		{types.Set{Value: 1, Name: "abc"}, 3, false, false},
-		{types.Duration{Duration: time.Duration(12*time.Hour + 1*time.Minute + 1*time.Second), Fsp: types.DefaultFsp}, 8, false, false},
 		{nil, 0, true, false},
 		{errors.New("must error"), 0, false, true},
 	}

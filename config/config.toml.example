@@ -13,7 +13,7 @@ port = 4000
 store = "mocktikv"
 
 # TiDB storage path.
-path = "/tmp/tidb"
+path = "/tmp/tinysql"
 
 # Schema lease duration, very dangerous to change only if you know what you do.
 lease = "45s"

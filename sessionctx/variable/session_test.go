@@ -14,40 +14,13 @@
 package variable_test
 
 import (
-	"time"
-
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
 )
 
 var _ = Suite(&testSessionSuite{})
 
 type testSessionSuite struct {
-}
-
-func (*testSessionSuite) TestSetSystemVariable(c *C) {
-	v := variable.NewSessionVars()
-	v.GlobalVarsAccessor = variable.NewMockGlobalAccessor()
-	v.TimeZone = time.UTC
-	tests := []struct {
-		key   string
-		value interface{}
-		err   bool
-	}{
-		{variable.TxnIsolation, "SERIALIZABLE", true},
-		{variable.TimeZone, "xyz", true},
-		{variable.TiDBOptAggPushDown, "1", false},
-	}
-	for _, t := range tests {
-		err := variable.SetSessionSystemVar(v, t.key, types.NewDatum(t.value))
-		if t.err {
-			c.Assert(err, NotNil)
-		} else {
-			c.Assert(err, IsNil)
-		}
-	}
 }
 
 func (*testSessionSuite) TestSession(c *C) {

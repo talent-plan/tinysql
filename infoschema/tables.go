@@ -894,16 +894,11 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 	}
 
 	var rows [][]types.Datum
-	createTimeTp := tablesCols[15].tp
 	for _, schema := range schemas {
 		for _, table := range schema.Tables {
 			collation := table.Collate
 			if collation == "" {
 				collation = mysql.DefaultCollationName
-			}
-			createTime := types.Time{
-				Time: types.FromGoTime(table.GetUpdateTime()),
-				Type: createTimeTp,
 			}
 
 			createOptions := ""
@@ -953,7 +948,7 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 				indexLength,   // INDEX_LENGTH
 				uint64(0),     // DATA_FREE
 				autoIncID,     // AUTO_INCREMENT
-				createTime,    // CREATE_TIME
+				nil,           // CREATE_TIME
 				nil,           // UPDATE_TIME
 				nil,           // CHECK_TIME
 				collation,     // TABLE_COLLATION
@@ -1102,8 +1097,6 @@ func dataForColumnsInTable(schema *model.DBInfo, tbl *model.TableInfo) [][]types
 		} else if types.IsString(col.Tp) {
 			charMaxLen = colLen
 			charOctLen = colLen
-		} else if types.IsTypeFractionable(col.Tp) {
-			datetimePrecision = decimal
 		} else if types.IsTypeNumeric(col.Tp) {
 			numericPrecision = colLen
 			if col.Tp != mysql.TypeFloat && col.Tp != mysql.TypeDouble {
@@ -1277,24 +1270,24 @@ func dataForTableConstraints(ctx sessionctx.Context, schemas []*model.DBInfo) []
 func dataForPseudoProfiling() [][]types.Datum {
 	var rows [][]types.Datum
 	row := types.MakeDatums(
-		0,                      // QUERY_ID
-		0,                      // SEQ
-		"",                     // STATE
-		types.NewDecFromInt(0), // DURATION
-		types.NewDecFromInt(0), // CPU_USER
-		types.NewDecFromInt(0), // CPU_SYSTEM
-		0,                      // CONTEXT_VOLUNTARY
-		0,                      // CONTEXT_INVOLUNTARY
-		0,                      // BLOCK_OPS_IN
-		0,                      // BLOCK_OPS_OUT
-		0,                      // MESSAGES_SENT
-		0,                      // MESSAGES_RECEIVED
-		0,                      // PAGE_FAULTS_MAJOR
-		0,                      // PAGE_FAULTS_MINOR
-		0,                      // SWAPS
-		"",                     // SOURCE_FUNCTION
-		"",                     // SOURCE_FILE
-		0,                      // SOURCE_LINE
+		0,   // QUERY_ID
+		0,   // SEQ
+		"",  // STATE
+		nil, // DURATION
+		nil, // CPU_USER
+		nil, // CPU_SYSTEM
+		0,   // CONTEXT_VOLUNTARY
+		0,   // CONTEXT_INVOLUNTARY
+		0,   // BLOCK_OPS_IN
+		0,   // BLOCK_OPS_OUT
+		0,   // MESSAGES_SENT
+		0,   // MESSAGES_RECEIVED
+		0,   // PAGE_FAULTS_MAJOR
+		0,   // PAGE_FAULTS_MINOR
+		0,   // SWAPS
+		"",  // SOURCE_FUNCTION
+		"",  // SOURCE_FILE
+		0,   // SOURCE_LINE
 	)
 	rows = append(rows, row)
 	return rows

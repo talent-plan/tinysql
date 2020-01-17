@@ -17,36 +17,11 @@ import (
 	"fmt"
 	"math/bits"
 	"reflect"
-	"time"
 	"unsafe"
 
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/hack"
 )
-
-// AppendDuration appends a duration value into this Column.
-func (c *Column) AppendDuration(dur types.Duration) {
-	c.AppendInt64(int64(dur.Duration))
-}
-
-// AppendMyDecimal appends a MyDecimal value into this Column.
-func (c *Column) AppendMyDecimal(dec *types.MyDecimal) {
-	*(*types.MyDecimal)(unsafe.Pointer(&c.elemBuf[0])) = *dec
-	c.finishAppendFixed()
-}
-
-func (c *Column) appendNameValue(name string, val uint64) {
-	var buf [8]byte
-	*(*uint64)(unsafe.Pointer(&buf[0])) = val
-	c.data = append(c.data, buf[:]...)
-	c.data = append(c.data, name...)
-	c.finishAppendVar()
-}
-
-// AppendSet appends a Set value into this Column.
-func (c *Column) AppendSet(set types.Set) {
-	c.appendNameValue(set.Name, set.Value)
-}
 
 // Column stores one column of data in Apache Arrow format.
 // See https://arrow.apache.org/docs/memory_layout.html
@@ -92,14 +67,8 @@ func (c *Column) Reset(eType types.EvalType) {
 		c.ResizeInt64(0, false)
 	case types.ETReal:
 		c.ResizeFloat64(0, false)
-	case types.ETDecimal:
-		c.ResizeDecimal(0, false)
 	case types.ETString:
 		c.ReserveString(0)
-	case types.ETDatetime, types.ETTimestamp:
-		c.ResizeTime(0, false)
-	case types.ETDuration:
-		c.ResizeGoDuration(0, false)
 	default:
 		panic(fmt.Sprintf("invalid EvalType %v", eType))
 	}
@@ -236,25 +205,11 @@ func (c *Column) AppendBytes(b []byte) {
 	c.finishAppendVar()
 }
 
-// AppendTime appends a time value into this Column.
-func (c *Column) AppendTime(t types.Time) {
-	*(*types.Time)(unsafe.Pointer(&c.elemBuf[0])) = t
-	c.finishAppendFixed()
-}
-
-// AppendEnum appends a Enum value into this Column.
-func (c *Column) AppendEnum(enum types.Enum) {
-	c.appendNameValue(enum.Name, enum.Value)
-}
-
 const (
-	sizeInt64      = int(unsafe.Sizeof(int64(0)))
-	sizeUint64     = int(unsafe.Sizeof(uint64(0)))
-	sizeFloat32    = int(unsafe.Sizeof(float32(0)))
-	sizeFloat64    = int(unsafe.Sizeof(float64(0)))
-	sizeMyDecimal  = int(unsafe.Sizeof(types.MyDecimal{}))
-	sizeGoDuration = int(unsafe.Sizeof(time.Duration(0)))
-	sizeTime       = int(unsafe.Sizeof(types.Time{}))
+	sizeInt64   = int(unsafe.Sizeof(int64(0)))
+	sizeUint64  = int(unsafe.Sizeof(uint64(0)))
+	sizeFloat32 = int(unsafe.Sizeof(float32(0)))
+	sizeFloat64 = int(unsafe.Sizeof(float64(0)))
 )
 
 var (
@@ -392,21 +347,6 @@ func (c *Column) ResizeFloat64(n int, isNull bool) {
 	c.resize(n, sizeFloat64, isNull)
 }
 
-// ResizeDecimal resizes the column so that it contains n decimal elements.
-func (c *Column) ResizeDecimal(n int, isNull bool) {
-	c.resize(n, sizeMyDecimal, isNull)
-}
-
-// ResizeGoDuration resizes the column so that it contains n duration elements.
-func (c *Column) ResizeGoDuration(n int, isNull bool) {
-	c.resize(n, sizeGoDuration, isNull)
-}
-
-// ResizeTime resizes the column so that it contains n Time elements.
-func (c *Column) ResizeTime(n int, isNull bool) {
-	c.resize(n, sizeTime, isNull)
-}
-
 // ReserveString changes the column capacity to store n string elements and set the length to zero.
 func (c *Column) ReserveString(n int) {
 	c.reserve(n, 8)
@@ -461,28 +401,6 @@ func (c *Column) Float64s() []float64 {
 	return res
 }
 
-// GoDurations returns a Golang time.Duration slice stored in this Column.
-// Different from the Row.GetDuration method, the argument Fsp is ignored, so the user should handle it outside.
-func (c *Column) GoDurations() []time.Duration {
-	var res []time.Duration
-	c.castSliceHeader((*reflect.SliceHeader)(unsafe.Pointer(&res)), sizeGoDuration)
-	return res
-}
-
-// Decimals returns a MyDecimal slice stored in this Column.
-func (c *Column) Decimals() []types.MyDecimal {
-	var res []types.MyDecimal
-	c.castSliceHeader((*reflect.SliceHeader)(unsafe.Pointer(&res)), sizeMyDecimal)
-	return res
-}
-
-// Times returns a Time slice stored in this Column.
-func (c *Column) Times() []types.Time {
-	var res []types.Time
-	c.castSliceHeader((*reflect.SliceHeader)(unsafe.Pointer(&res)), sizeTime)
-	return res
-}
-
 // GetInt64 returns the int64 in the specific row.
 func (c *Column) GetInt64(rowID int) int64 {
 	return *(*int64)(unsafe.Pointer(&c.data[rowID*8]))
@@ -503,11 +421,6 @@ func (c *Column) GetFloat64(rowID int) float64 {
 	return *(*float64)(unsafe.Pointer(&c.data[rowID*8]))
 }
 
-// GetDecimal returns the decimal in the specific row.
-func (c *Column) GetDecimal(rowID int) *types.MyDecimal {
-	return (*types.MyDecimal)(unsafe.Pointer(&c.data[rowID*types.MyDecimalStructSize]))
-}
-
 // GetString returns the string in the specific row.
 func (c *Column) GetString(rowID int) string {
 	return string(hack.String(c.data[c.offsets[rowID]:c.offsets[rowID+1]]))
@@ -516,37 +429,6 @@ func (c *Column) GetString(rowID int) string {
 // GetBytes returns the byte slice in the specific row.
 func (c *Column) GetBytes(rowID int) []byte {
 	return c.data[c.offsets[rowID]:c.offsets[rowID+1]]
-}
-
-// GetEnum returns the Enum in the specific row.
-func (c *Column) GetEnum(rowID int) types.Enum {
-	name, val := c.getNameValue(rowID)
-	return types.Enum{Name: name, Value: val}
-}
-
-// GetSet returns the Set in the specific row.
-func (c *Column) GetSet(rowID int) types.Set {
-	name, val := c.getNameValue(rowID)
-	return types.Set{Name: name, Value: val}
-}
-
-// GetTime returns the Time in the specific row.
-func (c *Column) GetTime(rowID int) types.Time {
-	return *(*types.Time)(unsafe.Pointer(&c.data[rowID*sizeTime]))
-}
-
-// GetDuration returns the Duration in the specific row.
-func (c *Column) GetDuration(rowID int, fillFsp int) types.Duration {
-	dur := *(*int64)(unsafe.Pointer(&c.data[rowID*8]))
-	return types.Duration{Duration: time.Duration(dur), Fsp: int8(fillFsp)}
-}
-
-func (c *Column) getNameValue(rowID int) (string, uint64) {
-	start, end := c.offsets[rowID], c.offsets[rowID+1]
-	if start == end {
-		return "", 0
-	}
-	return string(hack.String(c.data[start+8 : end])), *(*uint64)(unsafe.Pointer(&c.data[start]))
 }
 
 // GetRaw returns the underlying raw bytes in the specific row.

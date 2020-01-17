@@ -15,7 +15,6 @@ package aggfuncs
 
 import (
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -40,12 +39,6 @@ type partialResult4FirstRowFloat32 struct {
 	val float32
 }
 
-type partialResult4FirstRowDecimal struct {
-	basePartialResult4FirstRow
-
-	val types.MyDecimal
-}
-
 type partialResult4FirstRowFloat64 struct {
 	basePartialResult4FirstRow
 
@@ -56,18 +49,6 @@ type partialResult4FirstRowString struct {
 	basePartialResult4FirstRow
 
 	val string
-}
-
-type partialResult4FirstRowTime struct {
-	basePartialResult4FirstRow
-
-	val types.Time
-}
-
-type partialResult4FirstRowDuration struct {
-	basePartialResult4FirstRow
-
-	val types.Duration
 }
 
 type firstRow4Int struct {
@@ -253,148 +234,5 @@ func (e *firstRow4String) AppendFinalResult2Chunk(sctx sessionctx.Context, pr Pa
 		return nil
 	}
 	chk.AppendString(e.ordinal, p.val)
-	return nil
-}
-
-type firstRow4Time struct {
-	baseAggFunc
-}
-
-func (e *firstRow4Time) AllocPartialResult() PartialResult {
-	return PartialResult(new(partialResult4FirstRowTime))
-}
-
-func (e *firstRow4Time) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4FirstRowTime)(pr)
-	p.isNull, p.gotFirstRow = false, false
-}
-
-func (e *firstRow4Time) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4FirstRowTime)(pr)
-	if p.gotFirstRow {
-		return nil
-	}
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalTime(sctx, row)
-		if err != nil {
-			return err
-		}
-		p.gotFirstRow, p.isNull, p.val = true, isNull, input
-		break
-	}
-	return nil
-}
-func (*firstRow4Time) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
-	p1, p2 := (*partialResult4FirstRowTime)(src), (*partialResult4FirstRowTime)(dst)
-	if !p2.gotFirstRow {
-		*p2 = *p1
-	}
-	return nil
-
-}
-
-func (e *firstRow4Time) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4FirstRowTime)(pr)
-	if p.isNull || !p.gotFirstRow {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendTime(e.ordinal, p.val)
-	return nil
-}
-
-type firstRow4Duration struct {
-	baseAggFunc
-}
-
-func (e *firstRow4Duration) AllocPartialResult() PartialResult {
-	return PartialResult(new(partialResult4FirstRowDuration))
-}
-
-func (e *firstRow4Duration) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4FirstRowDuration)(pr)
-	p.isNull, p.gotFirstRow = false, false
-}
-
-func (e *firstRow4Duration) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4FirstRowDuration)(pr)
-	if p.gotFirstRow {
-		return nil
-	}
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalDuration(sctx, row)
-		if err != nil {
-			return err
-		}
-		p.gotFirstRow, p.isNull, p.val = true, isNull, input
-		break
-	}
-	return nil
-}
-func (*firstRow4Duration) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
-	p1, p2 := (*partialResult4FirstRowDuration)(src), (*partialResult4FirstRowDuration)(dst)
-	if !p2.gotFirstRow {
-		*p2 = *p1
-	}
-	return nil
-}
-
-func (e *firstRow4Duration) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4FirstRowDuration)(pr)
-	if p.isNull || !p.gotFirstRow {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendDuration(e.ordinal, p.val)
-	return nil
-}
-
-type firstRow4Decimal struct {
-	baseAggFunc
-}
-
-func (e *firstRow4Decimal) AllocPartialResult() PartialResult {
-	return PartialResult(new(partialResult4FirstRowDecimal))
-}
-
-func (e *firstRow4Decimal) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4FirstRowDecimal)(pr)
-	p.isNull, p.gotFirstRow = false, false
-}
-
-func (e *firstRow4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4FirstRowDecimal)(pr)
-	if p.gotFirstRow {
-		return nil
-	}
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalDecimal(sctx, row)
-		if err != nil {
-			return err
-		}
-		p.gotFirstRow, p.isNull = true, isNull
-		if input != nil {
-			p.val = *input
-		}
-		break
-	}
-	return nil
-}
-
-func (e *firstRow4Decimal) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4FirstRowDecimal)(pr)
-	if p.isNull || !p.gotFirstRow {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendMyDecimal(e.ordinal, &p.val)
-	return nil
-}
-
-func (*firstRow4Decimal) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
-	p1, p2 := (*partialResult4FirstRowDecimal)(src), (*partialResult4FirstRowDecimal)(dst)
-	if !p2.gotFirstRow {
-		*p2 = *p1
-	}
 	return nil
 }

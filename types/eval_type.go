@@ -23,16 +23,6 @@ const (
 	ETInt = ast.ETInt
 	// ETReal represents type REAL in evaluation.
 	ETReal = ast.ETReal
-	// ETDecimal represents type DECIMAL in evaluation.
-	ETDecimal = ast.ETDecimal
 	// ETString represents type STRING in evaluation.
 	ETString = ast.ETString
-	// ETDatetime represents type DATETIME in evaluation.
-	ETDatetime = ast.ETDatetime
-	// ETTimestamp represents type TIMESTAMP in evaluation.
-	ETTimestamp = ast.ETTimestamp
-	// ETDuration represents type DURATION in evaluation.
-	ETDuration = ast.ETDuration
-	// ETJson represents type JSON in evaluation.
-	ETJson = ast.ETJson
 )

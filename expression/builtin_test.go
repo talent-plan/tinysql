@@ -39,12 +39,6 @@ func evalBuiltinFunc(f builtinFunc, row chunk.Row) (d types.Datum, err error) {
 		}
 	case types.ETReal:
 		res, isNull, err = f.evalReal(row)
-	case types.ETDecimal:
-		res, isNull, err = f.evalDecimal(row)
-	case types.ETDatetime, types.ETTimestamp:
-		res, isNull, err = f.evalTime(row)
-	case types.ETDuration:
-		res, isNull, err = f.evalDuration(row)
 	case types.ETString:
 		res, isNull, err = f.evalString(row)
 	}

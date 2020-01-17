@@ -14,76 +14,55 @@
 package aggfuncs
 
 import (
-	"github.com/cznic/mathutil"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/set"
 )
 
 // All the following avg function implementations return the decimal result,
-// which store the partial results in "partialResult4AvgDecimal".
+// which store the partial results in "partialResult4AvgInt64".
 //
 // "baseAvgDecimal" is wrapped by:
-// - "avgOriginal4Decimal"
-// - "avgPartial4Decimal"
-type baseAvgDecimal struct {
+// - "avgOriginal4Int64"
+// - "avgPartial4Int64"
+type baseAvgInt64 struct {
 	baseAggFunc
 }
 
-type partialResult4AvgDecimal struct {
-	sum   types.MyDecimal
+type partialResult4AvgInt64 struct {
+	sum   int64
 	count int64
 }
 
-func (e *baseAvgDecimal) AllocPartialResult() PartialResult {
-	return PartialResult(&partialResult4AvgDecimal{})
+func (e *baseAvgInt64) AllocPartialResult() PartialResult {
+	return PartialResult(&partialResult4AvgInt64{})
 }
 
-func (e *baseAvgDecimal) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4AvgDecimal)(pr)
-	p.sum = *types.NewDecFromInt(0)
+func (e *baseAvgInt64) ResetPartialResult(pr PartialResult) {
+	p := (*partialResult4AvgInt64)(pr)
+	p.sum = 0
 	p.count = int64(0)
 }
 
-func (e *baseAvgDecimal) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4AvgDecimal)(pr)
+func (e *baseAvgInt64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
+	p := (*partialResult4AvgInt64)(pr)
 	if p.count == 0 {
 		chk.AppendNull(e.ordinal)
 		return nil
 	}
-	decimalCount := types.NewDecFromInt(p.count)
-	finalResult := new(types.MyDecimal)
-	err := types.DecimalDiv(&p.sum, decimalCount, finalResult, types.DivFracIncr)
-	if err != nil {
-		return err
-	}
-	// Make the decimal be the result of type inferring.
-	frac := e.args[0].GetType().Decimal
-	if len(e.args) == 2 {
-		frac = e.args[1].GetType().Decimal
-	}
-	if frac == -1 {
-		frac = mysql.MaxDecimalScale
-	}
-	err = finalResult.Round(finalResult, mathutil.Min(frac, mysql.MaxDecimalScale), types.ModeHalfEven)
-	if err != nil {
-		return err
-	}
-	chk.AppendMyDecimal(e.ordinal, finalResult)
+	chk.AppendInt64(e.ordinal, p.sum/p.count)
 	return nil
 }
 
-type avgOriginal4Decimal struct {
-	baseAvgDecimal
+type avgOriginal4Int64 struct {
+	baseAvgInt64
 }
 
-func (e *avgOriginal4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4AvgDecimal)(pr)
+func (e *avgOriginal4Int64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
+	p := (*partialResult4AvgInt64)(pr)
 	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalDecimal(sctx, row)
+		input, isNull, err := e.args[0].EvalInt(sctx, row)
 		if err != nil {
 			return err
 		}
@@ -91,25 +70,24 @@ func (e *avgOriginal4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsI
 			continue
 		}
 
-		newSum := new(types.MyDecimal)
-		err = types.DecimalAdd(&p.sum, input, newSum)
+		newSum, err := types.AddInt64(p.sum, input)
 		if err != nil {
 			return err
 		}
-		p.sum = *newSum
+		p.sum = newSum
 		p.count++
 	}
 	return nil
 }
 
-type avgPartial4Decimal struct {
-	baseAvgDecimal
+type avgPartial4Int64 struct {
+	baseAvgInt64
 }
 
-func (e *avgPartial4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4AvgDecimal)(pr)
+func (e *avgPartial4Int64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
+	p := (*partialResult4AvgInt64)(pr)
 	for _, row := range rowsInGroup {
-		inputSum, isNull, err := e.args[1].EvalDecimal(sctx, row)
+		inputSum, isNull, err := e.args[1].EvalInt(sctx, row)
 		if err != nil {
 			return err
 		}
@@ -125,107 +103,84 @@ func (e *avgPartial4Decimal) UpdatePartialResult(sctx sessionctx.Context, rowsIn
 			continue
 		}
 
-		newSum := new(types.MyDecimal)
-		err = types.DecimalAdd(&p.sum, inputSum, newSum)
+		newSum, err := types.AddInt64(p.sum, inputSum)
 		if err != nil {
 			return err
 		}
-		p.sum = *newSum
+		p.sum = newSum
 		p.count += inputCount
 	}
 	return nil
 }
 
-func (e *avgPartial4Decimal) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
-	p1, p2 := (*partialResult4AvgDecimal)(src), (*partialResult4AvgDecimal)(dst)
+func (e *avgPartial4Int64) MergePartialResult(sctx sessionctx.Context, src PartialResult, dst PartialResult) error {
+	p1, p2 := (*partialResult4AvgInt64)(src), (*partialResult4AvgInt64)(dst)
 	if p1.count == 0 {
 		return nil
 	}
-	newSum := new(types.MyDecimal)
-	err := types.DecimalAdd(&p1.sum, &p2.sum, newSum)
+	newSum, err := types.AddInt64(p1.sum, p2.sum)
 	if err != nil {
 		return err
 	}
-	p2.sum = *newSum
+	p2.sum = newSum
 	p2.count += p1.count
 	return nil
 }
 
-type partialResult4AvgDistinctDecimal struct {
-	partialResult4AvgDecimal
-	valSet set.StringSet
+type partialResult4AvgDistinctInt64 struct {
+	partialResult4AvgInt64
+	valSet set.Int64Set
 }
 
-type avgOriginal4DistinctDecimal struct {
+type avgOriginal4DistinctInt64 struct {
 	baseAggFunc
 }
 
-func (e *avgOriginal4DistinctDecimal) AllocPartialResult() PartialResult {
-	p := &partialResult4AvgDistinctDecimal{
-		valSet: set.NewStringSet(),
+func (e *avgOriginal4DistinctInt64) AllocPartialResult() PartialResult {
+	p := &partialResult4AvgDistinctInt64{
+		valSet: set.NewInt64Set(),
 	}
 	return PartialResult(p)
 }
 
-func (e *avgOriginal4DistinctDecimal) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4AvgDistinctDecimal)(pr)
-	p.sum = *types.NewDecFromInt(0)
+func (e *avgOriginal4DistinctInt64) ResetPartialResult(pr PartialResult) {
+	p := (*partialResult4AvgDistinctInt64)(pr)
+	p.sum = 0
 	p.count = int64(0)
-	p.valSet = set.NewStringSet()
+	p.valSet = set.NewInt64Set()
 }
 
-func (e *avgOriginal4DistinctDecimal) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4AvgDistinctDecimal)(pr)
+func (e *avgOriginal4DistinctInt64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
+	p := (*partialResult4AvgDistinctInt64)(pr)
 	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalDecimal(sctx, row)
+		input, isNull, err := e.args[0].EvalInt(sctx, row)
 		if err != nil {
 			return err
 		}
 		if isNull {
 			continue
 		}
-		hash, err := input.ToHashKey()
-		if err != nil {
-			return err
-		}
-		decStr := string(hack.String(hash))
-		if p.valSet.Exist(decStr) {
+		if p.valSet.Exist(input) {
 			continue
 		}
-		p.valSet.Insert(decStr)
-		newSum := new(types.MyDecimal)
-		err = types.DecimalAdd(&p.sum, input, newSum)
+		p.valSet.Insert(input)
+		newSum, err := types.AddInt64(p.sum, input)
 		if err != nil {
 			return err
 		}
-		p.sum = *newSum
+		p.sum = newSum
 		p.count++
 	}
 	return nil
 }
 
-func (e *avgOriginal4DistinctDecimal) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4AvgDistinctDecimal)(pr)
+func (e *avgOriginal4DistinctInt64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
+	p := (*partialResult4AvgDistinctInt64)(pr)
 	if p.count == 0 {
 		chk.AppendNull(e.ordinal)
 		return nil
 	}
-	decimalCount := types.NewDecFromInt(p.count)
-	finalResult := new(types.MyDecimal)
-	err := types.DecimalDiv(&p.sum, decimalCount, finalResult, types.DivFracIncr)
-	if err != nil {
-		return err
-	}
-	// Make the decimal be the result of type inferring.
-	frac := e.args[0].GetType().Decimal
-	if frac == -1 {
-		frac = mysql.MaxDecimalScale
-	}
-	err = finalResult.Round(finalResult, mathutil.Min(frac, mysql.MaxDecimalScale), types.ModeHalfEven)
-	if err != nil {
-		return err
-	}
-	chk.AppendMyDecimal(e.ordinal, finalResult)
+	chk.AppendInt64(e.ordinal, p.sum/p.count)
 	return nil
 }
 

@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -41,20 +40,14 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
-	"github.com/pingcap/tidb/util/timeutil"
-	"github.com/pingcap/tipb/go-tipb"
 )
 
 func TestT(t *testing.T) {
@@ -1203,70 +1196,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	c.Assert(fields[0].ColumnAsName.L, Equals, "if(1,c,c)")
 }
 
-func (s *testSuiteP2) TestHistoryRead(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists history_read")
-	tk.MustExec("create table history_read (a int)")
-	tk.MustExec("insert history_read values (1)")
-
-	// For mocktikv, safe point is not initialized, we manually insert it for snapshot to use.
-	safePointName := "tikv_gc_safe_point"
-	safePointValue := "20060102-15:04:05 -0700"
-	safePointComment := "All versions after safe point can be accessed. (DO NOT EDIT)"
-	updateSafePoint := fmt.Sprintf(`INSERT INTO mysql.tidb VALUES ('%[1]s', '%[2]s', '%[3]s')
-	ON DUPLICATE KEY
-	UPDATE variable_value = '%[2]s', comment = '%[3]s'`, safePointName, safePointValue, safePointComment)
-	tk.MustExec(updateSafePoint)
-
-	// Set snapshot to a time before save point will fail.
-	_, err := tk.Exec("set @@tidb_snapshot = '2006-01-01 15:04:05.999999'")
-	c.Assert(terror.ErrorEqual(err, variable.ErrSnapshotTooOld), IsTrue, Commentf("err %v", err))
-	// SnapshotTS Is not updated if check failed.
-	c.Assert(tk.Se.GetSessionVars().SnapshotTS, Equals, uint64(0))
-
-	curVer1, _ := s.store.CurrentVersion()
-	time.Sleep(time.Millisecond)
-	snapshotTime := time.Now()
-	time.Sleep(time.Millisecond)
-	curVer2, _ := s.store.CurrentVersion()
-	tk.MustExec("insert history_read values (2)")
-	tk.MustQuery("select * from history_read").Check(testkit.Rows("1", "2"))
-	tk.MustExec("set @@tidb_snapshot = '" + snapshotTime.Format("2006-01-02 15:04:05.999999") + "'")
-	ctx := tk.Se.(sessionctx.Context)
-	snapshotTS := ctx.GetSessionVars().SnapshotTS
-	c.Assert(snapshotTS, Greater, curVer1.Ver)
-	c.Assert(snapshotTS, Less, curVer2.Ver)
-	tk.MustQuery("select * from history_read").Check(testkit.Rows("1"))
-	_, err = tk.Exec("insert history_read values (2)")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("update history_read set a = 3 where a = 1")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("delete from history_read where a = 1")
-	c.Assert(err, NotNil)
-	tk.MustExec("set @@tidb_snapshot = ''")
-	tk.MustQuery("select * from history_read").Check(testkit.Rows("1", "2"))
-	tk.MustExec("insert history_read values (3)")
-	tk.MustExec("update history_read set a = 4 where a = 3")
-	tk.MustExec("delete from history_read where a = 1")
-
-	time.Sleep(time.Millisecond)
-	snapshotTime = time.Now()
-	time.Sleep(time.Millisecond)
-	tk.MustExec("alter table history_read add column b int")
-	tk.MustExec("insert history_read values (8, 8), (9, 9)")
-	tk.MustQuery("select * from history_read order by a").Check(testkit.Rows("2 <nil>", "4 <nil>", "8 8", "9 9"))
-	tk.MustExec("set @@tidb_snapshot = '" + snapshotTime.Format("2006-01-02 15:04:05.999999") + "'")
-	tk.MustQuery("select * from history_read order by a").Check(testkit.Rows("2", "4"))
-	tsoStr := strconv.FormatUint(oracle.EncodeTSO(snapshotTime.UnixNano()/int64(time.Millisecond)), 10)
-
-	tk.MustExec("set @@tidb_snapshot = '" + tsoStr + "'")
-	tk.MustQuery("select * from history_read order by a").Check(testkit.Rows("2", "4"))
-
-	tk.MustExec("set @@tidb_snapshot = ''")
-	tk.MustQuery("select * from history_read order by a").Check(testkit.Rows("2 <nil>", "4 <nil>", "8 8", "9 9"))
-}
-
 func (s *testSuite2) TestLowResolutionTSORead(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("set @@autocommit=1")
@@ -1510,46 +1439,6 @@ func (s *testSuite2) TestAddIndexPriority(c *C) {
 	cli.mu.Unlock()
 }
 
-func (s *testSuite1) TestAlterTableComment(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t_1")
-	tk.MustExec("create table t_1 (c1 int, c2 int, c3 int default 1, index (c1)) comment = 'test table';")
-	tk.MustExec("alter table `t_1` comment 'this is table comment';")
-	result := tk.MustQuery("select table_comment from information_schema.tables where table_name = 't_1';")
-	result.Check(testkit.Rows("this is table comment"))
-	tk.MustExec("alter table `t_1` comment 'table t comment';")
-	result = tk.MustQuery("select table_comment from information_schema.tables where table_name = 't_1';")
-	result.Check(testkit.Rows("table t comment"))
-}
-
-func (s *testSuite) TestTimezonePushDown(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t (ts timestamp)")
-	defer tk.MustExec("drop table t")
-	tk.MustExec(`insert into t values ("2018-09-13 10:02:06")`)
-
-	systemTZ := timeutil.SystemLocation()
-	c.Assert(systemTZ.String(), Not(Equals), "System")
-	c.Assert(systemTZ.String(), Not(Equals), "Local")
-	ctx := context.Background()
-	count := 0
-	ctx1 := context.WithValue(ctx, "CheckSelectRequestHook", func(req *kv.Request) {
-		count += 1
-		dagReq := new(tipb.DAGRequest)
-		err := proto.Unmarshal(req.Data, dagReq)
-		c.Assert(err, IsNil)
-		c.Assert(dagReq.GetTimeZoneName(), Equals, systemTZ.String())
-	})
-	tk.Se.Execute(ctx1, `select * from t where ts = "2018-09-13 10:02:06"`)
-
-	tk.MustExec(`set time_zone="System"`)
-	tk.Se.Execute(ctx1, `select * from t where ts = "2018-09-13 10:02:06"`)
-
-	c.Assert(count, Equals, 2) // Make sure the hook function is called.
-}
-
 func (s *testSuite) TestNotFillCacheFlag(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -1625,62 +1514,6 @@ func (s *testSuite) TestHandleTransfer(c *C) {
 	tk.MustQuery("select * from t use index(idx) order by a").Check(testkit.Rows("1 1", "2 2", "3 3"))
 }
 
-func (s *testSuite) TestBit(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(2))")
-	tk.MustExec("insert into t values (0), (1), (2), (3)")
-	_, err := tk.Exec("insert into t values (4)")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("insert into t values ('a')")
-	c.Assert(err, NotNil)
-	r, err := tk.Exec("select * from t where c1 = 2")
-	c.Assert(err, IsNil)
-	req := r.NewChunk()
-	err = r.Next(context.Background(), req)
-	c.Assert(err, IsNil)
-	c.Assert(types.BinaryLiteral(req.GetRow(0).GetBytes(0)), DeepEquals, types.NewBinaryLiteralFromUint(2, -1))
-	r.Close()
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(31))")
-	tk.MustExec("insert into t values (0x7fffffff)")
-	_, err = tk.Exec("insert into t values (0x80000000)")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("insert into t values (0xffffffff)")
-	c.Assert(err, NotNil)
-	tk.MustExec("insert into t values ('123')")
-	tk.MustExec("insert into t values ('1234')")
-	_, err = tk.Exec("insert into t values ('12345)")
-	c.Assert(err, NotNil)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(62))")
-	tk.MustExec("insert into t values ('12345678')")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(61))")
-	_, err = tk.Exec("insert into t values ('12345678')")
-	c.Assert(err, NotNil)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(32))")
-	tk.MustExec("insert into t values (0x7fffffff)")
-	tk.MustExec("insert into t values (0xffffffff)")
-	_, err = tk.Exec("insert into t values (0x1ffffffff)")
-	c.Assert(err, NotNil)
-	tk.MustExec("insert into t values ('1234')")
-	_, err = tk.Exec("insert into t values ('12345')")
-	c.Assert(err, NotNil)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 bit(64))")
-	tk.MustExec("insert into t values (0xffffffffffffffff)")
-	tk.MustExec("insert into t values ('12345678')")
-	_, err = tk.Exec("insert into t values ('123456789')")
-	c.Assert(err, NotNil)
-}
-
 func (s *testSuite) TestSubqueryInValues(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 
@@ -1745,12 +1578,6 @@ func (s *testSuite) TestUnsignedPk(c *C) {
 	tk.MustExec("insert into t values(9223372036854775808, 1), (1, 1)")
 	tk.MustQuery("select * from t use index(idx) where b = 1 and a < 2").Check(testkit.Rows("1 1"))
 	tk.MustQuery("select * from t use index(idx) where b = 1 order by b, a").Check(testkit.Rows("1 1", "9223372036854775808 1"))
-}
-
-func (s *testSuite) TestIssue5666(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("set @@profiling=1")
-	tk.MustQuery("SELECT QUERY_ID, SUM(DURATION) AS SUM_DURATION FROM INFORMATION_SCHEMA.PROFILING GROUP BY QUERY_ID;").Check(testkit.Rows("0 0"))
 }
 
 func (s *testSuite) TestIssue5341(c *C) {
@@ -1819,15 +1646,6 @@ func (s *testSuite) TestLimit(c *C) {
 		"5 5",
 		"6 6",
 	))
-}
-
-func (s *testSuite3) TestYearTypeDeleteIndex(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a YEAR, PRIMARY KEY(a));")
-	tk.MustExec("insert into t set a = '2151';")
-	tk.MustExec("delete from t;")
 }
 
 func (s *testSuite3) TestIndexJoinTableDualPanic(c *C) {

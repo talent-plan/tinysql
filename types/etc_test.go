@@ -197,22 +197,6 @@ func (s *testTypeEtcSuite) TestTruncate(c *C) {
 	}
 }
 
-func (s *testTypeEtcSuite) TestIsTypeTemporal(c *C) {
-	defer testleak.AfterTest(c)()
-	res := IsTypeTemporal(mysql.TypeDuration)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeDatetime)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeTimestamp)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeDate)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeNewDate)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal('t')
-	c.Assert(res, Equals, false)
-}
-
 func (s *testTypeEtcSuite) TestIsBinaryStr(c *C) {
 	defer testleak.AfterTest(c)()
 	in := FieldType{
@@ -260,22 +244,6 @@ func (s *testTypeEtcSuite) TestIsNonBinaryStr(c *C) {
 	c.Assert(res, Equals, false)
 }
 
-func (s *testTypeEtcSuite) TestIsTemporalWithDate(c *C) {
-	defer testleak.AfterTest(c)()
-
-	res := IsTemporalWithDate(mysql.TypeDatetime)
-	c.Assert(res, Equals, true)
-
-	res = IsTemporalWithDate(mysql.TypeDate)
-	c.Assert(res, Equals, true)
-
-	res = IsTemporalWithDate(mysql.TypeTimestamp)
-	c.Assert(res, Equals, true)
-
-	res = IsTemporalWithDate('t')
-	c.Assert(res, Equals, false)
-}
-
 func (s *testTypeEtcSuite) TestIsTypePrefixable(c *C) {
 	defer testleak.AfterTest(c)()
 
@@ -284,22 +252,6 @@ func (s *testTypeEtcSuite) TestIsTypePrefixable(c *C) {
 
 	res = IsTypePrefixable(mysql.TypeBlob)
 	c.Assert(res, Equals, true)
-}
-
-func (s *testTypeEtcSuite) TestIsTypeFractionable(c *C) {
-	defer testleak.AfterTest(c)()
-
-	res := IsTypeFractionable(mysql.TypeDatetime)
-	c.Assert(res, Equals, true)
-
-	res = IsTypeFractionable(mysql.TypeDuration)
-	c.Assert(res, Equals, true)
-
-	res = IsTypeFractionable(mysql.TypeTimestamp)
-	c.Assert(res, Equals, true)
-
-	res = IsTypeFractionable('t')
-	c.Assert(res, Equals, false)
 }
 
 func (s *testTypeEtcSuite) TestIsTypeNumeric(c *C) {

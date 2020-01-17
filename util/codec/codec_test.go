@@ -24,7 +24,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -69,16 +68,6 @@ func (s *testCodecSuite) TestCodecKey(c *C) {
 		{
 			types.MakeDatums(nil),
 			types.MakeDatums(nil),
-		},
-
-		{
-			types.MakeDatums(types.NewBinaryLiteralFromUint(100, -1), types.NewBinaryLiteralFromUint(100, 4)),
-			types.MakeDatums(uint64(100), uint64(100)),
-		},
-
-		{
-			types.MakeDatums(types.Enum{Name: "a", Value: 1}, types.Set{Name: "a", Value: 1}),
-			types.MakeDatums(uint64(1), uint64(1)),
 		},
 	}
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
@@ -199,16 +188,6 @@ func (s *testCodecSuite) TestCodecKeyCompare(c *C) {
 			types.MakeDatums(1, []byte{}, nil),
 			types.MakeDatums(1, nil, 123),
 			1,
-		},
-		{
-			types.MakeDatums(parseTime(c, "2011-11-11 00:00:00"), 1),
-			types.MakeDatums(parseTime(c, "2011-11-11 00:00:00"), 0),
-			1,
-		},
-		{
-			types.MakeDatums(parseDuration(c, "00:00:00"), 1),
-			types.MakeDatums(parseDuration(c, "00:00:01"), 0),
-			-1,
 		},
 		{
 			[]types.Datum{types.MinNotNullDatum()},
@@ -528,275 +507,6 @@ func (s *testCodecSuite) TestBytes(c *C) {
 	}
 }
 
-func parseTime(c *C, s string) types.Time {
-	m, err := types.ParseTime(nil, s, mysql.TypeDatetime, types.DefaultFsp)
-	c.Assert(err, IsNil)
-	return m
-}
-
-func parseDuration(c *C, s string) types.Duration {
-	m, err := types.ParseDuration(nil, s, types.DefaultFsp)
-	c.Assert(err, IsNil)
-	return m
-}
-
-func (s *testCodecSuite) TestTime(c *C) {
-	defer testleak.AfterTest(c)()
-	tbl := []string{
-		"2011-01-01 00:00:00",
-		"2011-01-01 00:00:00",
-		"0001-01-01 00:00:00",
-	}
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	for _, t := range tbl {
-		m := types.NewDatum(parseTime(c, t))
-
-		b, err := EncodeKey(sc, nil, m)
-		c.Assert(err, IsNil)
-		v, err := Decode(b, 1)
-		c.Assert(err, IsNil)
-		var t types.Time
-		t.Type = mysql.TypeDatetime
-		t.FromPackedUint(v[0].GetUint64())
-		c.Assert(types.NewDatum(t), DeepEquals, m)
-	}
-
-	tblCmp := []struct {
-		Arg1 string
-		Arg2 string
-		Ret  int
-	}{
-		{"2011-10-10 00:00:00", "2000-12-12 11:11:11", 1},
-		{"2000-10-10 00:00:00", "2001-10-10 00:00:00", -1},
-		{"2000-10-10 00:00:00", "2000-10-10 00:00:00", 0},
-	}
-
-	for _, t := range tblCmp {
-		m1 := types.NewDatum(parseTime(c, t.Arg1))
-		m2 := types.NewDatum(parseTime(c, t.Arg2))
-
-		b1, err := EncodeKey(sc, nil, m1)
-		c.Assert(err, IsNil)
-		b2, err := EncodeKey(sc, nil, m2)
-		c.Assert(err, IsNil)
-
-		ret := bytes.Compare(b1, b2)
-		c.Assert(ret, Equals, t.Ret)
-	}
-}
-
-func (s *testCodecSuite) TestDuration(c *C) {
-	defer testleak.AfterTest(c)()
-	tbl := []string{
-		"11:11:11",
-		"00:00:00",
-		"1 11:11:11",
-	}
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	for _, t := range tbl {
-		m := parseDuration(c, t)
-
-		b, err := EncodeKey(sc, nil, types.NewDatum(m))
-		c.Assert(err, IsNil)
-		v, err := Decode(b, 1)
-		c.Assert(err, IsNil)
-		m.Fsp = types.MaxFsp
-		c.Assert(v, DeepEquals, types.MakeDatums(m))
-	}
-
-	tblCmp := []struct {
-		Arg1 string
-		Arg2 string
-		Ret  int
-	}{
-		{"20:00:00", "11:11:11", 1},
-		{"00:00:00", "00:00:01", -1},
-		{"00:00:00", "00:00:00", 0},
-	}
-
-	for _, t := range tblCmp {
-		m1 := parseDuration(c, t.Arg1)
-		m2 := parseDuration(c, t.Arg2)
-
-		b1, err := EncodeKey(sc, nil, types.NewDatum(m1))
-		c.Assert(err, IsNil)
-		b2, err := EncodeKey(sc, nil, types.NewDatum(m2))
-		c.Assert(err, IsNil)
-
-		ret := bytes.Compare(b1, b2)
-		c.Assert(ret, Equals, t.Ret)
-	}
-}
-
-func (s *testCodecSuite) TestDecimal(c *C) {
-	defer testleak.AfterTest(c)()
-	tbl := []string{
-		"1234.00",
-		"1234",
-		"12.34",
-		"12.340",
-		"0.1234",
-		"0.0",
-		"0",
-		"-0.0",
-		"-0.0000",
-		"-1234.00",
-		"-1234",
-		"-12.34",
-		"-12.340",
-		"-0.1234",
-	}
-	sc := &stmtctx.StatementContext{TimeZone: time.Local}
-	for _, t := range tbl {
-		dec := new(types.MyDecimal)
-		err := dec.FromString([]byte(t))
-		c.Assert(err, IsNil)
-		b, err := EncodeKey(sc, nil, types.NewDatum(dec))
-		c.Assert(err, IsNil)
-		v, err := Decode(b, 1)
-		c.Assert(err, IsNil)
-		c.Assert(v, HasLen, 1)
-		vv := v[0].GetMysqlDecimal()
-		c.Assert(vv.Compare(dec), Equals, 0)
-	}
-
-	tblCmp := []struct {
-		Arg1 interface{}
-		Arg2 interface{}
-		Ret  int
-	}{
-		// Test for float type decimal.
-		{"1234", "123400", -1},
-		{"12340", "123400", -1},
-		{"1234", "1234.5", -1},
-		{"1234", "1234.0000", 0},
-		{"1234", "12.34", 1},
-		{"12.34", "12.35", -1},
-		{"0.12", "0.1234", -1},
-		{"0.1234", "12.3400", -1},
-		{"0.1234", "0.1235", -1},
-		{"0.123400", "12.34", -1},
-		{"12.34000", "12.34", 0},
-		{"0.01234", "0.01235", -1},
-		{"0.1234", "0", 1},
-		{"0.0000", "0", 0},
-		{"0.0001", "0", 1},
-		{"0.0001", "0.0000", 1},
-		{"0", "-0.0000", 0},
-		{"-0.0001", "0", -1},
-		{"-0.1234", "0", -1},
-		{"-0.1234", "-0.12", -1},
-		{"-0.12", "-0.1234", 1},
-		{"-0.12", "-0.1200", 0},
-		{"-0.1234", "0.1234", -1},
-		{"-1.234", "-12.34", 1},
-		{"-0.1234", "-12.34", 1},
-		{"-12.34", "1234", -1},
-		{"-12.34", "-12.35", 1},
-		{"-0.01234", "-0.01235", 1},
-		{"-1234", "-123400", 1},
-		{"-12340", "-123400", 1},
-
-		// Test for int type decimal.
-		{int64(-1), int64(1), -1},
-		{int64(math.MaxInt64), int64(math.MinInt64), 1},
-		{int64(math.MaxInt64), int64(math.MaxInt32), 1},
-		{int64(math.MinInt32), int64(math.MaxInt16), -1},
-		{int64(math.MinInt64), int64(math.MaxInt8), -1},
-		{int64(0), int64(math.MaxInt8), -1},
-		{int64(math.MinInt8), int64(0), -1},
-		{int64(math.MinInt16), int64(math.MaxInt16), -1},
-		{int64(1), int64(-1), 1},
-		{int64(1), int64(0), 1},
-		{int64(-1), int64(0), -1},
-		{int64(0), int64(0), 0},
-		{int64(math.MaxInt16), int64(math.MaxInt16), 0},
-
-		// Test for uint type decimal.
-		{uint64(0), uint64(0), 0},
-		{uint64(1), uint64(0), 1},
-		{uint64(0), uint64(1), -1},
-		{uint64(math.MaxInt8), uint64(math.MaxInt16), -1},
-		{uint64(math.MaxUint32), uint64(math.MaxInt32), 1},
-		{uint64(math.MaxUint8), uint64(math.MaxInt8), 1},
-		{uint64(math.MaxUint16), uint64(math.MaxInt32), -1},
-		{uint64(math.MaxUint64), uint64(math.MaxInt64), 1},
-		{uint64(math.MaxInt64), uint64(math.MaxUint32), 1},
-		{uint64(math.MaxUint64), uint64(0), 1},
-		{uint64(0), uint64(math.MaxUint64), -1},
-	}
-	for _, t := range tblCmp {
-		d1 := types.NewDatum(t.Arg1)
-		dec1, err := d1.ToDecimal(sc)
-		c.Assert(err, IsNil)
-		d1.SetMysqlDecimal(dec1)
-		d2 := types.NewDatum(t.Arg2)
-		dec2, err := d2.ToDecimal(sc)
-		c.Assert(err, IsNil)
-		d2.SetMysqlDecimal(dec2)
-
-		d1.SetLength(30)
-		d1.SetFrac(6)
-		d2.SetLength(30)
-		d2.SetFrac(6)
-		b1, err := EncodeKey(sc, nil, d1)
-		c.Assert(err, IsNil)
-		b2, err := EncodeKey(sc, nil, d2)
-		c.Assert(err, IsNil)
-
-		ret := bytes.Compare(b1, b2)
-		c.Assert(ret, Equals, t.Ret, Commentf("%v %x %x", t, b1, b2))
-
-		b1, err = EncodeValue(sc, b1[:0], d1)
-		c.Assert(err, IsNil)
-		size, err := EstimateValueSize(sc, d1)
-		c.Assert(err, IsNil)
-		c.Assert(len(b1), Equals, size)
-
-	}
-
-	floats := []float64{-123.45, -123.40, -23.45, -1.43, -0.93, -0.4333, -0.068,
-		-0.0099, 0, 0.001, 0.0012, 0.12, 1.2, 1.23, 123.3, 2424.242424}
-	decs := make([][]byte, 0, len(floats))
-	for i := range floats {
-		dec := types.NewDecFromFloatForTest(floats[i])
-		var d types.Datum
-		d.SetLength(20)
-		d.SetFrac(6)
-		d.SetMysqlDecimal(dec)
-		b, err := EncodeDecimal(nil, d.GetMysqlDecimal(), d.Length(), d.Frac())
-		c.Assert(err, IsNil)
-		decs = append(decs, b)
-		size, err := EstimateValueSize(sc, d)
-		c.Assert(err, IsNil)
-		// size - 1 because the flag occupy 1 bit.
-		c.Assert(len(b), Equals, size-1)
-	}
-	for i := 0; i < len(decs)-1; i++ {
-		cmp := bytes.Compare(decs[i], decs[i+1])
-		c.Assert(cmp, LessEqual, 0)
-	}
-
-	d := types.NewDecFromStringForTest("-123.123456789")
-	_, err := EncodeDecimal(nil, d, 20, 5)
-	c.Assert(terror.ErrorEqual(err, types.ErrTruncated), IsTrue, Commentf("err %v", err))
-	_, err = EncodeDecimal(nil, d, 12, 10)
-	c.Assert(terror.ErrorEqual(err, types.ErrOverflow), IsTrue, Commentf("err %v", err))
-
-	sc.IgnoreTruncate = true
-	decimalDatum := types.NewDatum(d)
-	decimalDatum.SetLength(20)
-	decimalDatum.SetFrac(5)
-	_, err = EncodeValue(sc, nil, decimalDatum)
-	c.Assert(err, IsNil)
-
-	sc.OverflowAsWarning = true
-	decimalDatum.SetLength(12)
-	decimalDatum.SetFrac(10)
-	_, err = EncodeValue(sc, nil, decimalDatum)
-	c.Assert(err, IsNil)
-}
-
 func (s *testCodecSuite) TestCut(c *C) {
 	defer testleak.AfterTest(c)()
 	table := []struct {
@@ -826,23 +536,9 @@ func (s *testCodecSuite) TestCut(c *C) {
 			types.MakeDatums(nil),
 			types.MakeDatums(nil),
 		},
-
-		{
-			types.MakeDatums(types.NewBinaryLiteralFromUint(100, -1), types.NewBinaryLiteralFromUint(100, 4)),
-			types.MakeDatums(uint64(100), uint64(100)),
-		},
-
-		{
-			types.MakeDatums(types.Enum{Name: "a", Value: 1}, types.Set{Name: "a", Value: 1}),
-			types.MakeDatums(uint64(1), uint64(1)),
-		},
 		{
 			types.MakeDatums(float32(1), float64(3.15), []byte("123456789012345")),
 			types.MakeDatums(float64(1), float64(3.15), []byte("123456789012345")),
-		},
-		{
-			types.MakeDatums(types.NewDecFromInt(0), types.NewDecFromFloatForTest(-1.3)),
-			types.MakeDatums(types.NewDecFromInt(0), types.NewDecFromFloatForTest(-1.3)),
 		},
 	}
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
@@ -937,7 +633,6 @@ func datumsForTest(sc *stmtctx.StatementContext) ([]types.Datum, []*types.FieldT
 		{uint64(1), types.NewFieldType(mysql.TypeLonglong)},
 		{float32(1), types.NewFieldType(mysql.TypeFloat)},
 		{float64(1), types.NewFieldType(mysql.TypeDouble)},
-		{types.NewDecFromInt(1), types.NewFieldType(mysql.TypeNewDecimal)},
 		{"abc", types.NewFieldType(mysql.TypeString)},
 		{"def", types.NewFieldType(mysql.TypeVarchar)},
 		{"ghi", types.NewFieldType(mysql.TypeVarString)},
@@ -945,16 +640,6 @@ func datumsForTest(sc *stmtctx.StatementContext) ([]types.Datum, []*types.FieldT
 		{[]byte("abc"), types.NewFieldType(mysql.TypeTinyBlob)},
 		{[]byte("abc"), types.NewFieldType(mysql.TypeMediumBlob)},
 		{[]byte("abc"), types.NewFieldType(mysql.TypeLongBlob)},
-		{types.CurrentTime(mysql.TypeDatetime), types.NewFieldType(mysql.TypeDatetime)},
-		{types.CurrentTime(mysql.TypeDate), types.NewFieldType(mysql.TypeDate)},
-		{types.Time{
-			Time: types.FromGoTime(time.Now()),
-			Type: mysql.TypeTimestamp,
-		}, types.NewFieldType(mysql.TypeTimestamp)},
-		{types.Duration{Duration: time.Second, Fsp: 1}, types.NewFieldType(mysql.TypeDuration)},
-		{types.Enum{Name: "a", Value: 0}, &types.FieldType{Tp: mysql.TypeEnum, Elems: []string{"a"}}},
-		{types.Set{Name: "a", Value: 0}, &types.FieldType{Tp: mysql.TypeSet, Elems: []string{"a"}}},
-		{types.BinaryLiteral{100}, &types.FieldType{Tp: mysql.TypeBit, Flen: 8}},
 		{int64(1), types.NewFieldType(mysql.TypeYear)},
 	}
 
@@ -1075,13 +760,6 @@ func (s *testCodecSuite) TestHashChunkRow(c *C) {
 
 	testHashChunkRowEqual(c, uint64(1), int64(1), true)
 	testHashChunkRowEqual(c, uint64(18446744073709551615), int64(-1), false)
-
-	dec1 := types.NewDecFromStringForTest("1.1")
-	dec2 := types.NewDecFromStringForTest("01.100")
-	testHashChunkRowEqual(c, dec1, dec2, true)
-	dec1 = types.NewDecFromStringForTest("1.1")
-	dec2 = types.NewDecFromStringForTest("01.200")
-	testHashChunkRowEqual(c, dec1, dec2, false)
 
 	testHashChunkRowEqual(c, float32(1.0), float64(1.0), true)
 	testHashChunkRowEqual(c, float32(1.0), float64(1.1), false)

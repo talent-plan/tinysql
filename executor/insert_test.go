@@ -21,7 +21,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 )
 
@@ -210,51 +209,6 @@ func (s *testSuite3) TestInsertWrongValueForField(c *C) {
 	c.Assert(terror.ErrorEqual(err, table.ErrTruncatedWrongValueForField), IsTrue)
 }
 
-func (s *testSuite3) TestInsertDateTimeWithTimeZone(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec(`use test;`)
-	tk.MustExec(`set time_zone="+09:00";`)
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t (id int, c1 datetime not null default CURRENT_TIMESTAMP);`)
-	tk.MustExec(`set TIMESTAMP = 1234;`)
-	tk.MustExec(`insert t (id) values (1);`)
-
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(
-		`1 1970-01-01 09:20:34`,
-	))
-}
-
-func (s *testSuite3) TestInsertZeroYear(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t1;`)
-	tk.MustExec(`create table t1(a year(4));`)
-	tk.MustExec(`insert into t1 values(0000),(00),("0000"),("000"), ("00"), ("0"), (79), ("79");`)
-	tk.MustQuery(`select * from t1;`).Check(testkit.Rows(
-		`0`,
-		`0`,
-		`0`,
-		`2000`,
-		`2000`,
-		`2000`,
-		`1979`,
-		`1979`,
-	))
-
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(f_year year NOT NULL DEFAULT '0000')ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`)
-	tk.MustExec(`insert into t values();`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(
-		`0`,
-	))
-	tk.MustExec(`insert into t values('0000');`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows(
-		`0`,
-		`0`,
-	))
-}
-
 func (s *testSuite3) TestPartitionInsertOnDuplicate(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec(`use test`)
@@ -279,24 +233,6 @@ func (s *testSuite3) TestPartitionInsertOnDuplicate(c *C) {
 	tk.MustExec("insert into t3 values (1,2,3,4,5)")
 	tk.MustExec("insert into t3 values (1,2,3,4,5),(6,2,3,4,6) on duplicate key update e = e + values(e)")
 	tk.MustQuery("select * from t3").Check(testkit.Rows("1 2 3 4 16"))
-}
-
-func (s *testSuite3) TestBit(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec(`use test`)
-	tk.MustExec(`create table t1 (a bit(3))`)
-	_, err := tk.Exec("insert into t1 values(-1)")
-	c.Assert(types.ErrDataTooLong.Equal(err), IsTrue)
-	c.Assert(err.Error(), Matches, ".*Data too long for column 'a' at.*")
-	_, err = tk.Exec("insert into t1 values(9)")
-	c.Assert(err.Error(), Matches, ".*Data too long for column 'a' at.*")
-
-	tk.MustExec(`create table t64 (a bit(64))`)
-	tk.MustExec("insert into t64 values(-1)")
-	tk.MustExec("insert into t64 values(18446744073709551615)")      // 2^64 - 1
-	_, err = tk.Exec("insert into t64 values(18446744073709551616)") // z^64
-	c.Assert(err.Error(), Matches, ".*Out of range value for column 'a' at.*")
-
 }
 
 func (s *testSuite3) TestAllocateContinuousRowID(c *C) {

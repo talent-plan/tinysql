@@ -29,6 +29,25 @@ func generateKeys4Schema(schema *Schema) {
 	schema.Keys = keys
 }
 
+var _ = Suite(&testEvalSuite{})
+
+type testEvalSuite struct {
+	colID int64
+}
+
+func (s *testEvalSuite) SetUpSuite(c *C) {
+	s.colID = 0
+}
+
+func (s *testEvalSuite) allocColID() int64 {
+	s.colID++
+	return s.colID
+}
+
+func (s *testEvalSuite) TearDownTest(c *C) {
+	s.colID = 0
+}
+
 // generateSchema will generate a schema for test. Used only in this file.
 func (s *testEvalSuite) generateSchema(colCount int) *Schema {
 	cols := make([]*Column, 0, colCount)

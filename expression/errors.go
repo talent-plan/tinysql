@@ -32,7 +32,6 @@ var (
 
 	// All the un-exported errors are defined here:
 	errFunctionNotExists = terror.ClassExpression.New(mysql.ErrSpDoesNotExist, mysql.MySQLErrName[mysql.ErrSpDoesNotExist])
-	errDefaultValue      = terror.ClassExpression.New(mysql.ErrInvalidDefault, "invalid default value")
 	errNonUniq           = terror.ClassExpression.New(mysql.ErrNonUniq, mysql.MySQLErrName[mysql.ErrNonUniq])
 )
 

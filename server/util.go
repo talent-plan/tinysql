@@ -36,19 +36,14 @@ package server
 
 import (
 	"bytes"
-	"encoding/binary"
-	"io"
-	"math"
-	"net/http"
-	"strconv"
-	"time"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/hack"
+	"io"
+	"math"
+	"net/http"
+	"strconv"
 )
 
 func parseNullTermString(b []byte) (str []byte, remain []byte) {
@@ -173,62 +168,6 @@ func init() {
 	}
 }
 
-func dumpBinaryTime(dur time.Duration) (data []byte) {
-	if dur == 0 {
-		data = tinyIntCache[0]
-		return
-	}
-	data = make([]byte, 13)
-	data[0] = 12
-	if dur < 0 {
-		data[1] = 1
-		dur = -dur
-	}
-	days := dur / (24 * time.Hour)
-	dur -= days * 24 * time.Hour
-	data[2] = byte(days)
-	hours := dur / time.Hour
-	dur -= hours * time.Hour
-	data[6] = byte(hours)
-	minutes := dur / time.Minute
-	dur -= minutes * time.Minute
-	data[7] = byte(minutes)
-	seconds := dur / time.Second
-	dur -= seconds * time.Second
-	data[8] = byte(seconds)
-	if dur == 0 {
-		data[0] = 8
-		return data[:9]
-	}
-	binary.LittleEndian.PutUint32(data[9:13], uint32(dur/time.Microsecond))
-	return
-}
-
-func dumpBinaryDateTime(data []byte, t types.Time, loc *time.Location) ([]byte, error) {
-	if t.Type == mysql.TypeTimestamp && loc != nil {
-		// TODO: Consider time_zone variable.
-		t1, err := t.Time.GoTime(time.Local)
-		if err != nil {
-			return nil, errors.Errorf("FATAL: convert timestamp %v go time return error!", t.Time)
-		}
-		t.Time = types.FromGoTime(t1.In(loc))
-	}
-
-	year, mon, day := t.Time.Year(), t.Time.Month(), t.Time.Day()
-	switch t.Type {
-	case mysql.TypeTimestamp, mysql.TypeDatetime:
-		data = append(data, 11)
-		data = dumpUint16(data, uint16(year))
-		data = append(data, byte(mon), byte(day), byte(t.Time.Hour()), byte(t.Time.Minute()), byte(t.Time.Second()))
-		data = dumpUint32(data, uint32(t.Time.Microsecond()))
-	case mysql.TypeDate:
-		data = append(data, 4)
-		data = dumpUint16(data, uint16(year)) //year
-		data = append(data, byte(mon), byte(day))
-	}
-	return data, nil
-}
-
 func dumpBinaryRow(buffer []byte, columns []*ColumnInfo, row chunk.Row) ([]byte, error) {
 	buffer = append(buffer, mysql.OKHeader)
 	nullBitmapOff := len(buffer)
@@ -256,23 +195,9 @@ func dumpBinaryRow(buffer []byte, columns []*ColumnInfo, row chunk.Row) ([]byte,
 			buffer = dumpUint32(buffer, math.Float32bits(row.GetFloat32(i)))
 		case mysql.TypeDouble:
 			buffer = dumpUint64(buffer, math.Float64bits(row.GetFloat64(i)))
-		case mysql.TypeNewDecimal:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetMyDecimal(i).String()))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeBit,
 			mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 			buffer = dumpLengthEncodedString(buffer, row.GetBytes(i))
-		case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-			var err error
-			buffer, err = dumpBinaryDateTime(buffer, row.GetTime(i), nil)
-			if err != nil {
-				return buffer, err
-			}
-		case mysql.TypeDuration:
-			buffer = append(buffer, dumpBinaryTime(row.GetDuration(i, 0).Duration)...)
-		case mysql.TypeEnum:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetEnum(i).String()))
-		case mysql.TypeSet:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetSet(i).String()))
 		default:
 			return nil, errInvalidType.GenWithStack("invalid type %v", columns[i].Type)
 		}
@@ -321,20 +246,9 @@ func dumpTextRow(buffer []byte, columns []*ColumnInfo, row chunk.Row) ([]byte, e
 			}
 			tmp = appendFormatFloat(tmp[:0], row.GetFloat64(i), prec, 64)
 			buffer = dumpLengthEncodedString(buffer, tmp)
-		case mysql.TypeNewDecimal:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetMyDecimal(i).String()))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeBit,
 			mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 			buffer = dumpLengthEncodedString(buffer, row.GetBytes(i))
-		case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetTime(i).String()))
-		case mysql.TypeDuration:
-			dur := row.GetDuration(i, int(col.Decimal))
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(dur.String()))
-		case mysql.TypeEnum:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetEnum(i).String()))
-		case mysql.TypeSet:
-			buffer = dumpLengthEncodedString(buffer, hack.Slice(row.GetSet(i).String()))
 		default:
 			return nil, errInvalidType.GenWithStack("invalid type %v", columns[i].Type)
 		}

@@ -105,7 +105,6 @@
       "select * from t where t.c = 1 and t.a > 1 order by t.d limit 1",
       // Test index filter condition push down.
       "select * from t use index(e_d_c_str_prefix) where t.c_str = 'abcdefghijk' and t.d_str = 'd' and t.e_str = 'e'",
-      "select * from t use index(e_d_c_str_prefix) where t.e_str = b'1110000'",
       "select * from (select * from t use index() order by b) t left join t t1 on t.a=t1.a limit 10",
       // Test embedded ORDER BY which imposes on different number of columns than outer query.
       "select * from ((SELECT 1 a,3 b) UNION (SELECT 2,1) ORDER BY (SELECT 2)) t order by a,b",

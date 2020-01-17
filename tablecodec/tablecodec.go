@@ -246,12 +246,7 @@ func DecodeRowKey(key kv.Key) (int64, error) {
 
 // EncodeValue encodes a go value to bytes.
 func EncodeValue(sc *stmtctx.StatementContext, b []byte, raw types.Datum) ([]byte, error) {
-	var v types.Datum
-	err := flatten(sc, raw, &v)
-	if err != nil {
-		return nil, err
-	}
-	return codec.EncodeValue(sc, b, v)
+	return codec.EncodeValue(sc, b, raw)
 }
 
 // EncodeRow encode row data and column ids into a slice of byte.
@@ -269,10 +264,7 @@ func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, 
 	for i, c := range row {
 		id := colIDs[i]
 		values[2*i].SetInt64(id)
-		err := flatten(sc, c, &values[2*i+1])
-		if err != nil {
-			return valBuf, errors.Trace(err)
-		}
+		values[2*i+1] = c
 	}
 	if len(values) == 0 {
 		// We could not set nil value into kv.
@@ -281,55 +273,13 @@ func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, 
 	return codec.EncodeValue(sc, valBuf, values...)
 }
 
-func flatten(sc *stmtctx.StatementContext, data types.Datum, ret *types.Datum) error {
-	switch data.Kind() {
-	case types.KindMysqlTime:
-		// for mysql datetime, timestamp and date type
-		t := data.GetMysqlTime()
-		if t.Type == mysql.TypeTimestamp && sc.TimeZone != time.UTC {
-			err := t.ConvertTimeZone(sc.TimeZone, time.UTC)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-		v, err := t.ToPackedUint()
-		ret.SetUint64(v)
-		return errors.Trace(err)
-	case types.KindMysqlDuration:
-		// for mysql time type
-		ret.SetInt64(int64(data.GetMysqlDuration().Duration))
-		return nil
-	case types.KindMysqlEnum:
-		ret.SetUint64(data.GetMysqlEnum().Value)
-		return nil
-	case types.KindMysqlSet:
-		ret.SetUint64(data.GetMysqlSet().Value)
-		return nil
-	case types.KindBinaryLiteral, types.KindMysqlBit:
-		// We don't need to handle errors here since the literal is ensured to be able to store in uint64 in convertToMysqlBit.
-		val, err := data.GetBinaryLiteral().ToInt(sc)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		ret.SetUint64(val)
-		return nil
-	default:
-		*ret = data
-		return nil
-	}
-}
-
 // DecodeColumnValue decodes data to a Datum according to the column info.
 func DecodeColumnValue(data []byte, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
 	_, d, err := codec.DecodeOne(data)
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
-	colDatum, err := unflatten(d, ft, loc)
-	if err != nil {
-		return types.Datum{}, errors.Trace(err)
-	}
-	return colDatum, nil
+	return d, nil
 }
 
 // DecodeRowWithMap decodes a byte slice into datums with a existing row map.
@@ -431,76 +381,8 @@ func CutRowNew(data []byte, colIDs map[int64]int) ([][]byte, error) {
 	return row, nil
 }
 
-// UnflattenDatums converts raw datums to column datums.
-func UnflattenDatums(datums []types.Datum, fts []*types.FieldType, loc *time.Location) ([]types.Datum, error) {
-	for i, datum := range datums {
-		ft := fts[i]
-		uDatum, err := unflatten(datum, ft, loc)
-		if err != nil {
-			return datums, errors.Trace(err)
-		}
-		datums[i] = uDatum
-	}
-	return datums, nil
-}
-
 // unflatten converts a raw datum to a column datum.
 func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
-	if datum.IsNull() {
-		return datum, nil
-	}
-	switch ft.Tp {
-	case mysql.TypeFloat:
-		datum.SetFloat32(float32(datum.GetFloat64()))
-		return datum, nil
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
-		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
-		mysql.TypeString:
-		return datum, nil
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		var t types.Time
-		t.Type = ft.Tp
-		t.Fsp = int8(ft.Decimal)
-		var err error
-		err = t.FromPackedUint(datum.GetUint64())
-		if err != nil {
-			return datum, errors.Trace(err)
-		}
-		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
-			err = t.ConvertTimeZone(time.UTC, loc)
-			if err != nil {
-				return datum, errors.Trace(err)
-			}
-		}
-		datum.SetUint64(0)
-		datum.SetMysqlTime(t)
-		return datum, nil
-	case mysql.TypeDuration: //duration should read fsp from column meta data
-		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: int8(ft.Decimal)}
-		datum.SetValue(dur)
-		return datum, nil
-	case mysql.TypeEnum:
-		// ignore error deliberately, to read empty enum value.
-		enum, err := types.ParseEnumValue(ft.Elems, datum.GetUint64())
-		if err != nil {
-			enum = types.Enum{}
-		}
-		datum.SetValue(enum)
-		return datum, nil
-	case mysql.TypeSet:
-		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
-		if err != nil {
-			return datum, errors.Trace(err)
-		}
-		datum.SetValue(set)
-		return datum, nil
-	case mysql.TypeBit:
-		val := datum.GetUint64()
-		byteSize := (ft.Flen + 7) >> 3
-		datum.SetUint64(0)
-		datum.SetMysqlBit(types.NewBinaryLiteralFromUint(val, byteSize))
-	}
 	return datum, nil
 }
 

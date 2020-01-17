@@ -78,35 +78,6 @@ func (b *builtinIfNullRealSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinIfNullDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := result.Decimals()
-	arg1 := buf1.Decimals()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) && !buf1.IsNull(i) {
-			result.SetNull(i, false)
-			arg0[i] = arg1[i]
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfNullDecimalSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinIfNullStringSig) vecEvalString(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETString, n)
@@ -140,64 +111,6 @@ func (b *builtinIfNullStringSig) vecEvalString(input *chunk.Chunk, result *chunk
 }
 
 func (b *builtinIfNullStringSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinIfNullTimeSig) vecEvalTime(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	if err := b.args[0].VecEvalTime(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDatetime, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalTime(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := result.Times()
-	arg1 := buf1.Times()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) && !buf1.IsNull(i) {
-			result.SetNull(i, false)
-			arg0[i] = arg1[i]
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfNullTimeSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinIfNullDurationSig) vecEvalDuration(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	if err := b.args[0].VecEvalDuration(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDuration, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDuration(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := result.GoDurations()
-	arg1 := buf1.GoDurations()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) && !buf1.IsNull(i) {
-			result.SetNull(i, false)
-			arg0[i] = arg1[i]
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfNullDurationSig) vectorized() bool {
 	return true
 }
 
@@ -293,52 +206,6 @@ func (b *builtinIfRealSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinIfDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalInt(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf2, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf2)
-	if err := b.args[2].VecEvalDecimal(b.ctx, input, buf2); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Int64s()
-	arg2 := buf2.Decimals()
-	rs := result.Decimals()
-	for i := 0; i < n; i++ {
-		arg := arg0[i]
-		isNull0 := buf0.IsNull(i)
-		switch {
-		case isNull0 || arg == 0:
-			if buf2.IsNull(i) {
-				result.SetNull(i, true)
-			} else {
-				result.SetNull(i, false)
-				rs[i] = arg2[i]
-			}
-		case arg != 0:
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfDecimalSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinIfStringSig) vecEvalString(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETInt, n)
@@ -390,97 +257,5 @@ func (b *builtinIfStringSig) vecEvalString(input *chunk.Chunk, result *chunk.Col
 }
 
 func (b *builtinIfStringSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinIfTimeSig) vecEvalTime(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalInt(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	if err := b.args[1].VecEvalTime(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf2, err := b.bufAllocator.get(types.ETDatetime, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf2)
-	if err := b.args[2].VecEvalTime(b.ctx, input, buf2); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Int64s()
-	arg2 := buf2.Times()
-	rs := result.Times()
-	for i := 0; i < n; i++ {
-		arg := arg0[i]
-		isNull0 := buf0.IsNull(i)
-		switch {
-		case isNull0 || arg == 0:
-			if buf2.IsNull(i) {
-				result.SetNull(i, true)
-			} else {
-				result.SetNull(i, false)
-				rs[i] = arg2[i]
-			}
-		case arg != 0:
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfTimeSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinIfDurationSig) vecEvalDuration(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETInt, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalInt(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	if err := b.args[1].VecEvalDuration(b.ctx, input, result); err != nil {
-		return err
-	}
-	buf2, err := b.bufAllocator.get(types.ETDuration, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf2)
-	if err := b.args[2].VecEvalDuration(b.ctx, input, buf2); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Int64s()
-	arg2 := buf2.GoDurations()
-	rs := result.GoDurations()
-	for i := 0; i < n; i++ {
-		arg := arg0[i]
-		isNull0 := buf0.IsNull(i)
-		switch {
-		case isNull0 || arg == 0:
-			if buf2.IsNull(i) {
-				result.SetNull(i, true)
-			} else {
-				result.SetNull(i, false)
-				rs[i] = arg2[i]
-			}
-		case arg != 0:
-		}
-	}
-	return nil
-}
-
-func (b *builtinIfDurationSig) vectorized() bool {
 	return true
 }

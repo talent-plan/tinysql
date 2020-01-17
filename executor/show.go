@@ -268,20 +268,7 @@ func (e *ShowExec) fetchShowColumns(ctx context.Context) error {
 		if desc.DefaultValue != nil {
 			// SHOW COLUMNS result expects string value
 			defaultValStr := fmt.Sprintf("%v", desc.DefaultValue)
-			// If column is timestamp, and default value is not current_timestamp, should convert the default value to the current session time zone.
-			if col.Tp == mysql.TypeTimestamp && defaultValStr != types.ZeroDatetimeStr && !strings.HasPrefix(strings.ToUpper(defaultValStr), strings.ToUpper(ast.CurrentTimestamp)) {
-				timeValue, err := table.GetColDefaultValue(e.ctx, col.ToInfo())
-				if err != nil {
-					return errors.Trace(err)
-				}
-				defaultValStr = timeValue.GetMysqlTime().String()
-			}
-			if col.Tp == mysql.TypeBit {
-				defaultValBinaryLiteral := types.BinaryLiteral(defaultValStr)
-				columnDefault = defaultValBinaryLiteral.ToBitLiteralString(true)
-			} else {
-				columnDefault = defaultValStr
-			}
+			columnDefault = defaultValStr
 		}
 
 		// The FULL keyword causes the output to include the column collation and comments,
@@ -545,33 +532,12 @@ func ConstructResultOfShowCreateTable(ctx sessionctx.Context, tableInfo *model.T
 				switch defaultValue {
 				case nil:
 					if !mysql.HasNotNullFlag(col.Flag) {
-						if col.Tp == mysql.TypeTimestamp {
-							buf.WriteString(" NULL")
-						}
 						buf.WriteString(" DEFAULT NULL")
-					}
-				case "CURRENT_TIMESTAMP":
-					buf.WriteString(" DEFAULT CURRENT_TIMESTAMP")
-					if col.Decimal > 0 {
-						buf.WriteString(fmt.Sprintf("(%d)", col.Decimal))
 					}
 				default:
 					defaultValStr := fmt.Sprintf("%v", defaultValue)
-					// If column is timestamp, and default value is not current_timestamp, should convert the default value to the current session time zone.
-					if col.Tp == mysql.TypeTimestamp && defaultValStr != types.ZeroDatetimeStr {
-						timeValue, err := table.GetColDefaultValue(ctx, col)
-						if err != nil {
-							return errors.Trace(err)
-						}
-						defaultValStr = timeValue.GetMysqlTime().String()
-					}
 
-					if col.Tp == mysql.TypeBit {
-						defaultValBinaryLiteral := types.BinaryLiteral(defaultValStr)
-						fmt.Fprintf(buf, " DEFAULT %s", defaultValBinaryLiteral.ToBitLiteralString(true))
-					} else {
-						fmt.Fprintf(buf, " DEFAULT '%s'", format.OutputFormat(defaultValStr))
-					}
+					fmt.Fprintf(buf, " DEFAULT '%s'", format.OutputFormat(defaultValStr))
 				}
 			}
 			if mysql.HasOnUpdateNowFlag(col.Flag) {
@@ -834,18 +800,6 @@ func (e *ShowExec) appendRow(row []interface{}) {
 			e.result.AppendString(i, x)
 		case []byte:
 			e.result.AppendBytes(i, x)
-		case types.BinaryLiteral:
-			e.result.AppendBytes(i, x)
-		case *types.MyDecimal:
-			e.result.AppendMyDecimal(i, x)
-		case types.Time:
-			e.result.AppendTime(i, x)
-		case types.Duration:
-			e.result.AppendDuration(i, x)
-		case types.Enum:
-			e.result.AppendEnum(i, x)
-		case types.Set:
-			e.result.AppendSet(i, x)
 		default:
 			e.result.AppendNull(i)
 		}

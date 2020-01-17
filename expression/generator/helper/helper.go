@@ -35,12 +35,6 @@ var (
 	TypeInt = TypeContext{ETName: "Int", TypeName: "Int", TypeNameInColumn: "Int64", TypeNameGo: "int64", Fixed: true}
 	// TypeReal represents the template context of types.ETReal .
 	TypeReal = TypeContext{ETName: "Real", TypeName: "Real", TypeNameInColumn: "Float64", TypeNameGo: "float64", Fixed: true}
-	// TypeDecimal represents the template context of types.ETDecimal .
-	TypeDecimal = TypeContext{ETName: "Decimal", TypeName: "Decimal", TypeNameInColumn: "Decimal", TypeNameGo: "types.MyDecimal", Fixed: true}
 	// TypeString represents the template context of types.ETString .
 	TypeString = TypeContext{ETName: "String", TypeName: "String", TypeNameInColumn: "String", TypeNameGo: "string", Fixed: false}
-	// TypeDatetime represents the template context of types.ETDatetime .
-	TypeDatetime = TypeContext{ETName: "Datetime", TypeName: "Time", TypeNameInColumn: "Time", TypeNameGo: "types.Time", Fixed: true}
-	// TypeDuration represents the template context of types.ETDuration .
-	TypeDuration = TypeContext{ETName: "Duration", TypeName: "Duration", TypeNameInColumn: "GoDuration", TypeNameGo: "time.Duration", Fixed: true}
 )

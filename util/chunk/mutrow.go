@@ -82,22 +82,6 @@ func zeroValForType(tp *types.FieldType) interface{} {
 		return ""
 	case mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		return []byte{}
-	case mysql.TypeDuration:
-		return types.ZeroDuration
-	case mysql.TypeNewDecimal:
-		return types.NewDecFromInt(0)
-	case mysql.TypeDate:
-		return types.ZeroDate
-	case mysql.TypeDatetime:
-		return types.ZeroDatetime
-	case mysql.TypeTimestamp:
-		return types.ZeroTimestamp
-	case mysql.TypeBit:
-		return types.BinaryLiteral{}
-	case mysql.TypeSet:
-		return types.Set{}
-	case mysql.TypeEnum:
-		return types.Enum{}
 	default:
 		return nil
 	}
@@ -125,30 +109,6 @@ func makeMutRowColumn(in interface{}) *Column {
 		return makeMutRowBytesColumn(hack.Slice(x))
 	case []byte:
 		return makeMutRowBytesColumn(x)
-	case types.BinaryLiteral:
-		return makeMutRowBytesColumn(x)
-	case *types.MyDecimal:
-		col := newMutRowFixedLenColumn(types.MyDecimalStructSize)
-		*(*types.MyDecimal)(unsafe.Pointer(&col.data[0])) = *x
-		return col
-	case types.Time:
-		col := newMutRowFixedLenColumn(sizeTime)
-		*(*types.Time)(unsafe.Pointer(&col.data[0])) = x
-		return col
-	case types.Duration:
-		col := newMutRowFixedLenColumn(8)
-		*(*int64)(unsafe.Pointer(&col.data[0])) = int64(x.Duration)
-		return col
-	case types.Enum:
-		col := newMutRowVarLenColumn(len(x.Name) + 8)
-		*(*uint64)(unsafe.Pointer(&col.data[0])) = x.Value
-		copy(col.data[8:], x.Name)
-		return col
-	case types.Set:
-		col := newMutRowVarLenColumn(len(x.Name) + 8)
-		*(*uint64)(unsafe.Pointer(&col.data[0])) = x.Value
-		copy(col.data[8:], x.Name)
-		return col
 	default:
 		return nil
 	}
@@ -238,18 +198,6 @@ func (mr MutRow) SetValue(colIdx int, val interface{}) {
 		setMutRowBytes(col, hack.Slice(x))
 	case []byte:
 		setMutRowBytes(col, x)
-	case types.BinaryLiteral:
-		setMutRowBytes(col, x)
-	case types.Duration:
-		*(*int64)(unsafe.Pointer(&col.data[0])) = int64(x.Duration)
-	case *types.MyDecimal:
-		*(*types.MyDecimal)(unsafe.Pointer(&col.data[0])) = *x
-	case types.Time:
-		*(*types.Time)(unsafe.Pointer(&col.data[0])) = x
-	case types.Enum:
-		setMutRowNameValue(col, x.Name, x.Value)
-	case types.Set:
-		setMutRowNameValue(col, x.Name, x.Value)
 	}
 	col.nullBitmap[0] = 1
 }
@@ -273,20 +221,8 @@ func (mr MutRow) SetDatum(colIdx int, d types.Datum) {
 		binary.LittleEndian.PutUint64(mr.c.columns[colIdx].data, d.GetUint64())
 	case types.KindFloat32:
 		binary.LittleEndian.PutUint32(mr.c.columns[colIdx].data, math.Float32bits(d.GetFloat32()))
-	case types.KindString, types.KindBytes, types.KindBinaryLiteral:
+	case types.KindString, types.KindBytes:
 		setMutRowBytes(col, d.GetBytes())
-	case types.KindMysqlTime:
-		*(*types.Time)(unsafe.Pointer(&col.data[0])) = d.GetMysqlTime()
-	case types.KindMysqlDuration:
-		*(*int64)(unsafe.Pointer(&col.data[0])) = int64(d.GetMysqlDuration().Duration)
-	case types.KindMysqlDecimal:
-		*(*types.MyDecimal)(unsafe.Pointer(&col.data[0])) = *d.GetMysqlDecimal()
-	case types.KindMysqlEnum:
-		e := d.GetMysqlEnum()
-		setMutRowNameValue(col, e.Name, e.Value)
-	case types.KindMysqlSet:
-		s := d.GetMysqlSet()
-		setMutRowNameValue(col, s.Name, s.Value)
 	default:
 		mr.c.columns[colIdx] = makeMutRowColumn(d.GetValue())
 	}
@@ -303,20 +239,6 @@ func setMutRowBytes(col *Column, bin []byte) {
 	}
 	copy(col.data, bin)
 	col.offsets[1] = int64(len(bin))
-}
-
-func setMutRowNameValue(col *Column, name string, val uint64) {
-	dataLen := len(name) + 8
-	if len(col.data) >= dataLen {
-		col.data = col.data[:dataLen]
-	} else {
-		buf := make([]byte, dataLen+1)
-		col.data = buf[:dataLen]
-		col.nullBitmap = buf[dataLen:]
-	}
-	binary.LittleEndian.PutUint64(col.data, val)
-	copy(col.data[8:], name)
-	col.offsets[1] = int64(dataLen)
 }
 
 // ShallowCopyPartialRow shallow copies the data of `row` to MutRow.

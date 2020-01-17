@@ -30,14 +30,6 @@ func (b *builtinValuesIntSig) vecEvalInt(input *chunk.Chunk, result *chunk.Colum
 	return errors.Errorf("not implemented")
 }
 
-func (b *builtinValuesDurationSig) vectorized() bool {
-	return false
-}
-
-func (b *builtinValuesDurationSig) vecEvalDuration(input *chunk.Chunk, result *chunk.Column) error {
-	return errors.Errorf("not implemented")
-}
-
 func (b *builtinRowSig) vectorized() bool {
 	return true
 }
@@ -59,14 +51,6 @@ func (b *builtinValuesStringSig) vectorized() bool {
 }
 
 func (b *builtinValuesStringSig) vecEvalString(input *chunk.Chunk, result *chunk.Column) error {
-	return errors.Errorf("not implemented")
-}
-
-func (b *builtinValuesTimeSig) vectorized() bool {
-	return false
-}
-
-func (b *builtinValuesTimeSig) vecEvalTime(input *chunk.Chunk, result *chunk.Column) error {
 	return errors.Errorf("not implemented")
 }
 
@@ -107,14 +91,6 @@ func (b *builtinSetVarSig) vecEvalString(input *chunk.Chunk, result *chunk.Colum
 		result.AppendString(res)
 	}
 	return nil
-}
-
-func (b *builtinValuesDecimalSig) vectorized() bool {
-	return false
-}
-
-func (b *builtinValuesDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	return errors.Errorf("not implemented")
 }
 
 func (b *builtinGetVarSig) vectorized() bool {

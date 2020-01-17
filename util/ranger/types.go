@@ -156,8 +156,7 @@ func formatDatum(d types.Datum, isLeftSide bool) string {
 		if d.GetUint64() == math.MaxUint64 && !isLeftSide {
 			return "+inf"
 		}
-	case types.KindString, types.KindBytes, types.KindMysqlEnum, types.KindMysqlSet,
-		types.KindMysqlJSON, types.KindBinaryLiteral, types.KindMysqlBit:
+	case types.KindString, types.KindBytes:
 		return fmt.Sprintf("\"%v\"", d.GetValue())
 	}
 	return fmt.Sprintf("%v", d.GetValue())

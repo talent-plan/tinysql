@@ -120,17 +120,6 @@ func (s *testSuiteAgg) TestInjectProjBelowTopN(c *C) {
 	}
 }
 
-func (s *testSuiteAgg) TestFirstRowEnum(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec(`use test;`)
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(a enum('a', 'b'));`)
-	tk.MustExec(`insert into t values('a');`)
-	tk.MustQuery(`select a from t group by a;`).Check(testkit.Rows(
-		`a`,
-	))
-}
-
 func (s *testSuiteAgg) TestIssue10099(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("drop table if exists t")

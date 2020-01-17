@@ -530,37 +530,6 @@ func (c *Chunk) AppendBytes(colIdx int, b []byte) {
 	c.columns[colIdx].AppendBytes(b)
 }
 
-// AppendTime appends a Time value to the chunk.
-// TODO: change the time structure so it can be directly written to memory.
-func (c *Chunk) AppendTime(colIdx int, t types.Time) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].AppendTime(t)
-}
-
-// AppendDuration appends a Duration value to the chunk.
-func (c *Chunk) AppendDuration(colIdx int, dur types.Duration) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].AppendDuration(dur)
-}
-
-// AppendMyDecimal appends a MyDecimal value to the chunk.
-func (c *Chunk) AppendMyDecimal(colIdx int, dec *types.MyDecimal) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].AppendMyDecimal(dec)
-}
-
-// AppendEnum appends an Enum value to the chunk.
-func (c *Chunk) AppendEnum(colIdx int, enum types.Enum) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].appendNameValue(enum.Name, enum.Value)
-}
-
-// AppendSet appends a Set value to the chunk.
-func (c *Chunk) AppendSet(colIdx int, set types.Set) {
-	c.appendSel(colIdx)
-	c.columns[colIdx].appendNameValue(set.Name, set.Value)
-}
-
 func (c *Chunk) appendSel(colIdx int) {
 	if colIdx == 0 && c.sel != nil { // use column 0 as standard
 		c.sel = append(c.sel, c.columns[0].length)
@@ -580,18 +549,8 @@ func (c *Chunk) AppendDatum(colIdx int, d *types.Datum) {
 		c.AppendFloat32(colIdx, d.GetFloat32())
 	case types.KindFloat64:
 		c.AppendFloat64(colIdx, d.GetFloat64())
-	case types.KindString, types.KindBytes, types.KindBinaryLiteral, types.KindRaw, types.KindMysqlBit:
+	case types.KindString, types.KindBytes:
 		c.AppendBytes(colIdx, d.GetBytes())
-	case types.KindMysqlDecimal:
-		c.AppendMyDecimal(colIdx, d.GetMysqlDecimal())
-	case types.KindMysqlDuration:
-		c.AppendDuration(colIdx, d.GetMysqlDuration())
-	case types.KindMysqlEnum:
-		c.AppendEnum(colIdx, d.GetMysqlEnum())
-	case types.KindMysqlSet:
-		c.AppendSet(colIdx, d.GetMysqlSet())
-	case types.KindMysqlTime:
-		c.AppendTime(colIdx, d.GetMysqlTime())
 	}
 }
 

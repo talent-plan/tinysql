@@ -58,48 +58,6 @@ func genVecFromConstExpr(ctx sessionctx.Context, expr Expression, targetType typ
 		for i := range f64s {
 			f64s[i] = v
 		}
-	case types.ETDecimal:
-		v, isNull, err := expr.EvalDecimal(ctx, chunk.Row{})
-		if err != nil {
-			return err
-		}
-		if isNull {
-			result.ResizeDecimal(n, true)
-			return nil
-		}
-		result.ResizeDecimal(n, false)
-		ds := result.Decimals()
-		for i := range ds {
-			ds[i] = *v
-		}
-	case types.ETDatetime, types.ETTimestamp:
-		v, isNull, err := expr.EvalTime(ctx, chunk.Row{})
-		if err != nil {
-			return err
-		}
-		if isNull {
-			result.ResizeTime(n, true)
-			return nil
-		}
-		result.ResizeTime(n, false)
-		ts := result.Times()
-		for i := range ts {
-			ts[i] = v
-		}
-	case types.ETDuration:
-		v, isNull, err := expr.EvalDuration(ctx, chunk.Row{})
-		if err != nil {
-			return err
-		}
-		if isNull {
-			result.ResizeGoDuration(n, true)
-			return nil
-		}
-		result.ResizeGoDuration(n, false)
-		ds := result.GoDurations()
-		for i := range ds {
-			ds[i] = v.Duration
-		}
 	case types.ETString:
 		result.ReserveString(n)
 		v, isNull, err := expr.EvalString(ctx, chunk.Row{})

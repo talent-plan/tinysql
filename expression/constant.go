@@ -87,21 +87,6 @@ func (c *Constant) VecEvalString(ctx sessionctx.Context, input *chunk.Chunk, res
 	return genVecFromConstExpr(ctx, c, types.ETString, input, result)
 }
 
-// VecEvalDecimal evaluates this expression in a vectorized manner.
-func (c *Constant) VecEvalDecimal(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, c, types.ETDecimal, input, result)
-}
-
-// VecEvalTime evaluates this expression in a vectorized manner.
-func (c *Constant) VecEvalTime(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, c, types.ETTimestamp, input, result)
-}
-
-// VecEvalDuration evaluates this expression in a vectorized manner.
-func (c *Constant) VecEvalDuration(ctx sessionctx.Context, input *chunk.Chunk, result *chunk.Column) error {
-	return genVecFromConstExpr(ctx, c, types.ETDuration, input, result)
-}
-
 // Eval implements Expression interface.
 func (c *Constant) Eval(_ chunk.Row) (types.Datum, error) {
 	return c.Value, nil
@@ -112,7 +97,7 @@ func (c *Constant) EvalInt(ctx sessionctx.Context, _ chunk.Row) (int64, bool, er
 	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
 		return 0, true, nil
 	}
-	if c.GetType().Hybrid() || c.Value.Kind() == types.KindBinaryLiteral || c.Value.Kind() == types.KindString {
+	if c.GetType().Hybrid() || c.Value.Kind() == types.KindString {
 		res, err := c.Value.ToInt64(ctx.GetSessionVars().StmtCtx)
 		return res, err != nil, err
 	}
@@ -124,7 +109,7 @@ func (c *Constant) EvalReal(ctx sessionctx.Context, _ chunk.Row) (float64, bool,
 	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
 		return 0, true, nil
 	}
-	if c.GetType().Hybrid() || c.Value.Kind() == types.KindBinaryLiteral || c.Value.Kind() == types.KindString {
+	if c.GetType().Hybrid() || c.Value.Kind() == types.KindString {
 		res, err := c.Value.ToFloat64(ctx.GetSessionVars().StmtCtx)
 		return res, err != nil, err
 	}
@@ -138,31 +123,6 @@ func (c *Constant) EvalString(ctx sessionctx.Context, _ chunk.Row) (string, bool
 	}
 	res, err := c.Value.ToString()
 	return res, err != nil, err
-}
-
-// EvalDecimal returns decimal representation of Constant.
-func (c *Constant) EvalDecimal(ctx sessionctx.Context, _ chunk.Row) (*types.MyDecimal, bool, error) {
-	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
-		return nil, true, nil
-	}
-	res, err := c.Value.ToDecimal(ctx.GetSessionVars().StmtCtx)
-	return res, err != nil, err
-}
-
-// EvalTime returns DATE/DATETIME/TIMESTAMP representation of Constant.
-func (c *Constant) EvalTime(ctx sessionctx.Context, _ chunk.Row) (val types.Time, isNull bool, err error) {
-	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
-		return types.Time{}, true, nil
-	}
-	return c.Value.GetMysqlTime(), false, nil
-}
-
-// EvalDuration returns Duration representation of Constant.
-func (c *Constant) EvalDuration(ctx sessionctx.Context, _ chunk.Row) (val types.Duration, isNull bool, err error) {
-	if c.GetType().Tp == mysql.TypeNull || c.Value.IsNull() {
-		return types.Duration{}, true, nil
-	}
-	return c.Value.GetMysqlDuration(), false, nil
 }
 
 // Equal implements Expression interface.

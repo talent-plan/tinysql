@@ -209,7 +209,7 @@ func (s *testSuite2) TestJoin(c *C) {
 	CREATE TABLE t1 (
   		pk int(11) NOT NULL AUTO_INCREMENT primary key,
   		a int(11) DEFAULT NULL,
-  		b date DEFAULT NULL,
+  		b varchar(64) DEFAULT NULL,
   		c varchar(1) DEFAULT NULL,
   		KEY a (a),
   		KEY b (b),
@@ -219,7 +219,7 @@ func (s *testSuite2) TestJoin(c *C) {
 	CREATE TABLE t2 (
   		pk int(11) NOT NULL AUTO_INCREMENT primary key,
   		a int(11) DEFAULT NULL,
-  		b date DEFAULT NULL,
+  		b varchar(64) DEFAULT NULL,
   		c varchar(1) DEFAULT NULL,
   		KEY a (a),
   		KEY b (b),
@@ -685,7 +685,7 @@ func (s *testSuiteJoin1) TestHashJoinExecEncodeDecodeRow(c *C) {
 	tk.MustExec("drop table if exists t1")
 	tk.MustExec("drop table if exists t2")
 	tk.MustExec("create table t1 (id int)")
-	tk.MustExec("create table t2 (id int, name varchar(255), ts timestamp)")
+	tk.MustExec("create table t2 (id int, name varchar(255), ts varchar(60))")
 	tk.MustExec("insert into t1 values (1)")
 	tk.MustExec("insert into t2 values (1, 'xxx', '2003-06-09 10:51:26')")
 	result := tk.MustQuery("select ts from t1 inner join t2 where t2.name = 'xxx'")
@@ -710,7 +710,7 @@ func (s *testSuiteJoin1) TestIssue5255(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1(a int, b date, c float, primary key(a, b))")
+	tk.MustExec("create table t1(a int, b varchar(64), c float, primary key(a, b))")
 	tk.MustExec("create table t2(a int primary key)")
 	tk.MustExec("insert into t1 values(1, '2017-11-29', 2.2)")
 	tk.MustExec("insert into t2 values(1)")
@@ -763,14 +763,6 @@ func (s *testSuiteJoin3) TestMergejoinOrder(c *C) {
 		`1 2 1 2`,
 		`2 1 2 1`,
 		`2 2 2 2`,
-	))
-
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(a decimal(6,2), index idx(a));`)
-	tk.MustExec(`insert into t values(1.01), (2.02), (NULL);`)
-	tk.MustQuery(`select /*+ TIDB_SMJ(t1) */ t1.a from t t1 join t t2 on t1.a=t2.a order by t1.a;`).Check(testkit.Rows(
-		`1.01`,
-		`2.02`,
 	))
 }
 

@@ -46,13 +46,7 @@ var vecBuiltinControlCases = map[string][]vecExprBenchCase{
 
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETReal, types.ETReal}},
 
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETDecimal, types.ETDecimal}},
-
 		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETString, types.ETString}},
-
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETDatetime, types.ETDatetime}},
-
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETDuration, types.ETDuration}},
 	},
 
 	ast.If: {
@@ -61,13 +55,7 @@ var vecBuiltinControlCases = map[string][]vecExprBenchCase{
 
 		{retEvalType: types.ETReal, childrenTypes: []types.EvalType{types.ETInt, types.ETReal, types.ETReal}, geners: []dataGenerator{defaultControlIntGener}},
 
-		{retEvalType: types.ETDecimal, childrenTypes: []types.EvalType{types.ETInt, types.ETDecimal, types.ETDecimal}, geners: []dataGenerator{defaultControlIntGener}},
-
 		{retEvalType: types.ETString, childrenTypes: []types.EvalType{types.ETInt, types.ETString, types.ETString}, geners: []dataGenerator{defaultControlIntGener}},
-
-		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETInt, types.ETDatetime, types.ETDatetime}, geners: []dataGenerator{defaultControlIntGener}},
-
-		{retEvalType: types.ETDuration, childrenTypes: []types.EvalType{types.ETInt, types.ETDuration, types.ETDuration}, geners: []dataGenerator{defaultControlIntGener}},
 	},
 }
 

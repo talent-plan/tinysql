@@ -159,14 +159,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	r = tk.MustQuery("select * from t;")
 	r.Check(testkit.Rows("2"))
 
-	// issue 3235
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(c decimal(5, 5))")
-	_, err = tk.Exec("insert into t value(0)")
-	c.Assert(err, IsNil)
-	_, err = tk.Exec("insert into t value(1)")
-	c.Assert(types.ErrWarnDataOutOfRange.Equal(err), IsTrue)
-
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(c binary(255))")
 	_, err = tk.Exec("insert into t value(1)")
@@ -186,18 +178,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	_, err = tk.Exec(`insert into t1 values ("");`)
 	c.Assert(err, IsNil)
 
-	// issue 3895
-	tk = testkit.NewTestKit(c, s.store)
-	tk.MustExec("USE test;")
-	tk.MustExec("DROP TABLE IF EXISTS t;")
-	tk.MustExec("CREATE TABLE t(a DECIMAL(4,2));")
-	tk.MustExec("INSERT INTO t VALUES (1.000001);")
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1292 Truncated incorrect DECIMAL value: '1.000001'"))
-	tk.MustExec("INSERT INTO t VALUES (1.000000);")
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows())
-
 	// test auto_increment with unsigned.
 	tk.MustExec("drop table if exists test")
 	tk.MustExec("CREATE TABLE test(id int(10) UNSIGNED NOT NULL AUTO_INCREMENT, p int(10) UNSIGNED NOT NULL, PRIMARY KEY(p), KEY(id))")
@@ -208,17 +188,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustQuery("select * from test use index (id) where id = 2").Check(testkit.Rows("2 2"))
 	tk.MustExec("insert into test values(2, 3)")
 	tk.MustQuery("select * from test use index (id) where id = 2").Check(testkit.Rows("2 2", "2 3"))
-
-	// issue 6424
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a time(6))")
-	tk.MustExec("insert into t value('20070219173709.055870'), ('20070219173709.055'), ('-20070219173709.055870'), ('20070219173709.055870123')")
-	tk.MustQuery("select * from t").Check(testkit.Rows("17:37:09.055870", "17:37:09.055000", "17:37:09.055870", "17:37:09.055870"))
-	tk.MustExec("delete from t")
-	tk.MustExec("insert into t value(20070219173709.055870), (20070219173709.055), (20070219173709.055870123)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("17:37:09.055870", "17:37:09.055000", "17:37:09.055870"))
-	_, err = tk.Exec("insert into t value(-20070219173709.055870)")
-	c.Assert(err.Error(), Equals, "[types:1525]Incorrect time value: '-20070219173709.055870'")
 
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("set @@sql_mode=''")
@@ -1190,23 +1159,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	r = tk.MustQuery("select * from tt1;")
 	r.Check(testkit.Rows("1 a a", "5 d b"))
 
-	// issue 5532
-	tk.MustExec("create table decimals (a decimal(20, 0) not null)")
-	tk.MustExec("insert into decimals values (201)")
-	// A warning rather than data truncated error.
-	tk.MustExec("update decimals set a = a + 1.23;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 1")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1292 Truncated incorrect DECIMAL value: '202.23'"))
-	r = tk.MustQuery("select * from decimals")
-	r.Check(testkit.Rows("202"))
-
-	tk.MustExec("drop table t")
-	tk.MustExec("CREATE TABLE `t` (	`c1` year DEFAULT NULL, `c2` year DEFAULT NULL, `c3` date DEFAULT NULL, `c4` datetime DEFAULT NULL,	KEY `idx` (`c1`,`c2`))")
-	_, err = tk.Exec("UPDATE t SET c2=16777215 WHERE c1>= -8388608 AND c1 < -9 ORDER BY c1 LIMIT 2")
-	c.Assert(err.Error(), Equals, "cannot convert datum from bigint to type year.")
-
-	tk.MustExec("update (select * from t) t set c1 = 1111111")
-
 	// test update ignore for bad null error
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec(`create table t (i int not null default 10)`)
@@ -1269,30 +1221,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.MustGetErrCode("update t2 set a=default(a), c=default(c);", mysql.ErrBadGeneratedColumn)
 	tk.MustGetErrCode("update t2 set a=default(a), c=default(a);", mysql.ErrBadGeneratedColumn)
 	tk.MustExec("drop table t1, t2")
-}
-
-// TestUpdateCastOnlyModifiedValues for issue #4514.
-func (s *testSuite4) TestUpdateCastOnlyModifiedValues(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table update_modified (col_1 int, col_2 enum('a', 'b'))")
-	tk.MustExec("set SQL_MODE=''")
-	tk.MustExec("insert into update_modified values (0, 3)")
-	r := tk.MustQuery("SELECT * FROM update_modified")
-	r.Check(testkit.Rows("0 "))
-	tk.MustExec("set SQL_MODE=STRICT_ALL_TABLES")
-	tk.MustExec("update update_modified set col_1 = 1")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	r = tk.MustQuery("SELECT * FROM update_modified")
-	r.Check(testkit.Rows("1 "))
-	_, err := tk.Exec("update update_modified set col_1 = 2, col_2 = 'c'")
-	c.Assert(err, NotNil)
-	r = tk.MustQuery("SELECT * FROM update_modified")
-	r.Check(testkit.Rows("1 "))
-	tk.MustExec("update update_modified set col_1 = 3, col_2 = 'a'")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-	r = tk.MustQuery("SELECT * FROM update_modified")
-	r.Check(testkit.Rows("3 a"))
 }
 
 func (s *testSuite4) fillMultiTableForUpdate(tk *testkit.TestKit) {
@@ -1527,18 +1455,6 @@ func (s *testSuite4) TestQualifiedDelete(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (s *testSuite4) TestNullDefault(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test; drop table if exists test_null_default;")
-	tk.MustExec("set timestamp = 1234")
-	tk.MustExec("set time_zone = '+08:00'")
-	tk.MustExec("create table test_null_default (ts timestamp null default current_timestamp)")
-	tk.MustExec("insert into test_null_default values (null)")
-	tk.MustQuery("select * from test_null_default").Check(testkit.Rows("<nil>"))
-	tk.MustExec("insert into test_null_default values ()")
-	tk.MustQuery("select * from test_null_default").Check(testkit.Rows("<nil>", "1970-01-01 08:20:34"))
-}
-
 func (s *testSuite4) TestNotNullDefault(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test; drop table if exists t1,t2;")
@@ -1736,14 +1652,6 @@ func (s *testSuite7) TestDeferConstraintCheckForInsert(c *C) {
 	tk.MustExec("insert into t values (1, 3)")
 	_, err = tk.Exec("commit")
 	c.Assert(err, NotNil)
-}
-
-func (s *testSuite7) TestDefEnumInsert(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table test (id int, prescription_type enum('a','b','c','d','e','f') NOT NULL, primary key(id));")
-	tk.MustExec("insert into test (id)  values (1)")
-	tk.MustQuery("select prescription_type from test").Check(testkit.Rows("a"))
 }
 
 func (s *testSuite7) TestIssue11059(c *C) {

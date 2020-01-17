@@ -15,10 +15,6 @@ package ddl
 
 import (
 	"fmt"
-	"strings"
-	"sync/atomic"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser/ast"
@@ -28,10 +24,10 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/zap"
+	"sync/atomic"
 )
 
 // adjustColumnInfoInAddColumn is used to set the correct position of column info when adding column.
@@ -594,14 +590,6 @@ func generateOriginDefaultValue(col *model.ColumnInfo) (interface{}, error) {
 		odValue, err = zeroVal.ToString()
 		if err != nil {
 			return nil, errors.Trace(err)
-		}
-	}
-
-	if odValue == strings.ToUpper(ast.CurrentTimestamp) {
-		if col.Tp == mysql.TypeTimestamp {
-			odValue = time.Now().UTC().Format(types.TimeFormat)
-		} else if col.Tp == mysql.TypeDatetime {
-			odValue = time.Now().Format(types.TimeFormat)
 		}
 	}
 	return odValue, nil

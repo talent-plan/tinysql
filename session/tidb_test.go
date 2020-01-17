@@ -15,7 +15,6 @@ package session
 
 import (
 	"os"
-	"sync"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -60,28 +59,6 @@ func (s *testMainSuite) TearDownSuite(c *C) {
 	removeStore(c, s.dbName)
 }
 
-func (s *testMainSuite) TestSysSessionPoolGoroutineLeak(c *C) {
-	store, dom := newStoreWithBootstrap(c, s.dbName+"goroutine_leak")
-	defer store.Close()
-	defer dom.Close()
-	se, err := createSession(store)
-	c.Assert(err, IsNil)
-
-	// Test an issue that sysSessionPool doesn't call session's Close, cause
-	// asyncGetTSWorker goroutine leak.
-	count := 200
-	var wg sync.WaitGroup
-	wg.Add(count)
-	for i := 0; i < count; i++ {
-		go func(se *session) {
-			_, _, err := se.ExecRestrictedSQL("select * from mysql.user limit 1")
-			c.Assert(err, IsNil)
-			wg.Done()
-		}(se)
-	}
-	wg.Wait()
-}
-
 func (s *testMainSuite) TestParseErrorWarn(c *C) {
 	ctx := core.MockContext()
 
@@ -98,14 +75,6 @@ func newStore(c *C, dbPath string) kv.Storage {
 	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, IsNil)
 	return store
-}
-
-func newStoreWithBootstrap(c *C, dbPath string) (kv.Storage, *domain.Domain) {
-	store, err := mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-	dom, err := BootstrapSession(store)
-	c.Assert(err, IsNil)
-	return store, dom
 }
 
 func removeStore(c *C, dbPath string) {

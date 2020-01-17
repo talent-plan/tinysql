@@ -292,19 +292,13 @@ type typeContext struct {
 var ifNullSigs = []sig{
 	{Arg0: TypeInt},
 	{Arg0: TypeReal},
-	{Arg0: TypeDecimal},
 	{Arg0: TypeString},
-	{Arg0: TypeDatetime},
-	{Arg0: TypeDuration},
 }
 
 var ifSigs = []sig{
 	{Arg0: TypeInt},
 	{Arg0: TypeReal},
-	{Arg0: TypeDecimal},
 	{Arg0: TypeString},
-	{Arg0: TypeDatetime},
-	{Arg0: TypeDuration},
 }
 
 type sig struct {

@@ -62,48 +62,6 @@ func (b *builtinLTRealSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinLTDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val < 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinLTDecimalSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinLTStringSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETString, n)
@@ -183,48 +141,6 @@ func (b *builtinLERealSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) 
 }
 
 func (b *builtinLERealSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinLEDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val <= 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinLEDecimalSig) vectorized() bool {
 	return true
 }
 
@@ -310,48 +226,6 @@ func (b *builtinGTRealSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinGTDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val > 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinGTDecimalSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinGTStringSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETString, n)
@@ -431,48 +305,6 @@ func (b *builtinGERealSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) 
 }
 
 func (b *builtinGERealSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinGEDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val >= 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinGEDecimalSig) vectorized() bool {
 	return true
 }
 
@@ -558,48 +390,6 @@ func (b *builtinEQRealSig) vectorized() bool {
 	return true
 }
 
-func (b *builtinEQDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val == 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinEQDecimalSig) vectorized() bool {
-	return true
-}
-
 func (b *builtinEQStringSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
 	n := input.NumRows()
 	buf0, err := b.bufAllocator.get(types.ETString, n)
@@ -679,48 +469,6 @@ func (b *builtinNERealSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) 
 }
 
 func (b *builtinNERealSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinNEDecimalSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) error {
-	n := input.NumRows()
-	buf0, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf0)
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, buf0); err != nil {
-		return err
-	}
-	buf1, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf1)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf1); err != nil {
-		return err
-	}
-
-	arg0 := buf0.Decimals()
-	arg1 := buf1.Decimals()
-	result.ResizeInt64(n, false)
-	result.MergeNulls(buf0, buf1)
-	i64s := result.Int64s()
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		val := arg0[i].Compare(&arg1[i])
-		if val != 0 {
-			i64s[i] = 1
-		} else {
-			i64s[i] = 0
-		}
-	}
-	return nil
-}
-
-func (b *builtinNEDecimalSig) vectorized() bool {
 	return true
 }
 

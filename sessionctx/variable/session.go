@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/timeutil"
 )
 
 // Error instances.
@@ -560,7 +559,7 @@ func (s *SessionVars) IsAutocommit() bool {
 func (s *SessionVars) Location() *time.Location {
 	loc := s.TimeZone
 	if loc == nil {
-		loc = timeutil.SystemLocation()
+		loc = time.Local
 	}
 	return loc
 }
@@ -614,12 +613,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		}
 		s.TxnIsolationLevelOneShot.State = 1
 		s.TxnIsolationLevelOneShot.Value = val
-	case TimeZone:
-		tz, err := parseTimeZone(val)
-		if err != nil {
-			return err
-		}
-		s.TimeZone = tz
 	case SQLModeVar:
 		val = mysql.FormatSQLModeStr(val)
 		// Modes is a list of different modes separated by commas.
@@ -630,11 +623,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.StrictSQLMode = sqlMode.HasStrictMode()
 		s.SQLMode = sqlMode
 		s.SetStatusFlag(mysql.ServerStatusNoBackslashEscaped, sqlMode.HasNoBackslashEscapesMode())
-	case TiDBSnapshot:
-		err := setSnapshotTS(s, val)
-		if err != nil {
-			return err
-		}
 	case AutoCommit:
 		isAutocommit := TiDBOptOn(val)
 		s.SetStatusFlag(mysql.ServerStatusAutocommit, isAutocommit)

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/ast"
@@ -46,19 +45,6 @@ func (g inGener) gen() interface{} {
 			return -float64(randNum)
 		}
 		return float64(randNum)
-	case types.ETDecimal:
-		d := new(types.MyDecimal)
-		f := float64(randNum * 100000)
-		if err := d.FromFloat64(f); err != nil {
-			panic(err)
-		}
-		return d
-	case types.ETDatetime, types.ETTimestamp:
-		gt := types.FromDate(2019, 11, 2, 22, 00, int(randNum), rand.Intn(1000000))
-		t := types.Time{Time: gt, Type: convertETType(g.eType)}
-		return t
-	case types.ETDuration:
-		return types.Duration{Duration: time.Duration(randNum)}
 	case types.ETString:
 		return fmt.Sprint(randNum)
 	}
@@ -99,22 +85,6 @@ var vecBuiltinOtherGeneratedCases = map[string][]vecExprBenchCase{
 				inGener{defaultGener{eType: types.ETString, nullRation: 0.2}},
 			},
 		},
-		// builtinInDecimalSig
-		{
-			retEvalType: types.ETInt,
-			childrenTypes: []types.EvalType{
-				types.ETDecimal,
-				types.ETDecimal,
-				types.ETDecimal,
-				types.ETDecimal,
-			},
-			geners: []dataGenerator{
-				inGener{defaultGener{eType: types.ETDecimal, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDecimal, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDecimal, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDecimal, nullRation: 0.2}},
-			},
-		},
 		// builtinInRealSig
 		{
 			retEvalType: types.ETInt,
@@ -129,38 +99,6 @@ var vecBuiltinOtherGeneratedCases = map[string][]vecExprBenchCase{
 				inGener{defaultGener{eType: types.ETReal, nullRation: 0.2}},
 				inGener{defaultGener{eType: types.ETReal, nullRation: 0.2}},
 				inGener{defaultGener{eType: types.ETReal, nullRation: 0.2}},
-			},
-		},
-		// builtinInTimeSig
-		{
-			retEvalType: types.ETInt,
-			childrenTypes: []types.EvalType{
-				types.ETDatetime,
-				types.ETDatetime,
-				types.ETDatetime,
-				types.ETDatetime,
-			},
-			geners: []dataGenerator{
-				inGener{defaultGener{eType: types.ETDatetime, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDatetime, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDatetime, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDatetime, nullRation: 0.2}},
-			},
-		},
-		// builtinInDurationSig
-		{
-			retEvalType: types.ETInt,
-			childrenTypes: []types.EvalType{
-				types.ETDuration,
-				types.ETDuration,
-				types.ETDuration,
-				types.ETDuration,
-			},
-			geners: []dataGenerator{
-				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
-				inGener{defaultGener{eType: types.ETDuration, nullRation: 0.2}},
 			},
 		},
 	},

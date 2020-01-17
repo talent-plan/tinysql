@@ -62,13 +62,10 @@ func calculateSum(sc *stmtctx.StatementContext, sum, v types.Datum) (data types.
 	switch v.Kind() {
 	case types.KindNull:
 	case types.KindInt64, types.KindUint64:
-		var d *types.MyDecimal
-		d, err = v.ToDecimal(sc)
+		d, err := v.ToInt64(sc)
 		if err == nil {
-			data = types.NewDecimalDatum(d)
+			data = types.NewIntDatum(d)
 		}
-	case types.KindMysqlDecimal:
-		data = types.CloneDatum(v)
 	default:
 		var f float64
 		f, err = v.ToFloat64(sc)
@@ -86,7 +83,7 @@ func calculateSum(sc *stmtctx.StatementContext, sum, v types.Datum) (data types.
 	switch sum.Kind() {
 	case types.KindNull:
 		return data, nil
-	case types.KindFloat64, types.KindMysqlDecimal:
+	case types.KindFloat64, types.KindInt64:
 		return types.ComputePlus(sum, data)
 	default:
 		return data, errors.Errorf("invalid value %v for aggregate", sum.Kind())

@@ -16,11 +16,6 @@ package executor_test
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
-	"strings"
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -38,7 +33,9 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/testkit"
-	"github.com/pingcap/tidb/util/testutil"
+	"math"
+	"strconv"
+	"strings"
 )
 
 // TestInTxnExecDDLFail tests the following case:
@@ -173,27 +170,6 @@ func (s *testSuite6) TestCreateDropIndex(c *C) {
 	tk.MustExec("create index idx_a on drop_test (a)")
 	tk.MustExec("drop index idx_a on drop_test")
 	tk.MustExec("drop table drop_test")
-}
-
-func (s *testSuite6) TestAlterTableAddColumn(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table if not exists alter_test (c1 int)")
-	tk.MustExec("insert into alter_test values(1)")
-	tk.MustExec("alter table alter_test add column c2 timestamp default current_timestamp")
-	time.Sleep(1 * time.Millisecond)
-	now := time.Now().Add(-time.Duration(1 * time.Millisecond)).Format(types.TimeFormat)
-	r, err := tk.Exec("select c2 from alter_test")
-	c.Assert(err, IsNil)
-	req := r.NewChunk()
-	err = r.Next(context.Background(), req)
-	c.Assert(err, IsNil)
-	row := req.GetRow(0)
-	c.Assert(row.Len(), Equals, 1)
-	c.Assert(now, GreaterEqual, row.GetTime(0).String())
-	r.Close()
-	tk.MustExec("alter table alter_test add column c3 varchar(50) default 'CURRENT_TIMESTAMP'")
-	tk.MustQuery("select c3 from alter_test").Check(testkit.Rows("CURRENT_TIMESTAMP"))
 }
 
 func (s *testSuite6) TestAddNotNullColumnNoDefault(c *C) {
@@ -698,93 +674,4 @@ func (s *testSuite6) TestSetDDLErrorCountLimit(c *C) {
 	c.Assert(variable.GetDDLErrorCountLimit(), Equals, int64(100))
 	res := tk.MustQuery("select @@global.tidb_ddl_error_count_limit")
 	res.Check(testkit.Rows("100"))
-}
-
-// Test issue #9205, fix the precision problem for time type default values
-// See https://github.com/pingcap/tidb/issues/9205 for details
-func (s *testSuite6) TestIssue9205(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-	tk.MustExec(`create table t(c time DEFAULT '12:12:12.8');`)
-	tk.MustQuery("show create table `t`").Check(testutil.RowsWithSep("|",
-		""+
-			"t CREATE TABLE `t` (\n"+
-			"  `c` time DEFAULT '12:12:13'\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-	tk.MustExec(`alter table t add column c1 time default '12:12:12.000000';`)
-	tk.MustQuery("show create table `t`").Check(testutil.RowsWithSep("|",
-		""+
-			"t CREATE TABLE `t` (\n"+
-			"  `c` time DEFAULT '12:12:13',\n"+
-			"  `c1` time DEFAULT '12:12:12'\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-
-	tk.MustExec(`alter table t alter column c1 set default '2019-02-01 12:12:10.4';`)
-	tk.MustQuery("show create table `t`").Check(testutil.RowsWithSep("|",
-		""+
-			"t CREATE TABLE `t` (\n"+
-			"  `c` time DEFAULT '12:12:13',\n"+
-			"  `c1` time DEFAULT '12:12:10'\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-
-	tk.MustExec(`alter table t modify c1 time DEFAULT '770:12:12.000000';`)
-	tk.MustQuery("show create table `t`").Check(testutil.RowsWithSep("|",
-		""+
-			"t CREATE TABLE `t` (\n"+
-			"  `c` time DEFAULT '12:12:13',\n"+
-			"  `c1` time DEFAULT '770:12:12'\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-}
-
-func (s *testSuite6) TestCheckDefaultFsp(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t;`)
-
-	_, err := tk.Exec("create table t (  tt timestamp default now(1));")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tt'")
-
-	_, err = tk.Exec("create table t (  tt timestamp(1) default current_timestamp);")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tt'")
-
-	_, err = tk.Exec("create table t (  tt timestamp(1) default now(2));")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tt'")
-
-	tk.MustExec("create table t (  tt timestamp(1) default now(1));")
-	tk.MustExec("create table t2 (  tt timestamp default current_timestamp());")
-	tk.MustExec("create table t3 (  tt timestamp default current_timestamp(0));")
-
-	_, err = tk.Exec("alter table t add column ttt timestamp default now(2);")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'ttt'")
-
-	_, err = tk.Exec("alter table t add column ttt timestamp(5) default current_timestamp;")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'ttt'")
-
-	_, err = tk.Exec("alter table t add column ttt timestamp(5) default now(2);")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'ttt'")
-
-	_, err = tk.Exec("alter table t modify column tt timestamp(1) default now();")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tt'")
-
-	_, err = tk.Exec("alter table t modify column tt timestamp(4) default now(5);")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tt'")
-
-	_, err = tk.Exec("alter table t change column tt tttt timestamp(4) default now(5);")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tttt'")
-
-	_, err = tk.Exec("alter table t change column tt tttt timestamp(1) default now();")
-	c.Assert(err.Error(), Equals, "[ddl:1067]Invalid default value for 'tttt'")
-}
-
-func (s *testSuite6) TestTimestampMinDefaultValue(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists tdv;")
-	tk.MustExec("create table tdv(a int);")
-	tk.MustExec("ALTER TABLE tdv ADD COLUMN ts timestamp DEFAULT '1970-01-01 08:00:01';")
 }

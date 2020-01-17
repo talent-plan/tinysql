@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1079,21 +1078,6 @@ func (s *testDBSuite) showColumns(c *C, tableName string) [][]interface{} {
 	return s.mustQuery(c, fmt.Sprintf("show columns from %s", tableName))
 }
 
-func (s *testDBSuite5) TestCreateIndexType(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use " + s.schemaName)
-	sql := `CREATE TABLE test_index (
-		price int(5) DEFAULT '0' NOT NULL,
-		area varchar(40) DEFAULT '' NOT NULL,
-		type varchar(40) DEFAULT '' NOT NULL,
-		transityes set('a','b'),
-		shopsyes enum('Y','N') DEFAULT 'Y' NOT NULL,
-		schoolsyes enum('Y','N') DEFAULT 'Y' NOT NULL,
-		petsyes enum('Y','N') DEFAULT 'Y' NOT NULL,
-		KEY price (price,area,type,transityes,shopsyes,schoolsyes,petsyes));`
-	s.tk.MustExec(sql)
-}
-
 func (s *testDBSuite1) TestColumn(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use " + s.schemaName)
@@ -1228,29 +1212,6 @@ LOOP:
 	rows = s.mustQuery(c, "select count(c4) from t2 where c4 = -1")
 	matchRows(c, rows, [][]interface{}{{count - int64(step)}})
 
-	// add timestamp type column
-	s.mustExec(c, "create table test_on_update_c (c1 int, c2 timestamp);")
-	s.mustExec(c, "alter table test_on_update_c add column c3 timestamp null default '2017-02-11' on update current_timestamp;")
-	is := domain.GetDomain(ctx).InfoSchema()
-	tbl, err := is.TableByName(model.NewCIStr("test_db"), model.NewCIStr("test_on_update_c"))
-	c.Assert(err, IsNil)
-	tblInfo := tbl.Meta()
-	colC := tblInfo.Columns[2]
-	c.Assert(colC.Tp, Equals, mysql.TypeTimestamp)
-	hasNotNull := mysql.HasNotNullFlag(colC.Flag)
-	c.Assert(hasNotNull, IsFalse)
-	// add datetime type column
-	s.mustExec(c, "create table test_on_update_d (c1 int, c2 datetime);")
-	s.mustExec(c, "alter table test_on_update_d add column c3 datetime on update current_timestamp;")
-	is = domain.GetDomain(ctx).InfoSchema()
-	tbl, err = is.TableByName(model.NewCIStr("test_db"), model.NewCIStr("test_on_update_d"))
-	c.Assert(err, IsNil)
-	tblInfo = tbl.Meta()
-	colC = tblInfo.Columns[2]
-	c.Assert(colC.Tp, Equals, mysql.TypeDatetime)
-	hasNotNull = mysql.HasNotNullFlag(colC.Flag)
-	c.Assert(hasNotNull, IsFalse)
-
 	// test add unsupported constraint
 	s.mustExec(c, "create table t_add_unsupported_constraint (a int);")
 	_, err = s.tk.Exec("ALTER TABLE t_add_unsupported_constraint ADD id int AUTO_INCREMENT;")
@@ -1384,19 +1345,6 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 	c.Assert(hasNotNull, IsFalse)
 	s.mustExec(c, "insert into t3 set aa = 3, dd = 5")
 	s.tk.MustQuery("select b from t3").Check(testkit.Rows("a", "b", "c"))
-	// for timestamp
-	s.mustExec(c, "alter table t3 add column c timestamp not null")
-	s.mustExec(c, "alter table t3 change c c timestamp null default '2017-02-11' comment 'col c comment' on update current_timestamp")
-	is = domain.GetDomain(ctx).InfoSchema()
-	tbl, err = is.TableByName(model.NewCIStr("test_db"), model.NewCIStr("t3"))
-	c.Assert(err, IsNil)
-	tblInfo = tbl.Meta()
-	colC := tblInfo.Columns[3]
-	c.Assert(colC.Comment, Equals, "col c comment")
-	hasNotNull = mysql.HasNotNullFlag(colC.Flag)
-	c.Assert(hasNotNull, IsFalse)
-	// for enum
-	s.mustExec(c, "alter table t3 add column en enum('a', 'b', 'c') not null default 'a'")
 
 	// for failing tests
 	sql := "alter table t3 change aa a bigint default ''"
@@ -1411,8 +1359,6 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 	s.tk.MustGetErrCode(sql, mysql.ErrInvalidUseOfNull)
 	sql = "alter table t4 change c2 a bigint not null;"
 	s.tk.MustGetErrCode(sql, mysql.WarnDataTruncated)
-	sql = "alter table t3 modify en enum('a', 'z', 'b', 'c') not null default 'a'"
-	s.tk.MustGetErrCode(sql, mysql.ErrUnsupportedDDLOperation)
 	// Rename to an existing column.
 	s.mustExec(c, "alter table t3 add column a bigint")
 	sql = "alter table t3 change aa a bigint"
@@ -1501,59 +1447,6 @@ func (s *testDBSuite1) TestCreateTable(c *C) {
 	s.tk.MustGetErrCode(failSQL, mysql.ErrDuplicatedValueInType)
 	_, err = s.tk.Exec("create table t_enum (a enum('B','b'));")
 	c.Assert(err.Error(), Equals, "[types:1291]Column 'a' has duplicated value 'B' in ENUM")
-}
-
-func (s *testDBSuite2) TestCreateTableWithSetCol(c *C) {
-	s.tk = testkit.NewTestKitWithInit(c, s.store)
-	s.tk.MustExec("create table t_set (a int, b set('e') default '');")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` int(11) DEFAULT NULL,\n" +
-		"  `b` set('e') DEFAULT ''\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("drop table t_set")
-	s.tk.MustExec("create table t_set (a set('a', 'b', 'c', 'd') default 'a,C,c');")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` set('a','b','c','d') DEFAULT 'a,c'\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-
-	// It's for failure cases.
-	// The type of default value is string.
-	s.tk.MustExec("drop table t_set")
-	failedSQL := "create table t_set (a set('1', '4', '10') default '3');"
-	s.tk.MustGetErrCode(failedSQL, mysql.ErrInvalidDefault)
-	failedSQL = "create table t_set (a set('1', '4', '10') default '1,4,11');"
-	s.tk.MustGetErrCode(failedSQL, mysql.ErrInvalidDefault)
-	failedSQL = "create table t_set (a set('1', '4', '10') default '1 ,4');"
-	s.tk.MustGetErrCode(failedSQL, mysql.ErrInvalidDefault)
-	// The type of default value is int.
-	failedSQL = "create table t_set (a set('1', '4', '10') default 0);"
-	s.tk.MustGetErrCode(failedSQL, mysql.ErrInvalidDefault)
-	failedSQL = "create table t_set (a set('1', '4', '10') default 8);"
-	s.tk.MustGetErrCode(failedSQL, mysql.ErrInvalidDefault)
-
-	// The type of default value is int.
-	// It's for successful cases
-	s.tk.MustExec("create table t_set (a set('1', '4', '10', '21') default 1);")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` set('1','4','10','21') DEFAULT '1'\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("drop table t_set")
-	s.tk.MustExec("create table t_set (a set('1', '4', '10', '21') default 2);")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` set('1','4','10','21') DEFAULT '4'\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("drop table t_set")
-	s.tk.MustExec("create table t_set (a set('1', '4', '10', '21') default 3);")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` set('1','4','10','21') DEFAULT '1,4'\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("drop table t_set")
-	s.tk.MustExec("create table t_set (a set('1', '4', '10', '21') default 15);")
-	s.tk.MustQuery("show create table t_set").Check(testkit.Rows("t_set CREATE TABLE `t_set` (\n" +
-		"  `a` set('1','4','10','21') DEFAULT '1,4,10,21'\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	s.tk.MustExec("insert into t_set value()")
-	s.tk.MustQuery("select * from t_set").Check(testkit.Rows("1,4,10,21"))
 }
 
 func (s *testDBSuite2) TestAddNotNullColumn(c *C) {
@@ -1668,38 +1561,6 @@ func (s *testDBSuite1) TestCharacterSetInColumns(c *C) {
 	s.tk.MustExec("create table t13(id int) charset=latin1;")
 	s.tk.MustExec("create table t14(id int) charset=ascii;")
 	s.tk.MustExec("create table t15(id int) charset=utf8mb4;")
-}
-
-func (s *testDBSuite2) TestAddNotNullColumnWhileInsertOnDupUpdate(c *C) {
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("use " + s.schemaName)
-	tk2 := testkit.NewTestKit(c, s.store)
-	tk2.MustExec("use " + s.schemaName)
-	closeCh := make(chan bool)
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	tk1.MustExec("create table nn (a int primary key, b int)")
-	tk1.MustExec("insert nn values (1, 1)")
-	var tk2Err error
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-closeCh:
-				return
-			default:
-			}
-			_, tk2Err = tk2.Exec("insert nn (a, b) values (1, 1) on duplicate key update a = 1, b = values(b) + 1")
-			if tk2Err != nil {
-				return
-			}
-		}
-	}()
-	tk1.MustExec("alter table nn add column c int not null default 3 after a")
-	close(closeCh)
-	wg.Wait()
-	c.Assert(tk2Err, IsNil)
-	tk1.MustQuery("select * from nn").Check(testkit.Rows("1 3 2"))
 }
 
 func (s *testDBSuite3) TestColumnModifyingDefinition(c *C) {

@@ -18,7 +18,6 @@ import (
 	"math"
 
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 )
@@ -56,55 +55,6 @@ func (b *builtinArithmeticMultiplyRealSig) vecEvalReal(input *chunk.Chunk, resul
 	return nil
 }
 
-func (b *builtinArithmeticDivideDecimalSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinArithmeticDivideDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	n := input.NumRows()
-	buf, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf); err != nil {
-		return err
-	}
-
-	result.MergeNulls(buf)
-	x := result.Decimals()
-	y := buf.Decimals()
-	var to types.MyDecimal
-	var frac int
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		err = types.DecimalDiv(&x[i], &y[i], &to, types.DivFracIncr)
-		if err == types.ErrDivByZero {
-			if err = handleDivisionByZeroError(b.ctx); err != nil {
-				return err
-			}
-			result.SetNull(i, true)
-			continue
-		} else if err == nil {
-			_, frac = to.PrecisionAndFrac()
-			if frac < b.baseBuiltinFunc.tp.Decimal {
-				if err = to.Round(&to, b.baseBuiltinFunc.tp.Decimal, types.ModeHalfEven); err != nil {
-					return err
-				}
-			}
-		} else {
-			return err
-		}
-		x[i] = to
-	}
-	return nil
-}
-
 func (b *builtinArithmeticMinusRealSig) vectorized() bool {
 	return true
 }
@@ -134,40 +84,6 @@ func (b *builtinArithmeticMinusRealSig) vecEvalReal(input *chunk.Chunk, result *
 			return types.ErrOverflow.GenWithStackByArgs("DOUBLE", fmt.Sprintf("(%s - %s)", b.args[0].String(), b.args[1].String()))
 		}
 		x[i] = x[i] - y[i]
-	}
-	return nil
-}
-
-func (b *builtinArithmeticMinusDecimalSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinArithmeticMinusDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	n := input.NumRows()
-	buf, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf); err != nil {
-		return err
-	}
-
-	result.MergeNulls(buf)
-	x := result.Decimals()
-	y := buf.Decimals()
-	var to types.MyDecimal
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		if err = types.DecimalSub(&x[i], &y[i], &to); err != nil {
-			return err
-		}
-		x[i] = to
 	}
 	return nil
 }
@@ -385,41 +301,6 @@ func (b *builtinArithmeticPlusRealSig) vecEvalReal(input *chunk.Chunk, result *c
 	return nil
 }
 
-func (b *builtinArithmeticMultiplyDecimalSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinArithmeticMultiplyDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	n := input.NumRows()
-	buf, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf); err != nil {
-		return err
-	}
-
-	result.MergeNulls(buf)
-	x := result.Decimals()
-	y := buf.Decimals()
-	var to types.MyDecimal
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		err = types.DecimalMul(&x[i], &y[i], &to)
-		if err != nil && !terror.ErrorEqual(err, types.ErrTruncated) {
-			return err
-		}
-		x[i] = to
-	}
-	return nil
-}
-
 func (b *builtinArithmeticMultiplyIntSig) vectorized() bool {
 	return true
 }
@@ -609,40 +490,6 @@ func (b *builtinArithmeticPlusIntSig) plusSS(result *chunk.Column, lhi64s, rhi64
 		}
 
 		resulti64s[i] = lh + rh
-	}
-	return nil
-}
-
-func (b *builtinArithmeticPlusDecimalSig) vectorized() bool {
-	return true
-}
-
-func (b *builtinArithmeticPlusDecimalSig) vecEvalDecimal(input *chunk.Chunk, result *chunk.Column) error {
-	if err := b.args[0].VecEvalDecimal(b.ctx, input, result); err != nil {
-		return err
-	}
-	n := input.NumRows()
-	buf, err := b.bufAllocator.get(types.ETDecimal, n)
-	if err != nil {
-		return err
-	}
-	defer b.bufAllocator.put(buf)
-	if err := b.args[1].VecEvalDecimal(b.ctx, input, buf); err != nil {
-		return err
-	}
-
-	result.MergeNulls(buf)
-	x := result.Decimals()
-	y := buf.Decimals()
-	to := new(types.MyDecimal)
-	for i := 0; i < n; i++ {
-		if result.IsNull(i) {
-			continue
-		}
-		if err = types.DecimalAdd(&x[i], &y[i], to); err != nil {
-			return err
-		}
-		x[i] = *to
 	}
 	return nil
 }

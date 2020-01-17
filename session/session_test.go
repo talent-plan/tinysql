@@ -139,64 +139,6 @@ func (s *testSessionSuite) TestQueryString(c *C) {
 	c.Assert(queryStr, Equals, "create table multi2 (a int)")
 }
 
-func (s *testSessionSuite) TestAffectedRows(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(id TEXT)")
-	tk.MustExec(`INSERT INTO t VALUES ("a");`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 1)
-	tk.MustExec(`INSERT INTO t VALUES ("b");`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 1)
-	tk.MustExec(`UPDATE t set id = 'c' where id = 'a';`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 1)
-	tk.MustExec(`UPDATE t set id = 'a' where id = 'a';`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 0)
-	tk.MustQuery(`SELECT * from t`).Check(testkit.Rows("c", "b"))
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 0)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, data int)")
-	tk.MustExec(`INSERT INTO t VALUES (1, 0), (0, 0), (1, 1);`)
-	tk.MustExec(`UPDATE t set id = 1 where data = 0;`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 1)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, c1 timestamp);")
-	tk.MustExec(`insert t values(1, 0);`)
-	tk.MustExec(`UPDATE t set id = 1 where id = 1;`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 0)
-
-	// With ON DUPLICATE KEY UPDATE, the affected-rows value per row is 1 if the row is inserted as a new row,
-	// 2 if an existing row is updated, and 0 if an existing row is set to its current values.
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c1 int PRIMARY KEY, c2 int);")
-	tk.MustExec(`insert t values(1, 1);`)
-	tk.MustExec(`insert into t values (1, 1) on duplicate key update c2=2;`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 2)
-	tk.MustExec(`insert into t values (1, 1) on duplicate key update c2=2;`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 0)
-	tk.MustExec("drop table if exists test")
-	createSQL := `CREATE TABLE test (
-	  id        VARCHAR(36) PRIMARY KEY NOT NULL,
-	  factor    INTEGER                 NOT NULL                   DEFAULT 2);`
-	tk.MustExec(createSQL)
-	insertSQL := `INSERT INTO test(id) VALUES('id') ON DUPLICATE KEY UPDATE factor=factor+3;`
-	tk.MustExec(insertSQL)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 1)
-	tk.MustExec(insertSQL)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 2)
-	tk.MustExec(insertSQL)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 2)
-
-	tk.Se.SetClientCapability(mysql.ClientFoundRows)
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, data int)")
-	tk.MustExec(`INSERT INTO t VALUES (1, 0), (0, 0), (1, 1);`)
-	tk.MustExec(`UPDATE t set id = 1 where data = 0;`)
-	c.Assert(int(tk.Se.AffectedRows()), Equals, 2)
-}
-
 func (s *testSessionSuite) TestLastMessage(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 
@@ -373,79 +315,6 @@ func (s *testSessionSuite) TestTxnLazyInitialize(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(txn.Valid(), IsTrue)
 	tk.MustExec("rollback")
-}
-
-func (s *testSessionSuite) TestGlobalVarAccessor(c *C) {
-	varName := "max_allowed_packet"
-	varValue := "67108864" // This is the default value for max_allowed_packet
-	varValue1 := "4194305"
-	varValue2 := "4194306"
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	se := tk.Se.(variable.GlobalVarAccessor)
-	// Get globalSysVar twice and get the same value
-	v, err := se.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue)
-	v, err = se.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue)
-	// Set global var to another value
-	err = se.SetGlobalSysVar(varName, varValue1)
-	c.Assert(err, IsNil)
-	v, err = se.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue1)
-	c.Assert(tk.Se.CommitTxn(context.TODO()), IsNil)
-
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	se1 := tk1.Se.(variable.GlobalVarAccessor)
-	v, err = se1.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue1)
-	err = se1.SetGlobalSysVar(varName, varValue2)
-	c.Assert(err, IsNil)
-	v, err = se1.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue2)
-	c.Assert(tk1.Se.CommitTxn(context.TODO()), IsNil)
-
-	// Make sure the change is visible to any client that accesses that global variable.
-	v, err = se.GetGlobalSysVar(varName)
-	c.Assert(err, IsNil)
-	c.Assert(v, Equals, varValue2)
-
-	// For issue 10955, make sure the new session load `max_execution_time` into sessionVars.
-	s.dom.GetGlobalVarsCache().Disable()
-	tk1.MustExec("set @@global.max_execution_time = 100")
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	c.Assert(tk2.Se.GetSessionVars().MaxExecutionTime, Equals, uint64(100))
-	tk1.MustExec("set @@global.max_execution_time = 0")
-
-	result := tk.MustQuery("show global variables  where variable_name='sql_select_limit';")
-	result.Check(testkit.Rows("sql_select_limit 18446744073709551615"))
-	result = tk.MustQuery("show session variables  where variable_name='sql_select_limit';")
-	result.Check(testkit.Rows("sql_select_limit 18446744073709551615"))
-	tk.MustExec("set session sql_select_limit=100000000000;")
-	result = tk.MustQuery("show global variables where variable_name='sql_select_limit';")
-	result.Check(testkit.Rows("sql_select_limit 18446744073709551615"))
-	result = tk.MustQuery("show session variables where variable_name='sql_select_limit';")
-	result.Check(testkit.Rows("sql_select_limit 100000000000"))
-
-	result = tk.MustQuery("select @@global.autocommit;")
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery("select @@autocommit;")
-	result.Check(testkit.Rows("1"))
-	tk.MustExec("set @@global.autocommit = 0;")
-	result = tk.MustQuery("select @@global.autocommit;")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select @@autocommit;")
-	result.Check(testkit.Rows("1"))
-	tk.MustExec("set @@global.autocommit=1")
-
-	_, err = tk.Exec("set global time_zone = 'timezone'")
-	c.Assert(err, NotNil)
-	c.Assert(terror.ErrorEqual(err, variable.ErrUnknownTimeZone), IsTrue)
 }
 
 func (s *testSessionSuite) TestGetSysVariables(c *C) {
@@ -944,16 +813,6 @@ func (s *testSessionSuite2) TestLastExecuteDDLFlag(c *C) {
 	c.Assert(tk.Se.Value(sessionctx.LastExecuteDDL), IsNil)
 }
 
-func (s *testSessionSuite2) TestDecimal(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (a decimal unique);")
-	tk.MustExec("insert t values ('100');")
-	_, err := tk.Exec("insert t values ('1e2');")
-	c.Check(err, NotNil)
-}
-
 func (s *testSessionSuite2) TestOnDuplicate(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 
@@ -1077,12 +936,6 @@ func (s *testSessionSuite2) TestUnique(c *C) {
 	tk.MustExec("insert into test(id, val1, val2) values(3, 3, 3);")
 }
 
-func (s *testSessionSuite2) TestMySQLTypes(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustQuery(`select 0x01 + 1, x'4D7953514C' = "MySQL"`).Check(testkit.Rows("2 1"))
-	tk.MustQuery(`select 0b01 + 1, 0b01000001 = "A"`).Check(testkit.Rows("2 1"))
-}
-
 func (s *testSessionSuite2) TestIssue986(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	sqlText := `CREATE TABLE address (
@@ -1151,22 +1004,6 @@ func (s *testSessionSuite2) TestDeletePanic(c *C) {
 	tk.MustExec("insert into t values (1), (2), (3)")
 	tk.MustExec("delete from `t` where `c` = 1")
 	tk.MustExec("delete from `t` where `c` = 2")
-}
-
-func (s *testSessionSuite2) TestInformationSchemaCreateTime(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table t (c int)")
-	ret := tk.MustQuery("select create_time from information_schema.tables where table_name='t';")
-	// Make sure t1 is greater than t.
-	time.Sleep(time.Second)
-	tk.MustExec("alter table t modify c int default 11")
-	ret1 := tk.MustQuery("select create_time from information_schema.tables where table_name='t';")
-	t, err := types.ParseDatetime(nil, ret.Rows()[0][0].(string))
-	c.Assert(err, IsNil)
-	t1, err := types.ParseDatetime(nil, ret1.Rows()[0][0].(string))
-	c.Assert(err, IsNil)
-	r := t1.Compare(t)
-	c.Assert(r, Equals, 1)
 }
 
 var _ = Suite(&testSchemaSuite{})

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/pingcap/parser/ast"
@@ -29,13 +28,11 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	field_types "github.com/pingcap/parser/types"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -375,42 +372,9 @@ func getColDefaultValue(ctx sessionctx.Context, col *model.ColumnInfo, defaultVa
 		return getColDefaultValueFromNil(ctx, col)
 	}
 
-	if col.Tp != mysql.TypeTimestamp && col.Tp != mysql.TypeDatetime {
-		value, err := CastValue(ctx, types.NewDatum(defaultVal), col)
-		if err != nil {
-			return types.Datum{}, err
-		}
-		return value, nil
-	}
-
-	// Check and get timestamp/datetime default value.
-	sc := ctx.GetSessionVars().StmtCtx
-	var needChangeTimeZone bool
-	// If the column's default value is not ZeroDatetimeStr nor CurrentTimestamp, should use the time zone of the default value itself.
-	if col.Tp == mysql.TypeTimestamp {
-		if vv, ok := defaultVal.(string); ok && vv != types.ZeroDatetimeStr && !strings.EqualFold(vv, ast.CurrentTimestamp) {
-			needChangeTimeZone = true
-			originalTZ := sc.TimeZone
-			// For col.Version = 0, the timezone information of default value is already lost, so use the system timezone as the default value timezone.
-			sc.TimeZone = timeutil.SystemLocation()
-			if col.Version >= model.ColumnInfoVersion1 {
-				sc.TimeZone = time.UTC
-			}
-			defer func() { sc.TimeZone = originalTZ }()
-		}
-	}
-	value, err := expression.GetTimeValue(ctx, defaultVal, col.Tp, int8(col.Decimal))
+	value, err := CastValue(ctx, types.NewDatum(defaultVal), col)
 	if err != nil {
-		return types.Datum{}, errGetDefaultFailed.GenWithStackByArgs(col.Name)
-	}
-	// If the column's default value is not ZeroDatetimeStr or CurrentTimestamp, convert the default value to the current session time zone.
-	if needChangeTimeZone {
-		t := value.GetMysqlTime()
-		err = t.ConvertTimeZone(sc.TimeZone, ctx.GetSessionVars().Location())
-		if err != nil {
-			return value, err
-		}
-		value.SetMysqlTime(t)
+		return types.Datum{}, err
 	}
 	return value, nil
 }
@@ -418,15 +382,6 @@ func getColDefaultValue(ctx sessionctx.Context, col *model.ColumnInfo, defaultVa
 func getColDefaultValueFromNil(ctx sessionctx.Context, col *model.ColumnInfo) (types.Datum, error) {
 	if !mysql.HasNotNullFlag(col.Flag) {
 		return types.Datum{}, nil
-	}
-	if col.Tp == mysql.TypeEnum {
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		defEnum, err := types.ParseEnumValue(col.FieldType.Elems, 1)
-		if err != nil {
-			return types.Datum{}, err
-		}
-		return types.NewMysqlEnumDatum(defEnum), nil
 	}
 	if mysql.HasAutoIncrementFlag(col.Flag) {
 		// Auto increment column doesn't has default value and we should not return error.
@@ -459,8 +414,6 @@ func GetZeroValue(col *model.ColumnInfo) types.Datum {
 		d.SetFloat32(0)
 	case mysql.TypeDouble:
 		d.SetFloat64(0)
-	case mysql.TypeNewDecimal:
-		d.SetMysqlDecimal(new(types.MyDecimal))
 	case mysql.TypeString:
 		if col.Flen > 0 && col.Charset == charset.CharsetBin {
 			d.SetBytes(make([]byte, col.Flen))
@@ -471,20 +424,6 @@ func GetZeroValue(col *model.ColumnInfo) types.Datum {
 		d.SetString("")
 	case mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		d.SetBytes([]byte{})
-	case mysql.TypeDuration:
-		d.SetMysqlDuration(types.ZeroDuration)
-	case mysql.TypeDate:
-		d.SetMysqlTime(types.ZeroDate)
-	case mysql.TypeTimestamp:
-		d.SetMysqlTime(types.ZeroTimestamp)
-	case mysql.TypeDatetime:
-		d.SetMysqlTime(types.ZeroDatetime)
-	case mysql.TypeBit:
-		d.SetMysqlBit(types.ZeroBinaryLiteral)
-	case mysql.TypeSet:
-		d.SetMysqlSet(types.Set{})
-	case mysql.TypeEnum:
-		d.SetMysqlEnum(types.Enum{})
 	}
 	return d
 }

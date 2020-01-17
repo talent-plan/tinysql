@@ -21,102 +21,20 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/timeutil"
 	"go.uber.org/zap"
 )
 
 const (
-	// CreateUserTable is the SQL statement creates User table in system db.
-	CreateUserTable = `CREATE TABLE if not exists mysql.user (
-		Host				CHAR(64),
-		User				CHAR(32),
-		Password			CHAR(41),
-		Select_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Insert_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Update_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Delete_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Drop_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Process_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Grant_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		References_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Alter_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Show_db_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Super_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_tmp_table_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Lock_tables_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Execute_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_view_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Show_view_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_routine_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Alter_routine_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Index_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_user_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Event_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Trigger_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_role_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Drop_role_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Account_locked			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Shutdown_priv			ENUM('N','Y') NOT NULL DEFAULT 'N',
-		PRIMARY KEY (Host, User));`
-	// CreateDBPrivTable is the SQL statement creates DB scope privilege table in system db.
-	CreateDBPrivTable = `CREATE TABLE if not exists mysql.db (
-		Host			CHAR(60),
-		DB			CHAR(64),
-		User			CHAR(32),
-		Select_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Insert_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Update_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Delete_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Create_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Drop_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Grant_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		References_priv 	ENUM('N','Y') Not Null DEFAULT 'N',
-		Index_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Alter_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Create_tmp_table_priv	ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Lock_tables_priv	ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_view_priv	ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Show_view_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Create_routine_priv	ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Alter_routine_priv	ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Execute_priv		ENUM('N','Y') Not Null DEFAULT 'N',
-		Event_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		Trigger_priv		ENUM('N','Y') NOT NULL DEFAULT 'N',
-		PRIMARY KEY (Host, DB, User));`
-	// CreateTablePrivTable is the SQL statement creates table scope privilege table in system db.
-	CreateTablePrivTable = `CREATE TABLE if not exists mysql.tables_priv (
-		Host		CHAR(60),
-		DB		CHAR(64),
-		User		CHAR(32),
-		Table_name	CHAR(64),
-		Grantor		CHAR(77),
-		Timestamp	Timestamp DEFAULT CURRENT_TIMESTAMP,
-		Table_priv	SET('Select','Insert','Update','Delete','Create','Drop','Grant','Index','Alter','Create View','Show View','Trigger','References'),
-		Column_priv	SET('Select','Insert','Update'),
-		PRIMARY KEY (Host, DB, User, Table_name));`
-	// CreateColumnPrivTable is the SQL statement creates column scope privilege table in system db.
-	CreateColumnPrivTable = `CREATE TABLE if not exists mysql.columns_priv(
-		Host		CHAR(60),
-		DB		CHAR(64),
-		User		CHAR(32),
-		Table_name	CHAR(64),
-		Column_name	CHAR(64),
-		Timestamp	Timestamp DEFAULT CURRENT_TIMESTAMP,
-		Column_priv	SET('Select','Insert','Update'),
-		PRIMARY KEY (Host, DB, User, Table_name, Column_name));`
 	// CreateGloablVariablesTable is the SQL statement creates global variable table in system db.
 	// TODO: MySQL puts GLOBAL_VARIABLES table in INFORMATION_SCHEMA db.
 	// INFORMATION_SCHEMA is a virtual db in TiDB. So we put this table in system db.
@@ -206,25 +124,6 @@ const (
 		UNIQUE KEY delete_range_done_index (job_id, element_id)
 	);`
 
-	// CreateRoleEdgesTable stores the role and user relationship information.
-	CreateRoleEdgesTable = `CREATE TABLE IF NOT EXISTS mysql.role_edges (
-		FROM_HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '',
-		FROM_USER char(32) COLLATE utf8_bin NOT NULL DEFAULT '',
-		TO_HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '',
-		TO_USER char(32) COLLATE utf8_bin NOT NULL DEFAULT '',
-		WITH_ADMIN_OPTION enum('N','Y') CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL DEFAULT 'N',
-		PRIMARY KEY (FROM_HOST,FROM_USER,TO_HOST,TO_USER)
-	);`
-
-	// CreateDefaultRolesTable stores the active roles for a user.
-	CreateDefaultRolesTable = `CREATE TABLE IF NOT EXISTS mysql.default_roles (
-		HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '',
-		USER char(32) COLLATE utf8_bin NOT NULL DEFAULT '',
-		DEFAULT_ROLE_HOST char(60) COLLATE utf8_bin NOT NULL DEFAULT '%',
-		DEFAULT_ROLE_USER char(32) COLLATE utf8_bin NOT NULL DEFAULT '',
-		PRIMARY KEY (HOST,USER,DEFAULT_ROLE_HOST,DEFAULT_ROLE_USER)
-	)`
-
 	// CreateStatsTopNTable stores topn data of a cmsketch with top n.
 	CreateStatsTopNTable = `CREATE TABLE if not exists mysql.stats_top_n (
 		table_id bigint(64) NOT NULL,
@@ -233,16 +132,6 @@ const (
 		value longblob,
 		count bigint(64) UNSIGNED NOT NULL,
 		index tbl(table_id, is_index, hist_id)
-	);`
-
-	// CreateExprPushdownBlacklist stores the expressions which are not allowed to be pushed down.
-	CreateExprPushdownBlacklist = `CREATE TABLE IF NOT EXISTS mysql.expr_pushdown_blacklist (
-		name char(100) NOT NULL
-	);`
-
-	// CreateOptRuleBlacklist stores the list of disabled optimizing operations.
-	CreateOptRuleBlacklist = `CREATE TABLE IF NOT EXISTS mysql.opt_rule_blacklist (
-		name char(100) NOT NULL
 	);`
 )
 
@@ -256,16 +145,9 @@ func bootstrap(s Session) {
 			logutil.BgLogger().Fatal("check bootstrap error",
 				zap.Error(err))
 		}
-		// For rolling upgrade, we can't do upgrade only in the owner.
-		if b {
-			upgrade(s)
-			logutil.BgLogger().Info("upgrade successful in bootstrap",
-				zap.Duration("take time", time.Since(startTime)))
-			return
-		}
 		// To reduce conflict when multiple TiDB-server start at the same time.
 		// Actually only one server need to do the bootstrap. So we chose DDL owner to do this.
-		if dom.DDL().OwnerManager().IsOwner() {
+		if !b && dom.DDL().OwnerManager().IsOwner() {
 			doDDLWorks(s)
 			doDMLWorks(s)
 			logutil.BgLogger().Info("bootstrap successful",
@@ -286,44 +168,6 @@ const (
 	// The variable name in mysql.TiDB table.
 	// It is used for getting the version of the TiDB server which bootstrapped the store.
 	tidbServerVersionVar = "tidb_server_version"
-	// The variable name in mysql.tidb table and it will be used when we want to know
-	// system timezone.
-	tidbSystemTZ = "system_tz"
-	// Const for TiDB server version 2.
-	version2  = 2
-	version3  = 3
-	version4  = 4
-	version5  = 5
-	version6  = 6
-	version7  = 7
-	version8  = 8
-	version9  = 9
-	version10 = 10
-	version11 = 11
-	version12 = 12
-	version13 = 13
-	version14 = 14
-	version15 = 15
-	version16 = 16
-	version17 = 17
-	version18 = 18
-	version19 = 19
-	version20 = 20
-	version21 = 21
-	version22 = 22
-	version23 = 23
-	version24 = 24
-	version25 = 25
-	version26 = 26
-	version27 = 27
-	version28 = 28
-	version30 = 30
-	version31 = 31
-	version32 = 32
-	version33 = 33
-	version34 = 34
-	version35 = 35
-	version36 = 36
 )
 
 func checkBootstrapped(s Session) (bool, error) {
@@ -378,469 +222,12 @@ func getTiDBVar(s Session, name string) (sVal string, isNull bool, e error) {
 	return row.GetString(0), false, nil
 }
 
-// upgrade function  will do some upgrade works, when the system is boostrapped by low version TiDB server
-// For example, add new system variables into mysql.global_variables table.
-func upgrade(s Session) {
-	ver, err := getBootstrapVersion(s)
-	terror.MustNil(err)
-	if ver >= currentBootstrapVersion {
-		// It is already bootstrapped/upgraded by a higher version TiDB server.
-		return
-	}
-	// Do upgrade works then update bootstrap version.
-	if ver < version2 {
-		upgradeToVer2(s)
-		ver = version2
-	}
-	if ver < version3 {
-		upgradeToVer3(s)
-	}
-	if ver < version4 {
-		upgradeToVer4(s)
-	}
-
-	if ver < version5 {
-		upgradeToVer5(s)
-	}
-
-	if ver < version6 {
-		upgradeToVer6(s)
-	}
-
-	if ver < version7 {
-		upgradeToVer7(s)
-	}
-
-	if ver < version8 {
-		upgradeToVer8(s)
-	}
-
-	if ver < version9 {
-		upgradeToVer9(s)
-	}
-
-	if ver < version10 {
-		upgradeToVer10(s)
-	}
-
-	if ver < version11 {
-		upgradeToVer11(s)
-	}
-
-	if ver < version12 {
-		upgradeToVer12(s)
-	}
-
-	if ver < version13 {
-		upgradeToVer13(s)
-	}
-
-	if ver < version14 {
-		upgradeToVer14(s)
-	}
-
-	if ver < version15 {
-		upgradeToVer15(s)
-	}
-
-	if ver < version16 {
-		upgradeToVer16(s)
-	}
-
-	if ver < version17 {
-		upgradeToVer17(s)
-	}
-
-	if ver < version18 {
-		upgradeToVer18(s)
-	}
-
-	if ver < version19 {
-		upgradeToVer19(s)
-	}
-
-	if ver < version20 {
-		upgradeToVer20(s)
-	}
-
-	if ver < version21 {
-		upgradeToVer21(s)
-	}
-
-	if ver < version22 {
-		upgradeToVer22(s)
-	}
-
-	if ver < version23 {
-		upgradeToVer23(s)
-	}
-
-	if ver < version24 {
-		upgradeToVer24(s)
-	}
-
-	if ver < version25 {
-		upgradeToVer25(s)
-	}
-
-	if ver < version26 {
-		upgradeToVer26(s)
-	}
-
-	if ver < version27 {
-		upgradeToVer27(s)
-	}
-
-	if ver < version28 {
-		upgradeToVer28(s)
-	}
-
-	// upgradeToVer29 only need to be run when the current version is 28.
-	if ver == version28 {
-		upgradeToVer29(s)
-	}
-
-	if ver < version30 {
-		upgradeToVer30(s)
-	}
-
-	if ver < version31 {
-		upgradeToVer31(s)
-	}
-
-	if ver < version32 {
-		upgradeToVer32(s)
-	}
-
-	if ver < version33 {
-		upgradeToVer33(s)
-	}
-
-	if ver < version34 {
-		upgradeToVer34(s)
-	}
-
-	if ver < version35 {
-		upgradeToVer35(s)
-	}
-
-	if ver < version36 {
-		upgradeToVer36(s)
-	}
-
-	updateBootstrapVer(s)
-	_, err = s.Execute(context.Background(), "COMMIT")
-
-	if err != nil {
-		sleepTime := 1 * time.Second
-		logutil.BgLogger().Info("update bootstrap ver failed",
-			zap.Error(err), zap.Duration("sleeping time", sleepTime))
-		time.Sleep(sleepTime)
-		// Check if TiDB is already upgraded.
-		v, err1 := getBootstrapVersion(s)
-		if err1 != nil {
-			logutil.BgLogger().Fatal("upgrade failed", zap.Error(err1))
-		}
-		if v >= currentBootstrapVersion {
-			// It is already bootstrapped/upgraded by a higher version TiDB server.
-			return
-		}
-		logutil.BgLogger().Fatal("[Upgrade] upgrade failed",
-			zap.Int64("from", ver),
-			zap.Int("to", currentBootstrapVersion),
-			zap.Error(err))
-	}
-}
-
-// upgradeToVer2 updates to version 2.
-func upgradeToVer2(s Session) {
-	// Version 2 add two system variable for DistSQL concurrency controlling.
-	// Insert distsql related system variable.
-	distSQLVars := []string{variable.TiDBDistSQLScanConcurrency}
-	values := make([]string, 0, len(distSQLVars))
-	for _, v := range distSQLVars {
-		value := fmt.Sprintf(`("%s", "%s")`, v, variable.SysVars[v].Value)
-		values = append(values, value)
-	}
-	sql := fmt.Sprintf("INSERT HIGH_PRIORITY IGNORE INTO %s.%s VALUES %s;", mysql.SystemDB, mysql.GlobalVariablesTable,
-		strings.Join(values, ", "))
-	mustExecute(s, sql)
-}
-
-// upgradeToVer3 updates to version 3.
-func upgradeToVer3(s Session) {
-	// Version 3 fix tx_read_only variable value.
-	sql := fmt.Sprintf("UPDATE HIGH_PRIORITY %s.%s set variable_value = '0' where variable_name = 'tx_read_only';",
-		mysql.SystemDB, mysql.GlobalVariablesTable)
-	mustExecute(s, sql)
-}
-
-// upgradeToVer4 updates to version 4.
-func upgradeToVer4(s Session) {
-	sql := CreateStatsMetaTable
-	mustExecute(s, sql)
-}
-
-func upgradeToVer5(s Session) {
-	mustExecute(s, CreateStatsColsTable)
-	mustExecute(s, CreateStatsBucketsTable)
-}
-
-func upgradeToVer6(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Super_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Show_db_priv`", infoschema.ErrColumnExists)
-	// For reasons of compatibility, set the non-exists privilege column value to 'Y', as TiDB doesn't check them in older versions.
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Super_priv='Y'")
-}
-
-func upgradeToVer7(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Process_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Drop_priv`", infoschema.ErrColumnExists)
-	// For reasons of compatibility, set the non-exists privilege column value to 'Y', as TiDB doesn't check them in older versions.
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Process_priv='Y'")
-}
-
-func upgradeToVer8(s Session) {
-	// This is a dummy upgrade, it checks whether upgradeToVer7 success, if not, do it again.
-	if _, err := s.Execute(context.Background(), "SELECT HIGH_PRIORITY `Process_priv` from mysql.user limit 0"); err == nil {
-		return
-	}
-	upgradeToVer7(s)
-}
-
-func upgradeToVer9(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Trigger_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_user_priv`", infoschema.ErrColumnExists)
-	// For reasons of compatibility, set the non-exists privilege column value to 'Y', as TiDB doesn't check them in older versions.
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Trigger_priv='Y'")
-}
-
-func doReentrantDDL(s Session, sql string, ignorableErrs ...error) {
-	_, err := s.Execute(context.Background(), sql)
-	for _, ignorableErr := range ignorableErrs {
-		if terror.ErrorEqual(err, ignorableErr) {
-			return
-		}
-	}
-	if err != nil {
-		logutil.BgLogger().Fatal("doReentrantDDL error", zap.Error(err))
-	}
-}
-
-func upgradeToVer10(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_buckets CHANGE COLUMN `value` `upper_bound` BLOB NOT NULL", infoschema.ErrColumnNotExists, infoschema.ErrColumnExists)
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_buckets ADD COLUMN `lower_bound` BLOB", infoschema.ErrColumnExists)
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `null_count` bigint(64) NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms DROP COLUMN distinct_ratio", ddl.ErrCantDropFieldOrKey)
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms DROP COLUMN use_count_to_estimate", ddl.ErrCantDropFieldOrKey)
-}
-
-func upgradeToVer11(s Session) {
-	_, err := s.Execute(context.Background(), "ALTER TABLE mysql.user ADD COLUMN `References_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Grant_priv`")
-	if err != nil {
-		if terror.ErrorEqual(err, infoschema.ErrColumnExists) {
-			return
-		}
-		logutil.BgLogger().Fatal("upgradeToVer11 error", zap.Error(err))
-	}
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET References_priv='Y'")
-}
-
-func upgradeToVer12(s Session) {
-}
-
-func upgradeToVer13(s Session) {
-	sqls := []string{
-		"ALTER TABLE mysql.user ADD COLUMN `Create_tmp_table_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Super_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Lock_tables_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_tmp_table_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Create_view_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Execute_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Show_view_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_view_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Create_routine_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Show_view_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Alter_routine_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_routine_priv`",
-		"ALTER TABLE mysql.user ADD COLUMN `Event_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_user_priv`",
-	}
-	ctx := context.Background()
-	for _, sql := range sqls {
-		_, err := s.Execute(ctx, sql)
-		if err != nil {
-			if terror.ErrorEqual(err, infoschema.ErrColumnExists) {
-				continue
-			}
-			logutil.BgLogger().Fatal("upgradeToVer13 error", zap.Error(err))
-		}
-	}
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Create_tmp_table_priv='Y',Lock_tables_priv='Y',Create_view_priv='Y',Show_view_priv='Y',Create_routine_priv='Y',Alter_routine_priv='Y',Event_priv='Y'")
-}
-
-func upgradeToVer14(s Session) {
-	sqls := []string{
-		"ALTER TABLE mysql.db ADD COLUMN `References_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Grant_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Create_tmp_table_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Alter_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Lock_tables_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_tmp_table_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Create_view_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Lock_tables_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Show_view_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_view_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Create_routine_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Show_view_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Alter_routine_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Create_routine_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Event_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Execute_priv`",
-		"ALTER TABLE mysql.db ADD COLUMN `Trigger_priv` enum('N','Y') CHARACTER SET utf8 NOT NULL DEFAULT 'N' AFTER `Event_priv`",
-	}
-	ctx := context.Background()
-	for _, sql := range sqls {
-		_, err := s.Execute(ctx, sql)
-		if err != nil {
-			if terror.ErrorEqual(err, infoschema.ErrColumnExists) {
-				continue
-			}
-			logutil.BgLogger().Fatal("upgradeToVer14 error", zap.Error(err))
-		}
-	}
-}
-
-func upgradeToVer15(s Session) {
-	var err error
-	_, err = s.Execute(context.Background(), CreateGCDeleteRangeTable)
-	if err != nil {
-		logutil.BgLogger().Fatal("upgradeToVer15 error", zap.Error(err))
-	}
-}
-
-func upgradeToVer16(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `cm_sketch` blob", infoschema.ErrColumnExists)
-}
-
-func upgradeToVer17(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.user MODIFY User CHAR(32)")
-}
-
-func upgradeToVer18(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `tot_col_size` bigint(64) NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
-}
-
-func upgradeToVer19(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.db MODIFY User CHAR(32)")
-	doReentrantDDL(s, "ALTER TABLE mysql.tables_priv MODIFY User CHAR(32)")
-	doReentrantDDL(s, "ALTER TABLE mysql.columns_priv MODIFY User CHAR(32)")
-}
-
-func upgradeToVer20(s Session) {
-}
-
-func upgradeToVer21(s Session) {
-	mustExecute(s, CreateGCDeleteRangeDoneTable)
-
-	doReentrantDDL(s, "ALTER TABLE mysql.gc_delete_range DROP INDEX job_id", ddl.ErrCantDropFieldOrKey)
-	doReentrantDDL(s, "ALTER TABLE mysql.gc_delete_range ADD UNIQUE INDEX delete_range_index (job_id, element_id)", ddl.ErrDupKeyName)
-	doReentrantDDL(s, "ALTER TABLE mysql.gc_delete_range DROP INDEX element_id", ddl.ErrCantDropFieldOrKey)
-}
-
-func upgradeToVer22(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `stats_ver` bigint(64) NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
-}
-
-func upgradeToVer23(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `flag` bigint(64) NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
-}
-
-// writeSystemTZ writes system timezone info into mysql.tidb
-func writeSystemTZ(s Session) {
-	sql := fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES ("%s", "%s", "TiDB Global System Timezone.") ON DUPLICATE KEY UPDATE VARIABLE_VALUE="%s"`,
-		mysql.SystemDB, mysql.TiDBTable, tidbSystemTZ, timeutil.InferSystemTZ(), timeutil.InferSystemTZ())
-	mustExecute(s, sql)
-}
-
-// upgradeToVer24 initializes `System` timezone according to docs/design/2018-09-10-adding-tz-env.md
-func upgradeToVer24(s Session) {
-	writeSystemTZ(s)
-}
-
-// upgradeToVer25 updates tidb_max_chunk_size to new low bound value 32 if previous value is small than 32.
-func upgradeToVer25(s Session) {
-	sql := fmt.Sprintf("UPDATE HIGH_PRIORITY %[1]s.%[2]s SET VARIABLE_VALUE = '%[4]d' WHERE VARIABLE_NAME = '%[3]s' AND VARIABLE_VALUE < %[4]d",
-		mysql.SystemDB, mysql.GlobalVariablesTable, variable.TiDBMaxChunkSize, variable.DefInitChunkSize)
-	mustExecute(s, sql)
-}
-
-func upgradeToVer26(s Session) {
-	mustExecute(s, CreateRoleEdgesTable)
-	mustExecute(s, CreateDefaultRolesTable)
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Create_role_priv` ENUM('N','Y')", infoschema.ErrColumnExists)
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Drop_role_priv` ENUM('N','Y')", infoschema.ErrColumnExists)
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Account_locked` ENUM('N','Y')", infoschema.ErrColumnExists)
-	// A root user will have those privileges after upgrading.
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Create_role_priv='Y',Drop_role_priv='Y'")
-}
-
-func upgradeToVer27(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `correlation` double NOT NULL DEFAULT 0", infoschema.ErrColumnExists)
-}
-
-func upgradeToVer28(_ Session) {
-}
-
-func upgradeToVer29(_ Session) {
-}
-
-func upgradeToVer30(s Session) {
-	mustExecute(s, CreateStatsTopNTable)
-}
-
-func upgradeToVer31(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.stats_histograms ADD COLUMN `last_analyze_pos` blob default null", infoschema.ErrColumnExists)
-}
-
-func upgradeToVer32(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.tables_priv MODIFY table_priv SET('Select','Insert','Update','Delete','Create','Drop','Grant', 'Index', 'Alter', 'Create View', 'Show View', 'Trigger', 'References')")
-}
-
-func upgradeToVer33(s Session) {
-	doReentrantDDL(s, CreateExprPushdownBlacklist)
-}
-
-func upgradeToVer34(s Session) {
-	doReentrantDDL(s, CreateOptRuleBlacklist)
-}
-
-func upgradeToVer35(s Session) {
-	sql := fmt.Sprintf("UPDATE HIGH_PRIORITY %s.%s SET VARIABLE_NAME = '%s' WHERE VARIABLE_NAME = 'tidb_back_off_weight'",
-		mysql.SystemDB, mysql.GlobalVariablesTable, variable.TiDBBackOffWeight)
-	mustExecute(s, sql)
-}
-
-func upgradeToVer36(s Session) {
-	doReentrantDDL(s, "ALTER TABLE mysql.user ADD COLUMN `Shutdown_priv` ENUM('N','Y') DEFAULT 'N'", infoschema.ErrColumnExists)
-	// A root user will have those privileges after upgrading.
-	mustExecute(s, "UPDATE HIGH_PRIORITY mysql.user SET Shutdown_priv='Y' where User = 'root'")
-}
-
-// updateBootstrapVer updates bootstrap version variable in mysql.TiDB table.
-func updateBootstrapVer(s Session) {
-	// Update bootstrap version.
-	sql := fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES ("%s", "%d", "TiDB bootstrap version.") ON DUPLICATE KEY UPDATE VARIABLE_VALUE="%d"`,
-		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion, currentBootstrapVersion)
-	mustExecute(s, sql)
-}
-
-// getBootstrapVersion gets bootstrap version from mysql.tidb table;
-func getBootstrapVersion(s Session) (int64, error) {
-	sVal, isNull, err := getTiDBVar(s, tidbServerVersionVar)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if isNull {
-		return 0, nil
-	}
-	return strconv.ParseInt(sVal, 10, 64)
-}
-
 // doDDLWorks executes DDL statements in bootstrap stage.
 func doDDLWorks(s Session) {
 	// Create a test database.
 	mustExecute(s, "CREATE DATABASE IF NOT EXISTS test")
 	// Create system db.
 	mustExecute(s, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", mysql.SystemDB))
-	// Create user table.
-	mustExecute(s, CreateUserTable)
-	// Create privilege tables.
-	mustExecute(s, CreateDBPrivTable)
-	mustExecute(s, CreateTablePrivTable)
-	mustExecute(s, CreateColumnPrivTable)
 	// Create global system variable table.
 	mustExecute(s, CreateGloablVariablesTable)
 	// Create TiDB table.
@@ -857,26 +244,14 @@ func doDDLWorks(s Session) {
 	mustExecute(s, CreateGCDeleteRangeTable)
 	// Create gc_delete_range_done table.
 	mustExecute(s, CreateGCDeleteRangeDoneTable)
-	// Create role_edges table.
-	mustExecute(s, CreateRoleEdgesTable)
-	// Create default_roles table.
-	mustExecute(s, CreateDefaultRolesTable)
 	// Create stats_topn_store table.
 	mustExecute(s, CreateStatsTopNTable)
-	// Create expr_pushdown_blacklist table.
-	mustExecute(s, CreateExprPushdownBlacklist)
-	// Create opt_rule_blacklist table.
-	mustExecute(s, CreateOptRuleBlacklist)
 }
 
 // doDMLWorks executes DML statements in bootstrap stage.
 // All the statements run in a single transaction.
 func doDMLWorks(s Session) {
 	mustExecute(s, "BEGIN")
-
-	// Insert a default user with empty password.
-	mustExecute(s, `INSERT HIGH_PRIORITY INTO mysql.user VALUES
-		("%", "root", "", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "N", "Y")`)
 
 	// Init global system variables table.
 	values := make([]string, 0, len(variable.SysVars))
@@ -897,10 +272,9 @@ func doDMLWorks(s Session) {
 	mustExecute(s, sql)
 
 	sql = fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES("%s", "%d", "Bootstrap version. Do not delete.")`,
-		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, currentBootstrapVersion)
+		mysql.SystemDB, mysql.TiDBTable, tidbServerVersionVar, bootstrapped)
 	mustExecute(s, sql)
 
-	writeSystemTZ(s)
 	_, err := s.Execute(context.Background(), "COMMIT")
 	if err != nil {
 		sleepTime := 1 * time.Second
