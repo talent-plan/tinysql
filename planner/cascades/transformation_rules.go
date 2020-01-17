@@ -95,8 +95,8 @@ type PushSelDownTableScan struct {
 // The pattern of this rule is: `Selection -> TableScan`
 func NewRulePushSelDownTableScan() Transformation {
 	rule := &PushSelDownTableScan{}
-	ts := memo.NewPattern(memo.OperandTableScan, memo.EngineTiKVOrTiFlash)
-	p := memo.BuildPattern(memo.OperandSelection, memo.EngineTiKVOrTiFlash, ts)
+	ts := memo.NewPattern(memo.OperandTableScan, memo.EngineTiKVOnly)
+	p := memo.BuildPattern(memo.OperandSelection, memo.EngineTiKVOnly, ts)
 	rule.pattern = p
 	return rule
 }
@@ -228,7 +228,7 @@ type PushSelDownTiKVSingleGather struct {
 // NewRulePushSelDownTiKVSingleGather creates a new Transformation PushSelDownTiKVSingleGather.
 // The pattern of this rule is `Selection -> TiKVSingleGather -> Any`.
 func NewRulePushSelDownTiKVSingleGather() Transformation {
-	any := memo.NewPattern(memo.OperandAny, memo.EngineTiKVOrTiFlash)
+	any := memo.NewPattern(memo.OperandAny, memo.EngineTiKVOnly)
 	tg := memo.BuildPattern(memo.OperandTiKVSingleGather, memo.EngineTiDBOnly, any)
 	p := memo.BuildPattern(memo.OperandSelection, memo.EngineTiDBOnly, tg)
 
@@ -326,12 +326,7 @@ func (r *PushAggDownGather) Match(expr *memo.ExprIter) bool {
 			return false
 		}
 	}
-	childEngine := expr.Children[0].GetExpr().Children[0].EngineType
-	if childEngine != memo.EngineTiKV {
-		// TODO: Remove this check when we have implemented TiFlashAggregation.
-		return false
-	}
-	return plannercore.CheckAggCanPushCop(agg.SCtx(), agg.AggFuncs, agg.GroupByItems, false)
+	return plannercore.CheckAggCanPushCop(agg.SCtx(), agg.AggFuncs, agg.GroupByItems)
 }
 
 // OnTransform implements Transformation interface.

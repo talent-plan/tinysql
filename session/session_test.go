@@ -1776,18 +1776,3 @@ func (s *testSessionSuite2) TestReplicaRead(c *C) {
 	tk.MustExec("set @@tidb_replica_read = 'leader';")
 	c.Assert(tk.Se.GetSessionVars().GetReplicaRead(), Equals, kv.ReplicaReadLeader)
 }
-
-func (s *testSessionSuite2) TestIsolationRead(c *C) {
-	var err error
-	tk := testkit.NewTestKit(c, s.store)
-	tk.Se, err = session.CreateSession4Test(s.store)
-	c.Assert(err, IsNil)
-	c.Assert(len(tk.Se.GetSessionVars().GetIsolationReadEngines()), Equals, 3)
-	tk.MustExec("set @@tidb_isolation_read_engines = 'tiflash';")
-	engines := tk.Se.GetSessionVars().GetIsolationReadEngines()
-	c.Assert(len(engines), Equals, 1)
-	_, hasTiFlash := engines[kv.TiFlash]
-	_, hasTiKV := engines[kv.TiKV]
-	c.Assert(hasTiFlash, Equals, true)
-	c.Assert(hasTiKV, Equals, false)
-}

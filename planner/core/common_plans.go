@@ -24,8 +24,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
@@ -261,20 +259,12 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, indent string, isLast
 
 	switch x := p.(type) {
 	case *PhysicalTableReader:
-		var storeType string
-		switch x.StoreType {
-		case kv.TiKV, kv.TiFlash, kv.TiDB:
-			// expected do nothing
-		default:
-			return errors.Errorf("the store type %v is unknown", x.StoreType)
-		}
-		storeType = x.StoreType.Name()
-		err = e.explainPlanInRowFormat(x.tablePlan, "cop["+storeType+"]", childIndent, true)
+		err = e.explainPlanInRowFormat(x.tablePlan, "cop", childIndent, true)
 	case *PhysicalIndexReader:
-		err = e.explainPlanInRowFormat(x.indexPlan, "cop[tikv]", childIndent, true)
+		err = e.explainPlanInRowFormat(x.indexPlan, "cop", childIndent, true)
 	case *PhysicalIndexLookUpReader:
-		err = e.explainPlanInRowFormat(x.indexPlan, "cop[tikv]", childIndent, false)
-		err = e.explainPlanInRowFormat(x.tablePlan, "cop[tikv]", childIndent, true)
+		err = e.explainPlanInRowFormat(x.indexPlan, "cop", childIndent, false)
+		err = e.explainPlanInRowFormat(x.tablePlan, "cop", childIndent, true)
 	case *Insert:
 		if x.SelectPlan != nil {
 			err = e.explainPlanInRowFormat(x.SelectPlan, "root", childIndent, true)

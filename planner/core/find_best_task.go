@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/planner/util"
 	"github.com/pingcap/tidb/types"
@@ -276,9 +275,6 @@ func (ds *DataSource) getTableCandidate(path *util.AccessPath, prop *property.Ph
 	pkCol := ds.getPKIsHandleCol()
 	if len(prop.Items) == 1 && pkCol != nil {
 		candidate.isMatchProp = prop.Items[0].Col.Equal(nil, pkCol)
-		if path.StoreType == kv.TiFlash {
-			candidate.isMatchProp = candidate.isMatchProp && !prop.Items[0].Desc
-		}
 	}
 	candidate.columnSet = expression.ExtractColumnSet(path.AccessConds)
 	candidate.isSingleScan = true
@@ -332,9 +328,6 @@ func (ds *DataSource) skylinePruning(prop *property.PhysicalProperty) []*candida
 		}
 		pruned := false
 		for i := len(candidates) - 1; i >= 0; i-- {
-			if candidates[i].path.StoreType == kv.TiFlash {
-				continue
-			}
 			result := compareCandidates(candidates[i], currentCandidate)
 			if result == 1 {
 				pruned = true
@@ -412,12 +405,6 @@ func (ds *DataSource) findBestTask(prop *property.PhysicalProperty) (t task, err
 			}, nil
 		}
 		if path.IsTablePath {
-			if ds.preferStoreType&preferTiFlash != 0 && path.StoreType == kv.TiKV {
-				continue
-			}
-			if ds.preferStoreType&preferTiKV != 0 && path.StoreType == kv.TiFlash {
-				continue
-			}
 			tblTask, err := ds.convertToTableScan(prop, candidate)
 			if err != nil {
 				return nil, err
@@ -425,10 +412,6 @@ func (ds *DataSource) findBestTask(prop *property.PhysicalProperty) (t task, err
 			if tblTask.cost() < t.cost() {
 				t = tblTask
 			}
-			continue
-		}
-		// TiFlash storage do not support index scan.
-		if ds.preferStoreType&preferTiFlash != 0 {
 			continue
 		}
 		idxTask, err := ds.convertToIndexScan(prop, candidate)
@@ -749,14 +732,7 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 		Ranges:          path.Ranges,
 		AccessCondition: path.AccessConds,
 		filterCondition: path.TableFilters,
-		StoreType:       path.StoreType,
 	}.Init(ds.ctx)
-	if ts.StoreType == kv.TiFlash {
-		// Append the AccessCondition to filterCondition because TiFlash only support full range scan for each
-		// region, do not reset ts.Ranges as it will help prune regions during `buildCopTasks`
-		ts.filterCondition = append(ts.filterCondition, ts.AccessCondition...)
-		ts.AccessCondition = nil
-	}
 	ts.SetSchema(ds.schema.Clone())
 	rowCount := path.CountAfterAccess
 	// Only use expectedCnt when it's smaller than the count we calculated.
@@ -772,14 +748,7 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 	// we still need to assume values are uniformly distributed. For simplicity, we use uniform-assumption
 	// for all columns now, as we do in `deriveStatsByFilter`.
 	ts.stats = ds.tableStats.ScaleByExpectCnt(rowCount)
-	var rowSize float64
-	if ts.StoreType == kv.TiKV {
-		rowSize = ds.TblColHists.GetTableAvgRowSize(ds.TblCols, ts.StoreType, true)
-	} else {
-		// If `ds.handleCol` is nil, then the schema of tableScan doesn't have handle column.
-		// This logic can be ensured in column pruning.
-		rowSize = ds.TblColHists.GetTableAvgRowSize(ts.Schema().Columns, ts.StoreType, ds.handleCol != nil)
-	}
+	rowSize := ds.TblColHists.GetTableAvgRowSize(ds.TblCols)
 	sessVars := ds.ctx.GetSessionVars()
 	cost := rowCount * rowSize * sessVars.ScanFactor
 	if isMatchProp {
@@ -789,12 +758,7 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 		}
 		ts.KeepOrder = true
 	}
-	switch ts.StoreType {
-	case kv.TiKV:
-		cost += float64(len(ts.Ranges)) * sessVars.SeekFactor
-	case kv.TiFlash:
-		cost += float64(len(ts.Ranges)) * float64(len(ts.Columns)) * sessVars.SeekFactor
-	}
+	cost += float64(len(ts.Ranges)) * sessVars.SeekFactor
 	return ts, cost, rowCount
 }
 

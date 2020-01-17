@@ -563,32 +563,6 @@ func NewValuesFunc(ctx sessionctx.Context, offset int, retTp *types.FieldType) *
 	}
 }
 
-// CheckExprPushFlash checks a expr list whether each expr can be pushed to flash storage.
-func CheckExprPushFlash(exprs []Expression) (exprPush, remain []Expression) {
-	for _, expr := range exprs {
-		switch x := expr.(type) {
-		case *Constant, *CorrelatedColumn, *Column:
-			exprPush = append(exprPush, expr)
-		case *ScalarFunction:
-			switch x.FuncName.L {
-			case ast.Plus, ast.Minus, ast.Div, ast.Mul,
-				ast.NullEQ, ast.GE, ast.LE, ast.EQ, ast.NE,
-				ast.LT, ast.GT, ast.Ifnull, ast.IsNull, ast.Or,
-				ast.In, ast.Mod, ast.And, ast.LogicOr, ast.LogicAnd,
-				ast.Like, ast.UnaryNot:
-				if _, r := CheckExprPushFlash(x.GetArgs()); len(r) > 0 {
-					remain = append(remain, expr)
-				} else {
-					exprPush = append(exprPush, expr)
-				}
-			default:
-				remain = append(remain, expr)
-			}
-		}
-	}
-	return
-}
-
 // FindFieldName finds the column name from NameSlice.
 func FindFieldName(names types.NameSlice, astCol *ast.ColumnName) (int, error) {
 	dbName, tblName, colName := astCol.Schema, astCol.Table, astCol.Name

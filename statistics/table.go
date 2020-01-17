@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -683,18 +682,11 @@ func (coll *HistColl) GetAvgRowSizeListInDisk(cols []*expression.Column, padChar
 }
 
 // GetTableAvgRowSize computes average row size for a table scan, exclude the index key-value pairs.
-func (coll *HistColl) GetTableAvgRowSize(cols []*expression.Column, storeType kv.StoreType, handleInCols bool) (size float64) {
+func (coll *HistColl) GetTableAvgRowSize(cols []*expression.Column) (size float64) {
 	size = coll.GetAvgRowSize(cols, false)
-	switch storeType {
-	case kv.TiKV:
-		size += tablecodec.RecordRowKeyLen
-		// The `cols` for TiKV always contain the row_id, so prefix row size subtract its length.
-		size -= 8
-	case kv.TiFlash:
-		if !handleInCols {
-			size += 8 /* row_id length */
-		}
-	}
+	size += tablecodec.RecordRowKeyLen
+	// The `cols` for TiKV always contain the row_id, so prefix row size subtract its length.
+	size -= 8
 	return
 }
 

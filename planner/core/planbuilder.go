@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/util"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
@@ -50,8 +49,6 @@ type tableHintInfo struct {
 	sortMergeJoinTables []hintTableInfo
 	hashJoinTables      []hintTableInfo
 	indexHintList       []indexHintInfo
-	tiflashTables       []hintTableInfo
-	tikvTables          []hintTableInfo
 	aggHints            aggHintInfo
 }
 
@@ -98,14 +95,6 @@ func (info *tableHintInfo) ifPreferHashJoin(tableNames ...*hintTableInfo) bool {
 
 func (info *tableHintInfo) ifPreferINLJ(tableNames ...*hintTableInfo) bool {
 	return info.matchTableName(tableNames, info.indexNestedLoopJoinTables.inljTables)
-}
-
-func (info *tableHintInfo) ifPreferTiFlash(tableNames ...*hintTableInfo) bool {
-	return info.matchTableName(tableNames, info.tiflashTables)
-}
-
-func (info *tableHintInfo) ifPreferTiKV(tableNames ...*hintTableInfo) bool {
-	return info.matchTableName(tableNames, info.tikvTables)
 }
 
 // matchTableName checks whether the hint hit the need.
@@ -428,11 +417,7 @@ func isPrimaryIndex(indexName model.CIStr) bool {
 func (b *PlanBuilder) getPossibleAccessPaths(indexHints []*ast.IndexHint, tbl table.Table, dbName, tblName model.CIStr) ([]*util.AccessPath, error) {
 	tblInfo := tbl.Meta()
 	publicPaths := make([]*util.AccessPath, 0, len(tblInfo.Indices)+2)
-	tp := kv.TiKV
-	if tbl.Type().IsClusterTable() {
-		tp = kv.TiDB
-	}
-	publicPaths = append(publicPaths, &util.AccessPath{IsTablePath: true, StoreType: tp})
+	publicPaths = append(publicPaths, &util.AccessPath{IsTablePath: true})
 	for _, index := range tblInfo.Indices {
 		if index.State == model.StatePublic {
 			publicPaths = append(publicPaths, &util.AccessPath{Index: index})
@@ -506,32 +491,6 @@ func (b *PlanBuilder) getPossibleAccessPaths(indexHints []*ast.IndexHint, tbl ta
 		available = append(available, &util.AccessPath{IsTablePath: true})
 	}
 	return available, nil
-}
-
-func (b *PlanBuilder) filterPathByIsolationRead(paths []*util.AccessPath) ([]*util.AccessPath, error) {
-	// TODO: filter paths with isolation read locations.
-	isolationReadEngines := b.ctx.GetSessionVars().GetIsolationReadEngines()
-	availableEngine := map[kv.StoreType]struct{}{}
-	var availableEngineStr string
-	for i := len(paths) - 1; i >= 0; i-- {
-		if _, ok := availableEngine[paths[i].StoreType]; !ok {
-			availableEngine[paths[i].StoreType] = struct{}{}
-			if availableEngineStr != "" {
-				availableEngineStr += ", "
-			}
-			availableEngineStr += paths[i].StoreType.Name()
-		}
-		if _, ok := isolationReadEngines[paths[i].StoreType]; !ok {
-			paths = append(paths[:i], paths[i+1:]...)
-		}
-	}
-	var err error
-	if len(paths) == 0 {
-		engineVals, _ := b.ctx.GetSessionVars().GetSystemVar(variable.TiDBIsolationReadEngines)
-		err = ErrInternal.GenWithStackByArgs(fmt.Sprintf("Can not find access path matching '%v'(value: '%v'). Available values are '%v'.",
-			variable.TiDBIsolationReadEngines, engineVals, availableEngineStr))
-	}
-	return paths, err
 }
 
 func removeIgnoredPaths(paths, ignoredPaths []*util.AccessPath, tblInfo *model.TableInfo) []*util.AccessPath {

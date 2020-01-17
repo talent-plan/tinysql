@@ -158,28 +158,6 @@ func (s *testMemoSuite) TestGetInsertGroupImpl(c *C) {
 	c.Assert(newImpl, IsNil)
 }
 
-func (s *testMemoSuite) TestEngineTypeSet(c *C) {
-	c.Assert(EngineAll.Contains(EngineTiDB), IsTrue)
-	c.Assert(EngineAll.Contains(EngineTiKV), IsTrue)
-	c.Assert(EngineAll.Contains(EngineTiFlash), IsTrue)
-
-	c.Assert(EngineTiDBOnly.Contains(EngineTiDB), IsTrue)
-	c.Assert(EngineTiDBOnly.Contains(EngineTiKV), IsFalse)
-	c.Assert(EngineTiDBOnly.Contains(EngineTiFlash), IsFalse)
-
-	c.Assert(EngineTiKVOnly.Contains(EngineTiDB), IsFalse)
-	c.Assert(EngineTiKVOnly.Contains(EngineTiKV), IsTrue)
-	c.Assert(EngineTiKVOnly.Contains(EngineTiFlash), IsFalse)
-
-	c.Assert(EngineTiFlashOnly.Contains(EngineTiDB), IsFalse)
-	c.Assert(EngineTiFlashOnly.Contains(EngineTiKV), IsFalse)
-	c.Assert(EngineTiFlashOnly.Contains(EngineTiFlash), IsTrue)
-
-	c.Assert(EngineTiKVOrTiFlash.Contains(EngineTiDB), IsFalse)
-	c.Assert(EngineTiKVOrTiFlash.Contains(EngineTiKV), IsTrue)
-	c.Assert(EngineTiKVOrTiFlash.Contains(EngineTiFlash), IsTrue)
-}
-
 func (s *testMemoSuite) TestFirstElemAfterDelete(c *C) {
 	oldExpr := NewGroupExpr(plannercore.LogicalLimit{}.Init(s.sctx))
 	g := NewGroupWithSchema(oldExpr, s.schema)

@@ -34,8 +34,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/planner/util"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/table"
@@ -71,12 +69,6 @@ const (
 	HintIgnoreIndex = "ignore_index"
 	// HintAggToCop is hint enforce pushing aggregation to coprocessor.
 	HintAggToCop = "agg_to_cop"
-	// HintReadFromStorage is hint enforce some tables read from specific type of storage.
-	HintReadFromStorage = "read_from_storage"
-	// HintTiFlash is a label represents the tiflash storage type.
-	HintTiFlash = "tiflash"
-	// HintTiKV is a label represents the tikv storage type.
-	HintTiKV = "tikv"
 )
 
 const (
@@ -392,45 +384,6 @@ func (p *LogicalJoin) setPreferredJoinType(hintInfo *tableHintInfo) {
 		errMsg := "Join hints are conflict, you can only specify one type of join"
 		warning := ErrInternal.GenWithStack(errMsg)
 		p.ctx.GetSessionVars().StmtCtx.AppendWarning(warning)
-	}
-}
-
-func (ds *DataSource) setPreferredStoreType(hintInfo *tableHintInfo) {
-	if hintInfo == nil {
-		return
-	}
-
-	var alias *hintTableInfo
-	if len(ds.TableAsName.L) != 0 {
-		alias = &hintTableInfo{dbName: ds.DBName, tblName: *ds.TableAsName}
-	} else {
-		alias = &hintTableInfo{dbName: ds.DBName, tblName: ds.tableInfo.Name}
-	}
-	if hintInfo.ifPreferTiKV(alias) {
-		ds.preferStoreType |= preferTiKV
-	}
-	if hintInfo.ifPreferTiFlash(alias) {
-		if ds.preferStoreType != 0 {
-			errMsg := fmt.Sprintf("Storage hints are conflict, you can only specify one storage type of table %s.%s",
-				alias.dbName.L, alias.tblName.L)
-			warning := ErrInternal.GenWithStack(errMsg)
-			ds.ctx.GetSessionVars().StmtCtx.AppendWarning(warning)
-			ds.preferStoreType = 0
-			return
-		}
-		ds.preferStoreType |= preferTiFlash
-		hasTiFlashPath := false
-		for _, path := range ds.possibleAccessPaths {
-			if path.StoreType == kv.TiFlash {
-				hasTiFlashPath = true
-				break
-			}
-		}
-		// TODO: For now, if there is a TiFlash hint for a table, we enforce a TiFlash path. But hint is just a suggestion
-		//       for the planner. We can keep it since we need it to debug with PD and TiFlash. In future, this should be removed.
-		if !hasTiFlashPath {
-			ds.possibleAccessPaths = append(ds.possibleAccessPaths, &util.AccessPath{IsTablePath: true, StoreType: kv.TiFlash})
-		}
 	}
 }
 
@@ -1992,7 +1945,6 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 	var (
 		sortMergeTables, INLJTables, INLHJTables, INLMJTables, hashJoinTables []hintTableInfo
 		indexHintList                                                         []indexHintInfo
-		tiflashTables, tikvTables                                             []hintTableInfo
 		aggHints                                                              aggHintInfo
 	)
 	for _, hint := range hints {
@@ -2045,13 +1997,7 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 					},
 				})
 			}
-		case HintReadFromStorage:
-			if hint.StoreType.L == HintTiFlash {
-				tiflashTables = tableNames2HintTableInfo(b.ctx, hint.Tables)
-			}
-			if hint.StoreType.L == HintTiKV {
-				tikvTables = tableNames2HintTableInfo(b.ctx, hint.Tables)
-			}
+
 		default:
 			// ignore hints that not implemented
 		}
@@ -2061,8 +2007,6 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 		indexNestedLoopJoinTables: indexNestedLoopJoinTables{INLJTables, INLHJTables, INLMJTables},
 		hashJoinTables:            hashJoinTables,
 		indexHintList:             indexHintList,
-		tiflashTables:             tiflashTables,
-		tikvTables:                tikvTables,
 		aggHints:                  aggHints,
 	})
 }
@@ -2308,10 +2252,6 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 	if err != nil {
 		return nil, err
 	}
-	possiblePaths, err = b.filterPathByIsolationRead(possiblePaths)
-	if err != nil {
-		return nil, err
-	}
 
 	var columns []*table.Column
 	if b.inUpdateStmt {
@@ -2393,7 +2333,6 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 	}
 	ds.SetSchema(schema)
 	ds.names = names
-	ds.setPreferredStoreType(b.TableHints())
 
 	// Init FullIdxCols, FullIdxColLens for accessPaths.
 	for _, path := range ds.possibleAccessPaths {

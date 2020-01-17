@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -56,9 +55,6 @@ type PhysicalTableReader struct {
 	// TablePlans flats the tablePlan to construct executor pb.
 	TablePlans []PhysicalPlan
 	tablePlan  PhysicalPlan
-
-	// StoreType indicates table read from which type of store.
-	StoreType kv.StoreType
 }
 
 // GetPhysicalTableReader returns PhysicalTableReader for logical TiKVSingleGather.
@@ -206,8 +202,6 @@ type PhysicalTableScan struct {
 	rangeDecidedBy []*expression.Column
 
 	HandleIdx int
-
-	StoreType kv.StoreType
 
 	// The table scan may be a partition, rather than a real table.
 	isPartition bool

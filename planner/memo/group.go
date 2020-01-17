@@ -33,8 +33,6 @@ const (
 	EngineTiDB EngineType = 1 << iota
 	// EngineTiKV stands for groups which is below `Gather`s and will be executed in TiKV layer.
 	EngineTiKV
-	// EngineTiFlash stands for groups which is below `Gather`s and will be executed in TiFlash layer.
-	EngineTiFlash
 )
 
 // EngineTypeSet is the bit set of EngineTypes.
@@ -45,12 +43,8 @@ const (
 	EngineTiDBOnly = EngineTypeSet(EngineTiDB)
 	// EngineTiKVOnly is the EngineTypeSet for EngineTiKV only.
 	EngineTiKVOnly = EngineTypeSet(EngineTiKV)
-	// EngineTiFlashOnly is the EngineTypeSet for EngineTiFlash only.
-	EngineTiFlashOnly = EngineTypeSet(EngineTiFlash)
-	// EngineTiKVOrTiFlash is the EngineTypeSet for (EngineTiKV | EngineTiFlash).
-	EngineTiKVOrTiFlash = EngineTypeSet(EngineTiKV | EngineTiFlash)
 	// EngineAll is the EngineTypeSet for all of the EngineTypes.
-	EngineAll = EngineTypeSet(EngineTiDB | EngineTiKV | EngineTiFlash)
+	EngineAll = EngineTypeSet(EngineTiDB | EngineTiKV)
 )
 
 // Contains checks whether the EngineTypeSet contains the EngineType.
@@ -65,8 +59,6 @@ func (e EngineType) String() string {
 		return "EngineTiDB"
 	case EngineTiKV:
 		return "EngineTiKV"
-	case EngineTiFlash:
-		return "EngineTiFlash"
 	}
 	return "UnknownEngineType"
 }

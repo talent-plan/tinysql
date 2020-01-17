@@ -7,7 +7,7 @@
         "└─Sort_4 10000.00 root Column#3:asc",
         "  └─Projection_9 10000.00 root test.t.i, plus(test.t.i, 1)->Column#3",
         "    └─TableReader_7 10000.00 root data:TableScan_6",
-        "      └─TableScan_6 10000.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false, stats:pseudo"
+        "      └─TableScan_6 10000.00 cop table:t, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
         "1",
@@ -25,8 +25,8 @@
         "└─TopN_7 2.00 root Column#3:asc, offset:0, count:2",
         "  └─Projection_16 2.00 root test.t.i, plus(test.t.i, 1)->Column#3",
         "    └─TableReader_12 2.00 root data:TopN_11",
-        "      └─TopN_11 2.00 cop[tikv] plus(test.t.i, 1):asc, offset:0, count:2",
-        "        └─TableScan_10 10000.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false, stats:pseudo"
+        "      └─TopN_11 2.00 cop plus(test.t.i, 1):asc, offset:0, count:2",
+        "        └─TableScan_10 10000.00 cop table:t, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
         "1",

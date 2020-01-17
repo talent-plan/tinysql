@@ -68,7 +68,7 @@ func NewRegionRequestSender(regionCache *RegionCache, client Client) *RegionRequ
 
 // SendReq sends a request to tikv server.
 func (s *RegionRequestSender) SendReq(bo *Backoffer, req *tikvrpc.Request, regionID RegionVerID, timeout time.Duration) (*tikvrpc.Response, error) {
-	resp, _, err := s.SendReqCtx(bo, req, regionID, timeout, kv.TiKV)
+	resp, _, err := s.SendReqCtx(bo, req, regionID, timeout)
 	return resp, err
 }
 
@@ -78,7 +78,6 @@ func (s *RegionRequestSender) SendReqCtx(
 	req *tikvrpc.Request,
 	regionID RegionVerID,
 	timeout time.Duration,
-	sType kv.StoreType,
 ) (
 	resp *tikvrpc.Response,
 	rpcCtx *RPCContext,
@@ -111,18 +110,7 @@ func (s *RegionRequestSender) SendReqCtx(
 	}
 	seed := req.ReplicaReadSeed
 	for {
-		switch sType {
-		case kv.TiKV:
-			rpcCtx, err = s.regionCache.GetTiKVRPCContext(bo, regionID, replicaRead, seed)
-		case kv.TiFlash:
-			rpcCtx, err = s.regionCache.GetTiFlashRPCContext(bo, regionID)
-		case kv.TiDB:
-			rpcCtx = &RPCContext{
-				Addr: s.storeAddr,
-			}
-		default:
-			err = errors.Errorf("unsupported storage type: %v", sType)
-		}
+		rpcCtx, err = s.regionCache.GetTiKVRPCContext(bo, regionID, replicaRead, seed)
 		if err != nil {
 			return nil, nil, err
 		}

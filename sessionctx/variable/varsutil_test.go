@@ -162,10 +162,6 @@ func (s *testVarsutilSuite) TestValidate(c *C) {
 		{TiDBOptJoinReorderThreshold, "a", true},
 		{TiDBOptJoinReorderThreshold, "-1", true},
 		{TiDBReplicaRead, "invalid", true},
-		{TiDBIsolationReadEngines, "", true},
-		{TiDBIsolationReadEngines, "tikv", false},
-		{TiDBIsolationReadEngines, "TiKV,tiflash", false},
-		{TiDBIsolationReadEngines, "   tikv,   tiflash  ", false},
 	}
 
 	for _, t := range tests {

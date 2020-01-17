@@ -111,7 +111,7 @@ const (
 	TiDBOptScanFactor = "tidb_opt_scan_factor"
 	// tidb_opt_desc_factor is the IO cost of scanning 1 byte data on TiKV in desc order.
 	TiDBOptDescScanFactor = "tidb_opt_desc_factor"
-	// tidb_opt_seek_factor is the IO cost of seeking the start value in a range on TiKV or TiFlash.
+	// tidb_opt_seek_factor is the IO cost of seeking the start value in a range on TiKV.
 	TiDBOptSeekFactor = "tidb_opt_seek_factor"
 	// tidb_opt_memory_factor is the memory cost of storing one tuple.
 	TiDBOptMemoryFactor = "tidb_opt_memory_factor"
@@ -233,10 +233,6 @@ const (
 
 	// TiDBEnableNoopFuncs set true will enable using fake funcs(like get_lock release_lock)
 	TiDBEnableNoopFuncs = "tidb_enable_noop_functions"
-
-	// TiDBIsolationReadEngines indicates the tidb only read from the stores whose engine type is involved in IsolationReadEngines.
-	// Now, only support TiKV and TiFlash.
-	TiDBIsolationReadEngines = "tidb_isolation_read_engines"
 )
 
 // Default TiDB system variable values.

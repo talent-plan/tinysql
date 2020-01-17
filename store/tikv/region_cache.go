@@ -58,10 +58,9 @@ type Region struct {
 // RegionStore represents region stores info
 // it will be store as unsafe.Pointer and be load at once
 type RegionStore struct {
-	workTiKVIdx    int32    // point to current work peer in meta.Peers and work store in stores(same idx) for tikv peer
-	workTiFlashIdx int32    // point to current work peer in meta.Peers and work store in stores(same idx) for tiflash peer
-	stores         []*Store // stores in this region
-	storeFails     []uint32 // snapshots of store's fail, need reload when `storeFails[curr] != stores[cur].fail`
+	workTiKVIdx int32    // point to current work peer in meta.Peers and work store in stores(same idx) for tikv peer
+	stores      []*Store // stores in this region
+	storeFails  []uint32 // snapshots of store's fail, need reload when `storeFails[curr] != stores[cur].fail`
 }
 
 // clone clones region store struct.
@@ -69,10 +68,9 @@ func (r *RegionStore) clone() *RegionStore {
 	storeFails := make([]uint32, len(r.stores))
 	copy(storeFails, r.storeFails)
 	return &RegionStore{
-		workTiFlashIdx: r.workTiFlashIdx,
-		workTiKVIdx:    r.workTiKVIdx,
-		stores:         r.stores,
-		storeFails:     storeFails,
+		workTiKVIdx: r.workTiKVIdx,
+		stores:      r.stores,
+		storeFails:  storeFails,
 	}
 }
 
@@ -88,9 +86,6 @@ func (r *RegionStore) follower(seed uint32) int32 {
 		if followerIdx >= r.workTiKVIdx {
 			followerIdx++
 		}
-		if r.stores[followerIdx].storeType != kv.TiKV {
-			continue
-		}
 		if r.storeFails[followerIdx] == atomic.LoadUint32(&r.stores[followerIdx].fail) {
 			return followerIdx
 		}
@@ -104,10 +99,9 @@ func (r *Region) init(c *RegionCache) {
 	// region store pull used store from global store map
 	// to avoid acquire storeMu in later access.
 	rs := &RegionStore{
-		workTiKVIdx:    0,
-		workTiFlashIdx: 0,
-		stores:         make([]*Store, 0, len(r.meta.Peers)),
-		storeFails:     make([]uint32, 0, len(r.meta.Peers)),
+		workTiKVIdx: 0,
+		stores:      make([]*Store, 0, len(r.meta.Peers)),
+		storeFails:  make([]uint32, 0, len(r.meta.Peers)),
 	}
 	for _, p := range r.meta.Peers {
 		c.storeMu.RLock()
@@ -327,64 +321,6 @@ func (c *RegionCache) GetTiKVRPCContext(bo *Backoffer, id RegionVerID, replicaRe
 	}, nil
 }
 
-// GetTiFlashRPCContext returns RPCContext for a region must access flash store. If it returns nil, the region
-// must be out of date and already dropped from cache or not flash store found.
-func (c *RegionCache) GetTiFlashRPCContext(bo *Backoffer, id RegionVerID) (*RPCContext, error) {
-	ts := time.Now().Unix()
-
-	cachedRegion := c.getCachedRegionWithRLock(id)
-	if cachedRegion == nil {
-		return nil, nil
-	}
-	if !cachedRegion.checkRegionCacheTTL(ts) {
-		return nil, nil
-	}
-
-	regionStore := cachedRegion.getStore()
-
-	// sIdx is for load balance of TiFlash store.
-	sIdx := int(atomic.AddInt32(&regionStore.workTiFlashIdx, 1))
-	for i := range regionStore.stores {
-		storeIdx := (sIdx + i) % len(regionStore.stores)
-		store := regionStore.stores[storeIdx]
-		addr, err := c.getStoreAddr(bo, cachedRegion, store, storeIdx)
-		if err != nil {
-			return nil, err
-		}
-		if len(addr) == 0 {
-			cachedRegion.invalidate()
-			return nil, nil
-		}
-		if store.getResolveState() == needCheck {
-			store.reResolve(c)
-		}
-		if store.storeType != kv.TiFlash {
-			continue
-		}
-		atomic.StoreInt32(&regionStore.workTiFlashIdx, int32(storeIdx))
-		peer := cachedRegion.meta.Peers[storeIdx]
-		storeFailEpoch := atomic.LoadUint32(&store.fail)
-		if storeFailEpoch != regionStore.storeFails[storeIdx] {
-			cachedRegion.invalidate()
-			logutil.BgLogger().Info("invalidate current region, because others failed on same store",
-				zap.Uint64("region", id.GetID()),
-				zap.String("store", store.addr))
-			return nil, nil
-		}
-		return &RPCContext{
-			Region:  id,
-			Meta:    cachedRegion.meta,
-			Peer:    peer,
-			PeerIdx: storeIdx,
-			Store:   store,
-			Addr:    addr,
-		}, nil
-	}
-
-	cachedRegion.invalidate()
-	return nil, nil
-}
-
 // KeyLocation is the region and range that a key is located.
 type KeyLocation struct {
 	Region   RegionVerID
@@ -461,11 +397,7 @@ func (c *RegionCache) findRegionByKey(bo *Backoffer, key []byte, isEndKey bool) 
 func (c *RegionCache) OnSendFail(bo *Backoffer, ctx *RPCContext, scheduleReload bool, err error) {
 	r := c.getCachedRegionWithRLock(ctx.Region)
 	if r != nil {
-		if ctx.Store.storeType == kv.TiKV {
-			c.switchNextPeer(r, ctx.PeerIdx, err)
-		} else {
-			c.switchNextFlashPeer(r, ctx.PeerIdx, err)
-		}
+		c.switchNextPeer(r, ctx.PeerIdx, err)
 		if scheduleReload {
 			r.scheduleReload()
 		}
@@ -1036,24 +968,6 @@ func (c *RegionCache) switchToPeer(r *Region, targetStoreID uint64) (found bool)
 	return
 }
 
-func (c *RegionCache) switchNextFlashPeer(r *Region, currentPeerIdx int, err error) {
-	rs := r.getStore()
-
-	if err != nil { // TODO: refine err, only do this for some errors.
-		s := rs.stores[currentPeerIdx]
-		epoch := rs.storeFails[currentPeerIdx]
-		if atomic.CompareAndSwapUint32(&s.fail, epoch, epoch+1) {
-			logutil.BgLogger().Info("mark store's regions need be refill", zap.String("store", s.addr))
-		}
-		s.markNeedCheck(c.notifyCheckCh)
-	}
-
-	nextIdx := (currentPeerIdx + 1) % len(rs.stores)
-	newRegionStore := rs.clone()
-	newRegionStore.workTiFlashIdx = int32(nextIdx)
-	r.compareAndSwapStore(rs, newRegionStore)
-}
-
 func (c *RegionCache) switchNextPeer(r *Region, currentPeerIdx int, err error) {
 	rs := r.getStore()
 
@@ -1071,9 +985,6 @@ func (c *RegionCache) switchNextPeer(r *Region, currentPeerIdx int, err error) {
 	}
 
 	nextIdx := (currentPeerIdx + 1) % len(rs.stores)
-	for rs.stores[nextIdx].storeType == kv.TiFlash {
-		nextIdx = (nextIdx + 1) % len(rs.stores)
-	}
 	newRegionStore := rs.clone()
 	newRegionStore.workTiKVIdx = int32(nextIdx)
 	r.compareAndSwapStore(rs, newRegionStore)
@@ -1124,12 +1035,11 @@ func (r *Region) ContainsByEnd(key []byte) bool {
 
 // Store contains a kv process's address.
 type Store struct {
-	addr         string       // loaded store address
-	storeID      uint64       // store's id
-	state        uint64       // unsafe store storeState
-	resolveMutex sync.Mutex   // protect pd from concurrent init requests
-	fail         uint32       // store fail count, see RegionStore.storeFails
-	storeType    kv.StoreType // type of the store
+	addr         string     // loaded store address
+	storeID      uint64     // store's id
+	state        uint64     // unsafe store storeState
+	resolveMutex sync.Mutex // protect pd from concurrent init requests
+	fail         uint32     // store fail count, see RegionStore.storeFails
 }
 
 type resolveState uint64
@@ -1169,15 +1079,6 @@ func (s *Store) initResolve(bo *Backoffer, c *RegionCache) (addr string, err err
 		}
 		addr = store.GetAddress()
 		s.addr = addr
-		s.storeType = kv.TiKV
-		for _, label := range store.Labels {
-			if label.Key == "engine" {
-				if label.Value == kv.TiFlash.Name() {
-					s.storeType = kv.TiFlash
-				}
-				break
-			}
-		}
 	retry:
 		state = s.getResolveState()
 		if state != unresolved {
@@ -1208,19 +1109,10 @@ func (s *Store) reResolve(c *RegionCache) {
 		return
 	}
 
-	storeType := kv.TiKV
-	for _, label := range store.Labels {
-		if label.Key == "engine" {
-			if label.Value == kv.TiFlash.Name() {
-				storeType = kv.TiFlash
-			}
-			break
-		}
-	}
 	addr = store.GetAddress()
 	if s.addr != addr {
 		state := resolved
-		newStore := &Store{storeID: s.storeID, addr: addr, storeType: storeType}
+		newStore := &Store{storeID: s.storeID, addr: addr}
 		newStore.state = *(*uint64)(unsafe.Pointer(&state))
 		c.storeMu.Lock()
 		c.storeMu.stores[newStore.storeID] = newStore

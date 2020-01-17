@@ -15,7 +15,6 @@ package implementation
 
 import (
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/kv"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/planner/memo"
 	"github.com/pingcap/tidb/statistics"
@@ -100,7 +99,7 @@ func NewTableScanImpl(ts *plannercore.PhysicalTableScan, cols []*expression.Colu
 // CalcCost calculates the cost of the table scan Implementation.
 func (impl *TableScanImpl) CalcCost(outCount float64, children ...memo.Implementation) float64 {
 	ts := impl.plan.(*plannercore.PhysicalTableScan)
-	width := impl.tblColHists.GetTableAvgRowSize(impl.tblCols, kv.TiKV, true)
+	width := impl.tblColHists.GetTableAvgRowSize(impl.tblCols)
 	sessVars := ts.SCtx().GetSessionVars()
 	impl.cost = outCount * sessVars.ScanFactor * width
 	if ts.Desc {

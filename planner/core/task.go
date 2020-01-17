@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
@@ -136,20 +135,6 @@ func (t *copTask) finishIndexPlan() {
 	}
 	rowSize := t.tblColHists.GetIndexAvgRowSize(t.tblCols, p.(*PhysicalIndexScan).Index.Unique)
 	t.cst += cnt * rowSize * sessVars.ScanFactor
-}
-
-func (t *copTask) getStoreType() kv.StoreType {
-	if t.tablePlan == nil {
-		return kv.TiKV
-	}
-	tp := t.tablePlan
-	for len(tp.Children()) > 0 {
-		tp = tp.Children()[0]
-	}
-	if ts, ok := tp.(*PhysicalTableScan); ok {
-		return ts.StoreType
-	}
-	return kv.TiKV
 }
 
 func (p *basePhysicalPlan) attach2Task(tasks ...task) task {
@@ -483,7 +468,6 @@ func finishCopTask(ctx sessionctx.Context, task task) task {
 		ts := tp.(*PhysicalTableScan)
 		p := PhysicalTableReader{
 			tablePlan: t.tablePlan,
-			StoreType: ts.StoreType,
 		}.Init(ctx)
 		p.stats = t.tablePlan.statsInfo()
 		ts.ExpandVirtualColumn()
@@ -738,20 +722,12 @@ func (sel *PhysicalSelection) attach2Task(tasks ...task) task {
 
 // CheckAggCanPushCop checks whether the aggFuncs with groupByItems can
 // be pushed down to coprocessor.
-func CheckAggCanPushCop(sctx sessionctx.Context, aggFuncs []*aggregation.AggFuncDesc, groupByItems []expression.Expression, copToFlash bool) bool {
+func CheckAggCanPushCop(sctx sessionctx.Context, aggFuncs []*aggregation.AggFuncDesc, groupByItems []expression.Expression) bool {
 	sc := sctx.GetSessionVars().StmtCtx
 	client := sctx.GetClient()
 	for _, aggFunc := range aggFuncs {
 		if expression.ContainVirtualColumn(aggFunc.Args) {
 			return false
-		}
-		if copToFlash {
-			if !aggregation.CheckAggPushFlash(aggFunc) {
-				return false
-			}
-			if _, remain := expression.CheckExprPushFlash(append(aggFunc.Args, groupByItems...)); len(remain) > 0 {
-				return false
-			}
 		}
 		pb := aggregation.AggFuncToPBExpr(sc, client, aggFunc)
 		if pb == nil {
@@ -821,24 +797,14 @@ func BuildFinalModeAggregation(
 	return
 }
 
-func (p *basePhysicalAgg) newPartialAggregate(copTaskType kv.StoreType) (partial, final PhysicalPlan) {
+func (p *basePhysicalAgg) newPartialAggregate() (partial, final PhysicalPlan) {
 	// Check if this aggregation can push down.
-	if !CheckAggCanPushCop(p.ctx, p.AggFuncs, p.GroupByItems, copTaskType == kv.TiFlash) {
+	if !CheckAggCanPushCop(p.ctx, p.AggFuncs, p.GroupByItems) {
 		return nil, p.self
 	}
 	finalAggFuncs, finalGbyItems, partialSchema := BuildFinalModeAggregation(p.ctx, p.AggFuncs, p.GroupByItems, p.schema)
 	// Remove unnecessary FirstRow.
 	p.AggFuncs = RemoveUnnecessaryFirstRow(p.ctx, finalAggFuncs, finalGbyItems, p.AggFuncs, p.GroupByItems, partialSchema)
-	if copTaskType == kv.TiDB {
-		// For partial agg of TiDB cop task, since TiDB coprocessor reuse the TiDB executor,
-		// and TiDB aggregation executor won't output the group by value,
-		// so we need add `firstrow` aggregation function to output the group by value.
-		aggFuncs, err := genFirstRowAggForGroupBy(p.ctx, p.GroupByItems)
-		if err != nil {
-			return nil, p.self
-		}
-		p.AggFuncs = append(p.AggFuncs, aggFuncs...)
-	}
 	finalSchema := p.schema
 	p.schema = partialSchema
 	partialAgg := p.self
@@ -858,18 +824,6 @@ func (p *basePhysicalAgg) newPartialAggregate(copTaskType kv.StoreType) (partial
 	}.initForHash(p.ctx, p.stats)
 	finalAgg.schema = finalSchema
 	return partialAgg, finalAgg
-}
-
-func genFirstRowAggForGroupBy(ctx sessionctx.Context, groupByItems []expression.Expression) ([]*aggregation.AggFuncDesc, error) {
-	aggFuncs := make([]*aggregation.AggFuncDesc, 0, len(groupByItems))
-	for _, groupBy := range groupByItems {
-		agg, err := aggregation.NewAggFuncDesc(ctx, ast.AggFuncFirstRow, []expression.Expression{groupBy}, false)
-		if err != nil {
-			return nil, err
-		}
-		aggFuncs = append(aggFuncs, agg)
-	}
-	return aggFuncs, nil
 }
 
 // RemoveUnnecessaryFirstRow removes unnecessary FirstRow of the aggregation. This function can be
@@ -922,8 +876,7 @@ func (p *PhysicalStreamAgg) attach2Task(tasks ...task) task {
 		// The `extraHandleCol` is added if the double read needs to keep order. So we just use it to decided
 		// whether the following plan is double read with order reserved.
 		if cop.extraHandleCol == nil {
-			copTaskType := cop.getStoreType()
-			partialAgg, finalAgg := p.newPartialAggregate(copTaskType)
+			partialAgg, finalAgg := p.newPartialAggregate()
 			if partialAgg != nil {
 				if cop.tablePlan != nil {
 					cop.finishIndexPlan()
@@ -987,8 +940,7 @@ func (p *PhysicalHashAgg) attach2Task(tasks ...task) task {
 	t := tasks[0].copy()
 	inputRows := t.count()
 	if cop, ok := t.(*copTask); ok {
-		copTaskType := cop.getStoreType()
-		partialAgg, finalAgg := p.newPartialAggregate(copTaskType)
+		partialAgg, finalAgg := p.newPartialAggregate()
 		if partialAgg != nil {
 			if cop.tablePlan != nil {
 				cop.finishIndexPlan()

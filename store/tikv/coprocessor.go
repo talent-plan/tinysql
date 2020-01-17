@@ -28,12 +28,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/ranger"
 	"go.uber.org/zap"
 )
 
@@ -86,7 +83,6 @@ type copTask struct {
 	respChan  chan *copResponse
 	storeAddr string
 	cmdType   tikvrpc.CmdType
-	storeType kv.StoreType
 }
 
 func (r *copTask) String() string {
@@ -210,55 +206,24 @@ const rangesPerTask = 25000
 func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv.Request) ([]*copTask, error) {
 	start := time.Now()
 	cmdType := tikvrpc.CmdCop
-	var tableStart, tableEnd kv.Key
-	if req.StoreType == kv.TiFlash {
-		tableID := tablecodec.DecodeTableID(ranges.at(0).StartKey)
-		fullRange := ranger.FullIntRange(false)
-		keyRange := distsql.TableRangesToKVRanges(tableID, fullRange)
-		tableStart, tableEnd = keyRange[0].StartKey, keyRange[0].EndKey
-	}
 
 	rangesLen := ranges.len()
 	var tasks []*copTask
 	appendTask := func(regionWithRangeInfo *KeyLocation, ranges *copRanges) {
-		if req.StoreType == kv.TiKV {
-			// TiKV will return gRPC error if the message is too large. So we need to limit the length of the ranges slice
-			// to make sure the message can be sent successfully.
-			rLen := ranges.len()
-			for i := 0; i < rLen; {
-				nextI := mathutil.Min(i+rangesPerTask, rLen)
-				tasks = append(tasks, &copTask{
-					region: regionWithRangeInfo.Region,
-					ranges: ranges.slice(i, nextI),
-					// Channel buffer is 2 for handling region split.
-					// In a common case, two region split tasks will not be blocked.
-					respChan:  make(chan *copResponse, 2),
-					cmdType:   cmdType,
-					storeType: req.StoreType,
-				})
-				i = nextI
-			}
-		} else if req.StoreType == kv.TiFlash {
-			left, right := regionWithRangeInfo.StartKey, regionWithRangeInfo.EndKey
-			if bytes.Compare(tableStart, left) >= 0 {
-				left = tableStart
-			}
-			if bytes.Compare(tableEnd, right) <= 0 || len(right) == 0 {
-				right = tableEnd
-			}
-			fullRange := kv.KeyRange{StartKey: left, EndKey: right}
+		// TiKV will return gRPC error if the message is too large. So we need to limit the length of the ranges slice
+		// to make sure the message can be sent successfully.
+		rLen := ranges.len()
+		for i := 0; i < rLen; {
+			nextI := mathutil.Min(i+rangesPerTask, rLen)
 			tasks = append(tasks, &copTask{
 				region: regionWithRangeInfo.Region,
-				// TiFlash only support full range scan for the region, ignore the real ranges
-				// does not affect the correctness because we already merge the access range condition
-				// into filter condition in `getOriginalPhysicalTableScan`
-				ranges: &copRanges{mid: []kv.KeyRange{fullRange}},
+				ranges: ranges.slice(i, nextI),
 				// Channel buffer is 2 for handling region split.
 				// In a common case, two region split tasks will not be blocked.
-				respChan:  make(chan *copResponse, 2),
-				cmdType:   cmdType,
-				storeType: req.StoreType,
+				respChan: make(chan *copResponse, 2),
+				cmdType:  cmdType,
 			})
+			i = nextI
 		}
 	}
 
@@ -651,9 +616,8 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		HandleTime:     true,
 		ScanDetail:     true,
 	})
-	req.StoreTp = task.storeType
 	startTime := time.Now()
-	resp, rpcCtx, storeAddr, err := worker.SendReqCtx(bo, req, task.region, ReadTimeoutMedium, task.storeType, task.storeAddr)
+	resp, rpcCtx, storeAddr, err := worker.SendReqCtx(bo, req, task.region, ReadTimeoutMedium, task.storeAddr)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -722,13 +686,13 @@ func (ch *clientHelper) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks 
 }
 
 // SendReqCtx wraps the SendReqCtx function and use the resolved lock result in the kvrpcpb.Context.
-func (ch *clientHelper) SendReqCtx(bo *Backoffer, req *tikvrpc.Request, regionID RegionVerID, timeout time.Duration, sType kv.StoreType, directStoreAddr string) (*tikvrpc.Response, *RPCContext, string, error) {
+func (ch *clientHelper) SendReqCtx(bo *Backoffer, req *tikvrpc.Request, regionID RegionVerID, timeout time.Duration, directStoreAddr string) (*tikvrpc.Response, *RPCContext, string, error) {
 	sender := NewRegionRequestSender(ch.RegionCache, ch.Client)
 	if len(directStoreAddr) > 0 {
 		sender.storeAddr = directStoreAddr
 	}
 	req.Context.ResolvedLocks = ch.minCommitTSPushed.Get()
-	resp, ctx, err := sender.SendReqCtx(bo, req, regionID, timeout, sType)
+	resp, ctx, err := sender.SendReqCtx(bo, req, regionID, timeout)
 	return resp, ctx, sender.storeAddr, err
 }
 
@@ -749,11 +713,6 @@ func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *co
 // returns more tasks when that happens, or handles the response if no error.
 func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCContext, resp *copResponse, task *copTask, ch chan<- *copResponse) ([]*copTask, error) {
 	if regionErr := resp.pbResp.GetRegionError(); regionErr != nil {
-		if rpcCtx != nil && task.storeType == kv.TiDB {
-			resp.err = errors.Errorf("error: %v", regionErr)
-			worker.sendToRespCh(resp, ch, true)
-			return nil, nil
-		}
 		if err := bo.Backoff(BoRegionMiss, errors.New(regionErr.String())); err != nil {
 			return nil, errors.Trace(err)
 		}

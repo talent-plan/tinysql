@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -563,26 +562,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 			return "off", nil
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-	case TiDBIsolationReadEngines:
-		engines := strings.Split(value, ",")
-		var formatVal string
-		for i, engine := range engines {
-			engine = strings.TrimSpace(engine)
-			if i != 0 {
-				formatVal += ","
-			}
-			switch {
-			case strings.EqualFold(engine, kv.TiKV.Name()):
-				formatVal += kv.TiKV.Name()
-			case strings.EqualFold(engine, kv.TiFlash.Name()):
-				formatVal += kv.TiFlash.Name()
-			case strings.EqualFold(engine, kv.TiDB.Name()):
-				formatVal += kv.TiDB.Name()
-			default:
-				return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
-			}
-		}
-		return formatVal, nil
 	}
 	return value, nil
 }

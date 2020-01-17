@@ -11,11 +11,11 @@
         "Plan": [
           "IndexJoin_9 12475.01 root inner join, inner:IndexReader_8, outer key:test.t1.a, inner key:test.t2.a, other cond:eq(test.t1.c, test.t2.c), gt(test.t2.b, minus(test.t1.b, 1)), lt(test.t2.b, plus(test.t1.b, 1))",
           "├─TableReader_12 9980.01 root data:Selection_11",
-          "│ └─Selection_11 9980.01 cop[tikv] not(isnull(test.t1.a)), not(isnull(test.t1.c))",
-          "│   └─TableScan_10 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "│ └─Selection_11 9980.01 cop not(isnull(test.t1.a)), not(isnull(test.t1.c))",
+          "│   └─TableScan_10 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
           "└─IndexReader_8 1.25 root index:Selection_7",
-          "  └─Selection_7 1.25 cop[tikv] not(isnull(test.t2.a)), not(isnull(test.t2.c))",
-          "    └─IndexScan_6 1.25 cop[tikv] table:t2, index:a, b, c, range: decided by [eq(test.t2.a, test.t1.a) gt(test.t2.b, minus(test.t1.b, 1)) lt(test.t2.b, plus(test.t1.b, 1))], keep order:false, stats:pseudo"
+          "  └─Selection_7 1.25 cop not(isnull(test.t2.a)), not(isnull(test.t2.c))",
+          "    └─IndexScan_6 1.25 cop table:t2, index:a, b, c, range: decided by [eq(test.t2.a, test.t1.a) gt(test.t2.b, minus(test.t1.b, 1)) lt(test.t2.b, plus(test.t1.b, 1))], keep order:false, stats:pseudo"
         ]
       },
       {
@@ -27,18 +27,14 @@
           "Projection_7 0.00 root test.t.a, test.t.b, test.t.a, test.t.b",
           "└─HashRightJoin_9 0.00 root inner join, equal:[eq(test.t.b, test.t.b)]",
           "  ├─TableReader_12 0.00 root data:Selection_11",
-          "  │ └─Selection_11 0.00 cop[tikv] isnull(test.t.b), not(isnull(test.t.b))",
-          "  │   └─TableScan_10 10000.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "  │ └─Selection_11 0.00 cop isnull(test.t.b), not(isnull(test.t.b))",
+          "  │   └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
           "  └─TableReader_18 9990.00 root data:Selection_17",
-          "    └─Selection_17 9990.00 cop[tikv] not(isnull(test.t.b))",
-          "      └─TableScan_16 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo"
+          "    └─Selection_17 9990.00 cop not(isnull(test.t.b))",
+          "      └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo"
         ]
       }
     ]
-  },
-  {
-    "Name": "TestTiFlashCostModel",
-    "Cases": null
   },
   {
     "Name": "TestStraightJoin",
@@ -48,41 +44,41 @@
         "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
         "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
-        "│ │ │ └─TableScan_16 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │ │ └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
-        "│ │   └─TableScan_18 10000.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │   └─TableScan_18 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│   └─TableScan_20 10000.00 cop[tikv] table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│   └─TableScan_20 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
         "└─TableReader_23 10000.00 root data:TableScan_22",
-        "  └─TableScan_22 10000.00 cop[tikv] table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
+        "  └─TableScan_22 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
         "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join",
         "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
         "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
-        "│ │ │ └─TableScan_16 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │ │ └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
-        "│ │   └─TableScan_18 10000.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │   └─TableScan_18 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│   └─TableScan_20 10000.00 cop[tikv] table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│   └─TableScan_20 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
         "└─TableReader_23 10000.00 root data:TableScan_22",
-        "  └─TableScan_22 10000.00 cop[tikv] table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
+        "  └─TableScan_22 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
       ],
       [
         "HashLeftJoin_11 1248750000000.00 root inner join, equal:[eq(test.t1.a, test.t4.a)]",
         "├─HashLeftJoin_13 999000000000.00 root CARTESIAN inner join",
         "│ ├─HashRightJoin_16 99900000.00 root CARTESIAN inner join",
         "│ │ ├─TableReader_19 9990.00 root data:Selection_18",
-        "│ │ │ └─Selection_18 9990.00 cop[tikv] not(isnull(test.t1.a))",
-        "│ │ │   └─TableScan_17 10000.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │ │ └─Selection_18 9990.00 cop not(isnull(test.t1.a))",
+        "│ │ │   └─TableScan_17 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ │ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│ │   └─TableScan_20 10000.00 cop[tikv] table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│ │   └─TableScan_20 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
         "│ └─TableReader_23 10000.00 root data:TableScan_22",
-        "│   └─TableScan_22 10000.00 cop[tikv] table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
+        "│   └─TableScan_22 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
         "└─TableReader_26 9990.00 root data:Selection_25",
-        "  └─Selection_25 9990.00 cop[tikv] not(isnull(test.t4.a))",
-        "    └─TableScan_24 10000.00 cop[tikv] table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
+        "  └─Selection_25 9990.00 cop not(isnull(test.t4.a))",
+        "    └─TableScan_24 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
       ]
     ]
   },
@@ -91,23 +87,23 @@
     "Cases": [
       [
         "TableReader_7 2.00 root data:Selection_6",
-        "└─Selection_6 2.00 cop[tikv] isnull(test.t.a)",
-        "  └─TableScan_5 2.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false"
+        "└─Selection_6 2.00 cop isnull(test.t.a)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
       ],
       [
         "IndexLookUp_7 2.00 root ",
-        "├─IndexScan_5 2.00 cop[tikv] table:t, index:a, range:[NULL,NULL], keep order:false",
-        "└─TableScan_6 2.00 cop[tikv] table:t, keep order:false"
+        "├─IndexScan_5 2.00 cop table:t, index:a, range:[NULL,NULL], keep order:false",
+        "└─TableScan_6 2.00 cop table:t, keep order:false"
       ],
       [
         "TableReader_7 0.00 root data:Selection_6",
-        "└─Selection_6 0.00 cop[tikv] eq(test.t.b, 1)",
-        "  └─TableScan_5 2.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false"
+        "└─Selection_6 0.00 cop eq(test.t.b, 1)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
       ],
       [
         "TableReader_7 0.00 root data:Selection_6",
-        "└─Selection_6 0.00 cop[tikv] lt(test.t.b, 1)",
-        "  └─TableScan_5 2.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false"
+        "└─Selection_6 0.00 cop lt(test.t.b, 1)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
       ]
     ]
   },
@@ -118,15 +114,15 @@
         "Projection_11 10.00 root Column#14",
         "└─Apply_13 10.00 root CARTESIAN left outer semi join, other cond:eq(test.t.c, Column#13)",
         "  ├─TableReader_15 10.00 root data:TableScan_14",
-        "  │ └─TableScan_14 10.00 cop[tikv] table:t, range:[-inf,+inf], keep order:false",
+        "  │ └─TableScan_14 10.00 cop table:t, range:[-inf,+inf], keep order:false",
         "  └─StreamAgg_22 1.00 root funcs:count(1)->Column#13",
         "    └─HashLeftJoin_23 1.00 root inner join, equal:[eq(test.t.a, test.t.a)]",
         "      ├─TableReader_27 1.00 root data:Selection_26",
-        "      │ └─Selection_26 1.00 cop[tikv] eq(test.t.a, test.t.a), not(isnull(test.t.a))",
-        "      │   └─TableScan_25 10.00 cop[tikv] table:s, range:[-inf,+inf], keep order:false",
+        "      │ └─Selection_26 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
+        "      │   └─TableScan_25 10.00 cop table:s, range:[-inf,+inf], keep order:false",
         "      └─TableReader_33 1.00 root data:Selection_32",
-        "        └─Selection_32 1.00 cop[tikv] eq(test.t.a, test.t.a), not(isnull(test.t.a))",
-        "          └─TableScan_31 10.00 cop[tikv] table:t1, range:[-inf,+inf], keep order:false"
+        "        └─Selection_32 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
+        "          └─TableScan_31 10.00 cop table:t1, range:[-inf,+inf], keep order:false"
       ]
     ]
   },

@@ -16,11 +16,12 @@ package core
 import (
 	"bytes"
 	"fmt"
+	"math"
+
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/planner/util"
 	"github.com/pingcap/tidb/sessionctx"
@@ -30,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/set"
 	"go.uber.org/zap"
-	"math"
 )
 
 func (p *LogicalUnionScan) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {
@@ -377,7 +377,7 @@ func (p *LogicalJoin) getIndexJoinByOuterIdx(prop *property.PhysicalProperty, ou
 	}
 	ds, isDataSource := innerChild.(*DataSource)
 	us, isUnionScan := innerChild.(*LogicalUnionScan)
-	if (!isDataSource && !isUnionScan) || (isDataSource && ds.preferStoreType&preferTiFlash != 0) {
+	if !isDataSource && !isUnionScan {
 		return nil
 	}
 	if isUnionScan {
@@ -385,12 +385,6 @@ func (p *LogicalJoin) getIndexJoinByOuterIdx(prop *property.PhysicalProperty, ou
 		ds, isDataSource = us.Children()[0].(*DataSource)
 		if !isDataSource {
 			return nil
-		}
-		// If one of the union scan children is a TiFlash table, then we can't choose index join.
-		for _, child := range us.Children() {
-			if ds, ok := child.(*DataSource); ok && ds.preferStoreType&preferTiFlash != 0 {
-				return nil
-			}
 		}
 	}
 	var avgInnerRowCnt float64
@@ -414,7 +408,7 @@ func (p *LogicalJoin) buildIndexJoinInner2TableScan(
 	outerIdx int, us *LogicalUnionScan, avgInnerRowCnt float64) (joins []PhysicalPlan) {
 	var tblPath *util.AccessPath
 	for _, path := range ds.possibleAccessPaths {
-		if path.IsTablePath && path.StoreType == kv.TiKV {
+		if path.IsTablePath {
 			tblPath = path
 			break
 		}
@@ -569,7 +563,7 @@ func (p *LogicalJoin) constructInnerTableScanTask(
 		StatsVersion: ds.stats.StatsVersion,
 		// Cardinality would not be used in cost computation of IndexJoin, set leave it as default nil.
 	}
-	rowSize := ds.TblColHists.GetTableAvgRowSize(ds.TblCols, ts.StoreType, true)
+	rowSize := ds.TblColHists.GetTableAvgRowSize(ds.TblCols)
 	sessVars := ds.ctx.GetSessionVars()
 	copTask := &copTask{
 		tablePlan:         ts,
