@@ -159,7 +159,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	r = tk.MustQuery("select * from t;")
 	r.Check(testkit.Rows("2"))
 
-
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(c binary(255))")
 	_, err = tk.Exec("insert into t value(1)")

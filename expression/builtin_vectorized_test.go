@@ -416,7 +416,7 @@ func evalRows(b *testing.B, it *chunk.Iterator4Chunk, eType types.EvalType, resu
 }
 
 func BenchmarkMockDoubleRow(b *testing.B) {
-	typeNames := []string{"Int", "Real","String"}
+	typeNames := []string{"Int", "Real", "String"}
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {
@@ -429,7 +429,7 @@ func BenchmarkMockDoubleRow(b *testing.B) {
 }
 
 func BenchmarkMockDoubleVec(b *testing.B) {
-	typeNames := []string{"Int", "Real","String"}
+	typeNames := []string{"Int", "Real", "String"}
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for i, eType := range eTypes {
 		b.Run(typeNames[i], func(b *testing.B) {

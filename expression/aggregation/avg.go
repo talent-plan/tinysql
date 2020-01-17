@@ -74,7 +74,7 @@ func (af *avgFunction) GetResult(evalCtx *AggEvaluateContext) (d types.Datum) {
 		return
 	case types.KindInt64:
 		sum := evalCtx.Value.GetInt64()
-		d.SetInt64(sum/evalCtx.Count)
+		d.SetInt64(sum / evalCtx.Count)
 		return
 	}
 	return

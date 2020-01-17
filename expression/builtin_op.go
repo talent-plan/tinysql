@@ -144,7 +144,7 @@ func (c *unaryNotFunctionClass) getFunction(ctx sessionctx.Context, args []Expre
 	}
 
 	argTp := args[0].GetType().EvalType()
-    if argTp == types.ETString {
+	if argTp == types.ETString {
 		argTp = types.ETReal
 	}
 
@@ -209,25 +209,6 @@ func (b *builtinUnaryNotIntSig) evalInt(row chunk.Row) (int64, bool, error) {
 
 type unaryMinusFunctionClass struct {
 	baseFunctionClass
-}
-
-func (c *unaryMinusFunctionClass) handleIntOverflow(arg *Constant) (overflow bool) {
-	if mysql.HasUnsignedFlag(arg.GetType().Flag) {
-		uval := arg.Value.GetUint64()
-		// -math.MinInt64 is 9223372036854775808, so if uval is more than 9223372036854775808, like
-		// 9223372036854775809, -9223372036854775809 is less than math.MinInt64, overflow occurs.
-		if uval > uint64(-math.MinInt64) {
-			return true
-		}
-	} else {
-		val := arg.Value.GetInt64()
-		// The math.MinInt64 is -9223372036854775808, the math.MaxInt64 is 9223372036854775807,
-		// which is less than abs(-9223372036854775808). When val == math.MinInt64, overflow occurs.
-		if val == math.MinInt64 {
-			return true
-		}
-	}
-	return false
 }
 
 // typeInfer infers unaryMinus function return type. when the arg is an int constant and overflow,

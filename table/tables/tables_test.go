@@ -144,9 +144,6 @@ func (ts *testSuite) TestBasic(c *C) {
 	table.MockTableFromMeta(tb.Meta())
 	alc := tb.Allocator(nil)
 	c.Assert(alc, NotNil)
-
-	err = tb.RebaseAutoID(nil, 0, false)
-	c.Assert(err, IsNil)
 }
 
 func countEntriesWithPrefix(ctx sessionctx.Context, prefix []byte) (int, error) {

@@ -133,27 +133,6 @@ func (s *testSuite6) TestCreateTable(c *C) {
 	_, err = tk.Exec("create table test_err_multiple_collate (a char(1) collate utf8_unicode_ci collate utf8mb4_general_ci) charset utf8mb4 collate utf8mb4_bin")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, ddl.ErrCollationCharsetMismatch.GenWithStackByArgs("utf8mb4_general_ci", "utf8").Error())
-
-	// table option is auto-increment
-	tk.MustExec("drop table if exists create_auto_increment_test;")
-	tk.MustExec("create table create_auto_increment_test (id int not null auto_increment, name varchar(255), primary key(id)) auto_increment = 999;")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('aa')")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('bb')")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('cc')")
-	r := tk.MustQuery("select * from create_auto_increment_test;")
-	r.Check(testkit.Rows("999 aa", "1000 bb", "1001 cc"))
-	tk.MustExec("drop table create_auto_increment_test")
-	tk.MustExec("create table create_auto_increment_test (id int not null auto_increment, name varchar(255), primary key(id)) auto_increment = 1999;")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('aa')")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('bb')")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('cc')")
-	r = tk.MustQuery("select * from create_auto_increment_test;")
-	r.Check(testkit.Rows("1999 aa", "2000 bb", "2001 cc"))
-	tk.MustExec("drop table create_auto_increment_test")
-	tk.MustExec("create table create_auto_increment_test (id int not null auto_increment, name varchar(255), key(id)) auto_increment = 1000;")
-	tk.MustExec("insert into create_auto_increment_test (name) values ('aa')")
-	r = tk.MustQuery("select * from create_auto_increment_test;")
-	r.Check(testkit.Rows("1000 aa"))
 }
 
 func (s *testSuite6) TestCreateDropDatabase(c *C) {

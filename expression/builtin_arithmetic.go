@@ -46,9 +46,6 @@ var (
 // numericContextResultType returns types.EvalType for numeric function's parameters.
 // the returned types.EvalType should be one of: types.ETInt, types.ETDecimal, types.ETReal
 func numericContextResultType(ft *types.FieldType) types.EvalType {
-	if types.IsTypeTemporal(ft.Tp) {
-		return types.ETInt
-	}
 	if types.IsBinaryStr(ft) {
 		return types.ETInt
 	}

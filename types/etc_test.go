@@ -197,22 +197,6 @@ func (s *testTypeEtcSuite) TestTruncate(c *C) {
 	}
 }
 
-func (s *testTypeEtcSuite) TestIsTypeTemporal(c *C) {
-	defer testleak.AfterTest(c)()
-	res := IsTypeTemporal(mysql.TypeDuration)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeDatetime)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeTimestamp)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeDate)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal(mysql.TypeNewDate)
-	c.Assert(res, Equals, true)
-	res = IsTypeTemporal('t')
-	c.Assert(res, Equals, false)
-}
-
 func (s *testTypeEtcSuite) TestIsBinaryStr(c *C) {
 	defer testleak.AfterTest(c)()
 	in := FieldType{

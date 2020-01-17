@@ -230,13 +230,3 @@ func testDropIndex(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, t
 	checkHistoryJobArgs(c, ctx, job.ID, &historyJobArgs{ver: v, tbl: tblInfo})
 	return job
 }
-
-func buildRebaseAutoIDJobJob(dbInfo *model.DBInfo, tblInfo *model.TableInfo, newBaseID int64) *model.Job {
-	return &model.Job{
-		SchemaID:   dbInfo.ID,
-		TableID:    tblInfo.ID,
-		Type:       model.ActionRebaseAutoID,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{newBaseID},
-	}
-}

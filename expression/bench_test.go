@@ -839,7 +839,7 @@ func BenchmarkVecEvalBool(b *testing.B) {
 
 func (s *testEvaluatorSuite) TestRowBasedFilterAndVectorizedFilter(c *C) {
 	ctx := mock.NewContext()
-	eTypes := []types.EvalType{types.ETInt, types.ETReal,types.ETString}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for numCols := 1; numCols <= 5; numCols++ {
 		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
@@ -863,7 +863,7 @@ func BenchmarkRowBasedFilterAndVectorizedFilter(b *testing.B) {
 	selected := make([]bool, 0, 1024)
 	nulls := make([]bool, 0, 1024)
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
-	tNames := []string{"int", "real","string"}
+	tNames := []string{"int", "real", "string"}
 	for numCols := 1; numCols <= 2; numCols++ {
 		typeCombination := make([]types.EvalType, numCols)
 		var combFunc func(nCols int)
@@ -937,7 +937,7 @@ func BenchmarkRowBasedFilterAndVectorizedFilter(b *testing.B) {
 func (s *testEvaluatorSuite) TestVectorizedFilterConsiderNull(c *C) {
 	ctx := mock.NewContext()
 	dafaultEnableVectorizedExpressionVar := ctx.GetSessionVars().EnableVectorizedExpression
-	eTypes := []types.EvalType{types.ETInt, types.ETReal,types.ETString}
+	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETString}
 	for numCols := 1; numCols <= 5; numCols++ {
 		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)

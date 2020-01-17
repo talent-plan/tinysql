@@ -38,7 +38,7 @@ const (
 	KindFloat64       byte = 4
 	KindString        byte = 5
 	KindBytes         byte = 6
-	KindBinaryLiteral byte = 7 // Used for BIT / HEX literals.
+	KindBinaryLiteral byte = 7  // Used for BIT / HEX literals.
 	KindMysqlBit      byte = 11 // Used for BIT table column values.
 	KindMysqlSet      byte = 12
 	KindMysqlTime     byte = 13
@@ -730,7 +730,6 @@ func (d *Datum) ToBool(sc *stmtctx.StatementContext) (int64, error) {
 	}
 	return ret, nil
 }
-
 
 // ToInt64 converts to a int64.
 func (d *Datum) ToInt64(sc *stmtctx.StatementContext) (int64, error) {

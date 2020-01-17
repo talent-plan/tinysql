@@ -22,7 +22,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/charset"
@@ -32,7 +31,6 @@ import (
 	field_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
@@ -1038,13 +1036,6 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 	}
 
 	err = d.doDDLJob(ctx, job)
-	if err == nil {
-		if tbInfo.AutoIncID > 1 {
-			// Default tableAutoIncID base is 0.
-			// If the first ID is expected to greater than 1, we need to do rebase.
-			err = d.handleAutoIncID(tbInfo, schema.ID)
-		}
-	}
 
 	// table exists, but if_not_exists flags is true, so we ignore this error.
 	if infoschema.ErrTableExists.Equal(err) && s.IfNotExists {
@@ -1058,24 +1049,6 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 func checkCharsetAndCollation(cs string, co string) error {
 	if !charset.ValidCharsetAndCollation(cs, co) {
 		return ErrUnknownCharacterSet.GenWithStackByArgs(cs)
-	}
-	return nil
-}
-
-// handleAutoIncID handles auto_increment option in DDL. It creates a ID counter for the table and initiates the counter to a proper value.
-// For example if the option sets auto_increment to 10. The counter will be set to 9. So the next allocated ID will be 10.
-func (d *ddl) handleAutoIncID(tbInfo *model.TableInfo, schemaID int64) error {
-	alloc := autoid.NewAllocator(d.store, tbInfo.GetDBID(schemaID), tbInfo.IsAutoIncColUnsigned())
-	tbInfo.State = model.StatePublic
-	tb, err := table.TableFromMeta(alloc, tbInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// The operation of the minus 1 to make sure that the current value doesn't be used,
-	// the next Alloc operation will get this value.
-	// Its behavior is consistent with MySQL.
-	if err = tb.RebaseAutoID(nil, tbInfo.AutoIncID-1, false); err != nil {
-		return errors.Trace(err)
 	}
 	return nil
 }
@@ -1173,12 +1146,7 @@ func getCharsetAndCollateInTableOption(startIdx int, options []*ast.TableOption)
 // returns valied specs, and the occurred error.
 func resolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) ([]*ast.AlterTableSpec, error) {
 	validSpecs := make([]*ast.AlterTableSpec, 0, len(specs))
-	algorithm := ast.AlgorithmTypeDefault
 	for _, spec := range specs {
-		if spec.Tp == ast.AlterTableAlgorithm {
-			// Find the last AlterTableAlgorithm.
-			algorithm = spec.Algorithm
-		}
 		if isIgnorableSpec(spec.Tp) {
 			continue
 		}
@@ -1188,21 +1156,6 @@ func resolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) 
 	if len(validSpecs) > 1 {
 		// Now we only allow one schema changing at the same time.
 		return nil, errRunMultiSchemaChanges
-	}
-
-	// Verify whether the algorithm is supported.
-	for _, spec := range validSpecs {
-		resolvedAlgorithm, err := ResolveAlterAlgorithm(spec, algorithm)
-		if err != nil {
-			if algorithm != ast.AlgorithmTypeCopy {
-				return nil, errors.Trace(err)
-			}
-			// For the compatibility, we return warning instead of error when the algorithm is COPY,
-			// because the COPY ALGORITHM is not supported in TiDB.
-			ctx.GetSessionVars().StmtCtx.AppendError(err)
-		}
-
-		spec.Algorithm = resolvedAlgorithm
 	}
 
 	// Only handle valid specs.
@@ -1262,8 +1215,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 						opt.UintValue = shardRowIDBitsMax
 					}
 					err = d.ShardRowID(ctx, ident, opt.UintValue)
-				case ast.TableOptionAutoIncrement:
-					err = d.RebaseAutoID(ctx, ident, int64(opt.UintValue))
 				case ast.TableOptionComment:
 					spec.Comment = opt.StrValue
 					err = d.AlterTableComment(ctx, ident, spec)
@@ -1296,34 +1247,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 	}
 
 	return nil
-}
-
-func (d *ddl) RebaseAutoID(ctx sessionctx.Context, ident ast.Ident, newBase int64) error {
-	schema, t, err := d.getSchemaAndTableByIdent(ctx, ident)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	autoIncID, err := t.Allocator(ctx).NextGlobalAutoID(t.Meta().ID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// If newBase < autoIncID, we need to do a rebase before returning.
-	// Assume there are 2 TiDB servers: TiDB-A with allocator range of 0 ~ 30000; TiDB-B with allocator range of 30001 ~ 60000.
-	// If the user sends SQL `alter table t1 auto_increment = 100` to TiDB-B,
-	// and TiDB-B finds 100 < 30001 but returns without any handling,
-	// then TiDB-A may still allocate 99 for auto_increment column. This doesn't make sense for the user.
-	newBase = mathutil.MaxInt64(newBase, autoIncID)
-	job := &model.Job{
-		SchemaID:   schema.ID,
-		TableID:    t.Meta().ID,
-		SchemaName: schema.Name.L,
-		Type:       model.ActionRebaseAutoID,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{newBase},
-	}
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
 }
 
 // ShardRowID shards the implicit row ID by adding shard value to the row ID's first few bits.

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util"
@@ -296,27 +295,6 @@ func (s *testTableSuite) TestReloadDropDatabase(c *C) {
 	c.Assert(terror.ErrorEqual(infoschema.ErrTableNotExists, err), IsTrue)
 	_, ok := is.TableByID(t2.Meta().ID)
 	c.Assert(ok, IsFalse)
-}
-
-func (s *testTableSuite) checkSystemSchemaTableID(c *C, dbName string, dbID, start, end int64, uniqueIDMap map[int64]string) {
-	is := s.dom.InfoSchema()
-	c.Assert(is, NotNil)
-	db, ok := is.SchemaByName(model.NewCIStr(dbName))
-	c.Assert(ok, IsTrue)
-	c.Assert(db.ID, Equals, dbID)
-	// Test for information_schema table id.
-	tables := is.SchemaTables(model.NewCIStr(dbName))
-	c.Assert(len(tables), Greater, 0)
-	for _, tbl := range tables {
-		tid := tbl.Meta().ID
-		comment := Commentf("table name is %v", tbl.Meta().Name)
-		c.Assert(tid&autoid.SystemSchemaIDFlag, Greater, int64(0), comment)
-		c.Assert(tid&^autoid.SystemSchemaIDFlag, Greater, start, comment)
-		c.Assert(tid&^autoid.SystemSchemaIDFlag, Less, end, comment)
-		name, ok := uniqueIDMap[tid]
-		c.Assert(ok, IsFalse, Commentf("schema id of %v is duplicate with %v, both is %v", name, tbl.Meta().Name, tid))
-		uniqueIDMap[tid] = tbl.Meta().Name.O
-	}
 }
 
 func (s *testTableSuite) TestSelectHiddenColumn(c *C) {

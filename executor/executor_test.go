@@ -1580,7 +1580,6 @@ func (s *testSuite) TestUnsignedPk(c *C) {
 	tk.MustQuery("select * from t use index(idx) where b = 1 order by b, a").Check(testkit.Rows("1 1", "9223372036854775808 1"))
 }
 
-
 func (s *testSuite) TestIssue5341(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("drop table if exists test.t")
