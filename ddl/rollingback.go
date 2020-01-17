@@ -243,7 +243,7 @@ func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) 
 		err = rollingbackDropTableOrView(t, job)
 	case model.ActionDropSchema:
 		err = rollingbackDropSchema(t, job)
-	case model.ActionRebaseAutoID, model.ActionShardRowID,
+	case model.ActionShardRowID,
 		model.ActionModifyColumn,
 		model.ActionModifyTableCharsetAndCollate, model.ActionModifySchemaCharsetAndCollate:
 		ver, err = cancelOnlyNotHandledJob(job)
