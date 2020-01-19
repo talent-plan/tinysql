@@ -57,7 +57,7 @@ all: dev server benchkv
 parser:
 	cd parser && make parser
 
-dev: checklist check test
+dev: checklist parser check test
 
 build: parser
 	$(GOBUILD)
