@@ -55,7 +55,7 @@ buildsucc:
 all: dev server benchkv
 
 parser:
-	cd parser && make parser
+	cd parser && make all
 
 dev: checklist parser check test
 
@@ -65,7 +65,7 @@ build: parser
 # Install the check tools.
 check-setup:tools/bin/revive tools/bin/goword tools/bin/gometalinter tools/bin/gosec
 
-check: fmt errcheck lint tidy testSuite check-static vet
+check: parser fmt errcheck lint tidy testSuite check-static vet
 
 # These need to be fixed before they can be ran regularly
 check-fail: goword check-slow
@@ -102,7 +102,7 @@ gogenerate:
 
 lint:tools/bin/revive
 	@echo "linting"
-	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml -exclude ./parser/... $(FILES)
 
 vet:
 	@echo "vet"

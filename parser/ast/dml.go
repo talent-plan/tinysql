@@ -67,7 +67,6 @@ const (
 // Join represents table join.
 type Join struct {
 	node
-	resultSetNode
 
 	// Left table can be TableSource or JoinNode.
 	Left ResultSetNode
@@ -174,7 +173,6 @@ func (n *Join) Accept(v Visitor) (Node, bool) {
 // TableName represents a table name.
 type TableName struct {
 	node
-	resultSetNode
 
 	Schema model.CIStr
 	Name   model.CIStr
@@ -771,7 +769,6 @@ func (n *OrderByClause) Accept(v Visitor) (Node, bool) {
 // See https://dev.mysql.com/doc/refman/5.7/en/select.html
 type SelectStmt struct {
 	dmlNode
-	resultSetNode
 
 	// SelectStmtOpts wraps around select hints and switches.
 	*SelectStmtOpts
@@ -1062,7 +1059,6 @@ func (n *UnionSelectList) Accept(v Visitor) (Node, bool) {
 // See https://dev.mysql.com/doc/refman/5.7/en/union.html
 type UnionStmt struct {
 	dmlNode
-	resultSetNode
 
 	SelectList *UnionSelectList
 	OrderBy    *OrderByClause
@@ -1184,66 +1180,6 @@ type LoadDataStmt struct {
 	ColumnAssignments []*Assignment
 
 	ColumnsAndUserVars []*ColumnNameOrUserVar
-}
-
-// Restore implements Node interface.
-func (n *LoadDataStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("LOAD DATA ")
-	if n.IsLocal {
-		ctx.WriteKeyWord("LOCAL ")
-	}
-	ctx.WriteKeyWord("INFILE ")
-	ctx.WriteString(n.Path)
-	if n.OnDuplicate == OnDuplicateKeyHandlingReplace {
-		ctx.WriteKeyWord(" REPLACE")
-	} else if n.OnDuplicate == OnDuplicateKeyHandlingIgnore {
-		ctx.WriteKeyWord(" IGNORE")
-	}
-	ctx.WriteKeyWord(" INTO TABLE ")
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore LoadDataStmt.Table")
-	}
-	n.FieldsInfo.Restore(ctx)
-	n.LinesInfo.Restore(ctx)
-	if n.IgnoreLines != 0 {
-		ctx.WriteKeyWord(" IGNORE ")
-		ctx.WritePlainf("%d", n.IgnoreLines)
-		ctx.WriteKeyWord(" LINES")
-	}
-	if len(n.ColumnsAndUserVars) != 0 {
-		ctx.WritePlain(" (")
-		for i, c := range n.ColumnsAndUserVars {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			if c.ColumnName != nil {
-				if err := c.ColumnName.Restore(ctx); err != nil {
-					return errors.Annotate(err, "An error occurred while restore LoadDataStmt.ColumnsAndUserVars")
-				}
-			}
-			if c.UserVar != nil {
-				if err := c.UserVar.Restore(ctx); err != nil {
-					return errors.Annotate(err, "An error occurred while restore LoadDataStmt.ColumnsAndUserVars")
-				}
-			}
-
-		}
-		ctx.WritePlain(")")
-	}
-
-	if n.ColumnAssignments != nil {
-		ctx.WriteKeyWord(" SET")
-		for i, assign := range n.ColumnAssignments {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			ctx.WritePlain(" ")
-			if err := assign.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore LoadDataStmt.ColumnAssignments")
-			}
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -1886,7 +1822,6 @@ const (
 // See https://dev.mysql.com/doc/refman/5.7/en/show.html
 type ShowStmt struct {
 	dmlNode
-	resultSetNode
 
 	Tp          ShowStmtType // Databases/Tables/Columns/....
 	DBName      string
@@ -1908,258 +1843,6 @@ type ShowStmt struct {
 	ShowProfileTypes []int  // Used for `SHOW PROFILE` syntax
 	ShowProfileArgs  *int64 // Used for `SHOW PROFILE` syntax
 	ShowProfileLimit *Limit // Used for `SHOW PROFILE` syntax
-}
-
-// Restore implements Node interface.
-func (n *ShowStmt) Restore(ctx *RestoreCtx) error {
-	restoreOptFull := func() {
-		if n.Full {
-			ctx.WriteKeyWord("FULL ")
-		}
-	}
-	restoreShowDatabaseNameOpt := func() {
-		if n.DBName != "" {
-			// FROM OR IN
-			ctx.WriteKeyWord(" IN ")
-			ctx.WriteName(n.DBName)
-		}
-	}
-	restoreGlobalScope := func() {
-		if n.GlobalScope {
-			ctx.WriteKeyWord("GLOBAL ")
-		} else {
-			ctx.WriteKeyWord("SESSION ")
-		}
-	}
-	restoreShowLikeOrWhereOpt := func() error {
-		if n.Pattern != nil && n.Pattern.Pattern != nil {
-			ctx.WriteKeyWord(" LIKE ")
-			if err := n.Pattern.Pattern.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore ShowStmt.Pattern")
-			}
-		} else if n.Where != nil {
-			ctx.WriteKeyWord(" WHERE ")
-			if err := n.Where.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore ShowStmt.Where")
-			}
-		}
-		return nil
-	}
-
-	ctx.WriteKeyWord("SHOW ")
-	switch n.Tp {
-	case ShowCreateTable:
-		ctx.WriteKeyWord("CREATE TABLE ")
-		if err := n.Table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
-		}
-	case ShowCreateView:
-		ctx.WriteKeyWord("CREATE VIEW ")
-		if err := n.Table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ShowStmt.VIEW")
-		}
-	case ShowCreateDatabase:
-		ctx.WriteKeyWord("CREATE DATABASE ")
-		if n.IfNotExists {
-			ctx.WriteKeyWord("IF NOT EXISTS ")
-		}
-		ctx.WriteName(n.DBName)
-	case ShowCreateSequence:
-		ctx.WriteKeyWord("CREATE SEQUENCE ")
-		if err := n.Table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ShowStmt.SEQUENCE")
-		}
-	case ShowCreateUser:
-		ctx.WriteKeyWord("CREATE USER ")
-		if err := n.User.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ShowStmt.User")
-		}
-	case ShowGrants:
-		ctx.WriteKeyWord("GRANTS")
-		if n.User != nil {
-			ctx.WriteKeyWord(" FOR ")
-			if err := n.User.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore ShowStmt.User")
-			}
-		}
-		if n.Roles != nil {
-			ctx.WriteKeyWord(" USING ")
-			for i, r := range n.Roles {
-				if err := r.Restore(ctx); err != nil {
-					return errors.Annotate(err, "An error occurred while restore ShowStmt.User")
-				}
-				if i != len(n.Roles)-1 {
-					ctx.WritePlain(", ")
-				}
-			}
-		}
-	case ShowMasterStatus:
-		ctx.WriteKeyWord("MASTER STATUS")
-	case ShowProcessList:
-		restoreOptFull()
-		ctx.WriteKeyWord("PROCESSLIST")
-	case ShowStatsMeta:
-		ctx.WriteKeyWord("STATS_META")
-		if err := restoreShowLikeOrWhereOpt(); err != nil {
-			return err
-		}
-	case ShowStatsHistograms:
-		ctx.WriteKeyWord("STATS_HISTOGRAMS")
-		if err := restoreShowLikeOrWhereOpt(); err != nil {
-			return err
-		}
-	case ShowStatsBuckets:
-		ctx.WriteKeyWord("STATS_BUCKETS")
-		if err := restoreShowLikeOrWhereOpt(); err != nil {
-			return err
-		}
-	case ShowStatsHealthy:
-		ctx.WriteKeyWord("STATS_HEALTHY")
-		if err := restoreShowLikeOrWhereOpt(); err != nil {
-			return err
-		}
-	case ShowProfiles:
-		ctx.WriteKeyWord("PROFILES")
-	case ShowProfile:
-		ctx.WriteKeyWord("PROFILE")
-		if len(n.ShowProfileTypes) > 0 {
-			for i, tp := range n.ShowProfileTypes {
-				if i != 0 {
-					ctx.WritePlain(",")
-				}
-				ctx.WritePlain(" ")
-				switch tp {
-				case ProfileTypeCPU:
-					ctx.WriteKeyWord("CPU")
-				case ProfileTypeMemory:
-					ctx.WriteKeyWord("MEMORY")
-				case ProfileTypeBlockIo:
-					ctx.WriteKeyWord("BLOCK IO")
-				case ProfileTypeContextSwitch:
-					ctx.WriteKeyWord("CONTEXT SWITCHES")
-				case ProfileTypeIpc:
-					ctx.WriteKeyWord("IPC")
-				case ProfileTypePageFaults:
-					ctx.WriteKeyWord("PAGE FAULTS")
-				case ProfileTypeSource:
-					ctx.WriteKeyWord("SOURCE")
-				case ProfileTypeSwaps:
-					ctx.WriteKeyWord("SWAPS")
-				case ProfileTypeAll:
-					ctx.WriteKeyWord("ALL")
-				}
-			}
-		}
-		if n.ShowProfileArgs != nil {
-			ctx.WriteKeyWord(" FOR QUERY ")
-			ctx.WritePlainf("%d", *n.ShowProfileArgs)
-		}
-		if n.ShowProfileLimit != nil {
-			ctx.WritePlain(" ")
-			if err := n.ShowProfileLimit.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore ShowStmt.WritePlain")
-			}
-		}
-
-	case ShowPrivileges:
-		ctx.WriteKeyWord("PRIVILEGES")
-	case ShowBuiltins:
-		ctx.WriteKeyWord("BUILTINS")
-	// ShowTargetFilterable
-	default:
-		switch n.Tp {
-		case ShowEngines:
-			ctx.WriteKeyWord("ENGINES")
-		case ShowDatabases:
-			ctx.WriteKeyWord("DATABASES")
-		case ShowCharset:
-			ctx.WriteKeyWord("CHARSET")
-		case ShowTables:
-			restoreOptFull()
-			ctx.WriteKeyWord("TABLES")
-			restoreShowDatabaseNameOpt()
-		case ShowOpenTables:
-			ctx.WriteKeyWord("OPEN TABLES")
-			restoreShowDatabaseNameOpt()
-		case ShowTableStatus:
-			ctx.WriteKeyWord("TABLE STATUS")
-			restoreShowDatabaseNameOpt()
-		case ShowIndex:
-			// here can be INDEX INDEXES KEYS
-			// FROM or IN
-			ctx.WriteKeyWord("INDEX IN ")
-			if err := n.Table.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while resotre ShowStmt.Table")
-			} // TODO: remember to check this case
-		case ShowColumns: // equivalent to SHOW FIELDS
-			if n.Extended {
-				ctx.WriteKeyWord("EXTENDED ")
-			}
-			restoreOptFull()
-			ctx.WriteKeyWord("COLUMNS")
-			if n.Table != nil {
-				// FROM or IN
-				ctx.WriteKeyWord(" IN ")
-				if err := n.Table.Restore(ctx); err != nil {
-					return errors.Annotate(err, "An error occurred while resotre ShowStmt.Table")
-				}
-			}
-			restoreShowDatabaseNameOpt()
-		case ShowWarnings:
-			ctx.WriteKeyWord("WARNINGS")
-		case ShowErrors:
-			ctx.WriteKeyWord("ERRORS")
-		case ShowVariables:
-			restoreGlobalScope()
-			ctx.WriteKeyWord("VARIABLES")
-		case ShowStatus:
-			restoreGlobalScope()
-			ctx.WriteKeyWord("STATUS")
-		case ShowCollation:
-			ctx.WriteKeyWord("COLLATION")
-		case ShowTriggers:
-			ctx.WriteKeyWord("TRIGGERS")
-			restoreShowDatabaseNameOpt()
-		case ShowProcedureStatus:
-			ctx.WriteKeyWord("PROCEDURE STATUS")
-		case ShowEvents:
-			ctx.WriteKeyWord("EVENTS")
-			restoreShowDatabaseNameOpt()
-		case ShowPlugins:
-			ctx.WriteKeyWord("PLUGINS")
-		case ShowBindings:
-			if n.GlobalScope {
-				ctx.WriteKeyWord("GLOBAL ")
-			} else {
-				ctx.WriteKeyWord("SESSION ")
-			}
-			ctx.WriteKeyWord("BINDINGS")
-		case ShowPumpStatus:
-			ctx.WriteKeyWord("PUMP STATUS")
-		case ShowDrainerStatus:
-			ctx.WriteKeyWord("DRAINER STATUS")
-		case ShowAnalyzeStatus:
-			ctx.WriteKeyWord("ANALYZE STATUS")
-		case ShowRegions:
-			ctx.WriteKeyWord("TABLE ")
-			if err := n.Table.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore SplitIndexRegionStmt.Table")
-			}
-			if len(n.IndexName.L) > 0 {
-				ctx.WriteKeyWord(" INDEX ")
-				ctx.WriteName(n.IndexName.String())
-			}
-			ctx.WriteKeyWord(" REGIONS")
-			if err := restoreShowLikeOrWhereOpt(); err != nil {
-				return err
-			}
-			return nil
-		default:
-			return errors.New("Unknown ShowStmt type")
-		}
-		restoreShowLikeOrWhereOpt()
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.

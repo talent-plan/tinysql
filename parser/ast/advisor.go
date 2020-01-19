@@ -13,10 +13,6 @@
 
 package ast
 
-import (
-	. "github.com/pingcap/tidb/parser/format"
-)
-
 var _ StmtNode = &IndexAdviseStmt{}
 
 // IndexAdviseStmt is used to advise indexes
@@ -28,25 +24,6 @@ type IndexAdviseStmt struct {
 	MaxMinutes  uint64
 	MaxIndexNum *MaxIndexNumClause
 	LinesInfo   *LinesClause
-}
-
-// Restore implements Node Accept interface.
-func (n *IndexAdviseStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("INDEX ADVISE ")
-	if n.IsLocal {
-		ctx.WriteKeyWord("LOCAL ")
-	}
-	ctx.WriteKeyWord("INFILE ")
-	ctx.WriteString(n.Path)
-	if n.MaxMinutes != UnspecifiedSize {
-		ctx.WriteKeyWord(" MAX_MINUTES ")
-		ctx.WritePlainf("%d", n.MaxMinutes)
-	}
-	if n.MaxIndexNum != nil {
-		n.MaxIndexNum.Restore(ctx)
-	}
-	n.LinesInfo.Restore(ctx)
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -63,18 +40,4 @@ func (n *IndexAdviseStmt) Accept(v Visitor) (Node, bool) {
 type MaxIndexNumClause struct {
 	PerTable uint64
 	PerDB    uint64
-}
-
-// Restore for max index num clause
-func (n *MaxIndexNumClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord(" MAX_IDXNUM")
-	if n.PerTable != UnspecifiedSize {
-		ctx.WriteKeyWord(" PER_TABLE ")
-		ctx.WritePlainf("%d", n.PerTable)
-	}
-	if n.PerDB != UnspecifiedSize {
-		ctx.WriteKeyWord(" PER_DB ")
-		ctx.WritePlainf("%d", n.PerDB)
-	}
-	return nil
 }

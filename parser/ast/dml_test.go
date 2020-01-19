@@ -73,7 +73,7 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 	}
 }
 
-func (tc *testDMLSuite) TestTableNameRestore(c *C) {
+func (ts *testDMLSuite) TestTableNameRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"dbb.`tbb1`", "`dbb`.`tbb1`"},
 		{"`tbb2`", "`tbb2`"},
@@ -88,7 +88,7 @@ func (tc *testDMLSuite) TestTableNameRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "CREATE TABLE %s (id VARCHAR(128) NOT NULL);", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestTableNameIndexHintsRestore(c *C) {
+func (ts *testDMLSuite) TestTableNameIndexHintsRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"t use index (hello)", "`t` USE INDEX (`hello`)"},
 		{"t use index (hello, world)", "`t` USE INDEX (`hello`, `world`)"},
@@ -130,7 +130,7 @@ func (tc *testDMLSuite) TestTableNameIndexHintsRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT * FROM %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestLimitRestore(c *C) {
+func (ts *testDMLSuite) TestLimitRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"limit 10", "LIMIT 10"},
 		{"limit 10,20", "LIMIT 10,20"},
@@ -142,7 +142,7 @@ func (tc *testDMLSuite) TestLimitRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT 1 %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestWildCardFieldRestore(c *C) {
+func (ts *testDMLSuite) TestWildCardFieldRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"*", "*"},
 		{"t.*", "`t`.*"},
@@ -154,7 +154,7 @@ func (tc *testDMLSuite) TestWildCardFieldRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestSelectFieldRestore(c *C) {
+func (ts *testDMLSuite) TestSelectFieldRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"*", "*"},
 		{"t.*", "`t`.*"},
@@ -168,7 +168,7 @@ func (tc *testDMLSuite) TestSelectFieldRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestFieldListRestore(c *C) {
+func (ts *testDMLSuite) TestFieldListRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"*", "*"},
 		{"t.*", "`t`.*"},
@@ -182,7 +182,7 @@ func (tc *testDMLSuite) TestFieldListRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestTableSourceRestore(c *C) {
+func (ts *testDMLSuite) TestTableSourceRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"tbl", "`tbl`"},
 		{"tbl as t", "`tbl` AS `t`"},
@@ -195,7 +195,7 @@ func (tc *testDMLSuite) TestTableSourceRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "select * from %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestOnConditionRestore(c *C) {
+func (ts *testDMLSuite) TestOnConditionRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"on t1.a=t2.a", "ON `t1`.`a`=`t2`.`a`"},
 		{"on t1.a=t2.a and t1.b=t2.b", "ON `t1`.`a`=`t2`.`a` AND `t1`.`b`=`t2`.`b`"},
@@ -206,7 +206,7 @@ func (tc *testDMLSuite) TestOnConditionRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "select * from t1 join t2 %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestJoinRestore(c *C) {
+func (ts *testDMLSuite) TestJoinRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"t1 natural join t2", "`t1` NATURAL JOIN `t2`"},
 		{"t1 natural left join t2", "`t1` NATURAL LEFT JOIN `t2`"},
@@ -241,7 +241,7 @@ func (ts *testDMLSuite) TestTableRefsClauseRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "select * from %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestDeleteTableListRestore(c *C) {
+func (ts *testDMLSuite) TestDeleteTableListRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"t1,t2", "`t1`,`t2`"},
 	}
@@ -252,7 +252,7 @@ func (tc *testDMLSuite) TestDeleteTableListRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "DELETE FROM %s USING t1, t2;", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestDeleteTableIndexHintRestore(c *C) {
+func (ts *testDMLSuite) TestDeleteTableIndexHintRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"DELETE FROM t1 USE key (`fld1`) WHERE fld=1",
 			"DELETE FROM `t1` USE INDEX (`fld1`) WHERE `fld`=1"},
@@ -289,7 +289,7 @@ func (tc *testExpressionsSuite) TestGroupByClauseRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "select * from t %s", extractNodeFunc)
 }
 
-func (tc *testDMLSuite) TestOrderByClauseRestore(c *C) {
+func (ts *testDMLSuite) TestOrderByClauseRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"ORDER BY a", "ORDER BY `a`"},
 		{"ORDER BY a,b", "ORDER BY `a`,`b`"},
@@ -305,7 +305,7 @@ func (tc *testDMLSuite) TestOrderByClauseRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "SELECT 1 FROM t1 UNION SELECT 2 FROM t2 %s", extractNodeFromUnionStmtFunc)
 }
 
-func (tc *testDMLSuite) TestAssignmentRestore(c *C) {
+func (ts *testDMLSuite) TestAssignmentRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"a=1", "`a`=1"},
 		{"b=1+2", "`b`=1+2"},

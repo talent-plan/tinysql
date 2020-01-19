@@ -81,26 +81,6 @@ type BetweenExpr struct {
 	Not bool
 }
 
-// Restore implements Node interface.
-func (n *BetweenExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore BetweenExpr.Expr")
-	}
-	if n.Not {
-		ctx.WriteKeyWord(" NOT BETWEEN ")
-	} else {
-		ctx.WriteKeyWord(" BETWEEN ")
-	}
-	if err := n.Left.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore BetweenExpr.Left")
-	}
-	ctx.WriteKeyWord(" AND ")
-	if err := n.Right.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore BetweenExpr.Right ")
-	}
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *BetweenExpr) Format(w io.Writer) {
 	n.Expr.Format(w)
@@ -154,27 +134,6 @@ type BinaryOperationExpr struct {
 	R ExprNode
 }
 
-// Restore implements Node interface.
-func (n *BinaryOperationExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.L.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred when restore BinaryOperationExpr.L")
-	}
-	if ctx.Flags.HasSpacesAroundBinaryOperationFlag() {
-		ctx.WritePlain(" ")
-	}
-	if err := n.Op.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred when restore BinaryOperationExpr.Op")
-	}
-	if ctx.Flags.HasSpacesAroundBinaryOperationFlag() {
-		ctx.WritePlain(" ")
-	}
-	if err := n.R.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred when restore BinaryOperationExpr.R")
-	}
-
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *BinaryOperationExpr) Format(w io.Writer) {
 	n.L.Format(w)
@@ -214,19 +173,6 @@ type WhenClause struct {
 	Expr ExprNode
 	// Result is the result expression in WhenClause.
 	Result ExprNode
-}
-
-// Restore implements Node interface.
-func (n *WhenClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("WHEN ")
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore WhenClauses.Expr")
-	}
-	ctx.WriteKeyWord(" THEN ")
-	if err := n.Result.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore WhenClauses.Result")
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -638,35 +584,6 @@ type PatternInExpr struct {
 	Not bool
 	// Sel is the subquery, may be rewritten to other type of expression.
 	Sel ExprNode
-}
-
-// Restore implements Node interface.
-func (n *PatternInExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore PatternInExpr.Expr")
-	}
-	if n.Not {
-		ctx.WriteKeyWord(" NOT IN ")
-	} else {
-		ctx.WriteKeyWord(" IN ")
-	}
-	if n.Sel != nil {
-		if err := n.Sel.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore PatternInExpr.Sel")
-		}
-	} else {
-		ctx.WritePlain("(")
-		for i, expr := range n.List {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := expr.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore PatternInExpr.List[%d]", i)
-			}
-		}
-		ctx.WritePlain(")")
-	}
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -1180,7 +1097,7 @@ func (n *ValuesExpr) Accept(v Visitor) (Node, bool) {
 	}
 	// `node` may be *ast.ValueExpr, to avoid panic, we write `ok` but do not use
 	// it.
-	n.Column, ok = node.(*ColumnNameExpr)
+	n.Column, _ = node.(*ColumnNameExpr)
 	return v.Leave(n)
 }
 

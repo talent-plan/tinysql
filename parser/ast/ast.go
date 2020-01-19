@@ -16,9 +16,9 @@
 package ast
 
 import (
+	"github.com/pingcap/tidb/parser/format"
 	"io"
 
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 )
@@ -26,8 +26,7 @@ import (
 // Node is the basic element of the AST.
 // Interfaces embed Node should have 'Node' name suffix.
 type Node interface {
-	// Restore returns the sql text from ast tree
-	Restore(ctx *RestoreCtx) error
+	Restore(ctx *format.RestoreCtx) error
 	// Accept accepts Visitor to visit itself.
 	// The returned node should replace original node.
 	// ok returns false to stop visiting.
