@@ -98,13 +98,6 @@ func getKeysNeedCheck(ctx context.Context, sctx sessionctx.Context, t table.Tabl
 
 func getKeysNeedCheckOneRow(ctx sessionctx.Context, t table.Table, row []types.Datum, nUnique int, handleCol *table.Column, result []toBeCheckedRow) ([]toBeCheckedRow, error) {
 	var err error
-	if p, ok := t.(table.PartitionedTable); ok {
-		t, err = p.GetPartitionByRow(ctx, row)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var handleKey *keyValueWithDupInfo
 	uniqueKeys := make([]*keyValueWithDupInfo, 0, nUnique)
 	newRowValue, err := encodeNewRow(ctx, t, row)

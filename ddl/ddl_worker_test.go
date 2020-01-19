@@ -421,7 +421,7 @@ func (s *testDDLSuite) TestCancelJob(c *C) {
 	dbInfo := testSchemaInfo(c, d, "test_cancel_job")
 	testCreateSchema(c, testNewContext(d), d, dbInfo)
 	// create a partition table.
-	partitionTblInfo := testTableInfoWithPartition(c, d, "t_partition", 5)
+	partitionTblInfo := testTableInfo(c, d, "t_partition", 5)
 	// Skip using sessPool. Make sure adding primary key can be successful.
 	partitionTblInfo.Columns[0].Flag |= mysql.NotNullFlag
 	// create table t (c1 int, c2 int, c3 int, c4 int, c5 int);

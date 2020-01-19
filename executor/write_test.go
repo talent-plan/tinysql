@@ -20,7 +20,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table/tables"
@@ -507,28 +506,6 @@ func (s *testSuite4) TestInsertSetWithDefault(c *C) {
 	tk.MustExec("delete from t1;")
 	tk.MustExec("insert into t1 set a=default(b)+default(a);")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("30 20"))
-	// With generated columns
-	tk.MustExec("create table t2 (a int default 10, b int generated always as (-a) virtual, c int generated always as (-a) stored);")
-	tk.MustExec("insert into t2 set a=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("10 -10 -10"))
-	tk.MustExec("delete from t2;")
-	tk.MustExec("insert into t2 set a=2, b=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("2 -2 -2"))
-	tk.MustExec("delete from t2;")
-	tk.MustExec("insert into t2 set c=default, a=3;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("3 -3 -3"))
-	tk.MustExec("delete from t2;")
-	tk.MustExec("insert into t2 set a=default, b=default, c=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("10 -10 -10"))
-	tk.MustExec("delete from t2;")
-	tk.MustExec("insert into t2 set a=default(a), b=default, c=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("10 -10 -10"))
-	tk.MustExec("delete from t2;")
-	tk.MustGetErrCode("insert into t2 set b=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 set a=default(b), b=default(b);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 set a=default(a), c=default(c);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 set a=default(a), c=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustExec("drop table t1, t2")
 }
 
 func (s *testSuite4) TestInsertOnDupUpdateDefault(c *C) {
@@ -548,22 +525,6 @@ func (s *testSuite4) TestInsertOnDupUpdateDefault(c *C) {
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("2 20 20"))
 	tk.MustExec("insert into t1 values (2,default,default) on duplicate key update a=default(b)+default(c)")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("50 20 20"))
-	// With generated columns
-	tk.MustExec("create table t2 (a int unique, b int generated always as (-a) virtual, c int generated always as (-a) stored);")
-	tk.MustExec("insert into t2 values (1,default,default);")
-	tk.MustExec("insert into t2 values (1,default,default) on duplicate key update a=2, b=default;")
-	tk.MustQuery("select * from t2").Check(testkit.Rows("2 -2 -2"))
-	tk.MustExec("insert into t2 values (2,default,default) on duplicate key update a=3, c=default;")
-	tk.MustQuery("select * from t2").Check(testkit.Rows("3 -3 -3"))
-	tk.MustExec("insert into t2 values (3,default,default) on duplicate key update c=default, b=default, a=4;")
-	tk.MustQuery("select * from t2").Check(testkit.Rows("4 -4 -4"))
-	tk.MustExec("insert into t2 values (10,default,default) on duplicate key update b=default, a=20, c=default;")
-	tk.MustQuery("select * from t2").Check(testkit.Rows("4 -4 -4", "10 -10 -10"))
-	tk.MustGetErrCode("insert into t2 values (4,default,default) on duplicate key update b=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 values (4,default,default) on duplicate key update a=default(b), b=default(b);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 values (4,default,default) on duplicate key update a=default(a), c=default(c);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("insert into t2 values (4,default,default) on duplicate key update a=default(a), c=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustExec("drop table t1, t2")
 }
 
 func (s *testSuite4) TestReplace(c *C) {
@@ -728,64 +689,6 @@ func (s *testSuite4) TestReplace(c *C) {
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("1 20 30", "2 30 20"))
 	tk.MustExec("replace t1 set a=default(b)+default(c)")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("1 20 30", "2 30 20", "50 20 30"))
-	// With generated columns
-	tk.MustExec("create table t2 (pk int primary key, a int default 1, b int generated always as (-a) virtual, c int generated always as (-a) stored);")
-	tk.MustExec("replace t2 set pk=1, b=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 1 -1 -1"))
-	tk.MustExec("replace t2 set pk=2, a=10, b=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 1 -1 -1", "2 10 -10 -10"))
-	tk.MustExec("replace t2 set pk=2, c=default, a=20;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 1 -1 -1", "2 20 -20 -20"))
-	tk.MustExec("replace t2 set pk=2, a=default, b=default, c=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 1 -1 -1", "2 1 -1 -1"))
-	tk.MustExec("replace t2 set pk=3, a=default(a), b=default, c=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 1 -1 -1", "2 1 -1 -1", "3 1 -1 -1"))
-	tk.MustGetErrCode("replace t2 set b=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("replace t2 set a=default(b), b=default(b);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("replace t2 set a=default(a), c=default(c);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("replace t2 set a=default(a), c=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustExec("drop table t1, t2")
-}
-
-func (s *testSuite2) TestGeneratedColumnForInsert(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	// test cases for default behavior
-	tk.MustExec(`drop table if exists t1;`)
-	tk.MustExec(`create table t1(id int, id_gen int as(id + 42), b int, unique key id_gen(id_gen));`)
-	tk.MustExec(`insert into t1 (id, b) values(1,1),(2,2),(3,3),(4,4),(5,5);`)
-	tk.MustExec(`replace into t1 (id, b) values(1,1);`)
-	tk.MustExec(`replace into t1 (id, b) values(1,1),(2,2);`)
-	tk.MustExec(`replace into t1 (id, b) values(6,16),(7,17),(8,18);`)
-	tk.MustQuery("select * from t1;").Check(testkit.Rows(
-		"1 43 1", "2 44 2", "3 45 3", "4 46 4", "5 47 5", "6 48 16", "7 49 17", "8 50 18"))
-	tk.MustExec(`insert into t1 (id, b) values (6,18) on duplicate key update id = -id;`)
-	tk.MustExec(`insert into t1 (id, b) values (7,28) on duplicate key update b = -values(b);`)
-	tk.MustQuery("select * from t1;").Check(testkit.Rows(
-		"1 43 1", "2 44 2", "3 45 3", "4 46 4", "5 47 5", "-6 36 16", "7 49 -28", "8 50 18"))
-
-	// test cases for virtual and stored columns in the same table
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t
-	(i int as(k+1) stored, j int as(k+2) virtual, k int, unique key idx_i(i), unique key idx_j(j))`)
-	tk.MustExec(`insert into t (k) values (1), (2)`)
-	tk.MustExec(`replace into t (k) values (1), (2)`)
-	tk.MustQuery(`select * from t`).Check(testkit.Rows("2 3 1", "3 4 2"))
-
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t
-	(i int as(k+1) stored, j int as(k+2) virtual, k int, unique key idx_j(j))`)
-	tk.MustExec(`insert into t (k) values (1), (2)`)
-	tk.MustExec(`replace into t (k) values (1), (2)`)
-	tk.MustQuery(`select * from t`).Check(testkit.Rows("2 3 1", "3 4 2"))
-
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t
-	(i int as(k+1) stored, j int as(k+2) virtual, k int, unique key idx_i(i))`)
-	tk.MustExec(`insert into t (k) values (1), (2)`)
-	tk.MustExec(`replace into t (k) values (1), (2)`)
-	tk.MustQuery(`select * from t`).Check(testkit.Rows("2 3 1", "3 4 2"))
 }
 
 func (s *testSuite4) TestPartitionedTableReplace(c *C) {
@@ -1203,24 +1106,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("1 2", "1 2", "1 2"))
 	tk.MustExec("update t1 set a=default(b), b=default(a)")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("2 1", "2 1", "2 1"))
-	// With generated columns
-	tk.MustExec("create table t2 (a int default 1, b int generated always as (-a) virtual, c int generated always as (-a) stored);")
-	tk.MustExec("insert into t2 values (10, default, default), (20, default, default)")
-	tk.MustExec("update t2 set b=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("10 -10 -10", "20 -20 -20"))
-	tk.MustExec("update t2 set a=30, b=default where a=10;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("30 -30 -30", "20 -20 -20"))
-	tk.MustExec("update t2 set c=default, a=40 where c=-20;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("30 -30 -30", "40 -40 -40"))
-	tk.MustExec("update t2 set a=default, b=default, c=default where b=-30;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 -1 -1", "40 -40 -40"))
-	tk.MustExec("update t2 set a=default(a), b=default, c=default;")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 -1 -1", "1 -1 -1"))
-	tk.MustGetErrCode("update t2 set b=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("update t2 set a=default(b), b=default(b);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("update t2 set a=default(a), c=default(c);", mysql.ErrBadGeneratedColumn)
-	tk.MustGetErrCode("update t2 set a=default(a), c=default(a);", mysql.ErrBadGeneratedColumn)
-	tk.MustExec("drop table t1, t2")
 }
 
 func (s *testSuite4) fillMultiTableForUpdate(tk *testkit.TestKit) {
@@ -1660,48 +1545,5 @@ func (s *testSuite7) TestIssue11059(c *C) {
 	tk.MustExec("insert into t values (2, 11, 215)")
 	tk.MustExec("insert into t values (3, 7, 2111)")
 	_, err := tk.Exec("update t set pk = 2 where uk = 7")
-	c.Assert(err, NotNil)
-}
-
-func (s *testSuite7) TestSetWithRefGenCol(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`create table t (i int, j int as (i+1) not null);`)
-	tk.MustExec(`insert into t set i = j + 1;`)
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 2"))
-	tk.MustExec(`insert into t set i = j + 100;`)
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 2", "100 101"))
-
-	tk.MustExec(`create table te (i int)`)
-	tk.MustExec(`insert into te set i = i + 10;`)
-	tk.MustQuery("select * from te").Check(testkit.Rows("<nil>"))
-	tk.MustExec(`insert into te set i = i;`)
-	tk.MustQuery("select * from te").Check(testkit.Rows("<nil>", "<nil>"))
-
-	tk.MustExec(`create table tn (i int not null)`)
-	tk.MustExec(`insert into tn set i = i;`)
-	tk.MustQuery("select * from tn").Check(testkit.Rows("0"))
-	tk.MustExec(`insert into tn set i = i + 10;`)
-	tk.MustQuery("select * from tn").Check(testkit.Rows("0", "10"))
-
-	//
-	tk.MustExec(`create table t1 (j int(11) GENERATED ALWAYS AS (i + 1) stored, i int(11) DEFAULT '10');`)
-	tk.MustExec(`insert into t1 values()`)
-	tk.MustQuery("select * from t1").Check(testkit.Rows("11 10"))
-	tk.MustExec(`insert into t1 values()`)
-	tk.MustQuery("select * from t1").Check(testkit.Rows("11 10", "11 10"))
-
-	tk.MustExec(`create table t2 (j int(11) GENERATED ALWAYS AS (i + 1) stored not null, i int(11) DEFAULT '5');`)
-	tk.MustExec(`insert into t2 set i = j + 9`)
-	tk.MustQuery("select * from t2").Check(testkit.Rows("10 9"))
-	_, err := tk.Exec(`insert into t2 set j = i + 1`)
-	c.Assert(err, NotNil)
-	tk.MustExec(`insert into t2 set i = j + 100`)
-	tk.MustQuery("select * from t2").Check(testkit.Rows("10 9", "101 100"))
-
-	tk.MustExec(`create table t3(j int(11) GENERATED ALWAYS AS (i + 1) stored, i int(11) DEFAULT '5');`)
-	tk.MustExec(`insert into t3 set i = j + 100`)
-	tk.MustQuery("select * from t3").Check(testkit.Rows("<nil> <nil>"))
-	_, err = tk.Exec(`insert into t3 set j = i + 1`)
 	c.Assert(err, NotNil)
 }

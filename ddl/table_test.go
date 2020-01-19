@@ -66,26 +66,6 @@ func testTableInfo(c *C, d *ddl, name string, num int) *model.TableInfo {
 	return tblInfo
 }
 
-// testTableInfo creates a test table with num int columns and with no index.
-func testTableInfoWithPartition(c *C, d *ddl, name string, num int) *model.TableInfo {
-	tblInfo := testTableInfo(c, d, name, num)
-	genIDs, err := d.genGlobalIDs(1)
-	c.Assert(err, IsNil)
-	pid := genIDs[0]
-	tblInfo.Partition = &model.PartitionInfo{
-		Type:   model.PartitionTypeRange,
-		Expr:   tblInfo.Columns[0].Name.L,
-		Enable: true,
-		Definitions: []model.PartitionDefinition{{
-			ID:       pid,
-			Name:     model.NewCIStr("p0"),
-			LessThan: []string{"maxvalue"},
-		}},
-	}
-
-	return tblInfo
-}
-
 func testCreateTable(c *C, ctx sessionctx.Context, d *ddl, dbInfo *model.DBInfo, tblInfo *model.TableInfo) *model.Job {
 	job := &model.Job{
 		SchemaID:   dbInfo.ID,

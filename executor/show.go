@@ -619,8 +619,6 @@ func ConstructResultOfShowCreateTable(ctx sessionctx.Context, tableInfo *model.T
 	if len(tableInfo.Comment) > 0 {
 		fmt.Fprintf(buf, " COMMENT='%s'", format.OutputFormat(tableInfo.Comment))
 	}
-	// add partition info here.
-	appendPartitionInfo(tableInfo.Partition, buf)
 	return nil
 }
 
@@ -639,40 +637,6 @@ func (e *ShowExec) fetchShowCreateTable() error {
 
 	e.appendRow([]interface{}{tb.Meta().Name.O, buf.String()})
 	return nil
-}
-
-func appendPartitionInfo(partitionInfo *model.PartitionInfo, buf *bytes.Buffer) {
-	if partitionInfo == nil {
-		return
-	}
-	if partitionInfo.Type == model.PartitionTypeHash {
-		fmt.Fprintf(buf, "\nPARTITION BY HASH( %s )", partitionInfo.Expr)
-		fmt.Fprintf(buf, "\nPARTITIONS %d", partitionInfo.Num)
-		return
-	}
-	// this if statement takes care of range columns case
-	if partitionInfo.Columns != nil && partitionInfo.Type == model.PartitionTypeRange {
-		buf.WriteString("\nPARTITION BY RANGE COLUMNS(")
-		for i, col := range partitionInfo.Columns {
-			buf.WriteString(col.L)
-			if i < len(partitionInfo.Columns)-1 {
-				buf.WriteString(",")
-			}
-		}
-		buf.WriteString(") (\n")
-	} else {
-		fmt.Fprintf(buf, "\nPARTITION BY %s ( %s ) (\n", partitionInfo.Type.String(), partitionInfo.Expr)
-	}
-	for i, def := range partitionInfo.Definitions {
-		lessThans := strings.Join(def.LessThan, ",")
-		fmt.Fprintf(buf, "  PARTITION %s VALUES LESS THAN (%s)", def.Name, lessThans)
-		if i < len(partitionInfo.Definitions)-1 {
-			buf.WriteString(",\n")
-		} else {
-			buf.WriteString("\n")
-		}
-	}
-	buf.WriteString(")")
 }
 
 // ConstructResultOfShowCreateDatabase constructs the result for show create database.

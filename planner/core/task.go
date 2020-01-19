@@ -465,12 +465,10 @@ func finishCopTask(ctx sessionctx.Context, task task) task {
 		for len(tp.Children()) > 0 {
 			tp = tp.Children()[0]
 		}
-		ts := tp.(*PhysicalTableScan)
 		p := PhysicalTableReader{
 			tablePlan: t.tablePlan,
 		}.Init(ctx)
 		p.stats = t.tablePlan.statsInfo()
-		ts.ExpandVirtualColumn()
 		newTask.p = p
 	}
 
@@ -726,9 +724,6 @@ func CheckAggCanPushCop(sctx sessionctx.Context, aggFuncs []*aggregation.AggFunc
 	sc := sctx.GetSessionVars().StmtCtx
 	client := sctx.GetClient()
 	for _, aggFunc := range aggFuncs {
-		if expression.ContainVirtualColumn(aggFunc.Args) {
-			return false
-		}
 		pb := aggregation.AggFuncToPBExpr(sc, client, aggFunc)
 		if pb == nil {
 			return false

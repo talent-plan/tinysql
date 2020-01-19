@@ -1002,16 +1002,11 @@ func makeupDecodeColMap(t table.Table, indexInfo *model.IndexInfo) (map[int64]de
 		indexedCols[i] = cols[v.Offset]
 	}
 
-	var containsVirtualCol bool
 	decodeColMap, err := decoder.BuildFullDecodeColMap(indexedCols)
 	if err != nil {
 		return nil, err
 	}
 
-	if containsVirtualCol {
-		decoder.SubstituteGenColsInDecodeColMap(decodeColMap)
-		decoder.RemoveUnusedVirtualCols(decodeColMap, indexedCols)
-	}
 	return decodeColMap, nil
 }
 
@@ -1286,75 +1281,7 @@ func (w *worker) addPhysicalTableIndex(t table.PhysicalTable, indexInfo *model.I
 
 // addTableIndex handles the add index reorganization state for a table.
 func (w *worker) addTableIndex(t table.Table, idx *model.IndexInfo, reorgInfo *reorgInfo) error {
-	var err error
-	if tbl, ok := t.(table.PartitionedTable); ok {
-		var finish bool
-		for !finish {
-			p := tbl.GetPartition(reorgInfo.PhysicalTableID)
-			if p == nil {
-				return errCancelledDDLJob.GenWithStack("Can not find partition id %d for table %d", reorgInfo.PhysicalTableID, t.Meta().ID)
-			}
-			err = w.addPhysicalTableIndex(p, idx, reorgInfo)
-			if err != nil {
-				break
-			}
-			finish, err = w.updateReorgInfo(tbl, reorgInfo)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-	} else {
-		err = w.addPhysicalTableIndex(t.(table.PhysicalTable), idx, reorgInfo)
-	}
-	return errors.Trace(err)
-}
-
-// updateReorgInfo will find the next partition according to current reorgInfo.
-// If no more partitions, or table t is not a partitioned table, returns true to
-// indicate that the reorganize work is finished.
-func (w *worker) updateReorgInfo(t table.PartitionedTable, reorg *reorgInfo) (bool, error) {
-	pi := t.Meta().GetPartitionInfo()
-	if pi == nil {
-		return true, nil
-	}
-
-	pid, err := findNextPartitionID(reorg.PhysicalTableID, pi.Definitions)
-	if err != nil {
-		// Fatal error, should not run here.
-		logutil.BgLogger().Error("[ddl] find next partition ID failed", zap.Reflect("table", t), zap.Error(err))
-		return false, errors.Trace(err)
-	}
-	if pid == 0 {
-		// Next partition does not exist, all the job done.
-		return true, nil
-	}
-
-	start, end, err := getTableRange(reorg.d, t.GetPartition(pid), reorg.Job.SnapshotVer, reorg.Job.Priority)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	reorg.StartHandle, reorg.EndHandle, reorg.PhysicalTableID = start, end, pid
-
-	// Write the reorg info to store so the whole reorganize process can recover from panic.
-	err = kv.RunInNewTxn(reorg.d.store, true, func(txn kv.Transaction) error {
-		return errors.Trace(reorg.UpdateReorgMeta(txn, reorg.StartHandle, reorg.EndHandle, reorg.PhysicalTableID))
-	})
-	logutil.BgLogger().Info("[ddl] job update reorgInfo", zap.Int64("jobID", reorg.Job.ID), zap.Int64("partitionTableID", pid), zap.Int64("startHandle", start), zap.Int64("endHandle", end), zap.Error(err))
-	return false, errors.Trace(err)
-}
-
-// findNextPartitionID finds the next partition ID in the PartitionDefinition array.
-// Returns 0 if current partition is already the last one.
-func findNextPartitionID(currentPartition int64, defs []model.PartitionDefinition) (int64, error) {
-	for i, def := range defs {
-		if currentPartition == def.ID {
-			if i == len(defs)-1 {
-				return 0, nil
-			}
-			return defs[i+1].ID, nil
-		}
-	}
-	return 0, errors.Errorf("partition id not found %d", currentPartition)
+	return w.addPhysicalTableIndex(t.(table.PhysicalTable), idx, reorgInfo)
 }
 
 func allocateIndexID(tblInfo *model.TableInfo) int64 {

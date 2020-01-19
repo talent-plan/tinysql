@@ -2027,74 +2027,6 @@ func (s *testDBSuite4) TestIfExists(c *C) {
 	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Note|1091|index idx_c doesn't exist"))
 }
 
-func (s *testDBSuite5) TestModifyGeneratedColumn(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database if not exists test;")
-	tk.MustExec("use test")
-	modIdxColErrMsg := "[ddl:3106]'modifying an indexed column' is not supported for generated columns."
-	modStoredColErrMsg := "[ddl:3106]'modifying a stored column' is not supported for generated columns."
-
-	// Modify column with single-col-index.
-	tk.MustExec("drop table if exists t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1), index idx(b));")
-	tk.MustExec("insert into t1 set a=1;")
-	_, err := tk.Exec("alter table t1 modify column b int as (a+2);")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, modIdxColErrMsg)
-	tk.MustExec("drop index idx on t1;")
-	tk.MustExec("alter table t1 modify b int as (a+2);")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 3"))
-
-	// Modify column with multi-col-index.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1), index idx(a, b));")
-	tk.MustExec("insert into t1 set a=1;")
-	_, err = tk.Exec("alter table t1 modify column b int as (a+2);")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, modIdxColErrMsg)
-	tk.MustExec("drop index idx on t1;")
-	tk.MustExec("alter table t1 modify b int as (a+2);")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 3"))
-
-	// Modify column with stored status to a different expression.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1) stored);")
-	tk.MustExec("insert into t1 set a=1;")
-	_, err = tk.Exec("alter table t1 modify column b int as (a+2) stored;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, modStoredColErrMsg)
-
-	// Modify column with stored status to the same expression.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1) stored);")
-	tk.MustExec("insert into t1 set a=1;")
-	tk.MustExec("alter table t1 modify column b bigint as (a+1) stored;")
-	tk.MustExec("alter table t1 modify column b bigint as (a + 1) stored;")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 2"))
-
-	// Modify column with index to the same expression.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1), index idx(b));")
-	tk.MustExec("insert into t1 set a=1;")
-	tk.MustExec("alter table t1 modify column b bigint as (a+1);")
-	tk.MustExec("alter table t1 modify column b bigint as (a + 1);")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 2"))
-
-	// Modify column from non-generated to stored generated.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int);")
-	_, err = tk.Exec("alter table t1 modify column b bigint as (a+1) stored;")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, modStoredColErrMsg)
-
-	// Modify column from stored generated to non-generated.
-	tk.MustExec("drop table t1;")
-	tk.MustExec("create table t1 (a int, b int as (a+1) stored);")
-	tk.MustExec("insert into t1 set a=1;")
-	tk.MustExec("alter table t1 modify column b int;")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("1 2"))
-}
-
 func (s *testDBSuite5) TestDefaultSQLFunction(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test;")
@@ -2140,11 +2072,6 @@ func (s *testDBSuite5) TestDefaultSQLFunction(c *C) {
 	tk.MustExec("replace into t1 set a = 20, d = default(c) + default(b)")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("10 70 30 40", "20 20 30 50"))
 
-	// Use `DEFAULT()` in expression of generate columns, issue #12471
-	tk.MustExec("create table t2(a int default 9, b int as (1 + default(a)));")
-	tk.MustExec("insert into t2 values(1, default);")
-	tk.MustQuery("select * from t2;").Check(testkit.Rows("1 10"))
-
 	// Use `DEFAULT()` with subquery, issue #13390
 	tk.MustExec("create table t3(f1 int default 11);")
 	tk.MustExec("insert into t3 value ();")
@@ -2156,7 +2083,7 @@ func (s *testDBSuite5) TestDefaultSQLFunction(c *C) {
 	tk.MustQuery("select default(c) from (select b as c from (select a as b from t4) t3) t2;").Check(testkit.Rows("4"))
 	tk.MustGetErrCode("select default(a) from (select a from (select 1 as a) t4) t4;", mysql.ErrNoDefaultForField)
 
-	tk.MustExec("drop table t1, t2, t3, t4;")
+	tk.MustExec("drop table if exists t1, t2, t3, t4;")
 }
 
 func (s *testDBSuite1) TestModifyColumnCharset(c *C) {
@@ -2203,23 +2130,6 @@ func (s *testDBSuite2) TestSkipSchemaChecker(c *C) {
 	tk2.MustExec("alter table t1 add column b int;")
 	_, err := tk.Exec("commit")
 	c.Assert(terror.ErrorEqual(domain.ErrInfoSchemaChanged, err), IsTrue)
-}
-
-func (s *testDBSuite2) TestDDLWithInvalidTableInfo(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	tk := s.tk
-
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	defer tk.MustExec("drop table if exists t")
-	// Test create with invalid expression.
-	_, err := s.tk.Exec(`CREATE TABLE t (
-		c0 int(11) ,
-  		c1 int(11),
-    	c2 decimal(16,4) GENERATED ALWAYS AS ((case when (c0 = 0) then 0when (c0 > 0) then (c1 / c0) end))
-	);`)
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "[parser:1064]You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 4 column 88 near \"then (c1 / c0) end))\n\t);\" ")
 }
 
 func init() {

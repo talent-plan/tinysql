@@ -15,15 +15,12 @@ package executor
 
 import (
 	"context"
-	"sort"
-
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/kv"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/ranger"
@@ -58,11 +55,6 @@ type TableReaderExecutor struct {
 	corColInFilter bool
 	// corColInAccess tells whether there's correlated column in access conditions.
 	corColInAccess bool
-	// virtualColumnIndex records all the indices of virtual columns and sort them in definition
-	// to make sure we can compute the virtual column in right order.
-	virtualColumnIndex []int
-	// virtualColumnRetFieldTypes records the RetFieldTypes of virtual columns.
-	virtualColumnRetFieldTypes []*types.FieldType
 }
 
 // Open initialzes necessary variables for using this executor.
@@ -119,31 +111,7 @@ func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 		}
 		return tableName
 	}), e.ranges)
-	if err := e.resultHandler.nextChunk(ctx, req); err != nil {
-		return err
-	}
-
-	virCols := chunk.NewChunkWithCapacity(e.virtualColumnRetFieldTypes, req.Capacity())
-	iter := chunk.NewIterator4Chunk(req)
-
-	for i, idx := range e.virtualColumnIndex {
-		for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-			datum, err := e.schema.Columns[idx].EvalVirtualColumn(row)
-			if err != nil {
-				return err
-			}
-			// Because the expression might return different type from
-			// the generated column, we should wrap a CAST on the result.
-			castDatum, err := table.CastValue(e.ctx, datum, e.columns[idx])
-			if err != nil {
-				return err
-			}
-			virCols.AppendDatum(i, &castDatum)
-		}
-		req.SetCol(idx, virCols.Column(i))
-	}
-
-	return nil
+	return e.resultHandler.nextChunk(ctx, req)
 }
 
 // Close implements the Executor Close interface.
@@ -171,26 +139,6 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 	}
 	e.kvRanges = append(e.kvRanges, kvReq.KeyRanges...)
 	return distsql.Select(ctx, e.ctx, kvReq, retTypes(e))
-}
-
-// buildVirtualColumnInfo saves virtual column indices and sort them in definition order
-func (e *TableReaderExecutor) buildVirtualColumnInfo() {
-	e.virtualColumnIndex = make([]int, 0)
-	for i, col := range e.schema.Columns {
-		if col.VirtualExpr != nil {
-			e.virtualColumnIndex = append(e.virtualColumnIndex, i)
-		}
-	}
-	sort.Slice(e.virtualColumnIndex, func(i, j int) bool {
-		return plannercore.FindColumnInfoByID(e.columns, e.schema.Columns[e.virtualColumnIndex[i]].ID).Offset <
-			plannercore.FindColumnInfoByID(e.columns, e.schema.Columns[e.virtualColumnIndex[j]].ID).Offset
-	})
-	if len(e.virtualColumnIndex) > 0 {
-		e.virtualColumnRetFieldTypes = make([]*types.FieldType, len(e.virtualColumnIndex))
-		for i, idx := range e.virtualColumnIndex {
-			e.virtualColumnRetFieldTypes[i] = e.schema.Columns[idx].RetType
-		}
-	}
 }
 
 type tableResultHandler struct {

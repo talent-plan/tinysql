@@ -1078,11 +1078,6 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 	}
 	ts := v.TablePlans[0].(*plannercore.PhysicalTableScan)
 	tbl, _ := b.is.TableByID(ts.Table.ID)
-	isPartition, physicalTableID := ts.IsPartition()
-	if isPartition {
-		pt := tbl.(table.PartitionedTable)
-		tbl = pt.GetPartition(physicalTableID)
-	}
 	startTS, err := b.getStartTS()
 	if err != nil {
 		return nil, err
@@ -1099,7 +1094,6 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		corColInAccess: b.corColInAccess(v.TablePlans[0]),
 		plans:          v.TablePlans,
 	}
-	e.buildVirtualColumnInfo()
 
 	for i := range v.Schema().Columns {
 		dagReq.OutputOffsets = append(dagReq.OutputOffsets, uint32(i))
@@ -1131,13 +1125,6 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	}
 	is := v.IndexPlans[0].(*plannercore.PhysicalIndexScan)
 	tbl, _ := b.is.TableByID(is.Table.ID)
-	isPartition, physicalTableID := is.IsPartition()
-	if isPartition {
-		pt := tbl.(table.PartitionedTable)
-		tbl = pt.GetPartition(physicalTableID)
-	} else {
-		physicalTableID = is.Table.ID
-	}
 	startTS, err := b.getStartTS()
 	if err != nil {
 		return nil, err
@@ -1146,7 +1133,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		baseExecutor:    newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		dagPB:           dagReq,
 		startTS:         startTS,
-		physicalTableID: physicalTableID,
+		physicalTableID: is.Table.ID,
 		table:           tbl,
 		index:           is.Index,
 		keepOrder:       is.KeepOrder,
@@ -1199,10 +1186,6 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 	}
 
 	ts := v.TablePlans[0].(*plannercore.PhysicalTableScan)
-	if isPartition, physicalTableID := ts.IsPartition(); isPartition {
-		pt := tbl.(table.PartitionedTable)
-		tbl = pt.GetPartition(physicalTableID)
-	}
 	startTS, err := b.getStartTS()
 	if err != nil {
 		return nil, err

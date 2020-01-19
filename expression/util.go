@@ -92,9 +92,6 @@ func extractDependentColumns(result []*Column, expr Expression) []*Column {
 	switch v := expr.(type) {
 	case *Column:
 		result = append(result, v)
-		if v.VirtualExpr != nil {
-			result = extractDependentColumns(result, v.VirtualExpr)
-		}
 	case *ScalarFunction:
 		for _, arg := range v.GetArgs() {
 			result = extractDependentColumns(result, arg)
@@ -656,21 +653,4 @@ func GetUint64FromConstant(expr Expression) (uint64, bool, bool) {
 		return dt.GetUint64(), false, true
 	}
 	return 0, false, false
-}
-
-// ContainVirtualColumn checks if the expressions contain a virtual column
-func ContainVirtualColumn(exprs []Expression) bool {
-	for _, expr := range exprs {
-		switch v := expr.(type) {
-		case *Column:
-			if v.VirtualExpr != nil {
-				return true
-			}
-		case *ScalarFunction:
-			if ContainVirtualColumn(v.GetArgs()) {
-				return true
-			}
-		}
-	}
-	return false
 }

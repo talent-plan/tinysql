@@ -225,14 +225,6 @@ type PhysicalTable interface {
 	GetPhysicalID() int64
 }
 
-// PartitionedTable is a Table, and it has a GetPartition() method.
-// GetPartition() gets the partition from a partition table by a physical table ID,
-type PartitionedTable interface {
-	Table
-	GetPartition(physicalID int64) PhysicalTable
-	GetPartitionByRow(sessionctx.Context, []types.Datum) (Table, error)
-}
-
 // TableFromMeta builds a table.Table from *model.TableInfo.
 // Currently, it is assigned to tables.TableFromMeta in tidb package's init function.
 var TableFromMeta func(alloc autoid.Allocator, tblInfo *model.TableInfo) (Table, error)

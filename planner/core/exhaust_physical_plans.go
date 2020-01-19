@@ -634,7 +634,6 @@ func (p *LogicalJoin) constructInnerIndexScanTask(
 			Columns:         ds.Columns,
 			Table:           is.Table,
 			TableAsName:     ds.TableAsName,
-			isPartition:     ds.isPartition,
 			physicalTableID: ds.physicalTableID,
 		}.Init(ds.ctx)
 		ts.schema = is.dataSourceSchema.Clone()
