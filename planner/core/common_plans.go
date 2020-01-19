@@ -96,8 +96,6 @@ type Insert struct {
 	// NeedFillDefaultValue is true when expr in value list reference other column.
 	NeedFillDefaultValue bool
 
-	GenCols InsertGeneratedColumns
-
 	SelectPlan PhysicalPlan
 
 	AllAssignmentsAreConstant bool

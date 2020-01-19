@@ -1003,7 +1003,7 @@ func dataForColumnsInTable(schema *model.DBInfo, tbl *model.TableInfo) [][]types
 			columnDesc.Extra,                     // EXTRA
 			"select,insert,update,references",    // PRIVILEGES
 			columnDesc.Comment,                   // COLUMN_COMMENT
-			col.GeneratedExprString,              // GENERATION_EXPRESSION
+			"",                                   // GENERATION_EXPRESSION
 		)
 		rows = append(rows, record)
 	}

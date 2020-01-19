@@ -494,15 +494,6 @@ func ConstructResultOfShowCreateTable(ctx sessionctx.Context, tableInfo *model.T
 				}
 			}
 		}
-		if col.IsGenerated() {
-			// It's a generated column.
-			fmt.Fprintf(buf, " GENERATED ALWAYS AS (%s)", col.GeneratedExprString)
-			if col.GeneratedStored {
-				buf.WriteString(" STORED")
-			} else {
-				buf.WriteString(" VIRTUAL")
-			}
-		}
 		if mysql.HasAutoIncrementFlag(col.Flag) {
 			hasAutoIncID = true
 			buf.WriteString(" NOT NULL AUTO_INCREMENT")
@@ -511,7 +502,7 @@ func ConstructResultOfShowCreateTable(ctx sessionctx.Context, tableInfo *model.T
 				buf.WriteString(" NOT NULL")
 			}
 			// default values are not shown for generated columns in MySQL
-			if !mysql.HasNoDefaultValueFlag(col.Flag) && !col.IsGenerated() {
+			if !mysql.HasNoDefaultValueFlag(col.Flag) {
 				defaultValue := col.GetDefaultValue()
 				switch defaultValue {
 				case nil:

@@ -303,7 +303,6 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 		Columns:                   v.Columns,
 		Lists:                     v.Lists,
 		SetList:                   v.SetList,
-		GenExprs:                  v.GenCols.Exprs,
 		allAssignmentsAreConstant: v.AllAssignmentsAreConstant,
 		hasRefCols:                v.NeedFillDefaultValue,
 		SelectExec:                selectExec,
@@ -319,7 +318,7 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 	}
 	insert := &InsertExec{
 		InsertValues: ivs,
-		OnDuplicate:  append(v.OnDuplicate, v.GenCols.OnDuplicates...),
+		OnDuplicate:  v.OnDuplicate,
 	}
 	return insert
 }

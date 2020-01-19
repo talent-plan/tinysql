@@ -56,7 +56,7 @@ func (e *ReplaceExec) Open(ctx context.Context) error {
 // but if the to-be-removed row equals to the to-be-added row, no remove or add things to do.
 func (e *ReplaceExec) removeRow(ctx context.Context, txn kv.Transaction, handle int64, r toBeCheckedRow) (bool, error) {
 	newRow := r.row
-	oldRow, err := getOldRow(ctx, e.ctx, txn, r.t, handle, e.GenExprs)
+	oldRow, err := getOldRow(ctx, e.ctx, txn, r.t, handle)
 	if err != nil {
 		logutil.BgLogger().Error("get old row failed when replace",
 			zap.Int64("handle", handle),

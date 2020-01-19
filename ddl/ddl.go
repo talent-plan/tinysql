@@ -93,12 +93,6 @@ var (
 
 	// errWrongKeyColumn is for table column cannot be indexed.
 	errWrongKeyColumn = terror.ClassDDL.New(mysql.ErrWrongKeyColumn, mysql.MySQLErrName[mysql.ErrWrongKeyColumn])
-	// errUnsupportedOnGeneratedColumn is for unsupported actions on generated columns.
-	errUnsupportedOnGeneratedColumn = terror.ClassDDL.New(mysql.ErrUnsupportedOnGeneratedColumn, mysql.MySQLErrName[mysql.ErrUnsupportedOnGeneratedColumn])
-	// errGeneratedColumnNonPrior forbids to refer generated column non prior to it.
-	errGeneratedColumnNonPrior = terror.ClassDDL.New(mysql.ErrGeneratedColumnNonPrior, mysql.MySQLErrName[mysql.ErrGeneratedColumnNonPrior])
-	// errDependentByGeneratedColumn forbids to delete columns which are dependent by generated columns.
-	errDependentByGeneratedColumn = terror.ClassDDL.New(mysql.ErrDependentByGeneratedColumn, mysql.MySQLErrName[mysql.ErrDependentByGeneratedColumn])
 	// errJSONUsedAsKey forbids to use JSON as key or index.
 	errJSONUsedAsKey = terror.ClassDDL.New(mysql.ErrJSONUsedAsKey, mysql.MySQLErrName[mysql.ErrJSONUsedAsKey])
 	// errBlobCantHaveDefault forbids to give not null default value to TEXT/BLOB/JSON.

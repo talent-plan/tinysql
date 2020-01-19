@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
-	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	field_types "github.com/pingcap/tidb/parser/types"
@@ -438,11 +437,6 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 			},
 		}
 
-		var sb strings.Builder
-		restoreFlags := format.RestoreStringSingleQuotes | format.RestoreKeyWordLowercase | format.RestoreNameBackQuotes |
-			format.RestoreSpacesAroundBinaryOperation
-		restoreCtx := format.NewRestoreCtx(restoreFlags, &sb)
-
 		for _, v := range colDef.Options {
 			switch v.Tp {
 			case ast.ColumnOptionNotNull:
@@ -478,16 +472,6 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 				if err != nil {
 					return nil, nil, errors.Trace(err)
 				}
-			case ast.ColumnOptionGenerated:
-				sb.Reset()
-				err = v.Expr.Restore(restoreCtx)
-				if err != nil {
-					return nil, nil, errors.Trace(err)
-				}
-				col.GeneratedExprString = sb.String()
-				col.GeneratedStored = v.Stored
-				_, dependColNames := findDependedColumnNames(colDef)
-				col.Dependences = dependColNames
 			case ast.ColumnOptionCollate:
 				if field_types.HasCharset(colDef.Tp) {
 					col.FieldType.Collate = v.StrValue
@@ -659,63 +643,6 @@ func checkDuplicateColumn(cols []interface{}) error {
 			return infoschema.ErrColumnExists.GenWithStackByArgs(colName.O)
 		}
 		colNames.Insert(colName.L)
-	}
-	return nil
-}
-
-func checkIsAutoIncrementColumn(colDefs *ast.ColumnDef) bool {
-	for _, option := range colDefs.Options {
-		if option.Tp == ast.ColumnOptionAutoIncrement {
-			return true
-		}
-	}
-	return false
-}
-
-func checkGeneratedColumn(colDefs []*ast.ColumnDef) error {
-	var colName2Generation = make(map[string]columnGenerationInDDL, len(colDefs))
-	var exists bool
-	var autoIncrementColumn string
-	for i, colDef := range colDefs {
-		for _, option := range colDef.Options {
-			if option.Tp == ast.ColumnOptionGenerated {
-				if err := checkIllegalFn4GeneratedColumn(colDef.Name.Name.L, option.Expr); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-		if checkIsAutoIncrementColumn(colDef) {
-			exists, autoIncrementColumn = true, colDef.Name.Name.L
-		}
-		generated, depCols := findDependedColumnNames(colDef)
-		if !generated {
-			colName2Generation[colDef.Name.Name.L] = columnGenerationInDDL{
-				position:  i,
-				generated: false,
-			}
-		} else {
-			colName2Generation[colDef.Name.Name.L] = columnGenerationInDDL{
-				position:    i,
-				generated:   true,
-				dependences: depCols,
-			}
-		}
-	}
-
-	// Check whether the generated column refers to any auto-increment columns
-	if exists {
-		for colName, generated := range colName2Generation {
-			if _, found := generated.dependences[autoIncrementColumn]; found {
-				return ErrGeneratedColumnRefAutoInc.GenWithStackByArgs(colName)
-			}
-		}
-	}
-
-	for _, colDef := range colDefs {
-		colName := colDef.Name.Name.L
-		if err := verifyColumnGeneration(colName2Generation, colName); err != nil {
-			return errors.Trace(err)
-		}
 	}
 	return nil
 }
@@ -944,9 +871,6 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 		return nil, errors.Trace(err)
 	}
 	if err := checkDuplicateColumn(colObjects); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := checkGeneratedColumn(colDefs); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := checkTooLongColumn(colObjects); err != nil {
@@ -1339,39 +1263,6 @@ func (d *ddl) AddColumn(ctx sessionctx.Context, ti ast.Ident, spec *ast.AlterTab
 		return err
 	}
 
-	// If new column is a generated column, do validation.
-	// NOTE: we do check whether the column refers other generated
-	// columns occurring later in a table, but we don't handle the col offset.
-	for _, option := range specNewColumn.Options {
-		if option.Tp == ast.ColumnOptionGenerated {
-			if err := checkIllegalFn4GeneratedColumn(specNewColumn.Name.Name.L, option.Expr); err != nil {
-				return errors.Trace(err)
-			}
-
-			if option.Stored {
-				return errUnsupportedOnGeneratedColumn.GenWithStackByArgs("Adding generated stored column through ALTER TABLE")
-			}
-
-			_, dependColNames := findDependedColumnNames(specNewColumn)
-			if err = checkAutoIncrementRef(specNewColumn.Name.Name.L, dependColNames, t.Meta()); err != nil {
-				return errors.Trace(err)
-			}
-			duplicateColNames := make(map[string]struct{}, len(dependColNames))
-			for k := range dependColNames {
-				duplicateColNames[k] = struct{}{}
-			}
-			cols := t.Cols()
-
-			if err = checkDependedColExist(dependColNames, cols); err != nil {
-				return errors.Trace(err)
-			}
-
-			if err = verifyColumnGenerationSingle(duplicateColNames, cols, spec.Position); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-
 	if len(colName) > mysql.MaxColumnNameLength {
 		return ErrTooLongIdent.GenWithStackByArgs(colName)
 	}
@@ -1577,11 +1468,6 @@ func setColumnComment(ctx sessionctx.Context, col *table.Column, option *ast.Col
 
 // processColumnOptions is only used in getModifiableColumnJob.
 func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*ast.ColumnOption) error {
-	var sb strings.Builder
-	restoreFlags := format.RestoreStringSingleQuotes | format.RestoreKeyWordLowercase | format.RestoreNameBackQuotes |
-		format.RestoreSpacesAroundBinaryOperation
-	restoreCtx := format.NewRestoreCtx(restoreFlags, &sb)
-
 	var hasDefaultValue bool
 	var err error
 	for _, opt := range options {
@@ -1604,19 +1490,6 @@ func processColumnOptions(ctx sessionctx.Context, col *table.Column, options []*
 			col.Flag |= mysql.AutoIncrementFlag
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
 			return errUnsupportedModifyColumn.GenWithStack("can't change column constraint - %v", opt.Tp)
-		case ast.ColumnOptionGenerated:
-			sb.Reset()
-			err = opt.Expr.Restore(restoreCtx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			col.GeneratedExprString = sb.String()
-			col.GeneratedStored = opt.Stored
-			col.Dependences = make(map[string]struct{})
-			col.GeneratedExpr = opt.Expr
-			for _, colName := range findColumnNamesInExpr(opt.Expr) {
-				col.Dependences[colName.Name.L] = struct{}{}
-			}
 		case ast.ColumnOptionCollate:
 			col.Collate = opt.StrValue
 		case ast.ColumnOptionReference:
@@ -1754,11 +1627,6 @@ func (d *ddl) getModifiableColumnJob(ctx sessionctx.Context, ident ast.Ident, or
 
 	if err = checkColumnWithIndexConstraint(t.Meta(), col.ColumnInfo, newCol.ColumnInfo); err != nil {
 		return nil, err
-	}
-
-	// As same with MySQL, we don't support modifying the stored status for generated columns.
-	if err = checkModifyGeneratedColumn(t, col, newCol, specNewColumn); err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	job := &model.Job{
@@ -2227,14 +2095,6 @@ func (d *ddl) dropIndex(ctx sessionctx.Context, ti ast.Ident, isPK bool, indexNa
 }
 
 func isDroppableColumn(tblInfo *model.TableInfo, colName model.CIStr) error {
-	// Check whether there are other columns depend on this column or not.
-	for _, col := range tblInfo.Columns {
-		for dep := range col.Dependences {
-			if dep == colName.L {
-				return errDependentByGeneratedColumn.GenWithStackByArgs(dep)
-			}
-		}
-	}
 	if len(tblInfo.Columns) == 1 {
 		return ErrCantRemoveAllFields.GenWithStack("can't drop only column %s in table %s",
 			colName, tblInfo.Name)

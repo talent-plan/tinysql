@@ -126,28 +126,6 @@ func (t *testTableSuite) TestHandleBadNull(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (t *testTableSuite) TestDesc(c *C) {
-	defer testleak.AfterTest(c)()
-	col := newCol("a")
-	col.Flag = mysql.AutoIncrementFlag | mysql.NotNullFlag | mysql.PriKeyFlag
-	NewColDesc(col)
-	col.Flag = mysql.MultipleKeyFlag
-	NewColDesc(col)
-	col.Flag = mysql.UniqueKeyFlag | mysql.OnUpdateNowFlag
-	desc := NewColDesc(col)
-	c.Assert(desc.Extra, Equals, "DEFAULT_GENERATED on update CURRENT_TIMESTAMP")
-	col.Flag = 0
-	col.GeneratedExprString = "test"
-	col.GeneratedStored = true
-	desc = NewColDesc(col)
-	c.Assert(desc.Extra, Equals, "STORED GENERATED")
-	col.GeneratedStored = false
-	desc = NewColDesc(col)
-	c.Assert(desc.Extra, Equals, "VIRTUAL GENERATED")
-	ColDescFieldNames(false)
-	ColDescFieldNames(true)
-}
-
 func (t *testTableSuite) TestGetZeroValue(c *C) {
 	tests := []struct {
 		ft    *types.FieldType

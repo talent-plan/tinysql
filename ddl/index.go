@@ -95,10 +95,6 @@ func checkPKOnGeneratedColumn(tblInfo *model.TableInfo, idxColNames []*ast.Index
 		if lastCol == nil {
 			return nil, errKeyColumnDoesNotExits.GenWithStackByArgs(colName.Column.Name)
 		}
-		// Virtual columns cannot be used in primary key.
-		if lastCol.IsGenerated() && !lastCol.GeneratedStored {
-			return nil, errUnsupportedOnGeneratedColumn.GenWithStackByArgs("Defining a virtual generated column as primary key")
-		}
 	}
 
 	return lastCol, nil

@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
 )
 
@@ -277,42 +276,4 @@ func (ts *testSuite) TestIterRecords(c *C) {
 	txn, err := ts.se.Txn(true)
 	c.Assert(err, IsNil)
 	c.Assert(txn.Commit(context.Background()), IsNil)
-}
-
-func (ts *testSuite) TestTableFromMeta(c *C) {
-	tk := testkit.NewTestKitWithInit(c, ts.store)
-	tk.MustExec("use test")
-	tk.MustExec("CREATE TABLE meta (a int primary key auto_increment, b varchar(255) unique)")
-	c.Assert(ts.se.NewTxn(context.Background()), IsNil)
-	tb, err := ts.dom.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("meta"))
-	c.Assert(err, IsNil)
-	tbInfo := tb.Meta()
-
-	// For test coverage
-	tbInfo.Columns[0].GeneratedExprString = "a"
-	tables.TableFromMeta(nil, tbInfo)
-
-	tbInfo.Columns[0].GeneratedExprString = "test"
-	tables.TableFromMeta(nil, tbInfo)
-	tbInfo.Columns[0].State = model.StateNone
-	tb, err = tables.TableFromMeta(nil, tbInfo)
-	c.Assert(tb, IsNil)
-	c.Assert(err, NotNil)
-	tbInfo.State = model.StateNone
-	tb, err = tables.TableFromMeta(nil, tbInfo)
-	c.Assert(tb, IsNil)
-	c.Assert(err, NotNil)
-
-	tk.MustExec("create table t_meta (a int) shard_row_id_bits = 15")
-	tb, err = domain.GetDomain(tk.Se).InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t_meta"))
-	c.Assert(err, IsNil)
-	_, err = tb.AllocHandle(tk.Se)
-	c.Assert(err, IsNil)
-
-	maxID := 1<<(64-15-1) - 1
-	err = tb.RebaseAutoID(tk.Se, int64(maxID), false)
-	c.Assert(err, IsNil)
-
-	_, err = tb.AllocHandle(tk.Se)
-	c.Assert(err, NotNil)
 }

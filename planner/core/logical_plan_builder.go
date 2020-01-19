@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -2701,33 +2700,6 @@ func (b *PlanBuilder) buildUpdateLists(
 		}
 	}
 
-	// If columns in set list contains generated columns, raise error.
-	// And, fill virtualAssignments here; that's for generated columns.
-	virtualAssignments := make([]*ast.Assignment, 0)
-
-	for _, tn := range tableList {
-		tableInfo := tn.TableInfo
-		tableVal, found := b.is.TableByID(tableInfo.ID)
-		if !found {
-			return nil, nil, false, infoschema.ErrTableNotExists.GenWithStackByArgs(tn.DBInfo.Name.O, tableInfo.Name.O)
-		}
-		for i, colInfo := range tableInfo.Columns {
-			if !colInfo.IsGenerated() {
-				continue
-			}
-			columnFullName := fmt.Sprintf("%s.%s.%s", tn.Schema.L, tn.Name.L, colInfo.Name.L)
-			// Note: For INSERT, REPLACE, and UPDATE, if a generated column is inserted into, replaced, or updated explicitly, the only permitted value is DEFAULT.
-			// see https://dev.mysql.com/doc/refman/8.0/en/create-table-generated-columns.html
-			if isDefault, ok := modifyColumns[columnFullName]; ok && !isDefault {
-				return nil, nil, false, ErrBadGeneratedColumn.GenWithStackByArgs(colInfo.Name.O, tableInfo.Name.O)
-			}
-			virtualAssignments = append(virtualAssignments, &ast.Assignment{
-				Column: &ast.ColumnName{Schema: tn.Schema, Table: tn.Name, Name: colInfo.Name},
-				Expr:   tableVal.Cols()[i].GeneratedExpr,
-			})
-		}
-	}
-
 	allAssignmentsAreConstant = true
 	newList = make([]*expression.Assignment, 0, p.Schema().Len())
 	tblDbMap := make(map[string]string, len(tableList))
@@ -2735,7 +2707,7 @@ func (b *PlanBuilder) buildUpdateLists(
 		tblDbMap[tbl.Name.L] = tbl.DBInfo.Name.L
 	}
 
-	allAssignments := append(list, virtualAssignments...)
+	allAssignments := list
 	for i, assign := range allAssignments {
 		var idx int
 		var err error

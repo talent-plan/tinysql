@@ -548,24 +548,10 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 	return ret, nil
 }
 
-// FindColumnInfoByID finds ColumnInfo in cols by ID.
-func FindColumnInfoByID(colInfos []*model.ColumnInfo, id int64) *model.ColumnInfo {
-	for _, info := range colInfos {
-		if info.ID == id {
-			return info
-		}
-	}
-	return nil
-}
-
 // getColsInfo returns the info of index columns, normal columns and primary key.
 func getColsInfo(tn *ast.TableName) (indicesInfo []*model.IndexInfo, colsInfo []*model.ColumnInfo, pkCol *model.ColumnInfo) {
 	tbl := tn.TableInfo
 	for _, col := range tbl.Columns {
-		// The virtual column will not store any data in TiKV, so it should be ignored when collect statistics
-		if col.IsGenerated() && !col.GeneratedStored {
-			continue
-		}
 		if tbl.PKIsHandle && mysql.HasPriKeyFlag(col.Flag) {
 			pkCol = col
 		} else {
@@ -974,43 +960,6 @@ func (b *PlanBuilder) findDefaultValue(cols []*table.Column, name *ast.ColumnNam
 	return nil, ErrUnknownColumn.GenWithStackByArgs(name.Name.O, "field_list")
 }
 
-// resolveGeneratedColumns resolves generated columns with their generation
-// expressions respectively. onDups indicates which columns are in on-duplicate list.
-func (b *PlanBuilder) resolveGeneratedColumns(ctx context.Context, columns []*table.Column, onDups map[string]struct{}, mockPlan LogicalPlan) (igc InsertGeneratedColumns, err error) {
-	for _, column := range columns {
-		if !column.IsGenerated() {
-			continue
-		}
-		columnName := &ast.ColumnName{Name: column.Name}
-		columnName.SetText(column.Name.O)
-
-		idx, err := expression.FindFieldName(mockPlan.OutputNames(), columnName)
-		if err != nil {
-			return igc, err
-		}
-		colExpr := mockPlan.Schema().Columns[idx]
-
-		expr, _, err := b.rewrite(ctx, column.GeneratedExpr, mockPlan, nil, true)
-		if err != nil {
-			return igc, err
-		}
-
-		igc.Columns = append(igc.Columns, columnName)
-		igc.Exprs = append(igc.Exprs, expr)
-		if onDups == nil {
-			continue
-		}
-		for dep := range column.Dependences {
-			if _, ok := onDups[dep]; ok {
-				assign := &expression.Assignment{Col: colExpr, ColName: column.Name, Expr: expr}
-				igc.OnDuplicates = append(igc.OnDuplicates, assign)
-				break
-			}
-		}
-	}
-	return igc, nil
-}
-
 func (b *PlanBuilder) buildInsert(ctx context.Context, insert *ast.InsertStmt) (Plan, error) {
 	ts, ok := insert.Table.TableRefs.Left.(*ast.TableSource)
 	if !ok {
@@ -1074,17 +1023,9 @@ func (b *PlanBuilder) buildInsert(ctx context.Context, insert *ast.InsertStmt) (
 	mockTablePlan.SetSchema(insertPlan.Schema4OnDuplicate)
 	mockTablePlan.names = insertPlan.names4OnDuplicate
 
-	onDupColSet, err := insertPlan.resolveOnDuplicate(insert.OnDuplicate, tableInfo, func(node ast.ExprNode) (expression.Expression, error) {
+	_, err := insertPlan.resolveOnDuplicate(insert.OnDuplicate, tableInfo, func(node ast.ExprNode) (expression.Expression, error) {
 		return b.rewriteInsertOnDuplicateUpdate(ctx, node, mockTablePlan, insertPlan)
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate generated columns.
-	mockTablePlan.schema = insertPlan.tableSchema
-	mockTablePlan.names = insertPlan.tableColNames
-	insertPlan.GenCols, err = b.resolveGeneratedColumns(ctx, insertPlan.Table.Cols(), onDupColSet, mockTablePlan)
 	if err != nil {
 		return nil, err
 	}
@@ -1113,14 +1054,6 @@ func (p *Insert) resolveOnDuplicate(onDup []*ast.Assignment, tblInfo *model.Tabl
 		defaultExpr := extractDefaultExpr(assign.Expr)
 		if defaultExpr != nil {
 			defaultExpr.Name = assign.Column
-		}
-		// Note: For INSERT, REPLACE, and UPDATE, if a generated column is inserted into, replaced, or updated explicitly, the only permitted value is DEFAULT.
-		// see https://dev.mysql.com/doc/refman/8.0/en/create-table-generated-columns.html
-		if column.IsGenerated() {
-			if defaultExpr != nil {
-				continue
-			}
-			return nil, ErrBadGeneratedColumn.GenWithStackByArgs(assign.Column.Name.O, tblInfo.Name.O)
 		}
 
 		onDupColSet[column.Name.L] = struct{}{}
@@ -1163,7 +1096,6 @@ func (b *PlanBuilder) getAffectCols(insertStmt *ast.InsertStmt, insertPlan *Inse
 }
 
 func (b *PlanBuilder) buildSetValuesOfInsert(ctx context.Context, insert *ast.InsertStmt, insertPlan *Insert, mockTablePlan *LogicalTableDual, checkRefColumn func(n ast.Node) ast.Node) error {
-	tableInfo := insertPlan.Table.Meta()
 	colNames := make([]string, 0, len(insert.Setlist))
 	exprCols := make([]*expression.Column, 0, len(insert.Setlist))
 	for _, assign := range insert.Setlist {
@@ -1178,31 +1110,11 @@ func (b *PlanBuilder) buildSetValuesOfInsert(ctx context.Context, insert *ast.In
 		exprCols = append(exprCols, insertPlan.tableSchema.Columns[idx])
 	}
 
-	// Check whether the column to be updated is the generated column.
-	tCols, err := table.FindCols(insertPlan.Table.Cols(), colNames, tableInfo.PKIsHandle)
-	if err != nil {
-		return err
-	}
-	generatedColumns := make(map[string]struct{}, len(tCols))
-	for _, tCol := range tCols {
-		if tCol.IsGenerated() {
-			generatedColumns[tCol.Name.L] = struct{}{}
-		}
-	}
-
 	insertPlan.AllAssignmentsAreConstant = true
 	for i, assign := range insert.Setlist {
 		defaultExpr := extractDefaultExpr(assign.Expr)
 		if defaultExpr != nil {
 			defaultExpr.Name = assign.Column
-		}
-		// Note: For INSERT, REPLACE, and UPDATE, if a generated column is inserted into, replaced, or updated explicitly, the only permitted value is DEFAULT.
-		// see https://dev.mysql.com/doc/refman/8.0/en/create-table-generated-columns.html
-		if _, ok := generatedColumns[assign.Column.Name.L]; ok {
-			if defaultExpr != nil {
-				continue
-			}
-			return ErrBadGeneratedColumn.GenWithStackByArgs(assign.Column.Name.O, tableInfo.Name.O)
 		}
 		expr, _, err := b.rewriteWithPreprocess(ctx, assign.Expr, mockTablePlan, nil, true, checkRefColumn)
 		if err != nil {
@@ -1255,17 +1167,8 @@ func (b *PlanBuilder) buildValuesListOfInsert(ctx context.Context, insert *ast.I
 		for j, valueItem := range valuesItem {
 			var expr expression.Expression
 			var err error
-			var generatedColumnWithDefaultExpr bool
-			col := affectedValuesCols[j]
 			switch x := valueItem.(type) {
 			case *ast.DefaultExpr:
-				if col.IsGenerated() {
-					if x.Name != nil {
-						return ErrBadGeneratedColumn.GenWithStackByArgs(col.Name.O, insertPlan.Table.Meta().Name.O)
-					}
-					generatedColumnWithDefaultExpr = true
-					break
-				}
 				if x.Name != nil {
 					expr, err = b.findDefaultValue(totalTableCols, x.Name)
 				} else {
@@ -1285,15 +1188,6 @@ func (b *PlanBuilder) buildValuesListOfInsert(ctx context.Context, insert *ast.I
 			if insertPlan.AllAssignmentsAreConstant {
 				_, isConstant := expr.(*expression.Constant)
 				insertPlan.AllAssignmentsAreConstant = isConstant
-			}
-			// insert value into a generated column is not allowed
-			if col.IsGenerated() {
-				// but there is only one exception:
-				// it is allowed to insert the `default` value into a generated column
-				if generatedColumnWithDefaultExpr {
-					continue
-				}
-				return ErrBadGeneratedColumn.GenWithStackByArgs(col.Name.O, insertPlan.Table.Meta().Name.O)
 			}
 			exprList = append(exprList, expr)
 		}
@@ -1317,19 +1211,6 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 	// Check to guarantee that the length of the row returned by select is equal to that of affectedValuesCols.
 	if selectPlan.Schema().Len() != len(affectedValuesCols) {
 		return ErrWrongValueCountOnRow.GenWithStackByArgs(1)
-	}
-
-	// Check to guarantee that there's no generated column.
-	// This check should be done after the above one to make its behavior compatible with MySQL.
-	// For example, table t has two columns, namely a and b, and b is a generated column.
-	// "insert into t (b) select * from t" will raise an error that the column count is not matched.
-	// "insert into t select * from t" will raise an error that there's a generated column in the column list.
-	// If we do this check before the above one, "insert into t (b) select * from t" will raise an error
-	// that there's a generated column in the column list.
-	for _, col := range affectedValuesCols {
-		if col.IsGenerated() {
-			return ErrBadGeneratedColumn.GenWithStackByArgs(col.Name.O, insertPlan.Table.Meta().Name.O)
-		}
 	}
 
 	names := selectPlan.OutputNames()

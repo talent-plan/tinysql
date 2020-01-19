@@ -95,17 +95,6 @@ func TableFromMeta(alloc autoid.Allocator, tblInfo *model.TableInfo) (table.Tabl
 		}
 
 		col := table.ToColumn(colInfo)
-		if col.IsGenerated() {
-			expr, err := parseExpression(colInfo.GeneratedExprString)
-			if err != nil {
-				return nil, err
-			}
-			expr, err = simpleResolveName(expr, tblInfo)
-			if err != nil {
-				return nil, err
-			}
-			col.GeneratedExpr = expr
-		}
 		columns = append(columns, col)
 	}
 
@@ -948,9 +937,6 @@ func CanSkip(info *model.TableInfo, col *table.Column, value types.Datum) bool {
 		return true
 	}
 	if col.GetDefaultValue() == nil && value.IsNull() {
-		return true
-	}
-	if col.IsGenerated() && !col.GeneratedStored {
 		return true
 	}
 	return false

@@ -17,7 +17,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/chunk"
 )
 
 type keyValue struct {
@@ -159,8 +157,7 @@ func getKeysNeedCheckOneRow(ctx sessionctx.Context, t table.Table, row []types.D
 
 // getOldRow gets the table record row from storage for batch check.
 // t could be a normal table or a partition, but it must not be a PartitionedTable.
-func getOldRow(ctx context.Context, sctx sessionctx.Context, txn kv.Transaction, t table.Table, handle int64,
-	genExprs []expression.Expression) ([]types.Datum, error) {
+func getOldRow(ctx context.Context, sctx sessionctx.Context, txn kv.Transaction, t table.Table, handle int64) ([]types.Datum, error) {
 	oldValue, err := txn.Get(ctx, t.RecordKey(handle))
 	if err != nil {
 		return nil, err
@@ -171,8 +168,6 @@ func getOldRow(ctx context.Context, sctx sessionctx.Context, txn kv.Transaction,
 	if err != nil {
 		return nil, err
 	}
-	// Fill write-only and write-reorg columns with originDefaultValue if not found in oldValue.
-	gIdx := 0
 	for _, col := range cols {
 		if col.State != model.StatePublic && oldRow[col.Offset].IsNull() {
 			_, found := oldRowMap[col.ID]
@@ -182,20 +177,6 @@ func getOldRow(ctx context.Context, sctx sessionctx.Context, txn kv.Transaction,
 					return nil, err
 				}
 			}
-		}
-		if col.IsGenerated() {
-			// only the virtual column needs fill back.
-			if !col.GeneratedStored {
-				val, err := genExprs[gIdx].Eval(chunk.MutRowFromDatums(oldRow).ToRow())
-				if err != nil {
-					return nil, err
-				}
-				oldRow[col.Offset], err = table.CastValue(sctx, val, col.ToInfo())
-				if err != nil {
-					return nil, err
-				}
-			}
-			gIdx++
 		}
 	}
 	return oldRow, nil

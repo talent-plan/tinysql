@@ -46,8 +46,6 @@ type InsertValues struct {
 	Lists   [][]expression.Expression
 	SetList []*expression.Assignment
 
-	GenExprs []expression.Expression
-
 	insertColumns []*table.Column
 
 	allAssignmentsAreConstant bool
@@ -124,9 +122,7 @@ func (e *InsertValues) initInsertColumns() error {
 		cols = tableCols
 	}
 	for _, col := range cols {
-		if !col.IsGenerated() {
-			e.insertColumns = append(e.insertColumns, col)
-		}
+		e.insertColumns = append(e.insertColumns, col)
 		if col.Name.L == model.ExtraHandleName.L {
 			if !e.ctx.GetSessionVars().AllowWriteRowID {
 				return errors.Errorf("insert, update and replace statements for _tidb_rowid are not supported.")
@@ -462,37 +458,16 @@ func (e *InsertValues) fillColValue(ctx context.Context, datum types.Datum, idx 
 // Other statements like `insert select from` don't guarantee consecutive autoID.
 // https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html
 func (e *InsertValues) fillRow(ctx context.Context, row []types.Datum, hasValue []bool) ([]types.Datum, error) {
-	gCols := make([]*table.Column, 0)
 	for i, c := range e.Table.Cols() {
 		var err error
-		// Evaluate the generated columns later after real columns set
-		if c.IsGenerated() {
-			gCols = append(gCols, c)
-		} else {
-			// Get the default value for all no value columns, the auto increment column is different from the others.
-			if row[i], err = e.fillColValue(ctx, row[i], i, c, hasValue[i]); err != nil {
+		// Get the default value for all no value columns, the auto increment column is different from the others.
+		if row[i], err = e.fillColValue(ctx, row[i], i, c, hasValue[i]); err != nil {
+			return nil, err
+		}
+		if !e.lazyFillAutoID || (e.lazyFillAutoID && !mysql.HasAutoIncrementFlag(c.Flag)) {
+			if row[i], err = c.HandleBadNull(row[i], e.ctx.GetSessionVars().StmtCtx); err != nil {
 				return nil, err
 			}
-			if !e.lazyFillAutoID || (e.lazyFillAutoID && !mysql.HasAutoIncrementFlag(c.Flag)) {
-				if row[i], err = c.HandleBadNull(row[i], e.ctx.GetSessionVars().StmtCtx); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-	for i, gCol := range gCols {
-		colIdx := gCol.ColumnInfo.Offset
-		val, err := e.GenExprs[i].Eval(chunk.MutRowFromDatums(row).ToRow())
-		if e.handleErr(gCol, &val, 0, err) != nil {
-			return nil, err
-		}
-		row[colIdx], err = table.CastValue(e.ctx, val, gCol.ToInfo())
-		if err != nil {
-			return nil, err
-		}
-		// Handle the bad null error.
-		if row[colIdx], err = gCol.HandleBadNull(row[colIdx], e.ctx.GetSessionVars().StmtCtx); err != nil {
-			return nil, err
 		}
 	}
 	return row, nil

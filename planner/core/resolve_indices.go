@@ -421,23 +421,6 @@ func (p *Insert) ResolveIndices() (err error) {
 			return err
 		}
 	}
-	for i, expr := range p.GenCols.Exprs {
-		p.GenCols.Exprs[i], err = expr.ResolveIndices(p.tableSchema)
-		if err != nil {
-			return err
-		}
-	}
-	for _, asgn := range p.GenCols.OnDuplicates {
-		newCol, err := asgn.Col.ResolveIndices(p.tableSchema)
-		if err != nil {
-			return err
-		}
-		asgn.Col = newCol.(*expression.Column)
-		asgn.Expr, err = asgn.Expr.ResolveIndices(p.Schema4OnDuplicate)
-		if err != nil {
-			return err
-		}
-	}
 	return
 }
 
