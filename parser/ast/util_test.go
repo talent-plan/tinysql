@@ -14,13 +14,10 @@
 package ast_test
 
 import (
-	"fmt"
 	"strings"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/parser"
 	. "github.com/pingcap/tidb/parser/ast"
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/types/parser_driver"
 )
 
@@ -118,36 +115,4 @@ func (checker *nodeTextCleaner) Enter(in Node) (out Node, skipChildren bool) {
 // Leave implements Visitor interface.
 func (checker *nodeTextCleaner) Leave(in Node) (out Node, ok bool) {
 	return in, true
-}
-
-type NodeRestoreTestCase struct {
-	sourceSQL string
-	expectSQL string
-}
-
-func RunNodeRestoreTest(c *C, nodeTestCases []NodeRestoreTestCase, template string, extractNodeFunc func(node Node) Node) {
-	RunNodeRestoreTestWithFlags(c, nodeTestCases, template, extractNodeFunc, DefaultRestoreFlags)
-}
-
-func RunNodeRestoreTestWithFlags(c *C, nodeTestCases []NodeRestoreTestCase, template string, extractNodeFunc func(node Node) Node, flags RestoreFlags) {
-	parser := parser.New()
-	parser.EnableWindowFunc(true)
-	for _, testCase := range nodeTestCases {
-		sourceSQL := fmt.Sprintf(template, testCase.sourceSQL)
-		expectSQL := fmt.Sprintf(template, testCase.expectSQL)
-		stmt, err := parser.ParseOneStmt(sourceSQL, "", "")
-		comment := Commentf("source %#v", testCase)
-		c.Assert(err, IsNil, comment)
-		var sb strings.Builder
-		err = extractNodeFunc(stmt).Restore(NewRestoreCtx(flags, &sb))
-		c.Assert(err, IsNil, comment)
-		restoreSQL := fmt.Sprintf(template, sb.String())
-		comment = Commentf("source %#v; restore %v", testCase, restoreSQL)
-		c.Assert(restoreSQL, Equals, expectSQL, comment)
-		stmt2, err := parser.ParseOneStmt(restoreSQL, "", "")
-		c.Assert(err, IsNil, comment)
-		CleanNodeText(stmt)
-		CleanNodeText(stmt2)
-		c.Assert(stmt2, DeepEquals, stmt, comment)
-	}
 }
