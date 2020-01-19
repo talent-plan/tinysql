@@ -55,17 +55,17 @@ buildsucc:
 all: dev server benchkv
 
 parser:
-	@echo "remove this command later, when our CI script doesn't call it"
+	cd parser && make all
 
-dev: checklist check test
+dev: checklist parser check test
 
-build:
+build: parser
 	$(GOBUILD)
 
 # Install the check tools.
 check-setup:tools/bin/revive tools/bin/goword tools/bin/gometalinter tools/bin/gosec
 
-check: fmt errcheck lint tidy testSuite check-static vet
+check: parser fmt errcheck lint tidy testSuite check-static vet
 
 # These need to be fixed before they can be ran regularly
 check-fail: goword check-slow
@@ -102,7 +102,7 @@ gogenerate:
 
 lint:tools/bin/revive
 	@echo "linting"
-	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml -exclude ./parser/... $(FILES)
 
 vet:
 	@echo "vet"
@@ -179,7 +179,7 @@ ifeq ("$(WITH_CHECK)", "1")
 	CHECK_FLAG = $(TEST_LDFLAGS)
 endif
 
-server:
+server: parser
 ifeq ($(TARGET), "")
 	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -ldflags '$(LDFLAGS) $(CHECK_FLAG)' -o bin/tidb-server tidb-server/main.go
 else

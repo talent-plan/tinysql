@@ -18,8 +18,8 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"go.uber.org/zap"
 )

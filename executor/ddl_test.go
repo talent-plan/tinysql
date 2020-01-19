@@ -17,15 +17,15 @@ import (
 	"context"
 	"fmt"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/ddl"
 	ddlutil "github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -576,77 +576,6 @@ func (s *testSuite6) TestSetDDLReorgBatchSize(c *C) {
 	tk.MustExec("set @@global.tidb_ddl_reorg_batch_size = 1000")
 	res = tk.MustQuery("select @@global.tidb_ddl_reorg_batch_size")
 	res.Check(testkit.Rows("1000"))
-}
-
-func (s *testSuite6) TestIllegalFunctionCall4GeneratedColumns(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// Test create an exist database
-	_, err := tk.Exec("CREATE database test")
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create table t1 (b double generated always as (rand()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("b").Error())
-
-	_, err = tk.Exec("create table t1 (a varchar(64), b varchar(1024) generated always as (load_file(a)) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("b").Error())
-
-	_, err = tk.Exec("create table t1 (a datetime generated always as (curdate()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("a").Error())
-
-	_, err = tk.Exec("create table t1 (a datetime generated always as (current_time()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("a").Error())
-
-	_, err = tk.Exec("create table t1 (a datetime generated always as (current_timestamp()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("a").Error())
-
-	_, err = tk.Exec("create table t1 (a datetime, b varchar(10) generated always as (localtime()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("b").Error())
-
-	_, err = tk.Exec("create table t1 (a varchar(1024) generated always as (uuid()) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("a").Error())
-
-	_, err = tk.Exec("create table t1 (a varchar(1024), b varchar(1024) generated always as (is_free_lock(a)) virtual);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("b").Error())
-
-	tk.MustExec("create table t1 (a bigint not null primary key auto_increment, b bigint, c bigint as (b + 1));")
-
-	_, err = tk.Exec("alter table t1 add column d varchar(1024) generated always as (database());")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("d").Error())
-
-	tk.MustExec("alter table t1 add column d bigint generated always as (b + 1); ")
-
-	_, err = tk.Exec("alter table t1 modify column d bigint generated always as (connection_id());")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("d").Error())
-
-	_, err = tk.Exec("alter table t1 change column c cc bigint generated always as (connection_id());")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnFunctionIsNotAllowed.GenWithStackByArgs("cc").Error())
-}
-
-func (s *testSuite6) TestGeneratedColumnRelatedDDL(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// Test create an exist database
-	_, err := tk.Exec("CREATE database test")
-	c.Assert(err, NotNil)
-
-	_, err = tk.Exec("create table t1 (a bigint not null primary key auto_increment, b bigint as (a + 1));")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnRefAutoInc.GenWithStackByArgs("b").Error())
-
-	tk.MustExec("create table t1 (a bigint not null primary key auto_increment, b bigint, c bigint as (b + 1));")
-
-	_, err = tk.Exec("alter table t1 add column d bigint generated always as (a + 1);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnRefAutoInc.GenWithStackByArgs("d").Error())
-
-	tk.MustExec("alter table t1 add column d bigint generated always as (b + 1);")
-
-	_, err = tk.Exec("alter table t1 modify column d bigint generated always as (a + 1);")
-	c.Assert(err.Error(), Equals, ddl.ErrGeneratedColumnRefAutoInc.GenWithStackByArgs("d").Error())
-
-	_, err = tk.Exec("alter table t1 add column e bigint as (z + 1);")
-	c.Assert(err.Error(), Equals, ddl.ErrBadField.GenWithStackByArgs("z", "generated column function").Error())
-
-	tk.MustExec("drop table t1;")
 }
 
 func (s *testSuite6) TestSetDDLErrorCountLimit(c *C) {

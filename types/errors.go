@@ -14,9 +14,9 @@
 package types
 
 import (
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
-	parser_types "github.com/pingcap/parser/types"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
+	parser_types "github.com/pingcap/tidb/parser/types"
 )
 
 // const strings for ErrWrongValue

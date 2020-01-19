@@ -16,7 +16,7 @@ package sqlexec
 import (
 	"context"
 
-	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/chunk"
 )
 

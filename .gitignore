@@ -17,3 +17,5 @@ vendor
 /_tools/
 .DS_Store
 .vscode
+parser/parser.go
+parser/bin

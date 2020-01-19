@@ -16,7 +16,7 @@ package executor
 import (
 	"context"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"

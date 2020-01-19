@@ -5,8 +5,12 @@ require (
 	github.com/blacktear23/go-proxyprotocol v0.0.0-20180807104634-af7a81e8dd0d
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
+	github.com/cznic/golex v0.0.0-20181122101858-9c343928389c // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548
-	github.com/cznic/sortutil v0.0.0-20150617083342-4c7342852e65
+	github.com/cznic/parser v0.0.0-20181122101858-d773202d5b1f
+	github.com/cznic/sortutil v0.0.0-20181122101858-f5f958428db8
+	github.com/cznic/strutil v0.0.0-20181122101858-275e90344537
+	github.com/cznic/y v0.0.0-20181122101901-b05e8c2e8d7b
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/go-sql-driver/mysql v0.0.0-20170715192408-3955978caca4
 	github.com/gogo/protobuf v1.2.1
@@ -28,10 +32,9 @@ require (
 	github.com/pingcap/goleveldb v0.0.0-20171020122428-b9ff6c35079e
 	github.com/pingcap/kvproto v0.0.0-20191211054548-3c6b38ea5107
 	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
-	github.com/pingcap/parser v0.0.0-20191216031109-53ef01243aa6
 	github.com/pingcap/pd v1.1.0-beta.0.20191210055626-676ddd3fbd2d
 	github.com/pingcap/tipb v0.0.0-20191209145133-44f75c9bef33
-	github.com/remyoudompheng/bigfft v0.0.0-20190512091148-babf20351dd7 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/sirupsen/logrus v1.2.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72
@@ -43,7 +46,7 @@ require (
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
 	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
-	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 	golang.org/x/tools v0.0.0-20191107010934-f79515f33823
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect

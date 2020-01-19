@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/store/tikv/oracle"

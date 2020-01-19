@@ -22,16 +22,16 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/charset"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/charset"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
@@ -335,30 +335,6 @@ func (s *testIntegrationSuite2) TestUpdateMultipleTable(c *C) {
 
 	tk.MustQuery("select * from t1").Check(testkit.Rows("8 1 9", "8 2 9"))
 	tk.MustExec("drop database umt_db")
-}
-
-func (s *testIntegrationSuite2) TestDependedGeneratedColumnPrior2GeneratedColumn(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("CREATE TABLE `t` (" +
-		"`a` int(11) DEFAULT NULL," +
-		"`b` int(11) GENERATED ALWAYS AS (`a` + 1) VIRTUAL," +
-		"`c` int(11) GENERATED ALWAYS AS (`b` + 1) VIRTUAL" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
-	// should check unknown column first, then the prior ones.
-	sql := "alter table t add column d int as (c + f + 1) first"
-	tk.MustGetErrCode(sql, mysql.ErrBadField)
-
-	// depended generated column should be prior to generated column self
-	sql = "alter table t add column d int as (c+1) first"
-	tk.MustGetErrCode(sql, mysql.ErrGeneratedColumnNonPrior)
-
-	// correct case
-	tk.MustExec("alter table t add column d int as (c+1) after c")
-
-	// check position nil case
-	tk.MustExec("alter table t add column(e int as (c+1))")
 }
 
 func (s *testIntegrationSuite4) TestChangingTableCharset(c *C) {

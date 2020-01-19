@@ -14,7 +14,7 @@
 package expression
 
 import (
-	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/tidb/parser/ast"
 )
 
 // UnCacheableFunctions stores functions which can not be cached to plan cache.
