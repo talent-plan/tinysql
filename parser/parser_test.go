@@ -4098,36 +4098,6 @@ func (s *testParserSuite) TestAnalyze(c *C) {
 	s.RunTest(c, table)
 }
 
-func (s *testParserSuite) TestGeneratedColumn(c *C) {
-	tests := []struct {
-		input string
-		ok    bool
-		expr  string
-	}{
-		{"create table t (c int, d int generated always as (c + 1) virtual)", true, "c + 1"},
-		{"create table t (c int, d int as (   c + 1   ) virtual)", true, "c + 1"},
-		{"create table t (c int, d int as (1 + 1) stored)", true, "1 + 1"},
-	}
-	parser := parser.New()
-	for _, tt := range tests {
-		stmtNodes, _, err := parser.Parse(tt.input, "", "")
-		if tt.ok {
-			c.Assert(err, IsNil)
-			stmtNode := stmtNodes[0]
-			for _, col := range stmtNode.(*ast.CreateTableStmt).Cols {
-				for _, opt := range col.Options {
-					if opt.Tp == ast.ColumnOptionGenerated {
-						c.Assert(opt.Expr.Text(), Equals, tt.expr)
-					}
-				}
-			}
-		} else {
-			c.Assert(err, NotNil)
-		}
-	}
-
-}
-
 func (s *testParserSuite) TestSetTransaction(c *C) {
 	// Set transaction is equivalent to setting the global or session value of tx_isolation.
 	// For example:
