@@ -766,7 +766,6 @@ import (
 	GrantStmt			"Grant statement"
 	GrantRoleStmt			"Grant role statement"
 	InsertIntoStmt			"INSERT INTO statement"
-	IndexAdviseStmt			"INDEX ADVISE stetement"
 	KillStmt			"Kill statement"
 	LoadDataStmt			"Load data statement"
 	LoadStatsStmt			"Load statistic statement"
@@ -1153,10 +1152,6 @@ import (
 	EnforcedOrNotOrNotNullOpt	"{[ENFORCED|NOT ENFORCED|NOT NULL]}"
 	Match			"[MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]"
 	MatchOpt		"optional MATCH clause"
-	MaxMinutesOpt		"MAX_MINUTES num(int)"
-	MaxIndexNumOpt		"MAX_IDXNUM clause"
-	PerTable 		"Max index number PER_TABLE"
-	PerDB			"Max index number PER_DB"
 
 %type	<ident>
 	AsOpt			"AS or EmptyString"
@@ -8695,7 +8690,6 @@ Statement:
 |	GrantStmt
 |	GrantRoleStmt
 |	InsertIntoStmt
-|	IndexAdviseStmt
 |	KillStmt
 |	LoadDataStmt
 |	LoadStatsStmt
@@ -10954,80 +10948,3 @@ SignedNum:
 	{
 		$$ = -$2.(int64)
 	}
-
-/********************************************************************
- * Index Advisor Statement
- *
- * INDEX ADVISE
- * 	[LOCAL]
- *	INFILE 'file_name'
- *	[MAX_MINUTES number]
- *	[MAX_IDXNUM
- *  	[PER_TABLE number]
- *  	[PER_DB number]
- *	]
- *	[LINES
- *  	[STARTING BY 'string']
- *  	[TERMINATED BY 'string']
- *	]
- *******************************************************************/
-
-IndexAdviseStmt:
-	"INDEX" "ADVISE" LocalOpt "INFILE" stringLit MaxMinutesOpt MaxIndexNumOpt Lines
-	{
-		x := &ast.IndexAdviseStmt{
-			Path:			$5,
-			MaxMinutes:		$6.(uint64),
-		}
-		if $3 != nil {
-			x.IsLocal = true
-		}
-		if $7 != nil {
-			x.MaxIndexNum = $7.(*ast.MaxIndexNumClause)
-		}
-		if $8 != nil {
-			x.LinesInfo = $8.(*ast.LinesClause)
-		}
-		$$ = x
-	}
-
-MaxMinutesOpt:
-	{
-		$$ = uint64(ast.UnspecifiedSize)
-	}
-|	"MAX_MINUTES" NUM
-	{
-		$$ = getUint64FromNUM($2)
-	}
-
-MaxIndexNumOpt:
-	{
-		$$ = nil
-	}
-|	"MAX_IDXNUM" PerTable PerDB
-	{
-		$$ = &ast.MaxIndexNumClause{
-			PerTable:	$2.(uint64),
-			PerDB: 		$3.(uint64),
-		}
-	}
-
-PerTable:
-	{
-		$$ = uint64(ast.UnspecifiedSize)
-	}
-|	"PER_TABLE" NUM
-	{
-		$$ = getUint64FromNUM($2)
-	}
-
-PerDB:
-	{
-		$$ = uint64(ast.UnspecifiedSize)
-	}
-|	"PER_DB" NUM
-	{
-		$$ = getUint64FromNUM($2)
-	}
-
-%%
