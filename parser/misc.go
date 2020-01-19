@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/parser/charset"
+	"github.com/pingcap/tidb/parser/charset"
 )
 
 // CommentCodeVersion is used to track the highest version can be parsed in the comment with pattern /*T!00001 xxx */

@@ -18,7 +18,7 @@ import (
 	"io"
 
 	"github.com/pingcap/errors"
-	. "github.com/pingcap/parser/format"
+	. "github.com/pingcap/tidb/parser/format"
 )
 
 // Op is opcode type.

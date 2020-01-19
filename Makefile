@@ -55,11 +55,11 @@ buildsucc:
 all: dev server benchkv
 
 parser:
-	@echo "remove this command later, when our CI script doesn't call it"
+	cd parser && make parser
 
 dev: checklist check test
 
-build:
+build: parser
 	$(GOBUILD)
 
 # Install the check tools.
@@ -179,7 +179,7 @@ ifeq ("$(WITH_CHECK)", "1")
 	CHECK_FLAG = $(TEST_LDFLAGS)
 endif
 
-server:
+server: parser
 ifeq ($(TARGET), "")
 	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -ldflags '$(LDFLAGS) $(CHECK_FLAG)' -o bin/tidb-server tidb-server/main.go
 else

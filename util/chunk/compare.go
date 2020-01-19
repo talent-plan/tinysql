@@ -16,7 +16,7 @@ package chunk
 import (
 	"sort"
 
-	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 )
 

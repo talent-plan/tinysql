@@ -14,8 +14,8 @@
 package kv
 
 import (
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
 )
 
 // TxnRetryableMark is used to uniform the commit error messages which could retry the transaction.

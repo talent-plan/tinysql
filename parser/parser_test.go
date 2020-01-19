@@ -22,13 +22,13 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/charset"
-	. "github.com/pingcap/parser/format"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/charset"
+	. "github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/types"
 	driver "github.com/pingcap/tidb/types/parser_driver"
 )
@@ -318,10 +318,6 @@ func (s *testParserSuite) RunTest(c *C, table []testCase) {
 			continue
 		}
 		c.Assert(err, IsNil, comment)
-		// restore correctness test
-		if t.ok {
-			s.RunRestoreTest(c, t.src, t.restore)
-		}
 	}
 }
 
@@ -4556,7 +4552,7 @@ func (wfc *windowFrameBoundChecker) Leave(inNode ast.Node) (node ast.Node, ok bo
 }
 
 // For issue #51
-// See https://github.com/pingcap/parser/pull/51 for details
+// See https://github.com/pingcap/tidb/parser/pull/51 for details
 func (s *testParserSuite) TestVisitFrameBound(c *C) {
 	parser := parser.New()
 	parser.EnableWindowFunc(true)
@@ -4601,7 +4597,7 @@ func (s *testParserSuite) TestFieldText(c *C) {
 	}
 }
 
-// See https://github.com/pingcap/parser/issue/94
+// See https://github.com/pingcap/tidb/parser/issue/94
 func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 	parser := parser.New()
 
@@ -4662,7 +4658,7 @@ func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 	}
 }
 
-// See https://github.com/pingcap/parser/issue/95
+// See https://github.com/pingcap/tidb/parser/issue/95
 func (s *testParserSuite) TestQuotedVariableColumnName(c *C) {
 	parser := parser.New()
 
@@ -4828,9 +4824,6 @@ func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren b
 	case *ast.SelectField:
 		node.Offset = 0
 	case *driver.ValueExpr:
-		if node.Kind() == types.KindMysqlDecimal {
-			node.GetMysqlDecimal().FromString(node.GetMysqlDecimal().ToString())
-		}
 	case *ast.GrantStmt:
 		var privs []*ast.PrivElem
 		for _, v := range node.Privs {
