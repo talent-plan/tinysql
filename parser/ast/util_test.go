@@ -14,11 +14,8 @@
 package ast_test
 
 import (
-	"strings"
-
 	. "github.com/pingcap/check"
 	. "github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/types/parser_driver"
 )
 
 var _ = Suite(&testCacheableSuite{})
@@ -68,51 +65,4 @@ func (s *testCacheableSuite) TestCacheable(c *C) {
 	}
 	c.Assert(IsReadOnly(stmt), IsTrue)
 
-}
-
-// CleanNodeText set the text of node and all child node empty.
-// For test only.
-func CleanNodeText(node Node) {
-	var cleaner nodeTextCleaner
-	node.Accept(&cleaner)
-}
-
-// nodeTextCleaner clean the text of a node and it's child node.
-// For test only.
-type nodeTextCleaner struct {
-}
-
-// Enter implements Visitor interface.
-func (checker *nodeTextCleaner) Enter(in Node) (out Node, skipChildren bool) {
-	in.SetText("")
-	switch node := in.(type) {
-	case *Constraint:
-		if node.Option != nil {
-			if node.Option.KeyBlockSize == 0x0 && node.Option.Tp == 0 && node.Option.Comment == "" {
-				node.Option = nil
-			}
-		}
-	case *FuncCallExpr:
-		node.FnName.O = strings.ToLower(node.FnName.O)
-		switch node.FnName.L {
-		case "convert":
-			node.Args[1].(*driver.ValueExpr).Datum.SetBytes(nil)
-		}
-	case *AggregateFuncExpr:
-		node.F = strings.ToLower(node.F)
-	case *FieldList:
-		for _, f := range node.Fields {
-			f.Offset = 0
-		}
-	case *AlterTableSpec:
-		for _, opt := range node.Options {
-			opt.StrValue = strings.ToLower(opt.StrValue)
-		}
-	}
-	return in, false
-}
-
-// Leave implements Visitor interface.
-func (checker *nodeTextCleaner) Leave(in Node) (out Node, ok bool) {
-	return in, true
 }
