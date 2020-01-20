@@ -20,9 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/ddl/util"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -146,27 +144,3 @@ func (dr *mockDelRange) start() {}
 
 // clear implements delRangeManager interface.
 func (dr *mockDelRange) clear() {}
-
-// MockTableInfo mocks a table info by create table stmt ast and a specified table id.
-func MockTableInfo(ctx sessionctx.Context, stmt *ast.CreateTableStmt, tableID int64) (*model.TableInfo, error) {
-	cols, newConstraints, err := buildColumnsAndConstraints(ctx, stmt.Cols, stmt.Constraints, "", "", "", "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	tbl, err := buildTableInfo(ctx, nil, stmt.Table.Name, cols, newConstraints)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	tbl.ID = tableID
-
-	// The specified charset will be handled in handleTableOptions
-	if err = handleTableOptions(stmt.Options, tbl); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if err = resolveDefaultTableCharsetAndCollation(tbl, "", ""); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return tbl, nil
-}
