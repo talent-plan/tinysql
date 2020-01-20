@@ -19,7 +19,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -692,16 +691,13 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 }
 
 func (s *testDBSuite1) TestAddIndex1(c *C) {
-	testAddIndex(c, s.store, s.lease, false,
+	testAddIndex(c, s.store, s.lease,
 		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))", "")
 }
 
-func testAddIndex(c *C, store kv.Storage, lease time.Duration, testPartition bool, createTableSQL, idxTp string) {
+func testAddIndex(c *C, store kv.Storage, lease time.Duration, createTableSQL, idxTp string) {
 	tk := testkit.NewTestKit(c, store)
 	tk.MustExec("use test_db")
-	if testPartition {
-		tk.MustExec("set @@session.tidb_enable_table_partition = '1';")
-	}
 	tk.MustExec("drop table if exists test_add_index")
 	tk.MustExec(createTableSQL)
 
@@ -788,10 +784,6 @@ LOOP:
 	}
 	rows := tk.MustQuery(fmt.Sprintf("select c1 from test_add_index where c3 >= %d order by c1", start)).Rows()
 	matchRows(c, rows, expectedRows)
-
-	if testPartition {
-		return
-	}
 
 	// TODO: Support explain in future.
 	// rows := s.mustQuery(c, "explain select c1 from test_add_index where c3 >= 100")
@@ -989,20 +981,6 @@ func (s *testDBSuite4) TestAddIndexWithDupCols(c *C) {
 	s.tk.MustExec("drop table test_add_index_with_dup")
 }
 
-func (s *testDBSuite) showColumns(c *C, tableName string) [][]interface{} {
-	return s.mustQuery(c, fmt.Sprintf("show columns from %s", tableName))
-}
-
-func (s *testDBSuite1) TestColumn(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use " + s.schemaName)
-	s.tk.MustExec("create table t2 (c1 int, c2 int, c3 int)")
-	s.tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	s.testAddColumn(c)
-	s.testDropColumn(c)
-	s.tk.MustExec("drop table t2")
-}
-
 func (s *testDBSuite1) TestAddColumnTooMany(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test")
@@ -1027,168 +1005,6 @@ func sessionExec(c *C, s kv.Storage, sql string) {
 	c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
 	c.Assert(rs, IsNil)
 	se.Close()
-}
-
-func (s *testDBSuite) testAddColumn(c *C) {
-	done := make(chan error, 1)
-
-	num := defaultBatchSize + 10
-	// add some rows
-	batchInsert(s.tk, "t2", 0, num)
-
-	testddlutil.SessionExecInGoroutine(c, s.store, "alter table t2 add column c4 int default -1", done)
-
-	ticker := time.NewTicker(s.lease / 2)
-	defer ticker.Stop()
-	step := 10
-LOOP:
-	for {
-		select {
-		case err := <-done:
-			if err == nil {
-				break LOOP
-			}
-			c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
-		case <-ticker.C:
-			// delete some rows, and add some data
-			for i := num; i < num+step; i++ {
-				n := rand.Intn(num)
-				s.tk.MustExec("begin")
-				s.tk.MustExec(fmt.Sprintf("delete from t2 where c1 = %d", n))
-				s.tk.MustExec("commit")
-
-				// Make sure that statement of insert and show use the same infoSchema.
-				s.tk.MustExec("begin")
-				_, err := s.tk.Exec(fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
-				if err != nil {
-					// if err is failed, the column number must be 4 now.
-					values := s.showColumns(c, "t2")
-					c.Assert(values, HasLen, 4, Commentf("err:%v", errors.ErrorStack(err)))
-				}
-				s.tk.MustExec("commit")
-			}
-			num += step
-		}
-	}
-
-	// add data, here c4 must exist
-	for i := num; i < num+step; i++ {
-		s.tk.MustExec(fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
-	}
-
-	rows := s.mustQuery(c, "select count(c4) from t2")
-	c.Assert(rows, HasLen, 1)
-	c.Assert(rows[0], HasLen, 1)
-	count, err := strconv.ParseInt(rows[0][0].(string), 10, 64)
-	c.Assert(err, IsNil)
-	c.Assert(count, Greater, int64(0))
-
-	rows = s.mustQuery(c, "select count(c4) from t2 where c4 = -1")
-	matchRows(c, rows, [][]interface{}{{count - int64(step)}})
-
-	for i := num; i < num+step; i++ {
-		rows = s.mustQuery(c, fmt.Sprintf("select c4 from t2 where c4 = %d", i))
-		matchRows(c, rows, [][]interface{}{{i}})
-	}
-
-	ctx := s.s.(sessionctx.Context)
-	t := s.testGetTable(c, "t2")
-	i := 0
-	j := 0
-	ctx.NewTxn(context.Background())
-	defer func() {
-		if txn, err1 := ctx.Txn(true); err1 == nil {
-			txn.Rollback()
-		}
-	}()
-	err = t.IterRecords(ctx, t.FirstKey(), t.Cols(),
-		func(h int64, data []types.Datum, cols []*table.Column) (bool, error) {
-			i++
-			// c4 must be -1 or > 0
-			v, err1 := data[3].ToInt64(ctx.GetSessionVars().StmtCtx)
-			c.Assert(err1, IsNil)
-			if v == -1 {
-				j++
-			} else {
-				c.Assert(v, Greater, int64(0))
-			}
-			return true, nil
-		})
-	c.Assert(err, IsNil)
-	c.Assert(i, Equals, int(count))
-	c.Assert(i, LessEqual, num+step)
-	c.Assert(j, Equals, int(count)-step)
-
-	// for modifying columns after adding columns
-	s.tk.MustExec("alter table t2 modify c4 int default 11")
-	for i := num + step; i < num+step+10; i++ {
-		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
-	}
-	rows = s.mustQuery(c, "select count(c4) from t2 where c4 = -1")
-	matchRows(c, rows, [][]interface{}{{count - int64(step)}})
-
-	// test add unsupported constraint
-	s.mustExec(c, "create table t_add_unsupported_constraint (a int);")
-	_, err = s.tk.Exec("ALTER TABLE t_add_unsupported_constraint ADD id int AUTO_INCREMENT;")
-	c.Assert(err.Error(), Equals, "[ddl:8200]unsupported add column 'id' constraint AUTO_INCREMENT when altering 'test_db.t_add_unsupported_constraint'")
-	_, err = s.tk.Exec("ALTER TABLE t_add_unsupported_constraint ADD id int KEY;")
-	c.Assert(err.Error(), Equals, "[ddl:8200]unsupported add column 'id' constraint PRIMARY KEY when altering 'test_db.t_add_unsupported_constraint'")
-	_, err = s.tk.Exec("ALTER TABLE t_add_unsupported_constraint ADD id int UNIQUE;")
-	c.Assert(err.Error(), Equals, "[ddl:8200]unsupported add column 'id' constraint UNIQUE KEY when altering 'test_db.t_add_unsupported_constraint'")
-}
-
-func (s *testDBSuite) testDropColumn(c *C) {
-	done := make(chan error, 1)
-	s.mustExec(c, "delete from t2")
-
-	num := 100
-	// add some rows
-	for i := 0; i < num; i++ {
-		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d, %d)", i, i, i, i))
-	}
-
-	// get c4 column id
-	testddlutil.SessionExecInGoroutine(c, s.store, "alter table t2 drop column c4", done)
-
-	ticker := time.NewTicker(s.lease / 2)
-	defer ticker.Stop()
-	step := 10
-LOOP:
-	for {
-		select {
-		case err := <-done:
-			if err == nil {
-				break LOOP
-			}
-			c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
-		case <-ticker.C:
-			// delete some rows, and add some data
-			for i := num; i < num+step; i++ {
-				// Make sure that statement of insert and show use the same infoSchema.
-				s.tk.MustExec("begin")
-				_, err := s.tk.Exec(fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
-				if err != nil {
-					// If executing is failed, the column number must be 4 now.
-					values := s.showColumns(c, "t2")
-					c.Assert(values, HasLen, 4, Commentf("err:%v", errors.ErrorStack(err)))
-				}
-				s.tk.MustExec("commit")
-			}
-			num += step
-		}
-	}
-
-	// add data, here c4 must not exist
-	for i := num; i < num+step; i++ {
-		s.mustExec(c, fmt.Sprintf("insert into t2 values (%d, %d, %d)", i, i, i))
-	}
-
-	rows := s.mustQuery(c, "select count(*) from t2")
-	c.Assert(rows, HasLen, 1)
-	c.Assert(rows[0], HasLen, 1)
-	count, err := strconv.ParseInt(rows[0][0].(string), 10, 64)
-	c.Assert(err, IsNil)
-	c.Assert(count, Greater, int64(0))
 }
 
 // TestDropColumn is for inserting value with a to-be-dropped column when do drop column.
@@ -1284,11 +1100,6 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 
 func (s *testDBSuite) mustExec(c *C, query string) {
 	s.tk.MustExec(query)
-}
-
-func (s *testDBSuite) mustQuery(c *C, query string) [][]interface{} {
-	r := s.tk.MustQuery(query)
-	return r.Rows()
 }
 
 func matchRows(c *C, rows [][]interface{}, expected [][]interface{}) {

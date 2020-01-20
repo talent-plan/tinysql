@@ -28,7 +28,6 @@ var (
 	_ DMLNode = &UpdateStmt{}
 	_ DMLNode = &SelectStmt{}
 	_ DMLNode = &ShowStmt{}
-	_ DMLNode = &LoadDataStmt{}
 	_ DMLNode = &SplitRegionStmt{}
 
 	_ Node = &Assignment{}
@@ -1162,120 +1161,6 @@ func (n *Assignment) Accept(v Visitor) (Node, bool) {
 type ColumnNameOrUserVar struct {
 	ColumnName *ColumnName
 	UserVar    *VariableExpr
-}
-
-// LoadDataStmt is a statement to load data from a specified file, then insert this rows into an existing table.
-// See https://dev.mysql.com/doc/refman/5.7/en/load-data.html
-type LoadDataStmt struct {
-	dmlNode
-
-	IsLocal           bool
-	Path              string
-	OnDuplicate       OnDuplicateKeyHandlingType
-	Table             *TableName
-	Columns           []*ColumnName
-	FieldsInfo        *FieldsClause
-	LinesInfo         *LinesClause
-	IgnoreLines       uint64
-	ColumnAssignments []*Assignment
-
-	ColumnsAndUserVars []*ColumnNameOrUserVar
-}
-
-// Accept implements Node Accept interface.
-func (n *LoadDataStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*LoadDataStmt)
-	if n.Table != nil {
-		node, ok := n.Table.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Table = node.(*TableName)
-	}
-	for i, val := range n.Columns {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Columns[i] = node.(*ColumnName)
-	}
-
-	for i, assignment := range n.ColumnAssignments {
-		node, ok := assignment.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.ColumnAssignments[i] = node.(*Assignment)
-	}
-	return v.Leave(n)
-}
-
-const (
-	Terminated = iota
-	Enclosed
-	Escaped
-)
-
-type FieldItem struct {
-	Type  int
-	Value string
-}
-
-// FieldsClause represents fields references clause in load data statement.
-type FieldsClause struct {
-	Terminated string
-	Enclosed   byte
-	Escaped    byte
-}
-
-// Restore for FieldsClause
-func (n *FieldsClause) Restore(ctx *RestoreCtx) error {
-	if n.Terminated != "\t" || n.Escaped != '\\' {
-		ctx.WriteKeyWord(" FIELDS")
-		if n.Terminated != "\t" {
-			ctx.WriteKeyWord(" TERMINATED BY ")
-			ctx.WriteString(n.Terminated)
-		}
-		if n.Enclosed != 0 {
-			ctx.WriteKeyWord(" ENCLOSED BY ")
-			ctx.WriteString(string(n.Enclosed))
-		}
-		if n.Escaped != '\\' {
-			ctx.WriteKeyWord(" ESCAPED BY ")
-			if n.Escaped == 0 {
-				ctx.WritePlain("''")
-			} else {
-				ctx.WriteString(string(n.Escaped))
-			}
-		}
-	}
-	return nil
-}
-
-// LinesClause represents lines references clause in load data statement.
-type LinesClause struct {
-	Starting   string
-	Terminated string
-}
-
-// Restore for LinesClause
-func (n *LinesClause) Restore(ctx *RestoreCtx) error {
-	if n.Starting != "" || n.Terminated != "\n" {
-		ctx.WriteKeyWord(" LINES")
-		if n.Starting != "" {
-			ctx.WriteKeyWord(" STARTING BY ")
-			ctx.WriteString(n.Starting)
-		}
-		if n.Terminated != "\n" {
-			ctx.WriteKeyWord(" TERMINATED BY ")
-			ctx.WriteString(n.Terminated)
-		}
-	}
-	return nil
 }
 
 // InsertStmt is a statement to insert new rows into an existing table.

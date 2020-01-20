@@ -73,7 +73,6 @@ func (ts *testMiscSuite) TestMiscVisitorCover(c *C) {
 		&FlushStmt{},
 		&PrivElem{},
 		&VariableAssignment{Value: valueExpr},
-		&KillStmt{},
 		&DropStatsStmt{Table: &TableName{}},
 		&ShutdownStmt{},
 	}
@@ -102,25 +101,6 @@ constraint foreign key (jobabbr) references ffxi_jobtype (jobabbr) on delete cas
 `
 	parse := parser.New()
 	stmts, _, err := parse.Parse(sql, "", "")
-	c.Assert(err, IsNil)
-	for _, stmt := range stmts {
-		stmt.Accept(visitor{})
-		stmt.Accept(visitor1{})
-	}
-}
-
-func (ts *testMiscSuite) TestDMLVistorCover(c *C) {
-	sql := `delete from somelog where user = 'jcole' order by timestamp_column limit 1;
-delete t1, t2 from t1 inner join t2 inner join t3 where t1.id=t2.id and t2.id=t3.id;
-select * from t where exists(select * from t k where t.c = k.c having sum(c) = 1);
-insert into t_copy select * from t where t.x > 5;
-(select /*+ TIDB_INLJ(t1) */ a from t1 where a=10 and b=1) union (select /*+ TIDB_SMJ(t2) */ a from t2 where a=11 and b=2) order by a limit 10;
-update t1 set col1 = col1 + 1, col2 = col1;
-show create table t;
-load data infile '/tmp/t.csv' into table t fields terminated by 'ab' enclosed by 'b';`
-
-	p := parser.New()
-	stmts, _, err := p.Parse(sql, "", "")
 	c.Assert(err, IsNil)
 	for _, stmt := range stmts {
 		stmt.Accept(visitor{})

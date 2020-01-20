@@ -46,7 +46,6 @@ var (
 	_ StmtNode = &SetStmt{}
 	_ StmtNode = &UseStmt{}
 	_ StmtNode = &FlushStmt{}
-	_ StmtNode = &KillStmt{}
 	_ StmtNode = &CreateBindingStmt{}
 	_ StmtNode = &DropBindingStmt{}
 	_ StmtNode = &ShutdownStmt{}
@@ -531,49 +530,6 @@ func (n *FlushStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// KillStmt is a statement to kill a query or connection.
-type KillStmt struct {
-	stmtNode
-
-	// Query indicates whether terminate a single query on this connection or the whole connection.
-	// If Query is true, terminates the statement the connection is currently executing, but leaves the connection itself intact.
-	// If Query is false, terminates the connection associated with the given ConnectionID, after terminating any statement the connection is executing.
-	Query        bool
-	ConnectionID uint64
-	// TiDBExtension is used to indicate whether the user knows he is sending kill statement to the right tidb-server.
-	// When the SQL grammar is "KILL TIDB [CONNECTION | QUERY] connectionID", TiDBExtension will be set.
-	// It's a special grammar extension in TiDB. This extension exists because, when the connection is:
-	// client -> LVS proxy -> TiDB, and type Ctrl+C in client, the following action will be executed:
-	// new a connection; kill xxx;
-	// kill command may send to the wrong TiDB, because the exists of LVS proxy, and kill the wrong session.
-	// So, "KILL TIDB" grammar is introduced, and it REQUIRES DIRECT client -> TiDB TOPOLOGY.
-	// TODO: The standard KILL grammar will be supported once we have global connectionID.
-	TiDBExtension bool
-}
-
-// Restore implements Node interface.
-func (n *KillStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("KILL")
-	if n.TiDBExtension {
-		ctx.WriteKeyWord(" TIDB")
-	}
-	if n.Query {
-		ctx.WriteKeyWord(" QUERY")
-	}
-	ctx.WritePlainf(" %d", n.ConnectionID)
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *KillStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*KillStmt)
-	return v.Leave(n)
-}
-
 // SetStmt is the statement to set variables.
 type SetStmt struct {
 	stmtNode
@@ -597,27 +553,6 @@ func (n *SetStmt) Accept(v Visitor) (Node, bool) {
 	}
 	return v.Leave(n)
 }
-
-/*
-// SetCharsetStmt is a statement to assign values to character and collation variables.
-// See https://dev.mysql.com/doc/refman/5.7/en/set-statement.html
-type SetCharsetStmt struct {
-	stmtNode
-
-	Charset string
-	Collate string
-}
-
-// Accept implements Node Accept interface.
-func (n *SetCharsetStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*SetCharsetStmt)
-	return v.Leave(n)
-}
-*/
 
 // SetPwdStmt is a statement to assign a password to user account.
 // See https://dev.mysql.com/doc/refman/5.7/en/set-password.html
