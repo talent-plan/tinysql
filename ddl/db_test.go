@@ -1065,13 +1065,12 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 	hasNoDefault := mysql.HasNoDefaultValueFlag(colD.Flag)
 	c.Assert(hasNoDefault, IsTrue)
 	// for the following definitions: 'not null', 'null', 'default value' and 'comment'
-	s.mustExec(c, "alter table t3 change b b varchar(20) null default 'c' comment 'my comment'")
+	s.mustExec(c, "alter table t3 change b b varchar(20) null default 'c'")
 	is = domain.GetDomain(ctx).InfoSchema()
 	tbl, err = is.TableByName(model.NewCIStr("test_db"), model.NewCIStr("t3"))
 	c.Assert(err, IsNil)
 	tblInfo = tbl.Meta()
 	colB := tblInfo.Columns[1]
-	c.Assert(colB.Comment, Equals, "my comment")
 	hasNotNull := mysql.HasNotNullFlag(colB.Flag)
 	c.Assert(hasNotNull, IsFalse)
 	s.mustExec(c, "insert into t3 set aa = 3, dd = 5")
@@ -1137,27 +1136,7 @@ func (s *testDBSuite1) TestCreateTable(c *C) {
 
 	s.tk.MustExec("drop table t")
 
-	s.tk.MustGetErrCode("CREATE TABLE `t` (`a` int) DEFAULT CHARSET=abcdefg", mysql.ErrUnknownCharacterSet)
-
-	s.tk.MustExec("CREATE TABLE `collateTest` (`a` int, `b` varchar(10)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_slovak_ci")
-	expects := "CREATE TABLE `collateTest` (\n  `a` int(11) DEFAULT NULL,\n  `b` varchar(10) COLLATE utf8_slovak_ci DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_slovak_ci"
-	s.tk.MustQuery("show create table collateTest").Check(testkit.Rows(expects))
-
-	s.tk.MustGetErrCode("CREATE TABLE `collateTest2` (`a` int) CHARSET utf8 COLLATE utf8mb4_unicode_ci", mysql.ErrCollationCharsetMismatch)
-	s.tk.MustGetErrCode("CREATE TABLE `collateTest3` (`a` int) COLLATE utf8mb4_unicode_ci CHARSET utf8", mysql.ErrConflictingDeclarations)
-
-	s.tk.MustExec("CREATE TABLE `collateTest4` (`a` int) COLLATE utf8_uniCOde_ci")
-	expects = "CREATE TABLE `collateTest4` (\n  `a` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci"
-	s.tk.MustQuery("show create table collateTest4").Check(testkit.Rows(expects))
-
-	s.tk.MustExec("create database test2 default charset utf8 collate utf8_general_ci")
-	s.tk.MustExec("use test2")
-	s.tk.MustExec("create table dbCollateTest (a varchar(10))")
-	expects = "CREATE TABLE `dbCollateTest` (\n  `a` varchar(10) COLLATE utf8_general_ci DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci"
-	s.tk.MustQuery("show create table dbCollateTest").Check(testkit.Rows(expects))
-
 	// test for enum column
-	s.tk.MustExec("use test")
 	failSQL := "create table t_enum (a enum('e','e'));"
 	s.tk.MustGetErrCode(failSQL, mysql.ErrDuplicatedValueInType)
 	failSQL = "create table t_enum (a enum('e','E'));"
@@ -1199,36 +1178,6 @@ out:
 	s.tk.MustQuery("select c2, c3 from tnn where c1 = 99").Check(testkit.Rows(expected))
 
 	s.tk.MustExec("drop table tnn")
-}
-
-func (s *testDBSuite4) TestComment(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use " + s.schemaName)
-	s.tk.MustExec("drop table if exists ct, ct1")
-
-	validComment := strings.Repeat("a", 1024)
-	invalidComment := strings.Repeat("b", 1025)
-
-	s.tk.MustExec("create table ct (c int, d int, e int, key (c) comment '" + validComment + "')")
-	s.tk.MustExec("create index i on ct (d) comment '" + validComment + "'")
-	s.tk.MustExec("alter table ct add key (e) comment '" + validComment + "'")
-
-	s.tk.MustGetErrCode("create table ct1 (c int, key (c) comment '"+invalidComment+"')", mysql.ErrTooLongIndexComment)
-	s.tk.MustGetErrCode("create index i1 on ct (d) comment '"+invalidComment+"b"+"'", mysql.ErrTooLongIndexComment)
-	s.tk.MustGetErrCode("alter table ct add key (e) comment '"+invalidComment+"'", mysql.ErrTooLongIndexComment)
-
-	s.tk.MustExec("set @@sql_mode=''")
-	s.tk.MustExec("create table ct1 (c int, d int, e int, key (c) comment '" + invalidComment + "')")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1688|Comment for index 'c' is too long (max = 1024)"))
-	s.tk.MustExec("create index i1 on ct1 (d) comment '" + invalidComment + "b" + "'")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1688|Comment for index 'i1' is too long (max = 1024)"))
-	s.tk.MustExec("alter table ct1 add key (e) comment '" + invalidComment + "'")
-	c.Assert(s.tk.Se.GetSessionVars().StmtCtx.WarningCount(), Equals, uint16(1))
-	s.tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1688|Comment for index 'e' is too long (max = 1024)"))
-
-	s.tk.MustExec("drop table if exists ct, ct1")
 }
 
 func (s *testDBSuite5) TestCheckColumnDefaultValue(c *C) {
@@ -1312,48 +1261,6 @@ func (s *testDBSuite3) TestColumnModifyingDefinition(c *C) {
 	s.tk.MustExec("insert into test2(c2) values (null);")
 	s.tk.MustGetErrCode("alter table test2 change c2 a int not null", mysql.ErrInvalidUseOfNull)
 	s.tk.MustGetErrCode("alter table test2 change c1 a1 bigint not null;", mysql.WarnDataTruncated)
-}
-
-func (s *testDBSuite4) TestCheckTooBigFieldLength(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test")
-	s.tk.MustExec("drop table if exists tr_01;")
-	s.tk.MustExec("create table tr_01 (id int, name varchar(20000), purchased date )  default charset=utf8 collate=utf8_bin;")
-
-	s.tk.MustExec("drop table if exists tr_02;")
-	s.tk.MustExec("create table tr_02 (id int, name varchar(16000), purchased date )  default charset=utf8mb4 collate=utf8mb4_bin;")
-
-	s.tk.MustExec("drop table if exists tr_03;")
-	s.tk.MustExec("create table tr_03 (id int, name varchar(65534), purchased date ) default charset=latin1;")
-
-	s.tk.MustExec("drop table if exists tr_04;")
-	s.tk.MustExec("create table tr_04 (a varchar(20000) ) default charset utf8;")
-	s.tk.MustGetErrCode("alter table tr_04 add column b varchar(20000) charset utf8mb4;", mysql.ErrTooBigFieldlength)
-	s.tk.MustGetErrCode("alter table tr_04 convert to character set utf8mb4;", mysql.ErrTooBigFieldlength)
-	s.tk.MustGetErrCode("create table tr (id int, name varchar(30000), purchased date )  default charset=utf8 collate=utf8_bin;", mysql.ErrTooBigFieldlength)
-	s.tk.MustGetErrCode("create table tr (id int, name varchar(20000) charset utf8mb4, purchased date ) default charset=utf8 collate=utf8_bin;", mysql.ErrTooBigFieldlength)
-	s.tk.MustGetErrCode("create table tr (id int, name varchar(65536), purchased date ) default charset=latin1;", mysql.ErrTooBigFieldlength)
-
-	s.tk.MustExec("drop table if exists tr_05;")
-	s.tk.MustExec("create table tr_05 (a varchar(16000) charset utf8);")
-	s.tk.MustExec("alter table tr_05 modify column a varchar(16000) charset utf8;")
-	s.tk.MustExec("alter table tr_05 modify column a varchar(16000) charset utf8mb4;")
-}
-
-func (s *testDBSuite5) TestCheckConvertToCharacter(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test")
-	s.tk.MustExec("drop table if exists t")
-	defer s.tk.MustExec("drop table t")
-	s.tk.MustExec("create table t(a varchar(10) charset binary);")
-	ctx := s.tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	t, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	s.tk.MustGetErrCode("alter table t modify column a varchar(10) charset utf8 collate utf8_bin", mysql.ErrUnsupportedDDLOperation)
-	s.tk.MustGetErrCode("alter table t modify column a varchar(10) charset utf8mb4 collate utf8mb4_bin", mysql.ErrUnsupportedDDLOperation)
-	s.tk.MustGetErrCode("alter table t modify column a varchar(10) charset latin1 collate latin1_bin", mysql.ErrUnsupportedDDLOperation)
-	c.Assert(t.Cols()[0].Charset, Equals, "binary")
 }
 
 func (s *testDBSuite5) TestModifyColumnRollBack(c *C) {

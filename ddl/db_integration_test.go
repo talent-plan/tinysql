@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
@@ -38,9 +37,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
-	"github.com/pingcap/tidb/util/testutil"
 )
 
 var _ = Suite(&testIntegrationSuite1{&testIntegrationSuite{}})
@@ -337,118 +334,6 @@ func (s *testIntegrationSuite2) TestUpdateMultipleTable(c *C) {
 	tk.MustExec("drop database umt_db")
 }
 
-func (s *testIntegrationSuite4) TestChangingTableCharset(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("USE test")
-	tk.MustExec("create table t(a char(10)) charset latin1 collate latin1_bin")
-
-	tk.MustGetErrCode("alter table t charset gbk", mysql.ErrUnknownCharacterSet)
-	tk.MustGetErrCode("alter table t charset ''", mysql.ErrUnknownCharacterSet)
-
-	tk.MustGetErrCode("alter table t charset utf8mb4 collate '' collate utf8mb4_bin;", mysql.ErrUnknownCollation)
-
-	tk.MustGetErrCode("alter table t charset utf8 collate latin1_bin", mysql.ErrCollationCharsetMismatch)
-	tk.MustGetErrCode("alter table t charset utf8 collate utf8mb4_bin;", mysql.ErrCollationCharsetMismatch)
-	tk.MustGetErrCode("alter table t charset utf8 collate utf8_bin collate utf8mb4_bin collate utf8_bin;", mysql.ErrCollationCharsetMismatch)
-
-	tk.MustGetErrCode("alter table t charset utf8", mysql.ErrUnsupportedDDLOperation)
-	tk.MustGetErrCode("alter table t charset utf8mb4", mysql.ErrUnsupportedDDLOperation)
-	tk.MustGetErrCode("alter table t charset utf8mb4 collate utf8mb4_bin", mysql.ErrUnsupportedDDLOperation)
-
-	tk.MustGetErrCode("alter table t charset latin1 charset utf8 charset utf8mb4 collate utf8_bin;", mysql.ErrConflictingDeclarations)
-
-	// Test change column charset when changing table charset.
-	tk.MustExec("drop table t;")
-	tk.MustExec("create table t(a varchar(10)) charset utf8")
-	tk.MustExec("alter table t convert to charset utf8mb4;")
-	checkCharset := func(chs, coll string) {
-		tbl := testGetTableByName(c, s.ctx, "test", "t")
-		c.Assert(tbl, NotNil)
-		c.Assert(tbl.Meta().Charset, Equals, chs)
-		c.Assert(tbl.Meta().Collate, Equals, coll)
-		for _, col := range tbl.Meta().Columns {
-			c.Assert(col.Charset, Equals, chs)
-			c.Assert(col.Collate, Equals, coll)
-		}
-	}
-	checkCharset(charset.CharsetUTF8MB4, charset.CollationUTF8MB4)
-
-	// Test when column charset can not convert to the target charset.
-	tk.MustExec("drop table t;")
-	tk.MustExec("create table t(a varchar(10) character set ascii) charset utf8mb4")
-	tk.MustGetErrCode("alter table t convert to charset utf8mb4;", mysql.ErrUnsupportedDDLOperation)
-
-	tk.MustExec("drop table t;")
-	tk.MustExec("create table t(a varchar(10) character set utf8) charset utf8")
-	tk.MustExec("alter table t convert to charset utf8 collate utf8_general_ci;")
-	checkCharset(charset.CharsetUTF8, "utf8_general_ci")
-
-	// Test when table charset is equal to target charset but column charset is not equal.
-	tk.MustExec("drop table t;")
-	tk.MustExec("create table t(a varchar(10) character set utf8) charset utf8mb4")
-	tk.MustExec("alter table t convert to charset utf8mb4 collate utf8mb4_general_ci;")
-	checkCharset(charset.CharsetUTF8MB4, "utf8mb4_general_ci")
-
-	// Mock table info with charset is "". Old TiDB maybe create table with charset is "".
-	db, ok := domain.GetDomain(s.ctx).InfoSchema().SchemaByName(model.NewCIStr("test"))
-	c.Assert(ok, IsTrue)
-	tbl := testGetTableByName(c, s.ctx, "test", "t")
-	tblInfo := tbl.Meta().Clone()
-	tblInfo.Charset = ""
-	tblInfo.Collate = ""
-	updateTableInfo := func(tblInfo *model.TableInfo) {
-		mockCtx := mock.NewContext()
-		mockCtx.Store = s.store
-		err := mockCtx.NewTxn(context.Background())
-		c.Assert(err, IsNil)
-		txn, err := mockCtx.Txn(true)
-		c.Assert(err, IsNil)
-		mt := meta.NewMeta(txn)
-
-		err = mt.UpdateTable(db.ID, tblInfo)
-		c.Assert(err, IsNil)
-		err = txn.Commit(context.Background())
-		c.Assert(err, IsNil)
-	}
-	updateTableInfo(tblInfo)
-
-	// check table charset is ""
-	tk.MustExec("alter table t add column b varchar(10);") //  load latest schema.
-	tbl = testGetTableByName(c, s.ctx, "test", "t")
-	c.Assert(tbl, NotNil)
-	c.Assert(tbl.Meta().Charset, Equals, "")
-	c.Assert(tbl.Meta().Collate, Equals, "")
-	// Test when table charset is "", this for compatibility.
-	tk.MustExec("alter table t convert to charset utf8mb4;")
-	checkCharset(charset.CharsetUTF8MB4, charset.CollationUTF8MB4)
-
-	// Test when column charset is "".
-	tbl = testGetTableByName(c, s.ctx, "test", "t")
-	tblInfo = tbl.Meta().Clone()
-	tblInfo.Columns[0].Charset = ""
-	tblInfo.Columns[0].Collate = ""
-	updateTableInfo(tblInfo)
-	// check table charset is ""
-	tk.MustExec("alter table t drop column b;") //  load latest schema.
-	tbl = testGetTableByName(c, s.ctx, "test", "t")
-	c.Assert(tbl, NotNil)
-	c.Assert(tbl.Meta().Columns[0].Charset, Equals, "")
-	c.Assert(tbl.Meta().Columns[0].Collate, Equals, "")
-	tk.MustExec("alter table t convert to charset utf8mb4;")
-	checkCharset(charset.CharsetUTF8MB4, charset.CollationUTF8MB4)
-
-	tk.MustExec("drop table t")
-	tk.MustExec("create table t (a blob) character set utf8;")
-	tk.MustExec("alter table t charset=utf8mb4 collate=utf8mb4_bin;")
-	tk.MustQuery("show create table t").Check(testutil.RowsWithSep("|",
-		"t CREATE TABLE `t` (\n"+
-			"  `a` blob DEFAULT NULL\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	))
-
-}
-
 func (s *testIntegrationSuite5) TestModifyingColumnOption(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test")
@@ -484,64 +369,6 @@ func (s *testIntegrationSuite5) TestModifyingColumnOption(c *C) {
 	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: can't change unsigned integer to signed or vice versa")
 	_, err = tk.Exec("alter table t2 change b b int(11) unsigned")
 	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type int(11) not match origin char(1)")
-}
-
-func (s *testIntegrationSuite2) TestCaseInsensitiveCharsetAndCollate(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("create database if not exists test_charset_collate")
-	defer tk.MustExec("drop database test_charset_collate")
-	tk.MustExec("use test_charset_collate")
-	tk.MustExec("create table t(id int) ENGINE=InnoDB DEFAULT CHARSET=UTF8 COLLATE=UTF8_BIN;")
-	tk.MustExec("create table t1(id int) ENGINE=InnoDB DEFAULT CHARSET=UTF8 COLLATE=uTF8_BIN;")
-	tk.MustExec("create table t2(id int) ENGINE=InnoDB DEFAULT CHARSET=Utf8 COLLATE=utf8_BIN;")
-	tk.MustExec("create table t3(id int) ENGINE=InnoDB DEFAULT CHARSET=Utf8mb4 COLLATE=utf8MB4_BIN;")
-	tk.MustExec("create table t4(id int) ENGINE=InnoDB DEFAULT CHARSET=Utf8mb4 COLLATE=utf8MB4_general_ci;")
-
-	tk.MustExec("create table t5(a varchar(20)) ENGINE=InnoDB DEFAULT CHARSET=UTF8MB4 COLLATE=UTF8MB4_GENERAL_CI;")
-	tk.MustExec("insert into t5 values ('特克斯和凯科斯群岛')")
-
-	db, ok := domain.GetDomain(s.ctx).InfoSchema().SchemaByName(model.NewCIStr("test_charset_collate"))
-	c.Assert(ok, IsTrue)
-	tbl := testGetTableByName(c, s.ctx, "test_charset_collate", "t5")
-	tblInfo := tbl.Meta().Clone()
-	c.Assert(tblInfo.Charset, Equals, "utf8mb4")
-	c.Assert(tblInfo.Columns[0].Charset, Equals, "utf8mb4")
-
-	tblInfo.Version = model.TableInfoVersion2
-	tblInfo.Charset = "UTF8MB4"
-
-	updateTableInfo := func(tblInfo *model.TableInfo) {
-		mockCtx := mock.NewContext()
-		mockCtx.Store = s.store
-		err := mockCtx.NewTxn(context.Background())
-		c.Assert(err, IsNil)
-		txn, err := mockCtx.Txn(true)
-		c.Assert(err, IsNil)
-		mt := meta.NewMeta(txn)
-		c.Assert(ok, IsTrue)
-		err = mt.UpdateTable(db.ID, tblInfo)
-		c.Assert(err, IsNil)
-		err = txn.Commit(context.Background())
-		c.Assert(err, IsNil)
-	}
-	updateTableInfo(tblInfo)
-	tk.MustExec("alter table t5 add column b varchar(10);") //  load latest schema.
-
-	tblInfo = testGetTableByName(c, s.ctx, "test_charset_collate", "t5").Meta()
-	c.Assert(tblInfo.Charset, Equals, "utf8mb4")
-	c.Assert(tblInfo.Columns[0].Charset, Equals, "utf8mb4")
-
-	// For model.TableInfoVersion3, it is believed that all charsets / collations are lower-cased, do not do case-convert
-	tblInfo = tblInfo.Clone()
-	tblInfo.Version = model.TableInfoVersion3
-	tblInfo.Charset = "UTF8MB4"
-	updateTableInfo(tblInfo)
-	tk.MustExec("alter table t5 add column c varchar(10);") //  load latest schema.
-
-	tblInfo = testGetTableByName(c, s.ctx, "test_charset_collate", "t5").Meta()
-	c.Assert(tblInfo.Charset, Equals, "UTF8MB4")
-	c.Assert(tblInfo.Columns[0].Charset, Equals, "utf8mb4")
 }
 
 func (s *testIntegrationSuite5) TestBackwardCompatibility(c *C) {
@@ -763,36 +590,6 @@ func (s *testIntegrationSuite2) TestAddIndexAfterAddColumn(c *C) {
 	s.tk.MustGetErrCode(sql, mysql.ErrTooManyKeyParts)
 }
 
-func (s *testIntegrationSuite3) TestResolveCharset(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test")
-	s.tk.MustExec("drop table if exists resolve_charset")
-	s.tk.MustExec(`CREATE TABLE resolve_charset (a varchar(255) DEFAULT NULL) DEFAULT CHARSET=latin1`)
-	ctx := s.tk.Se.(sessionctx.Context)
-	is := domain.GetDomain(ctx).InfoSchema()
-	tbl, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr("resolve_charset"))
-	c.Assert(err, IsNil)
-	c.Assert(tbl.Cols()[0].Charset, Equals, "latin1")
-	s.tk.MustExec("INSERT INTO resolve_charset VALUES('鰈')")
-
-	s.tk.MustExec("create database resolve_charset charset binary")
-	s.tk.MustExec("use resolve_charset")
-	s.tk.MustExec(`CREATE TABLE resolve_charset (a varchar(255) DEFAULT NULL) DEFAULT CHARSET=latin1`)
-
-	is = domain.GetDomain(ctx).InfoSchema()
-	tbl, err = is.TableByName(model.NewCIStr("resolve_charset"), model.NewCIStr("resolve_charset"))
-	c.Assert(err, IsNil)
-	c.Assert(tbl.Cols()[0].Charset, Equals, "latin1")
-	c.Assert(tbl.Meta().Charset, Equals, "latin1")
-
-	s.tk.MustExec(`CREATE TABLE resolve_charset1 (a varchar(255) DEFAULT NULL)`)
-	is = domain.GetDomain(ctx).InfoSchema()
-	tbl, err = is.TableByName(model.NewCIStr("resolve_charset"), model.NewCIStr("resolve_charset1"))
-	c.Assert(err, IsNil)
-	c.Assert(tbl.Cols()[0].Charset, Equals, "binary")
-	c.Assert(tbl.Meta().Charset, Equals, "binary")
-}
-
 func (s *testIntegrationSuite2) TestAddAnonymousIndex(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test")
@@ -964,11 +761,6 @@ func (s *testIntegrationSuite3) TestAlterColumn(c *C) {
 	c.Assert(err, NotNil)
 
 	s.tk.MustExec("drop table if exists t")
-	s.tk.MustExec("create table t1 (a varchar(10),b varchar(100),c tinyint,d varchar(3071),index(a),index(a,b),index (c,d)) charset = ascii;")
-	s.tk.MustGetErrCode("alter table t1 modify column a varchar(3000);", mysql.ErrTooLongKey)
-	// check modify column with rename column.
-	s.tk.MustGetErrCode("alter table t1 change column a x varchar(3000);", mysql.ErrTooLongKey)
-	s.tk.MustGetErrCode("alter table t1 modify column c bigint;", mysql.ErrTooLongKey)
 
 	s.tk.MustExec("drop table if exists multi_unique")
 	s.tk.MustExec("create table multi_unique (a int unique unique)")
