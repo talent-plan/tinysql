@@ -383,11 +383,6 @@ type DataSource struct {
 	// possibleAccessPaths stores all the possible access path for physical plan, including table scan.
 	possibleAccessPaths []*util.AccessPath
 
-	// The data source may be a partition, rather than a real table.
-	isPartition     bool
-	physicalTableID int64
-	partitionNames  []model.CIStr
-
 	// handleCol represents the handle column for the datasource, either the
 	// int primary key column or extra handle column.
 	handleCol *expression.Column

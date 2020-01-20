@@ -127,10 +127,8 @@ type Delete struct {
 
 // analyzeInfo is used to store the database name, table name and partition name of analyze task.
 type analyzeInfo struct {
-	DBName        string
-	TableName     string
-	PartitionName string
-	// PhysicalTableID is the id for a partition or a table.
+	DBName          string
+	TableName       string
 	PhysicalTableID int64
 	Incremental     bool
 }

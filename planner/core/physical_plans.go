@@ -164,9 +164,8 @@ type PhysicalIndexScan struct {
 
 	GenExprs map[model.TableColumnID]expression.Expression
 
-	isPartition bool
-	Desc        bool
-	KeepOrder   bool
+	Desc      bool
+	KeepOrder bool
 	// DoubleRead means if the index executor will read kv two times.
 	// If the query requires the columns that don't belong to index, DoubleRead will be true.
 	DoubleRead bool
@@ -388,11 +387,6 @@ type PhysicalUnionScan struct {
 	Conditions []expression.Expression
 
 	HandleCol *expression.Column
-}
-
-// IsPartition returns true and partition ID if it works on a partition.
-func (p *PhysicalIndexScan) IsPartition() (bool, int64) {
-	return p.isPartition, p.physicalTableID
 }
 
 // IsPointGetByUniqueKey checks whether is a point get by unique key.

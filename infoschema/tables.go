@@ -831,9 +831,6 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 
 			createOptions := ""
 
-			if table.GetPartitionInfo() != nil {
-				createOptions = "partitioned"
-			}
 			var autoIncID interface{}
 			hasAutoIncID, _ := HasAutoIncrementColumn(table)
 			if hasAutoIncID {
@@ -844,17 +841,8 @@ func dataForTables(ctx sessionctx.Context, schemas []*model.DBInfo) ([][]types.D
 			}
 
 			var rowCount, dataLength, indexLength uint64
-			if table.GetPartitionInfo() == nil {
-				rowCount = tableRowsMap[table.ID]
-				dataLength, indexLength = getDataAndIndexLength(table, table.ID, rowCount, colLengthMap)
-			} else {
-				for _, pi := range table.GetPartitionInfo().Definitions {
-					rowCount += tableRowsMap[pi.ID]
-					parDataLen, parIndexLen := getDataAndIndexLength(table, pi.ID, tableRowsMap[pi.ID], colLengthMap)
-					dataLength += parDataLen
-					indexLength += parIndexLen
-				}
-			}
+			rowCount = tableRowsMap[table.ID]
+			dataLength, indexLength = getDataAndIndexLength(table, table.ID, rowCount, colLengthMap)
 			avgRowLength := uint64(0)
 			if rowCount != 0 {
 				avgRowLength = dataLength / rowCount

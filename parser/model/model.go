@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/auth"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tipb/go-tipb"
@@ -215,11 +214,8 @@ type TableInfo struct {
 	// And the PreSplitRegions should less than or equal to ShardRowIDBits.
 	PreSplitRegions uint64 `json:"pre_split_regions"`
 
-	Partition *PartitionInfo `json:"partition"`
-
 	Compression string `json:"compression"`
 
-	View *ViewInfo `json:"view"`
 	// Lock represent the table lock info.
 	Lock *TableLockInfo `json:"Lock"`
 
@@ -320,14 +316,6 @@ type TiFlashReplicaInfo struct {
 	Count          uint64
 	LocationLabels []string
 	Available      bool
-}
-
-// GetPartitionInfo returns the partition information.
-func (t *TableInfo) GetPartitionInfo() *PartitionInfo {
-	if t.Partition != nil && t.Partition.Enable {
-		return t.Partition
-	}
-	return nil
 }
 
 // GetUpdateTime gets the table's updating time.
@@ -470,147 +458,6 @@ func (t *TableInfo) ColumnIsInIndex(c *ColumnInfo) bool {
 		}
 	}
 	return false
-}
-
-// IsView checks if tableinfo is a view
-func (t *TableInfo) IsView() bool {
-	return t.View != nil
-}
-
-// ViewAlgorithm is VIEW's SQL AlGORITHM characteristic.
-// See https://dev.mysql.com/doc/refman/5.7/en/view-algorithms.html
-type ViewAlgorithm int
-
-const (
-	AlgorithmUndefined ViewAlgorithm = iota
-	AlgorithmMerge
-	AlgorithmTemptable
-)
-
-func (v *ViewAlgorithm) String() string {
-	switch *v {
-	case AlgorithmMerge:
-		return "MERGE"
-	case AlgorithmTemptable:
-		return "TEMPTABLE"
-	case AlgorithmUndefined:
-		return "UNDEFINED"
-	default:
-		return "UNDEFINED"
-	}
-}
-
-// ViewSecurity is VIEW's SQL SECURITY characteristic.
-// See https://dev.mysql.com/doc/refman/5.7/en/create-view.html
-type ViewSecurity int
-
-const (
-	SecurityDefiner ViewSecurity = iota
-	SecurityInvoker
-)
-
-func (v *ViewSecurity) String() string {
-	switch *v {
-	case SecurityInvoker:
-		return "INVOKER"
-	case SecurityDefiner:
-		return "DEFINER"
-	default:
-		return "DEFINER"
-	}
-}
-
-// ViewCheckOption is VIEW's WITH CHECK OPTION clause part.
-// See https://dev.mysql.com/doc/refman/5.7/en/view-check-option.html
-type ViewCheckOption int
-
-const (
-	CheckOptionLocal ViewCheckOption = iota
-	CheckOptionCascaded
-)
-
-func (v *ViewCheckOption) String() string {
-	switch *v {
-	case CheckOptionLocal:
-		return "LOCAL"
-	case CheckOptionCascaded:
-		return "CASCADED"
-	default:
-		return "CASCADED"
-	}
-}
-
-// ViewInfo provides meta data describing a DB view.
-type ViewInfo struct {
-	Algorithm   ViewAlgorithm      `json:"view_algorithm"`
-	Definer     *auth.UserIdentity `json:"view_definer"`
-	Security    ViewSecurity       `json:"view_security"`
-	SelectStmt  string             `json:"view_select"`
-	CheckOption ViewCheckOption    `json:"view_checkoption"`
-	Cols        []CIStr            `json:"view_cols"`
-}
-
-// PartitionType is the type for PartitionInfo
-type PartitionType int
-
-// Partition types.
-const (
-	PartitionTypeRange      PartitionType = 1
-	PartitionTypeHash                     = 2
-	PartitionTypeList                     = 3
-	PartitionTypeKey                      = 4
-	PartitionTypeSystemTime               = 5
-)
-
-func (p PartitionType) String() string {
-	switch p {
-	case PartitionTypeRange:
-		return "RANGE"
-	case PartitionTypeHash:
-		return "HASH"
-	case PartitionTypeList:
-		return "LIST"
-	case PartitionTypeKey:
-		return "KEY"
-	case PartitionTypeSystemTime:
-		return "SYSTEM_TIME"
-	default:
-		return ""
-	}
-
-}
-
-// PartitionInfo provides table partition info.
-type PartitionInfo struct {
-	Type    PartitionType `json:"type"`
-	Expr    string        `json:"expr"`
-	Columns []CIStr       `json:"columns"`
-
-	// User may already creates table with partition but table partition is not
-	// yet supported back then. When Enable is true, write/read need use tid
-	// rather than pid.
-	Enable bool `json:"enable"`
-
-	Definitions []PartitionDefinition `json:"definitions"`
-	Num         uint64                `json:"num"`
-}
-
-// GetNameByID gets the partition name by ID.
-func (pi *PartitionInfo) GetNameByID(id int64) string {
-	for _, def := range pi.Definitions {
-		if id == def.ID {
-			return def.Name.L
-		}
-	}
-	return ""
-}
-
-// PartitionDefinition defines a single partition.
-type PartitionDefinition struct {
-	ID       int64    `json:"id"`
-	Name     CIStr    `json:"name"`
-	LessThan []string `json:"less_than"`
-	Comment  string   `json:"comment,omitempty"`
 }
 
 // IndexColumn provides index column info.

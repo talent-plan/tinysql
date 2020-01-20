@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -134,9 +133,7 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 		modifyCount := row.GetInt64(2)
 		count := row.GetInt64(3)
 		lastVersion = version
-		h.mu.Lock()
-		table, ok := h.getTableByPhysicalID(is, physicalID)
-		h.mu.Unlock()
+		table, ok := is.TableByID(physicalID)
 		if !ok {
 			logutil.BgLogger().Debug("unknown physical ID in stats meta table, maybe it has been dropped", zap.Int64("ID", physicalID))
 			deletedTableIDs = append(deletedTableIDs, physicalID)
@@ -172,34 +169,6 @@ func getFullTableName(is infoschema.InfoSchema, tblInfo *model.TableInfo) string
 		}
 	}
 	return fmt.Sprintf("%d", tblInfo.ID)
-}
-
-func (h *Handle) getTableByPhysicalID(is infoschema.InfoSchema, physicalID int64) (table.Table, bool) {
-	if is.SchemaMetaVersion() != h.mu.schemaVersion {
-		h.mu.schemaVersion = is.SchemaMetaVersion()
-		h.mu.pid2tid = buildPartitionID2TableID(is)
-	}
-	if id, ok := h.mu.pid2tid[physicalID]; ok {
-		return is.TableByID(id)
-	}
-	return is.TableByID(physicalID)
-}
-
-func buildPartitionID2TableID(is infoschema.InfoSchema) map[int64]int64 {
-	mapper := make(map[int64]int64)
-	for _, db := range is.AllSchemas() {
-		tbls := db.Tables
-		for _, tbl := range tbls {
-			pi := tbl.GetPartitionInfo()
-			if pi == nil {
-				continue
-			}
-			for _, def := range pi.Definitions {
-				mapper[def.ID] = tbl.ID
-			}
-		}
-	}
-	return mapper
 }
 
 // GetTableStats retrieves the statistics table from cache, and the cache will be updated by a goroutine.

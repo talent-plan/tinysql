@@ -35,12 +35,6 @@ func (p *PhysicalIndexScan) explainInfo(normalized bool) string {
 		tblName = p.TableAsName.O
 	}
 	fmt.Fprintf(buffer, "table:%s", tblName)
-	if p.isPartition {
-		if pi := p.Table.GetPartitionInfo(); pi != nil {
-			partitionName := pi.GetNameByID(p.physicalTableID)
-			fmt.Fprintf(buffer, ", partition:%s", partitionName)
-		}
-	}
 	if len(p.Index.Columns) > 0 {
 		buffer.WriteString(", index:")
 		for i, idxCol := range p.Index.Columns {
@@ -460,12 +454,6 @@ func (p *DataSource) ExplainInfo() string {
 		tblName = p.TableAsName.O
 	}
 	fmt.Fprintf(buffer, "table:%s", tblName)
-	if p.isPartition {
-		if pi := p.tableInfo.GetPartitionInfo(); pi != nil {
-			partitionName := pi.GetNameByID(p.physicalTableID)
-			fmt.Fprintf(buffer, ", partition:%s", partitionName)
-		}
-	}
 	return buffer.String()
 }
 

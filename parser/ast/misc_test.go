@@ -46,19 +46,15 @@ func (ts *testMiscSuite) TestMiscVisitorCover(c *C) {
 	valueExpr := NewValueExpr(42)
 	stmts := []Node{
 		&AdminStmt{},
-		&AlterUserStmt{},
 		&BeginStmt{},
 		&BinlogStmt{},
 		&CommitStmt{},
-		&CreateUserStmt{},
 		&DeallocateStmt{},
 		&DoStmt{},
 		&ExecuteStmt{UsingVars: []ExprNode{valueExpr}},
 		&ExplainStmt{Stmt: &ShowStmt{}},
-		&GrantStmt{},
 		&PrepareStmt{SQLVar: &VariableExpr{Value: valueExpr}},
 		&RollbackStmt{},
-		&SetPwdStmt{},
 		&SetStmt{Variables: []*VariableAssignment{
 			{
 				Value: valueExpr,
@@ -124,20 +120,7 @@ shutdown;`
 }
 
 func (ts *testMiscSuite) TestSensitiveStatement(c *C) {
-	positive := []StmtNode{
-		&SetPwdStmt{},
-		&CreateUserStmt{},
-		&AlterUserStmt{},
-		&GrantStmt{},
-	}
-	for i, stmt := range positive {
-		_, ok := stmt.(SensitiveStmtNode)
-		c.Assert(ok, IsTrue, Commentf("%d, %#v fail", i, stmt))
-	}
-
 	negative := []StmtNode{
-		&DropUserStmt{},
-		&RevokeStmt{},
 		&AlterTableStmt{},
 		&CreateDatabaseStmt{},
 		&CreateIndexStmt{},

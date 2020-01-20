@@ -134,14 +134,10 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		str = "UnionAll{" + strings.Join(children, "->") + "}"
 		idxs = idxs[:last]
 	case *DataSource:
-		if x.isPartition {
-			str = fmt.Sprintf("Partition(%d)", x.physicalTableID)
+		if x.TableAsName != nil && x.TableAsName.L != "" {
+			str = fmt.Sprintf("DataScan(%s)", x.TableAsName)
 		} else {
-			if x.TableAsName != nil && x.TableAsName.L != "" {
-				str = fmt.Sprintf("DataScan(%s)", x.TableAsName)
-			} else {
-				str = fmt.Sprintf("DataScan(%s)", x.tableInfo.Name)
-			}
+			str = fmt.Sprintf("DataScan(%s)", x.tableInfo.Name)
 		}
 	case *LogicalSelection:
 		str = fmt.Sprintf("Sel(%s)", x.Conditions)

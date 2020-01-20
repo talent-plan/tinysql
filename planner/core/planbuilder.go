@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -566,70 +565,26 @@ func getColsInfo(tn *ast.TableName) (indicesInfo []*model.IndexInfo, colsInfo []
 	return
 }
 
-func getPhysicalIDsAndPartitionNames(tblInfo *model.TableInfo, partitionNames []model.CIStr) ([]int64, []string, error) {
-	pi := tblInfo.GetPartitionInfo()
-	if pi == nil {
-		if len(partitionNames) != 0 {
-			return nil, nil, errors.Trace(ddl.ErrPartitionMgmtOnNonpartitioned)
-		}
-		return []int64{tblInfo.ID}, []string{""}, nil
-	}
-	if len(partitionNames) == 0 {
-		ids := make([]int64, 0, len(pi.Definitions))
-		names := make([]string, 0, len(pi.Definitions))
-		for _, def := range pi.Definitions {
-			ids = append(ids, def.ID)
-			names = append(names, def.Name.O)
-		}
-		return ids, names, nil
-	}
-	ids := make([]int64, 0, len(partitionNames))
-	names := make([]string, 0, len(partitionNames))
-	for _, name := range partitionNames {
-		found := false
-		for _, def := range pi.Definitions {
-			if def.Name.L == name.L {
-				found = true
-				ids = append(ids, def.ID)
-				names = append(names, def.Name.O)
-				break
-			}
-		}
-		if !found {
-			return nil, nil, fmt.Errorf("can not found the specified partition name %s in the table definition", name.O)
-		}
-	}
-	return ids, names, nil
-}
-
 func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
 	p := &Analyze{Opts: opts}
 	for _, tbl := range as.TableNames {
 		idxInfo, colInfo, pkInfo := getColsInfo(tbl)
-		physicalIDs, names, err := getPhysicalIDsAndPartitionNames(tbl.TableInfo, as.PartitionNames)
-		if err != nil {
-			return nil, err
-		}
 		for _, idx := range idxInfo {
-			for i, id := range physicalIDs {
-				info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-				p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{
-					IndexInfo:   idx,
-					analyzeInfo: info,
-					TblInfo:     tbl.TableInfo,
-				})
-			}
+			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID, Incremental: as.Incremental}
+			p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{
+				IndexInfo:   idx,
+				analyzeInfo: info,
+				TblInfo:     tbl.TableInfo,
+			})
 		}
 		if len(colInfo) > 0 || pkInfo != nil {
-			for i, id := range physicalIDs {
-				info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-				p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{
-					PKInfo:      pkInfo,
-					ColsInfo:    colInfo,
-					analyzeInfo: info,
-					TblInfo:     tbl.TableInfo,
-				})
-			}
+			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID, Incremental: as.Incremental}
+			p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{
+				PKInfo:      pkInfo,
+				ColsInfo:    colInfo,
+				analyzeInfo: info,
+				TblInfo:     tbl.TableInfo,
+			})
 		}
 	}
 	return p, nil
@@ -638,27 +593,19 @@ func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.A
 func (b *PlanBuilder) buildAnalyzeIndex(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
 	p := &Analyze{Opts: opts}
 	tblInfo := as.TableNames[0].TableInfo
-	physicalIDs, names, err := getPhysicalIDsAndPartitionNames(tblInfo, as.PartitionNames)
-	if err != nil {
-		return nil, err
-	}
 	for _, idxName := range as.IndexNames {
 		if isPrimaryIndex(idxName) && tblInfo.PKIsHandle {
 			pkCol := tblInfo.GetPkColInfo()
-			for i, id := range physicalIDs {
-				info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-				p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
-			}
+			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
+			p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
 			continue
 		}
 		idx := tblInfo.FindIndexByName(idxName.L)
 		if idx == nil || idx.State != model.StatePublic {
 			return nil, ErrAnalyzeMissIndex.GenWithStackByArgs(idxName.O, tblInfo.Name.O)
 		}
-		for i, id := range physicalIDs {
-			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-			p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
-		}
+		info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
+		p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
 	}
 	return p, nil
 }
@@ -666,24 +613,16 @@ func (b *PlanBuilder) buildAnalyzeIndex(as *ast.AnalyzeTableStmt, opts map[ast.A
 func (b *PlanBuilder) buildAnalyzeAllIndex(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
 	p := &Analyze{Opts: opts}
 	tblInfo := as.TableNames[0].TableInfo
-	physicalIDs, names, err := getPhysicalIDsAndPartitionNames(tblInfo, as.PartitionNames)
-	if err != nil {
-		return nil, err
-	}
 	for _, idx := range tblInfo.Indices {
 		if idx.State == model.StatePublic {
-			for i, id := range physicalIDs {
-				info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-				p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
-			}
+			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
+			p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
 		}
 	}
 	if tblInfo.PKIsHandle {
 		pkCol := tblInfo.GetPkColInfo()
-		for i, id := range physicalIDs {
-			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PartitionName: names[i], PhysicalTableID: id, Incremental: as.Incremental}
-			p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
-		}
+		info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
+		p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
 	}
 	return p, nil
 }
@@ -1394,22 +1333,11 @@ func buildShowSchema(s *ast.ShowStmt) (schema *expression.Schema, outputNames []
 			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong}
 	case ast.ShowCreateTable:
 		names = []string{"Table", "Create Table"}
-	case ast.ShowCreateUser:
-		if s.User != nil {
-			names = []string{fmt.Sprintf("CREATE USER for %s", s.User)}
-		}
 	case ast.ShowCreateDatabase:
 		names = []string{"Database", "Create Database"}
 	case ast.ShowDrainerStatus:
 		names = []string{"NodeID", "Address", "State", "Max_Commit_Ts", "Update_Time"}
 		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar}
-	case ast.ShowGrants:
-		if s.User != nil {
-			names = []string{fmt.Sprintf("Grants for %s", s.User)}
-		} else {
-			// Don't know the name yet, so just say "user"
-			names = []string{"Grants for User"}
-		}
 	case ast.ShowIndex:
 		names = []string{"Table", "Non_unique", "Key_name", "Seq_in_index",
 			"Column_name", "Collation", "Cardinality", "Sub_part", "Packed",

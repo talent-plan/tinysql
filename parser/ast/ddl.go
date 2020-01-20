@@ -15,7 +15,6 @@ package ast
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/auth"
 	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
@@ -26,7 +25,6 @@ var (
 	_ DDLNode = &CreateDatabaseStmt{}
 	_ DDLNode = &CreateIndexStmt{}
 	_ DDLNode = &CreateTableStmt{}
-	_ DDLNode = &CreateViewStmt{}
 	_ DDLNode = &DropDatabaseStmt{}
 	_ DDLNode = &DropIndexStmt{}
 	_ DDLNode = &DropTableStmt{}
@@ -836,99 +834,6 @@ func (n *TableToTable) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.NewTable = node.(*TableName)
-	return v.Leave(n)
-}
-
-// CreateViewStmt is a statement to create a View.
-// See https://dev.mysql.com/doc/refman/5.7/en/create-view.html
-type CreateViewStmt struct {
-	ddlNode
-
-	OrReplace   bool
-	ViewName    *TableName
-	Cols        []model.CIStr
-	Select      StmtNode
-	SchemaCols  []model.CIStr
-	Algorithm   model.ViewAlgorithm
-	Definer     *auth.UserIdentity
-	Security    model.ViewSecurity
-	CheckOption model.ViewCheckOption
-}
-
-// Restore implements Node interface.
-func (n *CreateViewStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE ")
-	if n.OrReplace {
-		ctx.WriteKeyWord("OR REPLACE ")
-	}
-	ctx.WriteKeyWord("ALGORITHM")
-	ctx.WritePlain(" = ")
-	ctx.WriteKeyWord(n.Algorithm.String())
-	ctx.WriteKeyWord(" DEFINER")
-	ctx.WritePlain(" = ")
-
-	// todo Use n.Definer.Restore(ctx) to replace this part
-	if n.Definer.CurrentUser {
-		ctx.WriteKeyWord("current_user")
-	} else {
-		ctx.WriteName(n.Definer.Username)
-		if n.Definer.Hostname != "" {
-			ctx.WritePlain("@")
-			ctx.WriteName(n.Definer.Hostname)
-		}
-	}
-
-	ctx.WriteKeyWord(" SQL SECURITY ")
-	ctx.WriteKeyWord(n.Security.String())
-	ctx.WriteKeyWord(" VIEW ")
-
-	if err := n.ViewName.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while create CreateViewStmt.ViewName")
-	}
-
-	for i, col := range n.Cols {
-		if i == 0 {
-			ctx.WritePlain(" (")
-		} else {
-			ctx.WritePlain(",")
-		}
-		ctx.WriteName(col.O)
-		if i == len(n.Cols)-1 {
-			ctx.WritePlain(")")
-		}
-	}
-
-	ctx.WriteKeyWord(" AS ")
-
-	if err := n.Select.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while create CreateViewStmt.Select")
-	}
-
-	if n.CheckOption != model.CheckOptionCascaded {
-		ctx.WriteKeyWord(" WITH ")
-		ctx.WriteKeyWord(n.CheckOption.String())
-		ctx.WriteKeyWord(" CHECK OPTION")
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *CreateViewStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*CreateViewStmt)
-	node, ok := n.ViewName.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.ViewName = node.(*TableName)
-	selnode, ok := n.Select.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Select = selnode.(StmtNode)
 	return v.Leave(n)
 }
 

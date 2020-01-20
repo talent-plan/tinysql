@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
-	"github.com/pingcap/tidb/parser/auth"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/types"
 )
@@ -733,27 +732,19 @@ import (
 	AdminStmt			"Check table statement or show ddl statement"
 	AlterDatabaseStmt		"Alter database statement"
 	AlterTableStmt			"Alter table statement"
-	AlterUserStmt			"Alter user statement"
 	AnalyzeTableStmt		"Analyze table statement"
 	BeginTransactionStmt		"BEGIN TRANSACTION statement"
 	BinlogStmt			"Binlog base64 statement"
 	CommitStmt			"COMMIT statement"
 	CreateTableStmt			"CREATE TABLE statement"
-	CreateViewStmt			"CREATE VIEW  stetement"
-	CreateUserStmt			"CREATE User statement"
-	CreateRoleStmt			"CREATE Role statement"
 	CreateDatabaseStmt		"Create Database Statement"
 	CreateIndexStmt			"CREATE INDEX statement"
-	CreateBindingStmt		"CREATE BINDING  statement"
 	DoStmt				"Do statement"
 	DropDatabaseStmt		"DROP DATABASE statement"
 	DropIndexStmt			"DROP INDEX statement"
 	DropStatsStmt			"DROP STATS statement"
 	DropTableStmt			"DROP TABLE statement"
-	DropUserStmt			"DROP USER"
-	DropRoleStmt			"DROP ROLE"
 	DropViewStmt			"DROP VIEW statement"
-	DropBindingStmt		    	"DROP BINDING  statement"
 	DeallocateStmt			"Deallocate prepared statement"
 	DeleteFromStmt			"DELETE FROM statement"
 	EmptyStmt			"empty statement"
@@ -762,22 +753,16 @@ import (
 	ExplainableStmt			"explainable statement"
 	FlushStmt			"Flush statement"
 	FlashbackTableStmt		"Flashback table statement"
-	GrantStmt			"Grant statement"
-	GrantRoleStmt			"Grant role statement"
 	InsertIntoStmt			"INSERT INTO statement"
 	PreparedStmt			"PreparedStmt"
 	SelectStmt			"SELECT statement"
 	RenameTableStmt         	"rename table statement"
 	ReplaceIntoStmt			"REPLACE INTO statement"
 	RecoverTableStmt                "recover table statement"
-	RevokeStmt			"Revoke statement"
-	RevokeRoleStmt			"Revoke role statement"
 	RollbackStmt			"ROLLBACK statement"
 	SplitRegionStmt			"Split index region statement"
 	SetStmt				"Set variable statement"
 	ChangeStmt			"Change statement"
-	SetRoleStmt			"Set active role statement"
-	SetDefaultRoleStmt		"Set default statement for some user"
 	ShowStmt			"Show engines/databases/tables/user/columns/warnings/status statement"
 	Statement			"statement"
 	TraceStmt			"TRACE statement"
@@ -801,12 +786,9 @@ import (
 	Assignment			"assignment"
 	AssignmentList			"assignment list"
 	AssignmentListOpt		"assignment list opt"
-	AuthOption			"User auth option"
-	AuthString			"Password string value"
 	OptionalBraces			"optional braces"
 	CastType			"Cast function target type"
 	CharsetName			"Character set name"
-	ClearPasswordExpireOptions	"Clear password expire options"
 	CollationName			"Collation name"
 	ColumnDef			"table column definition"
 	ColumnDefList			"table column definition list"
@@ -815,7 +797,6 @@ import (
 	ColumnNameOrUserVariable	"column name or user variable"
 	ColumnNameList			"column name list"
 	ColumnNameOrUserVariableList	"column name or user variable list"
-	ColumnList			"column list"
 	ColumnNameListOpt		"column name list opt"
 	ColumnNameOrUserVarListOpt	"column name or user vairiabe list opt"
 	ColumnNameOrUserVarListOptWithBrackets	"column name or user variable list opt with brackets"
@@ -826,15 +807,11 @@ import (
 	ColumnOptionList		"column definition option list"
 	VirtualOrStored			"indicate generated column is stored or not"
 	ColumnOptionListOpt		"optional column definition option list"
-	ConnectionOption		"single connection options"
-	ConnectionOptionList		"connection options for CREATE USER statement"
-	ConnectionOptions		"optional connection options for CREATE USER statement"
 	Constraint			"table constraint"
 	ConstraintElem			"table constraint element"
 	ConstraintKeywordOpt		"Constraint Keyword or empty"
 	CreateTableOptionListOpt	"create table option list opt"
 	CreateTableSelectOpt	        "Select/Union statement in CREATE TABLE ... SELECT"
-	CreateViewSelectOpt     "Select/Union statement in CREATE VIEW ... AS SELECT"
 	DatabaseOption			"CREATE Database specification"
 	DatabaseOptionList		"CREATE Database specification list"
 	DatabaseOptionListOpt		"CREATE Database specification list opt"
@@ -843,8 +820,6 @@ import (
 	DefaultFalseDistinctOpt		"Distinct option which defaults to false"
 	DefaultTrueDistinctOpt		"Distinct option which defaults to true"
 	BuggyDefaultFalseDistinctOpt	"Distinct option which accepts DISTINCT ALL and defaults to false"
-	RequireClause			"Encrypted connections options"
-	RequireClauseOpt	"optional Encrypted connections options"
 	EqOpt				"= or empty"
 	EscapedTableRef 		"escaped table reference"
 	ExplainFormatType		"explain format type"
@@ -865,7 +840,6 @@ import (
 	GetFormatSelector		"{DATE|DATETIME|TIME|TIMESTAMP}"
 	GlobalScope			"The scope of variable"
 	GroupByClause			"GROUP BY clause"
-	HashString			"Hashed string"
 	HavingClause			"HAVING clause"
 	HandleRange			"handle range"
 	HandleRangeList			"handle range list"
@@ -902,14 +876,12 @@ import (
 	LockClause         		"Alter table lock clause"
 	NumLiteral			"Num/Int/Float/Decimal Literal"
 	NoWriteToBinLogAliasOpt		"NO_WRITE_TO_BINLOG alias LOCAL or empty"
-	ObjectType			"Grant statement object type"
 	OnDuplicateKeyUpdate		"ON DUPLICATE KEY UPDATE value list"
 	DuplicateOpt			"[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement or LOAD DATA statement"
 	OptFull				"Full or empty"
 	OptTemporary			"TEMPORARY or empty"
 	Order				"ORDER BY clause optional collation specification"
 	OrderBy				"ORDER BY clause"
-	OrReplace			"or replace"
 	ByItem				"BY item"
 	OrderByOptional			"Optional ORDER BY clause optional"
 	ByList				"BY list"
@@ -918,31 +890,15 @@ import (
 	QuickOptional			"QUICK or empty"
 	QueryBlockOpt			"Query block identifier optional"
 	PartDefOption			"COMMENT [=] xxx | TABLESPACE [=] tablespace_name | ENGINE [=] xxx"
-	PasswordExpire			"Single password option for create user statement"
-	PasswordOpt			"Password option"
-	PasswordOrLockOption		"Single password or lock option for create user statement"
-	PasswordOrLockOptionList	"Password or lock options for create user statement"
-	PasswordOrLockOptions		"Optional password or lock options for create user statement"
 	ColumnPosition			"Column position [First|After ColumnName]"
 	PrepareSQL			"Prepare statement sql string"
 	PriorityOpt			"Statement priority option"
-	PrivElem			"Privilege element"
-	PrivElemList			"Privilege element list"
-	PrivLevel			"Privilege scope"
-	PrivType			"Privilege type"
 	ReferDef			"Reference definition"
 	OnDelete			"ON DELETE clause"
 	OnUpdate			"ON UPDATE clause"
 	OnDeleteUpdateOpt		"optional ON DELETE and UPDATE clause"
 	OptGConcatSeparator		"optional GROUP_CONCAT SEPARATOR"
 	ReferOpt			"reference option"
-	RequireList			"require list"
-	RequireListElement		"require list element"
-	Rolename            "Rolename"
-	RolenameList            "RolenameList"
-	RoleSpec		"Rolename and auth option"
-	RoleSpecList		"Rolename and auth option list"
-	RoleNameString      "role name string"
 	RowFormat			"Row format option"
 	RowValue			"Row value"
 	SelectLockOpt			"FOR UPDATE or LOCK IN SHARE MODE,"
@@ -959,8 +915,6 @@ import (
 	SelectStmtFromDualTable			"SELECT statement from dual table"
 	SelectStmtFromTable			"SELECT statement from table"
 	SelectStmtGroup			"SELECT statement optional GROUP BY clause"
-	SetRoleOpt				"Set role options"
-	SetDefaultRoleOpt				"Set default role options"
 	ShowTargetFilterable    	"Show target that can be filtered by WHERE or LIKE"
 	ShowDatabaseNameOpt		"Show tables/columns statement database name option"
 	ShowTableAliasOpt       	"Show table alias option"
@@ -1005,29 +959,17 @@ import (
 	UnionOpt		"Union Option(empty/ALL/DISTINCT)"
 	UnionClauseList		"Union select clause list"
 	UnionSelect		"Union (select) item"
-	Username		"Username"
-	UsernameList		"UsernameList"
-	UserSpec		"Username and auth option"
-	UserSpecList		"Username and auth option list"
 	UserVariableList	"User defined variable name list"
-	UsingRoles	"UsingRoles is role option for SHOW GRANT"
 	Values			"values"
 	ValuesList		"values list"
 	ValuesOpt		"values optional"
 	VariableAssignment	"set variable value"
 	VariableAssignmentList	"set variable value list"
-	ViewAlgorithm		"view algorithm"
-	ViewCheckOption		"view check option"
-	ViewDefiner		"view definer"
-	ViewName		"view name"
-	ViewFieldList		"create view statement field list"
-	ViewSQLSecurity		"view sql security"
 	WhereClause		"WHERE clause"
 	WhereClauseOptional	"Optional WHERE clause"
 	WhenClause		"When clause"
 	WhenClauseList		"When clause list"
 	WithReadLockOpt		"With Read Lock opt"
-	WithGrantOptionOpt	"With Grant Option opt"
 	WithValidation		"with validation"
 	WithValidationOpt	"optional with validation"
 	ElseOpt			"Optional else clause"
@@ -2953,27 +2895,6 @@ CreateTableSelectOpt:
 		$$ = &ast.CreateTableStmt{Select: $1}
 	}
 
-CreateViewSelectOpt:
-	SelectStmt
-	{
-		$$ = $1.(*ast.SelectStmt)
-	}
-|
-	UnionStmt
-	{
-		$$ = $1.(*ast.UnionStmt)
-	}
-|
-	'(' SelectStmt ')'
-	{
-		$$ = $2.(*ast.SelectStmt)
-	}
-|
-	'(' UnionStmt ')'
-	{
-		$$ = $2.(*ast.UnionStmt)
-	}
-
 LikeTableWithOrWithoutParen:
 	"LIKE" TableName
 	{
@@ -2983,133 +2904,6 @@ LikeTableWithOrWithoutParen:
 	'(' "LIKE" TableName ')'
 	{
 		$$ = $3
-	}
-
-/*******************************************************************
- *
- *  Create View Statement
- *
- *  Example:
- *      CREATE VIEW OR REPLACE ALGORITHM = MERGE DEFINER="root@localhost" SQL SECURITY = definer view_name (col1,col2)
- *          as select Col1,Col2 from table WITH LOCAL CHECK OPTION
- *******************************************************************/
-CreateViewStmt:
-    "CREATE" OrReplace ViewAlgorithm ViewDefiner ViewSQLSecurity "VIEW" ViewName ViewFieldList "AS" CreateViewSelectOpt ViewCheckOption
-    {
-		startOffset := parser.startOffset(&yyS[yypt-1])
-		selStmt := $10.(ast.StmtNode)
-		selStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
-		x := &ast.CreateViewStmt {
- 			OrReplace:     $2.(bool),
-			ViewName:      $7.(*ast.TableName),
-			Select:        selStmt,
-			Algorithm:     $3.(model.ViewAlgorithm),
-			Definer:       $4.(*auth.UserIdentity),
-			Security:      $5.(model.ViewSecurity),
-		}
-		if $8 != nil{
-			x.Cols = $8.([]model.CIStr)
-		}
-		if $11 !=nil {
-		    x.CheckOption = $11.(model.ViewCheckOption)
-		    endOffset := parser.startOffset(&yyS[yypt])
-		    selStmt.SetText(strings.TrimSpace(parser.src[startOffset:endOffset]))
-		} else {
-		    x.CheckOption = model.CheckOptionCascaded
-		}
-		$$ = x
-	}
-
-OrReplace:
-	/* EMPTY */
-	{
-		$$ = false
-	}
-|	"OR" "REPLACE"
-	{
-		$$ = true
-	}
-
-ViewAlgorithm:
-	/* EMPTY */
-	{
-		$$ = model.AlgorithmUndefined
-	}
-|	"ALGORITHM" "=" "UNDEFINED"
-	{
-		$$ = model.AlgorithmUndefined
-	}
-|	"ALGORITHM" "=" "MERGE"
-	{
-		$$ = model.AlgorithmMerge
-	}
-|	"ALGORITHM" "=" "TEMPTABLE"
-	{
-		$$ = model.AlgorithmTemptable
-	}
-
-ViewDefiner:
-	/* EMPTY */
-	{
-		$$ = &auth.UserIdentity{CurrentUser: true}
-	}
-|   "DEFINER" "=" Username
-	{
-		$$ = $3
-	}
-
-ViewSQLSecurity:
-	/* EMPTY */
-	{
-		$$ = model.SecurityDefiner
-	}
-|   "SQL" "SECURITY" "DEFINER"
-	 {
-		 $$ = model.SecurityDefiner
-	 }
-|   "SQL" "SECURITY" "INVOKER"
-	 {
-		 $$ = model.SecurityInvoker
-	 }
-
-ViewName:
-	TableName
-	{
-		$$ = $1.(*ast.TableName)
-	}
-
-ViewFieldList:
-	/* Empty */
-	{
-		$$ = nil
-	}
-|   '(' ColumnList ')'
-	{
-		$$ = $2.([]model.CIStr)
-	}
-
-ColumnList:
-	Identifier
-	{
-		$$ = []model.CIStr{model.NewCIStr($1)}
-	}
-|   ColumnList ',' Identifier
-	{
-	$$ = append($1.([]model.CIStr), model.NewCIStr($3))
-	}
-
-ViewCheckOption:
-	/* EMPTY */
-	{
-		$$ = nil
-	}
-|   "WITH" "CASCADED" "CHECK" "OPTION"
-	{
-		$$ = model.CheckOptionCascaded
-	}
-|   "WITH" "LOCAL" "CHECK" "OPTION"
-	{
-		$$ = model.CheckOptionLocal
 	}
 
 /******************************************************************
@@ -3254,36 +3048,6 @@ DropViewStmt:
 	"DROP" "VIEW" "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
 	{
 		$$ = &ast.DropTableStmt{IfExists: true, Tables: $5.([]*ast.TableName), IsView: true}
-	}
-
-DropUserStmt:
-	"DROP" "USER" UsernameList
-	{
-		$$ = &ast.DropUserStmt{IsDropRole: false, IfExists: false, UserList: $3.([]*auth.UserIdentity)}
-	}
-|	"DROP" "USER" "IF" "EXISTS" UsernameList
-	{
-		$$ = &ast.DropUserStmt{IsDropRole: false, IfExists: true, UserList: $5.([]*auth.UserIdentity)}
-	}
-
-DropRoleStmt:
-	"DROP" "ROLE" RolenameList
-	{
-		tmp := make([]*auth.UserIdentity, 0, 10)
-		roleList := $3.([]*auth.RoleIdentity)
-		for _, r := range roleList {
-			tmp = append(tmp, &auth.UserIdentity{Username:r.Username, Hostname: r.Hostname})
-		}
-		$$ = &ast.DropUserStmt{IsDropRole: true, IfExists: false, UserList: tmp}
-	}
-|	"DROP" "ROLE" "IF" "EXISTS" RolenameList
-	{
-		tmp := make([]*auth.UserIdentity, 0, 10)
-		roleList := $5.([]*auth.RoleIdentity)
-		for _, r := range roleList {
-			tmp = append(tmp, &auth.UserIdentity{Username:r.Username, Hostname: r.Hostname})
-		}
-		$$ = &ast.DropUserStmt{IsDropRole: true, IfExists: true, UserList: tmp}
 	}
 
 DropStatsStmt:
@@ -6845,14 +6609,6 @@ SetStmt:
 	{
 		$$ = &ast.SetStmt{Variables: $2.([]*ast.VariableAssignment)}
 	}
-|	"SET" "PASSWORD" eq PasswordOpt
-	{
-		$$ = &ast.SetPwdStmt{Password: $4.(string)}
-	}
-|	"SET" "PASSWORD" "FOR" Username eq PasswordOpt
-	{
-		$$ = &ast.SetPwdStmt{User: $4.(*auth.UserIdentity), Password: $6.(string)}
-	}
 |	"SET" "GLOBAL" "TRANSACTION" TransactionChars
 	{
 		vars := $4.([]*ast.VariableAssignment)
@@ -6876,52 +6632,6 @@ SetStmt:
 		}
 		$$ = &ast.SetStmt{Variables: assigns}
 	}
-
-SetRoleStmt:
-	"SET" "ROLE" SetRoleOpt
-	{
-		$$ = $3.(*ast.SetRoleStmt)
-	}
-
-SetDefaultRoleStmt:
-	"SET" "DEFAULT" "ROLE" SetDefaultRoleOpt "TO" UsernameList
-	{
-		tmp := $4.(*ast.SetRoleStmt)
-		$$ = &ast.SetDefaultRoleStmt{
-			SetRoleOpt: tmp.SetRoleOpt,
-			RoleList: tmp.RoleList,
-			UserList: $6.([]*auth.UserIdentity),
-		}
-	}
-
-SetDefaultRoleOpt:
-	"NONE"
-	{
-		$$ = &ast.SetRoleStmt{SetRoleOpt: ast.SetRoleNone, RoleList: nil}
-	}
-|	"ALL"
-	{
-		$$ = &ast.SetRoleStmt{SetRoleOpt: ast.SetRoleAll, RoleList: nil}
-	}
-|	RolenameList
-	{
-		$$ = &ast.SetRoleStmt{SetRoleOpt: ast.SetRoleRegular, RoleList: $1.([]*auth.RoleIdentity)}
-	}
-
-SetRoleOpt:
-	"ALL" "EXCEPT" RolenameList
-	{
-		$$ = &ast.SetRoleStmt{SetRoleOpt: ast.SetRoleAllExcept, RoleList: $3.([]*auth.RoleIdentity)}
-	}
-|	SetDefaultRoleOpt
-	{
-		$$ = $1
-	}
-|	"DEFAULT"
-	{
-		$$ = &ast.SetRoleStmt{SetRoleOpt: ast.SetRoleDefault, RoleList: nil}
-	}
-
 
 TransactionChars:
 	TransactionChar
@@ -7151,85 +6861,6 @@ UserVariable:
 		v := $1
 		v = strings.TrimPrefix(v, "@")
 		$$ = &ast.VariableExpr{Name: v, IsGlobal: false, IsSystem: false}
-	}
-
-Username:
-	StringName
-	{
-		$$ = &auth.UserIdentity{Username: $1.(string), Hostname: "%"}
-	}
-|	StringName '@' StringName
-	{
-		$$ = &auth.UserIdentity{Username: $1.(string), Hostname: $3.(string)}
-	}
-|	StringName singleAtIdentifier
-	{
-		$$ = &auth.UserIdentity{Username: $1.(string), Hostname: strings.TrimPrefix($2, "@")}
-	}
-|	"CURRENT_USER" OptionalBraces
-	{
-		$$ = &auth.UserIdentity{CurrentUser: true}
-	}
-
-UsernameList:
-	Username
-	{
-		$$ = []*auth.UserIdentity{$1.(*auth.UserIdentity)}
-	}
-|	UsernameList ',' Username
-	{
-		$$ = append($1.([]*auth.UserIdentity), $3.(*auth.UserIdentity))
-	}
-
-PasswordOpt:
-	stringLit
-	{
-		$$ = $1
-	}
-|	"PASSWORD" '(' AuthString ')'
-	{
-		$$ = $3.(string)
-	}
-
-AuthString:
-	stringLit
-	{
-		$$ = $1
-	}
-
-RoleNameString:
-	stringLit
-	{
-		$$ = $1
-	}
-|	identifier
-	{
-		$$ = $1
-	}
-
-
-Rolename:
-    RoleNameString
-	{
-		$$ = &auth.RoleIdentity{Username: $1.(string), Hostname: "%"}
-	}
-|	StringName '@' StringName
-	{
-		$$ = &auth.RoleIdentity{Username: $1.(string), Hostname: $3.(string)}
-	}
-|	StringName singleAtIdentifier
-	{
-		$$ = &auth.RoleIdentity{Username: $1.(string), Hostname: strings.TrimPrefix($2, "@")}
-	}
-
-RolenameList:
-	Rolename
-	{
-		$$ = []*auth.RoleIdentity{$1.(*auth.RoleIdentity)}
-	}
-|	RolenameList ',' Rolename
-	{
-		$$ = append($1.([]*auth.RoleIdentity), $3.(*auth.RoleIdentity))
 	}
 
 /****************************Admin Statement*******************************/
@@ -7494,14 +7125,6 @@ ShowStmt:
 			Table:	$4.(*ast.TableName),
 		}
 	}
-|	"SHOW" "CREATE" "USER" Username
-        {
-                // See https://dev.mysql.com/doc/refman/5.7/en/show-create-user.html
-                $$ = &ast.ShowStmt{
-                        Tp:	ast.ShowCreateUser,
-                        User:	$4.(*auth.UserIdentity),
-                }
-        }
 |	"SHOW" "TABLE" TableName "REGIONS" WhereClauseOptional
 	{
 
@@ -7525,28 +7148,6 @@ ShowStmt:
 			stmt.Where = $7.(ast.ExprNode)
 		}
 		$$ = stmt
-	}
-|	"SHOW" "GRANTS"
-	{
-		// See https://dev.mysql.com/doc/refman/5.7/en/show-grants.html
-		$$ = &ast.ShowStmt{Tp: ast.ShowGrants}
-	}
-|	"SHOW" "GRANTS" "FOR" Username UsingRoles
-	{
-		// See https://dev.mysql.com/doc/refman/5.7/en/show-grants.html
-		if $5 != nil {
-			$$ = &ast.ShowStmt{
-				Tp:	ast.ShowGrants,
-				User:	$4.(*auth.UserIdentity),
-				Roles:  $5.([]*auth.RoleIdentity),
-			}
-		} else {
-			$$ = &ast.ShowStmt{
-				Tp:	ast.ShowGrants,
-				User:	$4.(*auth.UserIdentity),
-				Roles:  nil,
-			}
-		}
 	}
 |	"SHOW" "MASTER" "STATUS"
 	{
@@ -7734,15 +7335,6 @@ ShowProfileArgsOpt:
 	{
 		v := $3.(int64)
 		$$ = &v
-	}
-
-UsingRoles:
-	{
-		$$ = nil
-	}
-|	"USING" RolenameList
-	{
-		$$ = $2.([]*auth.RoleIdentity)
 	}
 
 ShowIndexKwd:
@@ -8036,7 +7628,6 @@ Statement:
 |	AdminStmt
 |	AlterDatabaseStmt
 |	AlterTableStmt
-|	AlterUserStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
 |	BinlogStmt
@@ -8049,36 +7640,23 @@ Statement:
 |	CreateDatabaseStmt
 |	CreateIndexStmt
 |	CreateTableStmt
-|	CreateViewStmt
-|	CreateUserStmt
-|	CreateRoleStmt
-|	CreateBindingStmt
 |	DoStmt
 |	DropDatabaseStmt
 |	DropIndexStmt
 |	DropTableStmt
 |	DropViewStmt
-|	DropUserStmt
-|	DropRoleStmt
 |	DropStatsStmt
-|	DropBindingStmt
 |	FlushStmt
 |	FlashbackTableStmt
-|	GrantStmt
-|	GrantRoleStmt
 |	InsertIntoStmt
 |	PreparedStmt
 |	RollbackStmt
 |	RenameTableStmt
 |	ReplaceIntoStmt
 |	RecoverTableStmt
-|	RevokeStmt
-|	RevokeRoleStmt
 |	SelectStmt
 |	UnionStmt
 |	SetStmt
-|	SetRoleStmt
-|	SetDefaultRoleStmt
 |	SplitRegionStmt
 |	ShowStmt
 |	SubSelect
@@ -9149,690 +8727,3 @@ CommaOpt:
 	{}
 |	','
 	{}
-
-/************************************************************************************
- *  Account Management Statements
- *  https://dev.mysql.com/doc/refman/5.7/en/account-management-sql.html
- ************************************************************************************/
-CreateUserStmt:
-	"CREATE" "USER" IfNotExists UserSpecList RequireClauseOpt ConnectionOptions PasswordOrLockOptions
-	{
- 		// See https://dev.mysql.com/doc/refman/5.7/en/create-user.html
-		$$ = &ast.CreateUserStmt{
-			IsCreateRole: false,
-			IfNotExists: $3.(bool),
-			Specs: $4.([]*ast.UserSpec),
-			TLSOptions: $5.([]*ast.TLSOption),
-			ResourceOptions: $6.([]*ast.ResourceOption),
-			PasswordOrLockOptions: $7.([]*ast.PasswordOrLockOption),
-		}
-	}
-
-CreateRoleStmt:
-    "CREATE" "ROLE" IfNotExists RoleSpecList
-	{
-		// See https://dev.mysql.com/doc/refman/8.0/en/create-role.html
-		$$ = &ast.CreateUserStmt{
-			IsCreateRole: true,
-			IfNotExists: $3.(bool),
-			Specs: $4.([]*ast.UserSpec),
-		}
-	}
-
-/* See http://dev.mysql.com/doc/refman/5.7/en/alter-user.html */
-AlterUserStmt:
-	"ALTER" "USER" IfExists UserSpecList RequireClauseOpt ConnectionOptions PasswordOrLockOptions
-	{
-		$$ = &ast.AlterUserStmt{
-			IfExists: $3.(bool),
-			Specs: $4.([]*ast.UserSpec),
-			TLSOptions: $5.([]*ast.TLSOption),
-			ResourceOptions: $6.([]*ast.ResourceOption),
-			PasswordOrLockOptions: $7.([]*ast.PasswordOrLockOption),
-		}
-	}
-| 	"ALTER" "USER" IfExists "USER" '(' ')' "IDENTIFIED" "BY" AuthString
-	{
-		auth := &ast.AuthOption {
-			AuthString: $9.(string),
-			ByAuthString: true,
-		}
-		$$ = &ast.AlterUserStmt{
-			IfExists: $3.(bool),
-			CurrentAuth: auth,
-		}
-	}
-
-UserSpec:
-	Username AuthOption
-	{
-		userSpec := &ast.UserSpec{
-			User: $1.(*auth.UserIdentity),
-		}
-		if $2 != nil {
-			userSpec.AuthOpt = $2.(*ast.AuthOption)
-		}
-		$$ = userSpec
-	}
-
-UserSpecList:
-	UserSpec
-	{
-		$$ = []*ast.UserSpec{$1.(*ast.UserSpec)}
-	}
-|	UserSpecList ',' UserSpec
-	{
-		$$ = append($1.([]*ast.UserSpec), $3.(*ast.UserSpec))
-	}
-
-ConnectionOptions:
-	{
-		l := []*ast.ResourceOption{}
-		$$ = l
-	}
-|	"WITH" ConnectionOptionList
-	{
-		$$ = $2
-		yylex.AppendError(yylex.Errorf("TiDB does not support WITH ConnectionOptions now, they would be parsed but ignored."))
-		parser.lastErrorAsWarn()
-	}
-
-ConnectionOptionList:
-	ConnectionOption
-	{
-		$$ = []*ast.ResourceOption{$1.(*ast.ResourceOption)}
-	}
-|	ConnectionOptionList ConnectionOption
-	{
-		l := $1.([]*ast.ResourceOption)
-		l = append(l, $2.(*ast.ResourceOption))
-		$$ = l
-	}
-
-ConnectionOption:
-	"MAX_QUERIES_PER_HOUR" NUM
-	{
-		$$ = &ast.ResourceOption {
-			Type: ast.MaxQueriesPerHour,
-			Count: $2.(int64),
-		}
-	}
-|	"MAX_UPDATES_PER_HOUR" NUM
-	{
-		$$ = &ast.ResourceOption {
-			Type: ast.MaxUpdatesPerHour,
-			Count: $2.(int64),
-		}
-	}
-|	"MAX_CONNECTIONS_PER_HOUR" NUM
-	{
-		$$ = &ast.ResourceOption {
-			Type: ast.MaxConnectionsPerHour,
-			Count: $2.(int64),
-		}
-	}
-|	"MAX_USER_CONNECTIONS" NUM
-	{
-		$$ = &ast.ResourceOption {
-			Type: ast.MaxUserConnections,
-			Count: $2.(int64),
-		}
-	}
-
-RequireClauseOpt:
-	{
-		$$ = []*ast.TLSOption{}
-	}
-| RequireClause
-	{
-		$$ = $1
-	}
-
-RequireClause:
-	"REQUIRE" "NONE"
-	{
-		t := &ast.TLSOption {
-			Type: ast.TslNone,
-		}
-		$$ = []*ast.TLSOption{t}
-	}
-|	"REQUIRE" "SSL"
-	{
-		t := &ast.TLSOption {
-			Type: ast.Ssl,
-		}
-		$$ = []*ast.TLSOption{t}
-	}
-|	"REQUIRE" "X509"
-	{
-		t := &ast.TLSOption {
-			Type: ast.X509,
-		}
-		$$ = []*ast.TLSOption{t}
-	}
-|	"REQUIRE" RequireList
-	{
-		$$ = $2
-	}
-
-RequireList:
-	RequireListElement
-	{
-		$$ = []*ast.TLSOption{$1.(*ast.TLSOption)}
-	}
-|	RequireList "AND" RequireListElement
-	{
-		l := $1.([]*ast.TLSOption)
-		l = append(l, $3.(*ast.TLSOption))
-		$$ = l
-	}
-|	RequireList RequireListElement
-	{
-		l := $1.([]*ast.TLSOption)
-		l = append(l, $2.(*ast.TLSOption))
-		$$ = l
-	}
-
-RequireListElement:
-	"ISSUER" stringLit
-	{
-		$$ = &ast.TLSOption {
-			Type: ast.Issuer,
-			Value: $2,
-		}
-	}
-|	"SUBJECT" stringLit
-	{
-		$$ = &ast.TLSOption {
-			Type: ast.Subject,
-			Value: $2,
-		}
-	}
-|	"CIPHER" stringLit
-	{
-		$$ = &ast.TLSOption {
-			Type: ast.Cipher,
-			Value: $2,
-		}
-	}
-
-PasswordOrLockOptions:
-	{
-		l := []*ast.PasswordOrLockOption{}
-		$$ = l
-	}
-|	PasswordOrLockOptionList
-	{
-		$$ = $1
-		yylex.AppendError(yylex.Errorf("TiDB does not support PASSWORD EXPIRE and ACCOUNT LOCK now, they would be parsed but ignored."))
-		parser.lastErrorAsWarn()
-	}
-
-PasswordOrLockOptionList:
-	PasswordOrLockOption
-	{
-		$$ = []*ast.PasswordOrLockOption{$1.(*ast.PasswordOrLockOption)}
-	}
-|	PasswordOrLockOptionList PasswordOrLockOption
-	{
-		l := $1.([]*ast.PasswordOrLockOption)
-		l = append(l, $2.(*ast.PasswordOrLockOption))
-		$$ = l
-	}
-
-PasswordOrLockOption:
-	"ACCOUNT" "UNLOCK"
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.Unlock,
-		}
-	}
-|	"ACCOUNT" "LOCK"
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.Lock,
-		}
-	}
-|	PasswordExpire
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.PasswordExpire,
-		}
-	}
-|	PasswordExpire "INTERVAL" NUM "DAY"
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.PasswordExpireInterval,
-			Count: $3.(int64),
-		}
-	}
-|	PasswordExpire "NEVER"
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.PasswordExpireNever,
-		}
-	}
-|	PasswordExpire "DEFAULT"
-	{
-		$$ = &ast.PasswordOrLockOption {
-			Type: ast.PasswordExpireDefault,
-		}
-	}
-
-PasswordExpire:
-	"PASSWORD" "EXPIRE" ClearPasswordExpireOptions
-	{
-		$$ = nil
-	}
-
-ClearPasswordExpireOptions:
-	{
-		$$ = nil
-	}
-
-AuthOption:
-	{
-		$$ = nil
-	}
-|	"IDENTIFIED" "BY" AuthString
-	{
-		$$ = &ast.AuthOption {
-			AuthString: $3.(string),
-			ByAuthString: true,
-		}
-	}
-|	"IDENTIFIED" "WITH" StringName
-	{
-		$$ = nil
-	}
-|	"IDENTIFIED" "WITH" StringName "BY" AuthString
-	{
-		$$ = &ast.AuthOption {
-			AuthString: $5.(string),
-			ByAuthString: true,
-		}
-	}
-|	"IDENTIFIED" "WITH" StringName "AS" HashString
-	{
-		$$ = &ast.AuthOption{
-			HashString: $5.(string),
-		}
-	}
-|	"IDENTIFIED" "BY" "PASSWORD" HashString
-	{
-		$$ = &ast.AuthOption{
-			HashString: $4.(string),
-		}
-	}
-
-HashString:
-	stringLit
-	{
-		$$ = $1
-	}
-
-RoleSpec:
-	Rolename
-	{
-		role := $1.(*auth.RoleIdentity)
-		roleSpec := &ast.UserSpec{
-			User: &auth.UserIdentity {
-				Username: role.Username,
-				Hostname: role.Hostname,
-			},
-			IsRole: true,
-		}
-		$$ = roleSpec
-	}
-
-RoleSpecList:
-	RoleSpec
-	{
-		$$ = []*ast.UserSpec{$1.(*ast.UserSpec)}
-	}
-|	RoleSpecList ',' RoleSpec
-	{
-		$$ = append($1.([]*ast.UserSpec), $3.(*ast.UserSpec))
-	}
-
-/*******************************************************************
- *
- *  Create Binding Statement
- *
- *  Example:
- *      CREATE GLOBAL BINDING FOR select Col1,Col2 from table USING select Col1,Col2 from table use index(Col1)
- *******************************************************************/
-CreateBindingStmt:
-	"CREATE" GlobalScope "BINDING" "FOR" SelectStmt "USING" SelectStmt
-	{
-		startOffset := parser.startOffset(&yyS[yypt-2])
-        	endOffset := parser.startOffset(&yyS[yypt-1])
-        	selStmt := $5.(*ast.SelectStmt)
-        	selStmt.SetText(strings.TrimSpace(parser.src[startOffset:endOffset]))
-
-		startOffset = parser.startOffset(&yyS[yypt])
-		hintedSelStmt := $7.(*ast.SelectStmt)
-		hintedSelStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
-
-		x := &ast.CreateBindingStmt {
-			OriginSel:  selStmt,
-			HintedSel:  hintedSelStmt,
-			GlobalScope: $2.(bool),
-		}
-
-		$$ = x
-	}
-/*******************************************************************
- *
- *  Drop Binding Statement
- *
- *  Example:
- *      DROP GLOBAL BINDING FOR select Col1,Col2 from table
- *******************************************************************/
-DropBindingStmt:
-	"DROP" GlobalScope "BINDING" "FOR" SelectStmt
-	{
-		startOffset := parser.startOffset(&yyS[yypt])
-		selStmt := $5.(*ast.SelectStmt)
-		selStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
-
-		x := &ast.DropBindingStmt {
-			OriginSel:  selStmt,
-			GlobalScope: $2.(bool),
-		}
-
-		$$ = x
-	}
-|	"DROP" GlobalScope "BINDING" "FOR" SelectStmt "USING" SelectStmt
- 	{
-		startOffset := parser.startOffset(&yyS[yypt-2])
-		endOffset := parser.startOffset(&yyS[yypt-1])
-		selStmt := $5.(*ast.SelectStmt)
-		selStmt.SetText(strings.TrimSpace(parser.src[startOffset:endOffset]))
-
-		startOffset = parser.startOffset(&yyS[yypt])
-		hintedSelStmt := $7.(*ast.SelectStmt)
-		hintedSelStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
-
-		x := &ast.DropBindingStmt {
-			OriginSel:  selStmt,
-			HintedSel:  hintedSelStmt,
-			GlobalScope: $2.(bool),
-		}
-
-		$$ = x
- 	}
-
-/*************************************************************************************
- * Grant statement
- * See https://dev.mysql.com/doc/refman/5.7/en/grant.html
- *************************************************************************************/
-GrantStmt:
-	 "GRANT" PrivElemList "ON" ObjectType PrivLevel "TO" UserSpecList RequireClauseOpt WithGrantOptionOpt
-	 {
-		$$ = &ast.GrantStmt{
-			Privs: $2.([]*ast.PrivElem),
-			ObjectType: $4.(ast.ObjectTypeType),
-			Level: $5.(*ast.GrantLevel),
-			Users: $7.([]*ast.UserSpec),
-			TLSOptions: $8.([]*ast.TLSOption),
-			WithGrant: $9.(bool),
-		}
-	 }
-
-GrantRoleStmt:
-	 "GRANT" RolenameList "TO" UsernameList
-	 {
-		$$ = &ast.GrantRoleStmt {
-			Roles: $2.([]*auth.RoleIdentity),
-			Users: $4.([]*auth.UserIdentity),
-		}
-	 }
-
-WithGrantOptionOpt:
-	{
-		$$ = false
-	}
-|	"WITH" "GRANT" "OPTION"
-	{
-		$$ = true
-	}
-|	"WITH" "MAX_QUERIES_PER_HOUR" NUM
-	{
-		$$ = false
-	}
-|	"WITH" "MAX_UPDATES_PER_HOUR" NUM
-	{
-		$$ = false
-	}
-|	"WITH" "MAX_CONNECTIONS_PER_HOUR" NUM
-	{
-		$$ = false
-	}
-|	"WITH" "MAX_USER_CONNECTIONS" NUM
-	{
-		$$ = false
-	}
-
-PrivElem:
-	PrivType
-	{
-		$$ = &ast.PrivElem{
-			Priv: $1.(mysql.PrivilegeType),
-		}
-	}
-|	PrivType '(' ColumnNameList ')'
-	{
-		$$ = &ast.PrivElem{
-			Priv: $1.(mysql.PrivilegeType),
-			Cols: $3.([]*ast.ColumnName),
-		}
-	}
-
-PrivElemList:
-	PrivElem
-	{
-		$$ = []*ast.PrivElem{$1.(*ast.PrivElem)}
-	}
-|	PrivElemList ',' PrivElem
-	{
-		$$ = append($1.([]*ast.PrivElem), $3.(*ast.PrivElem))
-	}
-
-PrivType:
-	"ALL"
-	{
-		$$ = mysql.AllPriv
-	}
-|	"ALL" "PRIVILEGES"
-	{
-		$$ = mysql.AllPriv
-	}
-|	"ALTER"
-	{
-		$$ = mysql.AlterPriv
-	}
-|	"CREATE"
-	{
-		$$ = mysql.CreatePriv
-	}
-|	"CREATE" "USER"
-	{
-		$$ = mysql.CreateUserPriv
-	}
-|	"TRIGGER"
-	{
-		$$ = mysql.TriggerPriv
-	}
-|	"DELETE"
-	{
-		$$ = mysql.DeletePriv
-	}
-|	"DROP"
-	{
-		$$ = mysql.DropPriv
-	}
-|	"PROCESS"
-	{
-		$$ = mysql.ProcessPriv
-	}
-|	"EXECUTE"
-	{
-		$$ = mysql.ExecutePriv
-	}
-|	"INDEX"
-	{
-		$$ = mysql.IndexPriv
-	}
-|	"INSERT"
-	{
-		$$ = mysql.InsertPriv
-	}
-|	"SELECT"
-	{
-		$$ = mysql.SelectPriv
-	}
-|	"SUPER"
-	{
-		$$ = mysql.SuperPriv
-	}
-|	"SHOW" "DATABASES"
-	{
-		$$ = mysql.ShowDBPriv
-	}
-|	"UPDATE"
-	{
-		$$ = mysql.UpdatePriv
-	}
-|	"GRANT" "OPTION"
-	{
-		$$ = mysql.GrantPriv
-	}
-|	"REFERENCES"
-	{
-		$$ = mysql.ReferencesPriv
-	}
-|	"REPLICATION" "SLAVE"
-	{
-		$$ = mysql.PrivilegeType(0)
-	}
-|	"REPLICATION" "CLIENT"
-	{
-		$$ = mysql.PrivilegeType(0)
-	}
-|	"USAGE"
-	{
-		$$ = mysql.PrivilegeType(0)
-	}
-|	"RELOAD"
-	{
-		$$ = mysql.PrivilegeType(0)
-	}
-|	"CREATE" "TEMPORARY" "TABLES"
-	{
-		$$ = mysql.CreateTMPTablePriv
-	}
-|	"LOCK" "TABLES"
-	{
-		$$ = mysql.LockTablesPriv
-	}
-|	"CREATE" "VIEW"
-	{
-		$$ = mysql.CreateViewPriv
-	}
-|	"SHOW" "VIEW"
-	{
-		$$ = mysql.ShowViewPriv
-	}
-|	"CREATE" "ROLE"
-	{
-		$$ = mysql.CreateRolePriv
-	}
-|	"DROP" "ROLE"
-	{
-		$$ = mysql.DropRolePriv
-	}
-|	"CREATE" "ROUTINE"
-	{
-		$$ = mysql.CreateRoutinePriv
-	}
-|	"ALTER" "ROUTINE"
-	{
-		$$ = mysql.AlterRoutinePriv
-	}
-|	"EVENT"
-	{
-		$$ = mysql.EventPriv
-	}
-|	"SHUTDOWN"
-	{
-		$$ = mysql.ShutdownPriv
-	}
-
-ObjectType:
-	{
-		$$ = ast.ObjectTypeNone
-	}
-|	"TABLE"
-	{
-		$$ = ast.ObjectTypeTable
-	}
-
-PrivLevel:
-	'*'
-	{
-		$$ = &ast.GrantLevel {
-			Level: ast.GrantLevelDB,
-		}
-	}
-|	'*' '.' '*'
-	{
-		$$ = &ast.GrantLevel {
-			Level: ast.GrantLevelGlobal,
-		}
-	}
-| 	Identifier '.' '*'
-	{
-		$$ = &ast.GrantLevel {
-			Level: ast.GrantLevelDB,
-			DBName: $1,
-		}
-	}
-|	Identifier '.' Identifier
-	{
-		$$ = &ast.GrantLevel {
-			Level: ast.GrantLevelTable,
-			DBName: $1,
-			TableName: $3,
-		}
-	}
-|	Identifier
-	{
-		$$ = &ast.GrantLevel {
-			Level: ast.GrantLevelTable,
-			TableName: $1,
-		}
-	}
-
-/**************************************RevokeStmt*******************************************
- * See https://dev.mysql.com/doc/refman/5.7/en/revoke.html
- *******************************************************************************************/
-RevokeStmt:
-	 "REVOKE" PrivElemList "ON" ObjectType PrivLevel "FROM" UserSpecList
-	 {
-		$$ = &ast.RevokeStmt{
-			Privs: $2.([]*ast.PrivElem),
-			ObjectType: $4.(ast.ObjectTypeType),
-			Level: $5.(*ast.GrantLevel),
-			Users: $7.([]*ast.UserSpec),
-		}
-	 }
-
-RevokeRoleStmt:
-	 "REVOKE" RolenameList "FROM" UsernameList
-	 {
-		$$ = &ast.RevokeRoleStmt {
-			Roles: $2.([]*auth.RoleIdentity),
-			Users: $4.([]*auth.UserIdentity),
-		}
-	 }

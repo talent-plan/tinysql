@@ -15,7 +15,6 @@ package ast
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/auth"
 	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -1715,10 +1714,8 @@ type ShowStmt struct {
 	IndexName   model.CIStr
 	Flag        int // Some flag parsed from sql, such as FULL.
 	Full        bool
-	User        *auth.UserIdentity   // Used for show grants/create user.
-	Roles       []*auth.RoleIdentity // Used for show grants .. using
-	IfNotExists bool                 // Used for `show create database if not exists`
-	Extended    bool                 // Used for `show extended columns from ...`
+	IfNotExists bool // Used for `show create database if not exists`
+	Extended    bool // Used for `show extended columns from ...`
 
 	// GlobalScope is used by `show variables` and `show bindings`
 	GlobalScope bool
