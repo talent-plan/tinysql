@@ -691,25 +691,6 @@ func (p *PhysicalProjection) attach2Task(tasks ...task) task {
 	return t
 }
 
-func (p *PhysicalUnionAll) attach2Task(tasks ...task) task {
-	t := &rootTask{p: p}
-	childPlans := make([]PhysicalPlan, 0, len(tasks))
-	var childMaxCost float64
-	for _, task := range tasks {
-		task = finishCopTask(p.ctx, task)
-		childCost := task.cost()
-		if childCost > childMaxCost {
-			childMaxCost = childCost
-		}
-		childPlans = append(childPlans, task.plan())
-	}
-	p.SetChildren(childPlans...)
-	sessVars := p.ctx.GetSessionVars()
-	// Children of UnionExec are executed in parallel.
-	t.cst = childMaxCost + float64(1+len(tasks))*sessVars.ConcurrencyFactor
-	return t
-}
-
 func (sel *PhysicalSelection) attach2Task(tasks ...task) task {
 	sessVars := sel.ctx.GetSessionVars()
 	t := finishCopTask(sel.ctx, tasks[0].copy())

@@ -157,20 +157,6 @@ func (p PhysicalProjection) Init(ctx sessionctx.Context, stats *property.StatsIn
 	return &p
 }
 
-// Init initializes LogicalUnionAll.
-func (p LogicalUnionAll) Init(ctx sessionctx.Context) *LogicalUnionAll {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeUnion, &p)
-	return &p
-}
-
-// Init initializes PhysicalUnionAll.
-func (p PhysicalUnionAll) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalUnionAll {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeUnion, &p)
-	p.childrenReqProps = props
-	p.stats = stats
-	return &p
-}
-
 // Init initializes LogicalSort.
 func (ls LogicalSort) Init(ctx sessionctx.Context) *LogicalSort {
 	ls.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSort, &ls)

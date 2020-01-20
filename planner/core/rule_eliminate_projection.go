@@ -118,9 +118,7 @@ func (pe *projectionEliminator) optimize(ctx context.Context, lp LogicalPlan) (L
 func (pe *projectionEliminator) eliminate(p LogicalPlan, replace map[string]*expression.Column, canEliminate bool) LogicalPlan {
 	proj, isProj := p.(*LogicalProjection)
 	childFlag := canEliminate
-	if _, isUnion := p.(*LogicalUnionAll); isUnion {
-		childFlag = false
-	} else if _, isAgg := p.(*LogicalAggregation); isAgg || isProj {
+	if _, isAgg := p.(*LogicalAggregation); isAgg || isProj {
 		childFlag = true
 	}
 	for i, child := range p.Children() {

@@ -23,11 +23,9 @@ import (
 var (
 	_ DMLNode = &DeleteStmt{}
 	_ DMLNode = &InsertStmt{}
-	_ DMLNode = &UnionStmt{}
 	_ DMLNode = &UpdateStmt{}
 	_ DMLNode = &SelectStmt{}
 	_ DMLNode = &ShowStmt{}
-	_ DMLNode = &SplitRegionStmt{}
 
 	_ Node = &Assignment{}
 	_ Node = &ByItem{}
@@ -44,10 +42,6 @@ var (
 	_ Node = &TableSource{}
 	_ Node = &UnionSelectList{}
 	_ Node = &WildCardField{}
-	_ Node = &WindowSpec{}
-	_ Node = &PartitionByClause{}
-	_ Node = &FrameClause{}
-	_ Node = &FrameBound{}
 )
 
 // JoinType is join type, including cross/left/right/full.
@@ -386,7 +380,7 @@ type TableSource struct {
 func (n *TableSource) Restore(ctx *RestoreCtx) error {
 	needParen := false
 	switch n.Source.(type) {
-	case *SelectStmt, *UnionStmt:
+	case *SelectStmt:
 		needParen = true
 	}
 
@@ -782,8 +776,6 @@ type SelectStmt struct {
 	GroupBy *GroupByClause
 	// Having is the having condition.
 	Having *HavingClause
-	// WindowSpecs is the window specification list.
-	WindowSpecs []WindowSpec
 	// OrderBy is the ordering expression list.
 	OrderBy *OrderByClause
 	// Limit is the limit clause.
@@ -883,18 +875,6 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 		}
 	}
 
-	if n.WindowSpecs != nil {
-		ctx.WriteKeyWord(" WINDOW ")
-		for i, windowsSpec := range n.WindowSpecs {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := windowsSpec.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SelectStmt.WindowSpec[%d]", i)
-			}
-		}
-	}
-
 	if n.OrderBy != nil {
 		ctx.WritePlain(" ")
 		if err := n.OrderBy.Restore(ctx); err != nil {
@@ -980,14 +960,6 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 		n.Having = node.(*HavingClause)
 	}
 
-	for i, spec := range n.WindowSpecs {
-		node, ok := spec.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.WindowSpecs[i] = *node.(*WindowSpec)
-	}
-
 	if n.OrderBy != nil {
 		node, ok := n.OrderBy.Accept(v)
 		if !ok {
@@ -1049,69 +1021,6 @@ func (n *UnionSelectList) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Selects[i] = node.(*SelectStmt)
-	}
-	return v.Leave(n)
-}
-
-// UnionStmt represents "union statement"
-// See https://dev.mysql.com/doc/refman/5.7/en/union.html
-type UnionStmt struct {
-	dmlNode
-
-	SelectList *UnionSelectList
-	OrderBy    *OrderByClause
-	Limit      *Limit
-}
-
-// Restore implements Node interface.
-func (n *UnionStmt) Restore(ctx *RestoreCtx) error {
-	if err := n.SelectList.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore UnionStmt.SelectList")
-	}
-
-	if n.OrderBy != nil {
-		ctx.WritePlain(" ")
-		if err := n.OrderBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionStmt.OrderBy")
-		}
-	}
-
-	if n.Limit != nil {
-		ctx.WritePlain(" ")
-		if err := n.Limit.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionStmt.Limit")
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *UnionStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*UnionStmt)
-	if n.SelectList != nil {
-		node, ok := n.SelectList.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.SelectList = node.(*UnionSelectList)
-	}
-	if n.OrderBy != nil {
-		node, ok := n.OrderBy.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.OrderBy = node.(*OrderByClause)
-	}
-	if n.Limit != nil {
-		node, ok := n.Limit.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Limit = node.(*Limit)
 	}
 	return v.Leave(n)
 }
@@ -1231,7 +1140,7 @@ func (n *InsertStmt) Restore(ctx *RestoreCtx) error {
 	if n.Select != nil {
 		ctx.WritePlain(" ")
 		switch v := n.Select.(type) {
-		case *SelectStmt, *UnionStmt:
+		case *SelectStmt:
 			if err := v.Restore(ctx); err != nil {
 				return errors.Annotate(err, "An error occurred while restore InsertStmt.Select")
 			}
@@ -1771,417 +1680,6 @@ func (n *ShowStmt) Accept(v Visitor) (Node, bool) {
 		n.Where = node.(ExprNode)
 	}
 	return v.Leave(n)
-}
-
-// WindowSpec is the specification of a window.
-type WindowSpec struct {
-	node
-
-	Name model.CIStr
-	// Ref is the reference window of this specification. For example, in `w2 as (w1 order by a)`,
-	// the definition of `w2` references `w1`.
-	Ref model.CIStr
-
-	PartitionBy *PartitionByClause
-	OrderBy     *OrderByClause
-	Frame       *FrameClause
-
-	// OnlyAlias will set to true of the first following case.
-	// To make compatible with MySQL, we need to distinguish `select func over w` from `select func over (w)`.
-	OnlyAlias bool
-}
-
-// Restore implements Node interface.
-func (n *WindowSpec) Restore(ctx *RestoreCtx) error {
-	if name := n.Name.String(); name != "" {
-		ctx.WriteName(name)
-		if n.OnlyAlias {
-			return nil
-		}
-		ctx.WriteKeyWord(" AS ")
-	}
-	ctx.WritePlain("(")
-	sep := ""
-	if refName := n.Ref.String(); refName != "" {
-		ctx.WriteName(refName)
-		sep = " "
-	}
-	if n.PartitionBy != nil {
-		ctx.WritePlain(sep)
-		if err := n.PartitionBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore WindowSpec.PartitionBy")
-		}
-		sep = " "
-	}
-	if n.OrderBy != nil {
-		ctx.WritePlain(sep)
-		if err := n.OrderBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore WindowSpec.OrderBy")
-		}
-		sep = " "
-	}
-	if n.Frame != nil {
-		ctx.WritePlain(sep)
-		if err := n.Frame.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore WindowSpec.Frame")
-		}
-	}
-	ctx.WritePlain(")")
-
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *WindowSpec) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*WindowSpec)
-	if n.PartitionBy != nil {
-		node, ok := n.PartitionBy.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.PartitionBy = node.(*PartitionByClause)
-	}
-	if n.OrderBy != nil {
-		node, ok := n.OrderBy.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.OrderBy = node.(*OrderByClause)
-	}
-	if n.Frame != nil {
-		node, ok := n.Frame.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Frame = node.(*FrameClause)
-	}
-	return v.Leave(n)
-}
-
-// PartitionByClause represents partition by clause.
-type PartitionByClause struct {
-	node
-
-	Items []*ByItem
-}
-
-// Restore implements Node interface.
-func (n *PartitionByClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("PARTITION BY ")
-	for i, v := range n.Items {
-		if i != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore PartitionByClause.Items[%d]", i)
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *PartitionByClause) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*PartitionByClause)
-	for i, val := range n.Items {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Items[i] = node.(*ByItem)
-	}
-	return v.Leave(n)
-}
-
-// FrameType is the type of window function frame.
-type FrameType int
-
-// Window function frame types.
-// MySQL only supports `ROWS` and `RANGES`.
-const (
-	Rows = iota
-	Ranges
-	Groups
-)
-
-// FrameClause represents frame clause.
-type FrameClause struct {
-	node
-
-	Type   FrameType
-	Extent FrameExtent
-}
-
-// Restore implements Node interface.
-func (n *FrameClause) Restore(ctx *RestoreCtx) error {
-	switch n.Type {
-	case Rows:
-		ctx.WriteKeyWord("ROWS")
-	case Ranges:
-		ctx.WriteKeyWord("RANGE")
-	default:
-		return errors.New("Unsupported window function frame type")
-	}
-	ctx.WriteKeyWord(" BETWEEN ")
-	if err := n.Extent.Start.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore FrameClause.Extent.Start")
-	}
-	ctx.WriteKeyWord(" AND ")
-	if err := n.Extent.End.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore FrameClause.Extent.End")
-	}
-
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *FrameClause) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*FrameClause)
-	node, ok := n.Extent.Start.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Extent.Start = *node.(*FrameBound)
-	node, ok = n.Extent.End.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Extent.End = *node.(*FrameBound)
-	return v.Leave(n)
-}
-
-// FrameExtent represents frame extent.
-type FrameExtent struct {
-	Start FrameBound
-	End   FrameBound
-}
-
-// FrameType is the type of window function frame bound.
-type BoundType int
-
-// Frame bound types.
-const (
-	Following = iota
-	Preceding
-	CurrentRow
-)
-
-// FrameBound represents frame bound.
-type FrameBound struct {
-	node
-
-	Type      BoundType
-	UnBounded bool
-	Expr      ExprNode
-	// `Unit` is used to indicate the units in which the `Expr` should be interpreted.
-	// For example: '2:30' MINUTE_SECOND.
-	Unit TimeUnitType
-}
-
-// Restore implements Node interface.
-func (n *FrameBound) Restore(ctx *RestoreCtx) error {
-	if n.UnBounded {
-		ctx.WriteKeyWord("UNBOUNDED")
-	}
-	switch n.Type {
-	case CurrentRow:
-		ctx.WriteKeyWord("CURRENT ROW")
-	case Preceding, Following:
-		if n.Unit != TimeUnitInvalid {
-			ctx.WriteKeyWord("INTERVAL ")
-		}
-		if n.Expr != nil {
-			if err := n.Expr.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore FrameBound.Expr")
-			}
-		}
-		if n.Unit != TimeUnitInvalid {
-			ctx.WritePlain(" ")
-			ctx.WriteKeyWord(n.Unit.String())
-		}
-		if n.Type == Preceding {
-			ctx.WriteKeyWord(" PRECEDING")
-		} else {
-			ctx.WriteKeyWord(" FOLLOWING")
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *FrameBound) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*FrameBound)
-	if n.Expr != nil {
-		node, ok := n.Expr.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Expr = node.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
-type SplitRegionStmt struct {
-	dmlNode
-
-	Table          *TableName
-	IndexName      model.CIStr
-	PartitionNames []model.CIStr
-
-	SplitSyntaxOpt *SplitSyntaxOption
-
-	SplitOpt *SplitOption
-}
-
-type SplitOption struct {
-	Lower      []ExprNode
-	Upper      []ExprNode
-	Num        int64
-	ValueLists [][]ExprNode
-}
-
-type SplitSyntaxOption struct {
-	HasRegionFor bool
-	HasPartition bool
-}
-
-func (n *SplitRegionStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("SPLIT ")
-	if n.SplitSyntaxOpt != nil {
-		if n.SplitSyntaxOpt.HasRegionFor {
-			ctx.WriteKeyWord("REGION FOR ")
-		}
-		if n.SplitSyntaxOpt.HasPartition {
-			ctx.WriteKeyWord("PARTITION ")
-
-		}
-	}
-	ctx.WriteKeyWord("TABLE ")
-
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore SplitIndexRegionStmt.Table")
-	}
-	if len(n.PartitionNames) > 0 {
-		ctx.WriteKeyWord(" PARTITION")
-		ctx.WritePlain("(")
-		for i, v := range n.PartitionNames {
-			if i != 0 {
-				ctx.WritePlain(", ")
-			}
-			ctx.WriteName(v.String())
-		}
-		ctx.WritePlain(")")
-	}
-
-	if len(n.IndexName.L) > 0 {
-		ctx.WriteKeyWord(" INDEX ")
-		ctx.WriteName(n.IndexName.String())
-	}
-	ctx.WritePlain(" ")
-	err := n.SplitOpt.Restore(ctx)
-	return err
-}
-
-func (n *SplitRegionStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-
-	n = newNode.(*SplitRegionStmt)
-	node, ok := n.Table.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Table = node.(*TableName)
-	for i, val := range n.SplitOpt.Lower {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.SplitOpt.Lower[i] = node.(ExprNode)
-	}
-	for i, val := range n.SplitOpt.Upper {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.SplitOpt.Upper[i] = node.(ExprNode)
-	}
-
-	for i, list := range n.SplitOpt.ValueLists {
-		for j, val := range list {
-			node, ok := val.Accept(v)
-			if !ok {
-				return n, false
-			}
-			n.SplitOpt.ValueLists[i][j] = node.(ExprNode)
-		}
-	}
-	return v.Leave(n)
-}
-
-func (n *SplitOption) Restore(ctx *RestoreCtx) error {
-	if len(n.ValueLists) == 0 {
-		ctx.WriteKeyWord("BETWEEN ")
-		ctx.WritePlain("(")
-		for j, v := range n.Lower {
-			if j != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := v.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SplitOption Lower")
-			}
-		}
-		ctx.WritePlain(")")
-
-		ctx.WriteKeyWord(" AND ")
-		ctx.WritePlain("(")
-		for j, v := range n.Upper {
-			if j != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := v.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SplitOption Upper")
-			}
-		}
-		ctx.WritePlain(")")
-		ctx.WriteKeyWord(" REGIONS")
-		ctx.WritePlainf(" %d", n.Num)
-		return nil
-	}
-	ctx.WriteKeyWord("BY ")
-	for i, row := range n.ValueLists {
-		if i != 0 {
-			ctx.WritePlain(",")
-		}
-		ctx.WritePlain("(")
-		for j, v := range row {
-			if j != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := v.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SplitOption.ValueLists[%d][%d]", i, j)
-			}
-		}
-		ctx.WritePlain(")")
-	}
-	return nil
 }
 
 type FulltextSearchModifier int

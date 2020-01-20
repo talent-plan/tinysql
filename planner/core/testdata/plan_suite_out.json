@@ -206,14 +206,6 @@
         "Best": "IndexJoin{TableReader(Table(t)->TopN([test.t.b],0,10))->TopN([test.t.b],0,10)->TableReader(Table(t))}(test.t.a,test.t.a)->Limit"
       },
       {
-        "SQL": "select * from ((SELECT 1 a,3 b) UNION (SELECT 2,1) ORDER BY (SELECT 2)) t order by a,b",
-        "Best": "UnionAll{Dual->Projection->Dual->Projection}->HashAgg->Sort"
-      },
-      {
-        "SQL": "select * from ((SELECT 1 a,6 b) UNION (SELECT 2,5) UNION (SELECT 2, 4) ORDER BY 1) t order by 1, 2",
-        "Best": "UnionAll{Dual->Projection->Dual->Projection->Dual->Projection}->HashAgg->Sort->Sort"
-      },
-      {
         "SQL": "select * from (select *, NULL as xxx from t) t order by xxx",
         "Best": "TableReader(Table(t))->Projection"
       },
@@ -552,27 +544,6 @@
       {
         "SQL": "show tables",
         "Best": "Show"
-      }
-    ]
-  },
-  {
-    "Name": "TestDAGPlanBuilderUnion",
-    "Cases": [
-      {
-        "SQL": "select * from t union all select * from t",
-        "Best": "UnionAll{TableReader(Table(t))->TableReader(Table(t))}"
-      },
-      {
-        "SQL": "select * from t union all (select * from t) order by a ",
-        "Best": "UnionAll{TableReader(Table(t))->TableReader(Table(t))}->Sort"
-      },
-      {
-        "SQL": "select * from t union all (select * from t) limit 1",
-        "Best": "UnionAll{TableReader(Table(t)->Limit)->Limit->TableReader(Table(t)->Limit)->Limit}->Limit"
-      },
-      {
-        "SQL": "select a from t union all (select c from t) order by a limit 1",
-        "Best": "UnionAll{TableReader(Table(t)->Limit)->Limit->IndexReader(Index(t.c_d_e)[[NULL,+inf]]->Limit)->Limit}->TopN([Column#25],0,1)"
       }
     ]
   },

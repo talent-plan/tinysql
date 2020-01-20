@@ -101,8 +101,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildSort(v)
 	case *plannercore.PhysicalTopN:
 		return b.buildTopN(v)
-	case *plannercore.PhysicalUnionAll:
-		return b.buildUnionAll(v)
 	case *plannercore.Update:
 		return b.buildUpdate(v)
 	case *plannercore.PhysicalUnionScan:
@@ -804,20 +802,6 @@ func (b *executorBuilder) buildMaxOneRow(v *plannercore.PhysicalMaxOneRow) Execu
 	base.initCap = 2
 	base.maxChunkSize = 2
 	e := &MaxOneRowExec{baseExecutor: base}
-	return e
-}
-
-func (b *executorBuilder) buildUnionAll(v *plannercore.PhysicalUnionAll) Executor {
-	childExecs := make([]Executor, len(v.Children()))
-	for i, child := range v.Children() {
-		childExecs[i] = b.build(child)
-		if b.err != nil {
-			return nil
-		}
-	}
-	e := &UnionExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), childExecs...),
-	}
 	return e
 }
 

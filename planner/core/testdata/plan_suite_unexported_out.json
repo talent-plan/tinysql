@@ -16,10 +16,8 @@
       "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
       "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
       "DataScan(t)->Aggr(sum(test.t.a))->Projection",
-      "UnionAll{DataScan(a)->Projection->Aggr(sum(test.t.c),firstrow(test.t.d))->DataScan(b)->Projection->Aggr(sum(test.t.a),firstrow(test.t.b))->DataScan(c)->Projection->Aggr(sum(test.t.b),firstrow(test.t.e))}->Aggr(sum(Column#40))->Projection",
       "Join{DataScan(a)->DataScan(b)->Aggr(max(test.t.b),firstrow(test.t.c))}(test.t.c,test.t.c)->Projection->Projection",
       "Join{DataScan(a)->DataScan(b)}(test.t.a,test.t.a)->Aggr(max(test.t.b),max(test.t.b))->Projection",
-      "UnionAll{DataScan(a)->Projection->Projection->Projection->DataScan(b)->Projection->Projection->Projection}->Aggr(max(Column#38))->Projection",
       "Join{DataScan(a)->DataScan(b)}(test.t.a,test.t.a)(test.t.b,test.t.b)->Aggr(max(test.t.c))->Projection",
       "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Projection->Projection"
     ]
@@ -29,7 +27,6 @@
     "Cases": [
       "TableReader(Table(t)->Limit)->Limit->Update",
       "TableReader(Table(t)->Limit)->Limit->Delete",
-      "*core.Explain",
       "*core.Explain",
       "*core.Explain",
       "*core.Explain",
@@ -66,7 +63,6 @@
       "Join{Join{DataScan(ta)->DataScan(tb)}(test.t.a,test.t.a)->Join{DataScan(tc)->DataScan(td)}(test.t.b,test.t.b)}(test.t.c,test.t.c)->Projection",
       "Join{DataScan(ta)->Join{DataScan(tb)->DataScan(tc)}(test.t.b,test.t.b)}(test.t.a,test.t.a)(test.t.c,test.t.c)->Sel([or(gt(test.t.d, 0), gt(test.t.d, 0))])->Projection",
       "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Sel([or(ifnull(test.t.d, 1), isnull(test.t.d))])->Projection",
-      "UnionAll{DataScan(t)->Projection->Projection->DataScan(t)->Projection->Projection->DataScan(t)->Projection->Projection}->Projection",
       "Apply{DataScan(k)->DataScan(t)->Aggr(count(1))->Projection->MaxOneRow}->Projection",
       "Join{DataScan(t)->DataScan(x)}->Projection",
       "Join{DataScan(t)->DataScan(x)}(test.t.a,test.t.a)->Projection",
@@ -124,44 +120,8 @@
       "Join{DataScan(t)->DataScan(s)}(test.t.a,test.t.a)->TopN([test.t.a],0,5)->Projection",
       "Join{DataScan(t)->DataScan(s)->TopN([test.t.a],0,5)}(test.t.a,test.t.a)->TopN([test.t.a],0,5)->Projection",
       "Join{DataScan(t)->DataScan(s)}(test.t.a,test.t.a)->TopN([test.t.a test.t.b],0,5)->Projection",
-      "UnionAll{DataScan(t)->TopN([test.t.a test.t.b],0,5)->Projection->DataScan(s)->TopN([test.t.a test.t.b],0,5)->Projection}->TopN([Column#25 Column#26],0,5)",
-      "UnionAll{DataScan(t)->TopN([test.t.a test.t.b],0,10)->Projection->DataScan(s)->TopN([test.t.a test.t.b],0,10)->Projection}->TopN([Column#25 Column#26],5,5)",
-      "UnionAll{DataScan(t)->Limit->Projection->DataScan(s)->TopN([test.t.a],0,5)->Projection}->Limit",
       "Join{DataScan(t1)->TopN([test.t.b],0,5)->DataScan(t2)}(test.t.e,test.t.e)->TopN([test.t.b],0,5)->Projection",
       "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->TopN([ifnull(test.t.h, test.t.b)],0,5)->Projection->Projection"
-    ]
-  },
-  {
-    "Name": "TestUnion",
-    "Cases": [
-      {
-        "Best": "UnionAll{DataScan(t)->Projection->DataScan(t)->Projection}->Aggr(firstrow(Column#25))",
-        "Err": false
-      },
-      {
-        "Best": "UnionAll{DataScan(t)->Projection->DataScan(t)->Projection}",
-        "Err": false
-      },
-      {
-        "Best": "UnionAll{UnionAll{DataScan(t)->Projection->DataScan(t)->Projection}->Aggr(firstrow(Column#37))->Projection->DataScan(t)->Projection}",
-        "Err": false
-      },
-      {
-        "Best": "UnionAll{DataScan(t)->Projection->DataScan(t)->Projection->DataScan(t)->Projection->DataScan(t)->Projection->DataScan(t)->Projection}->Aggr(firstrow(Column#61))",
-        "Err": false
-      },
-      {
-        "Best": "",
-        "Err": true
-      },
-      {
-        "Best": "UnionAll{UnionAll{Dual->Projection->Dual->Projection}->Aggr(firstrow(Column#4))->Projection->Dual->Projection}->Projection->Sort",
-        "Err": false
-      },
-      {
-        "Best": "Apply{UnionAll{UnionAll{Dual->Projection->Dual->Projection}->Aggr(firstrow(Column#4))->Projection->Dual->Projection}->Dual->Projection->MaxOneRow}->Sort->Projection",
-        "Err": false
-      }
     ]
   },
   {
@@ -538,26 +498,6 @@
           "test.t.a"
         ],
         "3": [
-          "test.t.a"
-        ]
-      },
-      {
-        "1": [
-          "test.t.a"
-        ],
-        "10": [
-          "test.t.a"
-        ],
-        "12": [
-          "test.t.a"
-        ],
-        "3": [
-          "test.t.a"
-        ],
-        "5": [
-          "Column#25"
-        ],
-        "8": [
           "test.t.a"
         ]
       },

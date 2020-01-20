@@ -41,12 +41,6 @@ func (s *testSuite3) TestCharsetDatabase(c *C) {
 	tk.MustQuery(`select @@collation_database;`).Check(testkit.Rows("latin1_swedish_ci"))
 }
 
-func (s *testSuite3) TestDo(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("do 1, @a:=1")
-	tk.MustQuery("select @a").Check(testkit.Rows("1"))
-}
-
 func (s *testSuite3) TestTransaction(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("begin")

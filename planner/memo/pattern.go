@@ -45,8 +45,6 @@ const (
 	OperandDataSource
 	// OperandUnionScan is the operand for LogicalUnionScan.
 	OperandUnionScan
-	// OperandUnionAll is the operand for LogicalUnionAll.
-	OperandUnionAll
 	// OperandSort is the operand for LogicalSort.
 	OperandSort
 	// OperandTopN is the operand for LogicalTopN.
@@ -86,8 +84,6 @@ func GetOperand(p plannercore.LogicalPlan) Operand {
 		return OperandDataSource
 	case *plannercore.LogicalUnionScan:
 		return OperandUnionScan
-	case *plannercore.LogicalUnionAll:
-		return OperandUnionAll
 	case *plannercore.LogicalSort:
 		return OperandSort
 	case *plannercore.LogicalTopN:

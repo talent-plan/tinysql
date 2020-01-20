@@ -376,17 +376,6 @@ func (p *LogicalProjection) PredicatePushDown(predicates []expression.Expression
 }
 
 // PredicatePushDown implements LogicalPlan PredicatePushDown interface.
-func (p *LogicalUnionAll) PredicatePushDown(predicates []expression.Expression) (ret []expression.Expression, retPlan LogicalPlan) {
-	for i, proj := range p.children {
-		newExprs := make([]expression.Expression, 0, len(predicates))
-		newExprs = append(newExprs, predicates...)
-		retCond, newChild := proj.PredicatePushDown(newExprs)
-		addSelection(p, newChild, retCond, i)
-	}
-	return nil, p
-}
-
-// PredicatePushDown implements LogicalPlan PredicatePushDown interface.
 func (la *LogicalAggregation) PredicatePushDown(predicates []expression.Expression) (ret []expression.Expression, retPlan LogicalPlan) {
 	var condsToPush []expression.Expression
 	exprsOriginal := make([]expression.Expression, 0, len(la.AggFuncs))

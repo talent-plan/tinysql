@@ -16,8 +16,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cznic/mathutil"
@@ -38,8 +36,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
 )
 
 var (
@@ -63,7 +59,6 @@ var (
 	_ Executor = &TableReaderExecutor{}
 	_ Executor = &TableScanExec{}
 	_ Executor = &TopNExec{}
-	_ Executor = &UnionExec{}
 )
 
 type baseExecutor struct {
@@ -863,152 +858,6 @@ func (e *MaxOneRowExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	return nil
 }
 
-// UnionExec pulls all it's children's result and returns to its parent directly.
-// A "resultPuller" is started for every child to pull result from that child and push it to the "resultPool", the used
-// "Chunk" is obtained from the corresponding "resourcePool". All resultPullers are running concurrently.
-//                             +----------------+
-//   +---> resourcePool 1 ---> | resultPuller 1 |-----+
-//   |                         +----------------+     |
-//   |                                                |
-//   |                         +----------------+     v
-//   +---> resourcePool 2 ---> | resultPuller 2 |-----> resultPool ---+
-//   |                         +----------------+     ^               |
-//   |                               ......           |               |
-//   |                         +----------------+     |               |
-//   +---> resourcePool n ---> | resultPuller n |-----+               |
-//   |                         +----------------+                     |
-//   |                                                                |
-//   |                          +-------------+                       |
-//   |--------------------------| main thread | <---------------------+
-//                              +-------------+
-type UnionExec struct {
-	baseExecutor
-
-	stopFetchData atomic.Value
-
-	finished      chan struct{}
-	resourcePools []chan *chunk.Chunk
-	resultPool    chan *unionWorkerResult
-
-	childrenResults []*chunk.Chunk
-	wg              sync.WaitGroup
-	initialized     bool
-}
-
-// unionWorkerResult stores the result for a union worker.
-// A "resultPuller" is started for every child to pull result from that child, unionWorkerResult is used to store that pulled result.
-// "src" is used for Chunk reuse: after pulling result from "resultPool", main-thread must push a valid unused Chunk to "src" to
-// enable the corresponding "resultPuller" continue to work.
-type unionWorkerResult struct {
-	chk *chunk.Chunk
-	err error
-	src chan<- *chunk.Chunk
-}
-
-func (e *UnionExec) waitAllFinished() {
-	e.wg.Wait()
-	close(e.resultPool)
-}
-
-// Open implements the Executor Open interface.
-func (e *UnionExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-	for _, child := range e.children {
-		e.childrenResults = append(e.childrenResults, newFirstChunk(child))
-	}
-	e.stopFetchData.Store(false)
-	e.initialized = false
-	e.finished = make(chan struct{})
-	return nil
-}
-
-func (e *UnionExec) initialize(ctx context.Context) {
-	e.resultPool = make(chan *unionWorkerResult, len(e.children))
-	e.resourcePools = make([]chan *chunk.Chunk, len(e.children))
-	for i := range e.children {
-		e.resourcePools[i] = make(chan *chunk.Chunk, 1)
-		e.resourcePools[i] <- e.childrenResults[i]
-		e.wg.Add(1)
-		go e.resultPuller(ctx, i)
-	}
-	go e.waitAllFinished()
-}
-
-func (e *UnionExec) resultPuller(ctx context.Context, childID int) {
-	result := &unionWorkerResult{
-		err: nil,
-		chk: nil,
-		src: e.resourcePools[childID],
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			buf := make([]byte, 4096)
-			stackSize := runtime.Stack(buf, false)
-			buf = buf[:stackSize]
-			logutil.Logger(ctx).Error("resultPuller panicked", zap.String("stack", string(buf)))
-			result.err = errors.Errorf("%v", r)
-			e.resultPool <- result
-			e.stopFetchData.Store(true)
-		}
-		e.wg.Done()
-	}()
-	for {
-		if e.stopFetchData.Load().(bool) {
-			return
-		}
-		select {
-		case <-e.finished:
-			return
-		case result.chk = <-e.resourcePools[childID]:
-		}
-		result.err = Next(ctx, e.children[childID], result.chk)
-		if result.err == nil && result.chk.NumRows() == 0 {
-			return
-		}
-		e.resultPool <- result
-		if result.err != nil {
-			e.stopFetchData.Store(true)
-			return
-		}
-	}
-}
-
-// Next implements the Executor Next interface.
-func (e *UnionExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.GrowAndReset(e.maxChunkSize)
-	if !e.initialized {
-		e.initialize(ctx)
-		e.initialized = true
-	}
-	result, ok := <-e.resultPool
-	if !ok {
-		return nil
-	}
-	if result.err != nil {
-		return errors.Trace(result.err)
-	}
-
-	req.SwapColumns(result.chk)
-	result.src <- result.chk
-	return nil
-}
-
-// Close implements the Executor Close interface.
-func (e *UnionExec) Close() error {
-	if e.finished != nil {
-		close(e.finished)
-	}
-	e.childrenResults = nil
-	if e.resultPool != nil {
-		for range e.resultPool {
-		}
-	}
-	e.resourcePools = nil
-	return e.baseExecutor.Close()
-}
-
 func extractStmtHintsFromStmtNode(stmtNode ast.StmtNode) []*ast.TableOptimizerHint {
 	switch x := stmtNode.(type) {
 	case *ast.SelectStmt:
@@ -1158,10 +1007,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 			sc.InShowWarning = true
 			sc.SetWarnings(vars.StmtCtx.GetWarnings())
 		}
-	case *ast.SplitRegionStmt:
-		sc.IgnoreTruncate = false
-		sc.IgnoreZeroInDate = true
-		sc.AllowInvalidDate = vars.SQLMode.HasAllowInvalidDatesMode()
 	default:
 		sc.IgnoreTruncate = true
 		sc.IgnoreZeroInDate = true

@@ -32,7 +32,7 @@ func (a *AggregateFuncExtractor) Enter(n ast.Node) (ast.Node, bool) {
 	switch n.(type) {
 	case *ast.AggregateFuncExpr:
 		a.inAggregateFuncExpr = true
-	case *ast.SelectStmt, *ast.UnionStmt:
+	case *ast.SelectStmt:
 		return n, true
 	}
 	return n, false

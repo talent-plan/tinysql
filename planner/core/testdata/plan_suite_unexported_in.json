@@ -16,10 +16,8 @@
       "select sum(a.a) from t a left join t b on a.c = b.c",
       "select sum(a.a) from t a right join t b on a.c = b.c",
       "select sum(a) from (select * from t) x",
-      "select sum(c1) from (select c c1, d c2 from t a union all select a c1, b c2 from t b union all select b c1, e c2 from t c) x group by c2",
       "select max(a.b), max(b.b) from t a join t b on a.c = b.c group by a.a",
       "select max(a.b), max(b.b) from t a join t b on a.a = b.a group by a.c",
-      "select max(c.b) from (select * from t a union all select * from t b) c group by c.a",
       "select max(a.c) from t a join t b on a.a=b.a and a.b=b.b group by a.b",
       "select t1.a, count(t2.b) from t t1, t t2 where t1.a = t2.a group by t1.a"
     ]
@@ -29,7 +27,6 @@
     "cases": [
       "update t set t.a = t.a * 1.5 where t.a >= 1000 order by t.a desc limit 10",
       "delete from t where t.a >= 1000 order by t.a desc limit 10",
-      "explain select * from t union all select * from t limit 1, 1",
       // The correctness of explain result is checked at integration test. There is to improve coverage.
       "explain select /*+ TIDB_INLJ(t1, t2) */ * from t t1 left join t t2 on t1.a=t2.a where t1.b=1 and t2.b=1 and (t1.c=1 or t2.c=1)",
       "explain select /*+ TIDB_HJ(t1, t2) */ * from t t1 left join t t2 on t1.a=t2.a where t1.b=1 and t2.b=1 and (t1.c=1 or t2.c=1)",
@@ -71,7 +68,6 @@
       "select * from ( t as ta left outer join t as tb on ta.a = tb.a) join ( t as tc left join t as td on tc.b = td.b) on ta.c = td.c where tb.c = 2 and td.a = 1",
       "select * from t ta left outer join (t tb left outer join t tc on tc.b = tb.b) on tb.a = ta.a and tc.c = ta.c where tc.d > 0 or ta.d > 0",
       "select * from t ta left outer join t tb on ta.d = tb.d and ta.a > 1 where ifnull(tb.d, 1) or tb.d is null",
-      "select a, d from (select * from t union all select * from t union all select * from t) z where a < 10",
       "select (select count(*) from t where t.a = k.a) from t k",
       "select a from t where exists(select 1 from t as x where x.a < t.a)",
       "select a from t where exists(select 1 from t as x where x.a = t.a and t.a < 1 and x.a < 1)",
@@ -154,28 +150,10 @@
       "select * from t right outer join t s on t.a = s.a order by s.a limit 5",
       // Test Limit + Right Join + Proj.
       "select * from t right outer join t s on t.a = s.a order by s.a,t.b limit 5",
-      // Test TopN + UA + Proj.
-      "select * from t union all (select * from t s) order by a,b limit 5",
-      // Test TopN + UA + Proj.
-      "select * from t union all (select * from t s) order by a,b limit 5, 5",
-      // Test Limit + UA + Proj + Sort.
-      "select * from t union all (select * from t s order by a) limit 5",
       // Test `ByItem` containing column from both sides.
       "select ifnull(t1.b, t2.a) from t t1 left join t t2 on t1.e=t2.e order by ifnull(t1.b, t2.a) limit 5",
       // Test ifnull cannot be eliminated
       "select ifnull(t1.h, t2.b) from t t1 left join t t2 on t1.e=t2.e order by ifnull(t1.h, t2.b) limit 5"
-    ]
-  },
-  {
-    "name": "TestUnion",
-    "cases": [
-      "select a from t union select a from t",
-      "select a from t union all select a from t",
-      "select a from t union select a from t union all select a from t",
-      "select a from t union select a from t union all select a from t union select a from t union select a from t",
-      "select a from t union select a, b from t",
-      "select * from (select 1 as a  union select 1 union all select 2) t order by a",
-      "select * from (select 1 as a  union select 1 union all select 2) t order by (select a)"
     ]
   },
   {
@@ -220,7 +198,6 @@
       "select a from t where (b,a) != all (select c,d from t)",
       "select a from t where (b,a) in (select c,d from t)",
       "select a from t where a in (select a from t s group by t.b)",
-      "select t01.a from (select a from t t21 union all select a from t t22) t2 join t t01 on 1 left outer join t t3 on 1 join t t4 on 1",
       "select 1 from (select count(b) as cnt from t) t1",
       "select count(1) from (select count(b) as cnt from t) t1",
       "select count(1) from (select count(b) as cnt from t group by c) t1"
@@ -260,14 +237,6 @@
       },
       {
         "SQL":   "select * from t where t.ptn > 17 and t.ptn < 61",
-        "IsIdx": 0
-      },
-      {
-        "SQL":   "select * from t where t.ptn > 17 and t.ptn < 61 union all select * from t where t.ptn > 17 and t.ptn < 61 ",
-        "IsIdx": 0
-      },
-      {
-        "SQL":   "select ptn from t where t.ptn > 17 and t.ptn < 61 union all select ptn from t where t.ptn > 17 and t.ptn < 61 ",
         "IsIdx": 0
       },
       {

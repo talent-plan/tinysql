@@ -30,7 +30,6 @@ var (
 	_ PhysicalPlan = &PhysicalTopN{}
 	_ PhysicalPlan = &PhysicalMaxOneRow{}
 	_ PhysicalPlan = &PhysicalTableDual{}
-	_ PhysicalPlan = &PhysicalUnionAll{}
 	_ PhysicalPlan = &PhysicalSort{}
 	_ PhysicalPlan = &NominalSort{}
 	_ PhysicalPlan = &PhysicalLimit{}
@@ -310,11 +309,6 @@ type PhysicalLimit struct {
 
 	Offset uint64
 	Count  uint64
-}
-
-// PhysicalUnionAll is the physical operator of UnionAll.
-type PhysicalUnionAll struct {
-	physicalSchemaProducer
 }
 
 type basePhysicalAgg struct {

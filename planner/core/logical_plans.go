@@ -43,7 +43,6 @@ var (
 	_ LogicalPlan = &TiKVSingleGather{}
 	_ LogicalPlan = &LogicalTableScan{}
 	_ LogicalPlan = &LogicalIndexScan{}
-	_ LogicalPlan = &LogicalUnionAll{}
 	_ LogicalPlan = &LogicalSort{}
 	_ LogicalPlan = &LogicalLimit{}
 )
@@ -747,11 +746,6 @@ func (ds *DataSource) getHandleCol() *expression.Column {
 // TableInfo returns the *TableInfo of data source.
 func (ds *DataSource) TableInfo() *model.TableInfo {
 	return ds.tableInfo
-}
-
-// LogicalUnionAll represents LogicalUnionAll plan.
-type LogicalUnionAll struct {
-	logicalSchemaProducer
 }
 
 // LogicalSort stands for the order by plan.

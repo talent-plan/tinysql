@@ -15,30 +15,21 @@ package ast
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-
 	"github.com/pingcap/errors"
 	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"strconv"
 )
 
 var (
 	_ StmtNode = &AdminStmt{}
 	_ StmtNode = &BeginStmt{}
-	_ StmtNode = &BinlogStmt{}
 	_ StmtNode = &CommitStmt{}
-	_ StmtNode = &DeallocateStmt{}
-	_ StmtNode = &DoStmt{}
-	_ StmtNode = &ExecuteStmt{}
 	_ StmtNode = &ExplainStmt{}
-	_ StmtNode = &PrepareStmt{}
 	_ StmtNode = &RollbackStmt{}
 	_ StmtNode = &SetStmt{}
 	_ StmtNode = &UseStmt{}
-	_ StmtNode = &FlushStmt{}
-	_ StmtNode = &ShutdownStmt{}
 
 	_ Node = &PrivElem{}
 	_ Node = &VariableAssignment{}
@@ -55,14 +46,6 @@ const (
 	ExplainFormatROW  = "row"
 	ExplainFormatDOT  = "dot"
 	ExplainFormatHint = "hint"
-	PumpType          = "PUMP"
-	DrainerType       = "DRAINER"
-)
-
-// Transaction mode constants.
-const (
-	Optimistic  = "OPTIMISTIC"
-	Pessimistic = "PESSIMISTIC"
 )
 
 var (
@@ -85,38 +68,6 @@ type TypeOpt struct {
 type FloatOpt struct {
 	Flen    int
 	Decimal int
-}
-
-// AuthOption is used for parsing create use statement.
-type AuthOption struct {
-	// ByAuthString set as true, if AuthString is used for authorization. Otherwise, authorization is done by HashString.
-	ByAuthString bool
-	AuthString   string
-	HashString   string
-	// TODO: support auth_plugin
-}
-
-// TraceStmt is a statement to trace what sql actually does at background.
-type TraceStmt struct {
-	stmtNode
-
-	Stmt   StmtNode
-	Format string
-}
-
-// Accept implements Node Accept interface.
-func (n *TraceStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*TraceStmt)
-	node, ok := n.Stmt.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Stmt = node.(StmtNode)
-	return v.Leave(n)
 }
 
 // ExplainForStmt is a statement to provite information about how is SQL statement executeing
@@ -178,124 +129,10 @@ func (n *ExplainStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// PrepareStmt is a statement to prepares a SQL statement which contains placeholders,
-// and it is executed with ExecuteStmt and released with DeallocateStmt.
-// See https://dev.mysql.com/doc/refman/5.7/en/prepare.html
-type PrepareStmt struct {
-	stmtNode
-
-	Name    string
-	SQLText string
-	SQLVar  *VariableExpr
-}
-
-// Restore implements Node interface.
-func (n *PrepareStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("PREPARE ")
-	ctx.WriteName(n.Name)
-	ctx.WriteKeyWord(" FROM ")
-	if n.SQLText != "" {
-		ctx.WriteString(n.SQLText)
-		return nil
-	}
-	if n.SQLVar != nil {
-		if err := n.SQLVar.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore PrepareStmt.SQLVar")
-		}
-		return nil
-	}
-	return errors.New("An error occurred while restore PrepareStmt")
-}
-
-// Accept implements Node Accept interface.
-func (n *PrepareStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*PrepareStmt)
-	if n.SQLVar != nil {
-		node, ok := n.SQLVar.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.SQLVar = node.(*VariableExpr)
-	}
-	return v.Leave(n)
-}
-
-// DeallocateStmt is a statement to release PreparedStmt.
-// See https://dev.mysql.com/doc/refman/5.7/en/deallocate-prepare.html
-type DeallocateStmt struct {
-	stmtNode
-
-	Name string
-}
-
-// Restore implements Node interface.
-func (n *DeallocateStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("DEALLOCATE PREPARE ")
-	ctx.WriteName(n.Name)
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *DeallocateStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*DeallocateStmt)
-	return v.Leave(n)
-}
-
-// Prepared represents a prepared statement.
-type Prepared struct {
-	Stmt          StmtNode
-	StmtType      string
-	Params        []ParamMarkerExpr
-	SchemaVersion int64
-	UseCache      bool
-	CachedPlan    interface{}
-	CachedNames   interface{}
-}
-
-// ExecuteStmt is a statement to execute PreparedStmt.
-// See https://dev.mysql.com/doc/refman/5.7/en/execute.html
-type ExecuteStmt struct {
-	stmtNode
-
-	Name       string
-	UsingVars  []ExprNode
-	BinaryArgs interface{}
-	ExecID     uint32
-	IdxInMulti int
-}
-
-// Accept implements Node Accept interface.
-func (n *ExecuteStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ExecuteStmt)
-	for i, val := range n.UsingVars {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.UsingVars[i] = node.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
 // BeginStmt is a statement to start a new transaction.
 // See https://dev.mysql.com/doc/refman/5.7/en/commit.html
 type BeginStmt struct {
 	stmtNode
-	Mode     string
-	ReadOnly bool
-	Bound    *TimestampBound
 }
 
 // Accept implements Node Accept interface.
@@ -304,39 +141,6 @@ func (n *BeginStmt) Accept(v Visitor) (Node, bool) {
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*BeginStmt)
-	if n.Bound != nil && n.Bound.Timestamp != nil {
-		newTimestamp, ok := n.Bound.Timestamp.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Bound.Timestamp = newTimestamp.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
-// BinlogStmt is an internal-use statement.
-// We just parse and ignore it.
-// See http://dev.mysql.com/doc/refman/5.7/en/binlog.html
-type BinlogStmt struct {
-	stmtNode
-	Str string
-}
-
-// Restore implements Node interface.
-func (n *BinlogStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("BINLOG ")
-	ctx.WriteString(n.Str)
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *BinlogStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*BinlogStmt)
 	return v.Leave(n)
 }
 
@@ -439,87 +243,6 @@ func (n *VariableAssignment) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// FlushStmtType is the type for FLUSH statement.
-type FlushStmtType int
-
-// Flush statement types.
-const (
-	FlushNone FlushStmtType = iota
-	FlushTables
-	FlushPrivileges
-	FlushStatus
-	FlushTiDBPlugin
-	FlushHosts
-	FlushLogs
-)
-
-// FlushStmt is a statement to flush tables/privileges/optimizer costs and so on.
-type FlushStmt struct {
-	stmtNode
-
-	Tp              FlushStmtType // Privileges/Tables/...
-	NoWriteToBinLog bool
-	Tables          []*TableName // For FlushTableStmt, if Tables is empty, it means flush all tables.
-	ReadLock        bool
-	Plugins         []string
-}
-
-// Restore implements Node interface.
-func (n *FlushStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("FLUSH ")
-	if n.NoWriteToBinLog {
-		ctx.WriteKeyWord("NO_WRITE_TO_BINLOG ")
-	}
-	switch n.Tp {
-	case FlushTables:
-		ctx.WriteKeyWord("TABLES")
-		for i, v := range n.Tables {
-			if i == 0 {
-				ctx.WritePlain(" ")
-			} else {
-				ctx.WritePlain(", ")
-			}
-			if err := v.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore FlushStmt.Tables[%d]", i)
-			}
-		}
-		if n.ReadLock {
-			ctx.WriteKeyWord(" WITH READ LOCK")
-		}
-	case FlushPrivileges:
-		ctx.WriteKeyWord("PRIVILEGES")
-	case FlushStatus:
-		ctx.WriteKeyWord("STATUS")
-	case FlushTiDBPlugin:
-		ctx.WriteKeyWord("TIDB PLUGINS")
-		for i, v := range n.Plugins {
-			if i == 0 {
-				ctx.WritePlain(" ")
-			} else {
-				ctx.WritePlain(", ")
-			}
-			ctx.WritePlain(v)
-		}
-	case FlushHosts:
-		ctx.WriteKeyWord("HOSTS")
-	case FlushLogs:
-		ctx.WriteKeyWord("LOGS")
-	default:
-		return errors.New("Unsupported type of FlushStmt")
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *FlushStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*FlushStmt)
-	return v.Leave(n)
-}
-
 // SetStmt is the statement to set variables.
 type SetStmt struct {
 	stmtNode
@@ -541,41 +264,6 @@ func (n *SetStmt) Accept(v Visitor) (Node, bool) {
 		}
 		n.Variables[i] = node.(*VariableAssignment)
 	}
-	return v.Leave(n)
-}
-
-type ChangeStmt struct {
-	stmtNode
-
-	NodeType string
-	State    string
-	NodeID   string
-}
-
-// Restore implements Node interface.
-func (n *ChangeStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CHANGE ")
-	ctx.WriteKeyWord(n.NodeType)
-	ctx.WriteKeyWord(" TO NODE_STATE ")
-	ctx.WritePlain("=")
-	ctx.WriteString(n.State)
-	ctx.WriteKeyWord(" FOR NODE_ID ")
-	ctx.WriteString(n.NodeID)
-	return nil
-}
-
-// SecureText implements SensitiveStatement interface.
-func (n *ChangeStmt) SecureText() string {
-	return fmt.Sprintf("change %s to node_state='%s' for node_id '%s'", strings.ToLower(n.NodeType), n.State, n.NodeID)
-}
-
-// Accept implements Node Accept interface.
-func (n *ChangeStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ChangeStmt)
 	return v.Leave(n)
 }
 
@@ -643,30 +331,6 @@ func (r *ResourceOption) Restore(ctx *RestoreCtx) error {
 	}
 	ctx.WritePlainf("%d", r.Count)
 	return nil
-}
-
-// DoStmt is the struct for DO statement.
-type DoStmt struct {
-	stmtNode
-
-	Exprs []ExprNode
-}
-
-// Accept implements Node Accept interface.
-func (n *DoStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*DoStmt)
-	for i, val := range n.Exprs {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Exprs[i] = node.(ExprNode)
-	}
-	return v.Leave(n)
 }
 
 // AdminStmtType is the type for admin statement.
@@ -866,28 +530,6 @@ func (n ObjectTypeType) Restore(ctx *RestoreCtx) error {
 		return errors.New("Unsupported object type")
 	}
 	return nil
-}
-
-// ShutdownStmt is a statement to stop the TiDB server.
-// See https://dev.mysql.com/doc/refman/5.7/en/shutdown.html
-type ShutdownStmt struct {
-	stmtNode
-}
-
-// Restore implements Node interface.
-func (n *ShutdownStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("SHUTDOWN")
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *ShutdownStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ShutdownStmt)
-	return v.Leave(n)
 }
 
 // Ident is the table identifier composed of schema name and table name.

@@ -42,43 +42,6 @@ func (visitor1) Enter(in Node) (Node, bool) {
 	return in, true
 }
 
-func (ts *testMiscSuite) TestMiscVisitorCover(c *C) {
-	valueExpr := NewValueExpr(42)
-	stmts := []Node{
-		&AdminStmt{},
-		&BeginStmt{},
-		&BinlogStmt{},
-		&CommitStmt{},
-		&DeallocateStmt{},
-		&DoStmt{},
-		&ExecuteStmt{UsingVars: []ExprNode{valueExpr}},
-		&ExplainStmt{Stmt: &ShowStmt{}},
-		&PrepareStmt{SQLVar: &VariableExpr{Value: valueExpr}},
-		&RollbackStmt{},
-		&SetStmt{Variables: []*VariableAssignment{
-			{
-				Value: valueExpr,
-			},
-		}},
-		&UseStmt{},
-		&AnalyzeTableStmt{
-			TableNames: []*TableName{
-				{},
-			},
-		},
-		&FlushStmt{},
-		&PrivElem{},
-		&VariableAssignment{Value: valueExpr},
-		&DropStatsStmt{Table: &TableName{}},
-		&ShutdownStmt{},
-	}
-
-	for _, v := range stmts {
-		v.Accept(visitor{})
-		v.Accept(visitor1{})
-	}
-}
-
 func (ts *testMiscSuite) TestDDLVisitorCover(c *C) {
 	sql := `
 create table t (c1 smallint unsigned, c2 int unsigned);
@@ -97,21 +60,6 @@ constraint foreign key (jobabbr) references ffxi_jobtype (jobabbr) on delete cas
 `
 	parse := parser.New()
 	stmts, _, err := parse.Parse(sql, "", "")
-	c.Assert(err, IsNil)
-	for _, stmt := range stmts {
-		stmt.Accept(visitor{})
-		stmt.Accept(visitor1{})
-	}
-}
-
-// test Change Pump or drainer status sql parser
-func (ts *testMiscSuite) TestChangeStmt(c *C) {
-	sql := `change pump to node_state='paused' for node_id '127.0.0.1:8249';
-change drainer to node_state='paused' for node_id '127.0.0.1:8249';
-shutdown;`
-
-	p := parser.New()
-	stmts, _, err := p.Parse(sql, "", "")
 	c.Assert(err, IsNil)
 	for _, stmt := range stmts {
 		stmt.Accept(visitor{})

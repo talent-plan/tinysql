@@ -126,13 +126,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 			r := eq.GetArgs()[1].String()
 			str += fmt.Sprintf("(%s,%s)", l, r)
 		}
-	case *LogicalUnionAll, *PhysicalUnionAll:
-		last := len(idxs) - 1
-		idx := idxs[last]
-		children := strs[idx:]
-		strs = strs[:idx]
-		str = "UnionAll{" + strings.Join(children, "->") + "}"
-		idxs = idxs[:last]
 	case *DataSource:
 		if x.TableAsName != nil && x.TableAsName.L != "" {
 			str = fmt.Sprintf("DataScan(%s)", x.TableAsName)

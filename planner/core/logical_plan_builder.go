@@ -23,7 +23,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
@@ -167,8 +166,6 @@ func (b *PlanBuilder) buildResultSetNode(ctx context.Context, node ast.ResultSet
 		switch v := x.Source.(type) {
 		case *ast.SelectStmt:
 			p, err = b.buildSelect(ctx, v)
-		case *ast.UnionStmt:
-			p, err = b.buildUnion(ctx, v)
 		case *ast.TableName:
 			p, err = b.buildDataSource(ctx, v, &x.AsName)
 		default:
@@ -199,8 +196,6 @@ func (b *PlanBuilder) buildResultSetNode(ctx context.Context, node ast.ResultSet
 		return p, nil
 	case *ast.SelectStmt:
 		return b.buildSelect(ctx, x)
-	case *ast.UnionStmt:
-		return b.buildUnion(ctx, x)
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.ResultSetNode(%T) for buildResultSetNode()", x)
 	}
@@ -849,165 +844,6 @@ func (b *PlanBuilder) buildDistinct(child LogicalPlan, length int) (*LogicalAggr
 	return plan4Agg, nil
 }
 
-// unionJoinFieldType finds the type which can carry the given types in Union.
-func unionJoinFieldType(a, b *types.FieldType) *types.FieldType {
-	resultTp := types.NewFieldType(types.MergeFieldType(a.Tp, b.Tp))
-	// This logic will be intelligible when it is associated with the buildProjection4Union logic.
-	if resultTp.Tp == mysql.TypeNewDecimal {
-		// The decimal result type will be unsigned only when all the decimals to be united are unsigned.
-		resultTp.Flag &= b.Flag & mysql.UnsignedFlag
-	} else {
-		// Non-decimal results will be unsigned when the first SQL statement result in the union is unsigned.
-		resultTp.Flag |= a.Flag & mysql.UnsignedFlag
-	}
-	resultTp.Decimal = mathutil.Max(a.Decimal, b.Decimal)
-	// `Flen - Decimal` is the fraction before '.'
-	resultTp.Flen = mathutil.Max(a.Flen-a.Decimal, b.Flen-b.Decimal) + resultTp.Decimal
-	if resultTp.EvalType() != types.ETInt && (a.EvalType() == types.ETInt || b.EvalType() == types.ETInt) && resultTp.Flen < mysql.MaxIntWidth {
-		resultTp.Flen = mysql.MaxIntWidth
-	}
-	resultTp.Charset = a.Charset
-	resultTp.Collate = a.Collate
-	expression.SetBinFlagOrBinStr(b, resultTp)
-	return resultTp
-}
-
-func (b *PlanBuilder) buildProjection4Union(ctx context.Context, u *LogicalUnionAll) {
-	unionCols := make([]*expression.Column, 0, u.children[0].Schema().Len())
-	names := make([]*types.FieldName, 0, u.children[0].Schema().Len())
-
-	// Infer union result types by its children's schema.
-	for i, col := range u.children[0].Schema().Columns {
-		resultTp := col.RetType
-		for j := 1; j < len(u.children); j++ {
-			childTp := u.children[j].Schema().Columns[i].RetType
-			resultTp = unionJoinFieldType(resultTp, childTp)
-		}
-		names = append(names, &types.FieldName{ColName: u.children[0].OutputNames()[i].ColName})
-		unionCols = append(unionCols, &expression.Column{
-			RetType:  resultTp,
-			UniqueID: b.ctx.GetSessionVars().AllocPlanColumnID(),
-		})
-	}
-	u.schema = expression.NewSchema(unionCols...)
-	u.names = names
-	// Process each child and add a projection above original child.
-	// So the schema of `UnionAll` can be the same with its children's.
-	for childID, child := range u.children {
-		exprs := make([]expression.Expression, len(child.Schema().Columns))
-		for i, srcCol := range child.Schema().Columns {
-			exprs[i] = srcCol
-		}
-		b.optFlag |= flagEliminateProjection
-		proj := LogicalProjection{Exprs: exprs, AvoidColumnEvaluator: true}.Init(b.ctx)
-		proj.SetSchema(u.schema.Clone())
-		proj.SetChildren(child)
-		u.children[childID] = proj
-	}
-}
-
-func (b *PlanBuilder) buildUnion(ctx context.Context, union *ast.UnionStmt) (LogicalPlan, error) {
-	distinctSelectPlans, allSelectPlans, err := b.divideUnionSelectPlans(ctx, union.SelectList.Selects)
-	if err != nil {
-		return nil, err
-	}
-
-	unionDistinctPlan := b.buildUnionAll(ctx, distinctSelectPlans)
-	if unionDistinctPlan != nil {
-		unionDistinctPlan, err = b.buildDistinct(unionDistinctPlan, unionDistinctPlan.Schema().Len())
-		if err != nil {
-			return nil, err
-		}
-		if len(allSelectPlans) > 0 {
-			// Can't change the statements order in order to get the correct column info.
-			allSelectPlans = append([]LogicalPlan{unionDistinctPlan}, allSelectPlans...)
-		}
-	}
-
-	unionAllPlan := b.buildUnionAll(ctx, allSelectPlans)
-	unionPlan := unionDistinctPlan
-	if unionAllPlan != nil {
-		unionPlan = unionAllPlan
-	}
-
-	oldLen := unionPlan.Schema().Len()
-
-	for i := 0; i < len(union.SelectList.Selects); i++ {
-		b.handleHelper.popMap()
-	}
-	b.handleHelper.pushMap(nil)
-
-	if union.OrderBy != nil {
-		unionPlan, err = b.buildSort(ctx, unionPlan, union.OrderBy.Items, nil)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if union.Limit != nil {
-		unionPlan, err = b.buildLimit(unionPlan, union.Limit)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Fix issue #8189 (https://github.com/pingcap/tidb/issues/8189).
-	// If there are extra expressions generated from `ORDER BY` clause, generate a `Projection` to remove them.
-	if oldLen != unionPlan.Schema().Len() {
-		proj := LogicalProjection{Exprs: expression.Column2Exprs(unionPlan.Schema().Columns[:oldLen])}.Init(b.ctx)
-		proj.SetChildren(unionPlan)
-		schema := expression.NewSchema(unionPlan.Schema().Clone().Columns[:oldLen]...)
-		for _, col := range schema.Columns {
-			col.UniqueID = b.ctx.GetSessionVars().AllocPlanColumnID()
-		}
-		proj.names = unionPlan.OutputNames()[:oldLen]
-		proj.SetSchema(schema)
-		return proj, nil
-	}
-
-	return unionPlan, nil
-}
-
-// divideUnionSelectPlans resolves union's select stmts to logical plans.
-// and divide result plans into "union-distinct" and "union-all" parts.
-// divide rule ref: https://dev.mysql.com/doc/refman/5.7/en/union.html
-// "Mixed UNION types are treated such that a DISTINCT union overrides any ALL union to its left."
-func (b *PlanBuilder) divideUnionSelectPlans(ctx context.Context, selects []*ast.SelectStmt) (distinctSelects []LogicalPlan, allSelects []LogicalPlan, err error) {
-	firstUnionAllIdx, columnNums := 0, -1
-	// The last slot is reserved for appending distinct union outside this function.
-	children := make([]LogicalPlan, len(selects), len(selects)+1)
-	for i := len(selects) - 1; i >= 0; i-- {
-		stmt := selects[i]
-		if firstUnionAllIdx == 0 && stmt.IsAfterUnionDistinct {
-			firstUnionAllIdx = i + 1
-		}
-
-		selectPlan, err := b.buildSelect(ctx, stmt)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if columnNums == -1 {
-			columnNums = selectPlan.Schema().Len()
-		}
-		if selectPlan.Schema().Len() != columnNums {
-			return nil, nil, ErrWrongNumberOfColumnsInSelect.GenWithStackByArgs()
-		}
-		children[i] = selectPlan
-	}
-	return children[:firstUnionAllIdx], children[firstUnionAllIdx:], nil
-}
-
-func (b *PlanBuilder) buildUnionAll(ctx context.Context, subPlan []LogicalPlan) LogicalPlan {
-	if len(subPlan) == 0 {
-		return nil
-	}
-	u := LogicalUnionAll{}.Init(b.ctx)
-	u.children = subPlan
-	b.buildProjection4Union(ctx, u)
-	return u
-}
-
 // ByItems wraps a "by" item.
 type ByItems struct {
 	Expr expression.Expression
@@ -1045,11 +881,7 @@ func (t *itemTransformer) Leave(inNode ast.Node) (ast.Node, bool) {
 }
 
 func (b *PlanBuilder) buildSort(ctx context.Context, p LogicalPlan, byItems []*ast.ByItem, aggMapper map[*ast.AggregateFuncExpr]int) (*LogicalSort, error) {
-	if _, isUnion := p.(*LogicalUnionAll); isUnion {
-		b.curClause = globalOrderByClause
-	} else {
-		b.curClause = orderByClause
-	}
+	b.curClause = orderByClause
 	sort := LogicalSort{}.Init(b.ctx)
 	exprs := make([]*ByItems, 0, len(byItems))
 	transformer := &itemTransformer{}

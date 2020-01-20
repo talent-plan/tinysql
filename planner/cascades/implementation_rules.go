@@ -71,9 +71,6 @@ var defaultImplementationMap = map[memo.Operand][]ImplementationRule{
 		&ImplHashJoinBuildLeft{},
 		&ImplHashJoinBuildRight{},
 	},
-	memo.OperandUnionAll: {
-		&ImplUnionAll{},
-	},
 	memo.OperandApply: {
 		&ImplApply{},
 	},
@@ -445,31 +442,6 @@ func (r *ImplHashJoinBuildRight) OnImplement(expr *memo.GroupExpr, reqProp *prop
 		// TODO: deal with other join type.
 		return nil, nil
 	}
-}
-
-// ImplUnionAll implements LogicalUnionAll to PhysicalUnionAll.
-type ImplUnionAll struct {
-}
-
-// Match implements ImplementationRule Match interface.
-func (r *ImplUnionAll) Match(expr *memo.GroupExpr, prop *property.PhysicalProperty) (matched bool) {
-	return prop.IsEmpty()
-}
-
-// OnImplement implements ImplementationRule OnImplement interface.
-func (r *ImplUnionAll) OnImplement(expr *memo.GroupExpr, reqProp *property.PhysicalProperty) (memo.Implementation, error) {
-	logicalUnion := expr.ExprNode.(*plannercore.LogicalUnionAll)
-	chReqProps := make([]*property.PhysicalProperty, len(expr.Children))
-	for i := range expr.Children {
-		chReqProps[i] = &property.PhysicalProperty{ExpectedCnt: reqProp.ExpectedCnt}
-	}
-	physicalUnion := plannercore.PhysicalUnionAll{}.Init(
-		logicalUnion.SCtx(),
-		expr.Group.Prop.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt),
-		chReqProps...,
-	)
-	physicalUnion.SetSchema(expr.Group.Prop.Schema)
-	return impl.NewUnionAllImpl(physicalUnion), nil
 }
 
 // ImplApply implements LogicalApply to PhysicalApply

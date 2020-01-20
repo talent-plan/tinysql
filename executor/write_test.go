@@ -88,12 +88,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec(insertSelectSQL)
 	tk.CheckLastMessage("Records: 4  Duplicates: 0  Warnings: 0")
 
-	insertSelectSQL = `create table insert_test_2 (id int, c1 int);`
-	tk.MustExec(insertSelectSQL)
-	insertSelectSQL = `insert insert_test_1 select id, c1 from insert_test union select id * 10, c1 * 10 from insert_test;`
-	tk.MustExec(insertSelectSQL)
-	tk.CheckLastMessage("Records: 8  Duplicates: 0  Warnings: 0")
-
 	errInsertSelectSQL = `insert insert_test_1 select c1 from insert_test;`
 	tk.MustExec("begin")
 	_, err = tk.Exec(errInsertSelectSQL)
@@ -582,12 +576,6 @@ func (s *testSuite4) TestReplace(c *C) {
 	replaceSelectSQL = `replace replace_test_1 select id, c1 from replace_test;`
 	tk.MustExec(replaceSelectSQL)
 	tk.CheckLastMessage("Records: 4  Duplicates: 0  Warnings: 0")
-
-	replaceSelectSQL = `create table replace_test_2 (id int, c1 int);`
-	tk.MustExec(replaceSelectSQL)
-	replaceSelectSQL = `replace replace_test_1 select id, c1 from replace_test union select id * 10, c1 * 10 from replace_test;`
-	tk.MustExec(replaceSelectSQL)
-	tk.CheckLastMessage("Records: 8  Duplicates: 0  Warnings: 0")
 
 	errReplaceSelectSQL := `replace replace_test_1 select c1 from replace_test;`
 	tk.MustExec("begin")

@@ -287,14 +287,10 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildInsert(ctx, x)
 	case *ast.SelectStmt:
 		return b.buildSelect(ctx, x)
-	case *ast.UnionStmt:
-		return b.buildUnion(ctx, x)
 	case *ast.UpdateStmt:
 		return b.buildUpdate(ctx, x)
 	case *ast.ShowStmt:
 		return b.buildShow(ctx, x)
-	case *ast.DoStmt:
-		return b.buildDo(ctx, x)
 	case *ast.SetStmt:
 		return b.buildSet(ctx, x)
 	case *ast.AnalyzeTableStmt:
@@ -305,33 +301,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildDDL(ctx, x)
 	}
 	return nil, ErrUnsupportedType.GenWithStack("Unsupported type %T", node)
-}
-
-func (b *PlanBuilder) buildDo(ctx context.Context, v *ast.DoStmt) (Plan, error) {
-	var p LogicalPlan
-	dual := LogicalTableDual{RowCount: 1}.Init(b.ctx)
-	dual.SetSchema(expression.NewSchema())
-	p = dual
-	proj := LogicalProjection{Exprs: make([]expression.Expression, 0, len(v.Exprs))}.Init(b.ctx)
-	proj.names = make([]*types.FieldName, len(v.Exprs))
-	schema := expression.NewSchema(make([]*expression.Column, 0, len(v.Exprs))...)
-	for _, astExpr := range v.Exprs {
-		expr, np, err := b.rewrite(ctx, astExpr, p, nil, true)
-		if err != nil {
-			return nil, err
-		}
-		p = np
-		proj.Exprs = append(proj.Exprs, expr)
-		schema.Append(&expression.Column{
-			UniqueID: b.ctx.GetSessionVars().AllocPlanColumnID(),
-			RetType:  expr.GetType(),
-		})
-	}
-	proj.SetChildren(p)
-	proj.self = proj
-	proj.SetSchema(schema)
-	proj.CalculateNoDelay = true
-	return proj, nil
 }
 
 func (b *PlanBuilder) buildSet(ctx context.Context, v *ast.SetStmt) (Plan, error) {

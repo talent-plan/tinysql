@@ -275,45 +275,6 @@ func (a *aggregationPushDownSolver) makeNewAgg(ctx sessionctx.Context, aggFuncs 
 	return agg, nil
 }
 
-// pushAggCrossUnion will try to push the agg down to the union. If the new aggregation's group-by columns doesn't contain unique key.
-// We will return the new aggregation. Otherwise we will transform the aggregation to projection.
-func (a *aggregationPushDownSolver) pushAggCrossUnion(agg *LogicalAggregation, unionSchema *expression.Schema, unionChild LogicalPlan) LogicalPlan {
-	ctx := agg.ctx
-	newAgg := LogicalAggregation{
-		AggFuncs:     make([]*aggregation.AggFuncDesc, 0, len(agg.AggFuncs)),
-		GroupByItems: make([]expression.Expression, 0, len(agg.GroupByItems)),
-		aggHints:     agg.aggHints,
-	}.Init(ctx)
-	newAgg.SetSchema(agg.schema.Clone())
-	for _, aggFunc := range agg.AggFuncs {
-		newAggFunc := aggFunc.Clone()
-		newArgs := make([]expression.Expression, 0, len(newAggFunc.Args))
-		for _, arg := range newAggFunc.Args {
-			newArgs = append(newArgs, expression.ColumnSubstitute(arg, unionSchema, expression.Column2Exprs(unionChild.Schema().Columns)))
-		}
-		newAggFunc.Args = newArgs
-		newAgg.AggFuncs = append(newAgg.AggFuncs, newAggFunc)
-	}
-	for _, gbyExpr := range agg.GroupByItems {
-		newExpr := expression.ColumnSubstitute(gbyExpr, unionSchema, expression.Column2Exprs(unionChild.Schema().Columns))
-		newAgg.GroupByItems = append(newAgg.GroupByItems, newExpr)
-	}
-	newAgg.collectGroupByColumns()
-	tmpSchema := expression.NewSchema(newAgg.groupByCols...)
-	// e.g. Union distinct will add a aggregation like `select join_agg_0, join_agg_1, join_agg_2 from t group by a, b, c` above UnionAll.
-	// And the pushed agg will be something like `select a, b, c, a, b, c from t group by a, b, c`. So if we just return child as join does,
-	// this will cause error during executor phase.
-	for _, key := range unionChild.Schema().Keys {
-		if tmpSchema.ColumnsIndices(key) != nil {
-			proj := a.convertAggToProj(newAgg)
-			proj.SetChildren(unionChild)
-			return proj
-		}
-	}
-	newAgg.SetChildren(unionChild)
-	return newAgg
-}
-
 func (a *aggregationPushDownSolver) optimize(ctx context.Context, p LogicalPlan) (LogicalPlan, error) {
 	if !p.SCtx().GetSessionVars().AllowAggPushDown {
 		return p, nil
@@ -376,20 +337,6 @@ func (a *aggregationPushDownSolver) aggPushDown(p LogicalPlan) (_ LogicalPlan, e
 				}
 				projChild := proj.children[0]
 				agg.SetChildren(projChild)
-			} else if union, ok1 := child.(*LogicalUnionAll); ok1 {
-				var gbyCols []*expression.Column
-				gbyCols = expression.ExtractColumnsFromExpressions(gbyCols, agg.GroupByItems, nil)
-				pushedAgg, err := a.makeNewAgg(agg.ctx, agg.AggFuncs, gbyCols, agg.aggHints)
-				if err != nil {
-					return nil, err
-				}
-				newChildren := make([]LogicalPlan, 0, len(union.children))
-				for _, child := range union.children {
-					newChild := a.pushAggCrossUnion(pushedAgg, union.Schema(), child)
-					newChildren = append(newChildren, newChild)
-				}
-				union.SetSchema(expression.NewSchema(newChildren[0].Schema().Columns...))
-				union.SetChildren(newChildren...)
 			}
 		}
 	}

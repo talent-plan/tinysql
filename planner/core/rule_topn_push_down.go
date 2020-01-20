@@ -89,23 +89,6 @@ func (p *LogicalLimit) pushDownTopN(topN *LogicalTopN) LogicalPlan {
 	return child
 }
 
-func (p *LogicalUnionAll) pushDownTopN(topN *LogicalTopN) LogicalPlan {
-	for i, child := range p.children {
-		var newTopN *LogicalTopN
-		if topN != nil {
-			newTopN = LogicalTopN{Count: topN.Count + topN.Offset}.Init(p.ctx)
-			for _, by := range topN.ByItems {
-				newTopN.ByItems = append(newTopN.ByItems, &ByItems{by.Expr, by.Desc})
-			}
-		}
-		p.children[i] = child.pushDownTopN(newTopN)
-	}
-	if topN != nil {
-		return topN.setChild(p)
-	}
-	return p
-}
-
 func (p *LogicalProjection) pushDownTopN(topN *LogicalTopN) LogicalPlan {
 	for _, expr := range p.Exprs {
 		if expression.HasAssignSetVarFunc(expr) {

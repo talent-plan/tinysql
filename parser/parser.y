@@ -719,44 +719,29 @@ import (
 	AlterTableStmt			"Alter table statement"
 	AnalyzeTableStmt		"Analyze table statement"
 	BeginTransactionStmt		"BEGIN TRANSACTION statement"
-	BinlogStmt			"Binlog base64 statement"
+
 	CommitStmt			"COMMIT statement"
 	CreateTableStmt			"CREATE TABLE statement"
 	CreateDatabaseStmt		"Create Database Statement"
 	CreateIndexStmt			"CREATE INDEX statement"
-	DoStmt				"Do statement"
 	DropDatabaseStmt		"DROP DATABASE statement"
 	DropIndexStmt			"DROP INDEX statement"
-	DropStatsStmt			"DROP STATS statement"
 	DropTableStmt			"DROP TABLE statement"
-	DropViewStmt			"DROP VIEW statement"
-	DeallocateStmt			"Deallocate prepared statement"
 	DeleteFromStmt			"DELETE FROM statement"
 	EmptyStmt			"empty statement"
-	ExecuteStmt			"Execute statement"
 	ExplainStmt			"EXPLAIN statement"
 	ExplainableStmt			"explainable statement"
-	FlushStmt			"Flush statement"
-	FlashbackTableStmt		"Flashback table statement"
 	InsertIntoStmt			"INSERT INTO statement"
-	PreparedStmt			"PreparedStmt"
 	SelectStmt			"SELECT statement"
 	RenameTableStmt         	"rename table statement"
 	ReplaceIntoStmt			"REPLACE INTO statement"
-	RecoverTableStmt                "recover table statement"
 	RollbackStmt			"ROLLBACK statement"
-	SplitRegionStmt			"Split index region statement"
 	SetStmt				"Set variable statement"
-	ChangeStmt			"Change statement"
 	ShowStmt			"Show engines/databases/tables/user/columns/warnings/status statement"
 	Statement			"statement"
-	TraceStmt			"TRACE statement"
-	TraceableStmt			"traceable statement"
 	TruncateTableStmt		"TRUNCATE TABLE statement"
 	UpdateStmt			"UPDATE statement"
-	UnionStmt			"Union select state ment"
 	UseStmt				"USE statement"
-	ShutdownStmt			"SHUTDOWN statement"
 
 %type   <item>
 	AdminShowSlow			"Admin Show Slow statement"
@@ -817,7 +802,6 @@ import (
 	FieldAsName			"Field alias name"
 	FieldAsNameOpt			"Field alias name opt"
 	FieldList			"field expression list"
-	FlushOption			"Flush option"
 	FulltextSearchModifierOpt	"Fulltext modifier"
 	PluginNameList			"Plugin Name List"
 	TableRefsClause			"Table references clause"
@@ -860,7 +844,6 @@ import (
 	LimitOption			"Limit option could be integer or parameter marker."
 	LockClause         		"Alter table lock clause"
 	NumLiteral			"Num/Int/Float/Decimal Literal"
-	NoWriteToBinLogAliasOpt		"NO_WRITE_TO_BINLOG alias LOCAL or empty"
 	OnDuplicateKeyUpdate		"ON DUPLICATE KEY UPDATE value list"
 	DuplicateOpt			"[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement or LOAD DATA statement"
 	OptFull				"Full or empty"
@@ -876,7 +859,6 @@ import (
 	QueryBlockOpt			"Query block identifier optional"
 	PartDefOption			"COMMENT [=] xxx | TABLESPACE [=] tablespace_name | ENGINE [=] xxx"
 	ColumnPosition			"Column position [First|After ColumnName]"
-	PrepareSQL			"Prepare statement sql string"
 	PriorityOpt			"Statement priority option"
 	ReferDef			"Reference definition"
 	OnDelete			"ON DELETE clause"
@@ -908,8 +890,6 @@ import (
 	ShowProfileTypesOpt		"Show profile types option"
 	ShowProfileType			"Show profile type"
 	ShowProfileTypes		"Show profile types"
-	SplitOption			"Split Option"
-	SplitSyntaxOption		"Split syntax Option"
 	StatementList			"statement list"
 	StatsPersistentVal		"stats_persistent value"
 	StringName			"string literal or identifier"
@@ -934,17 +914,10 @@ import (
 	TableToTableList 		"rename table to table by list"
 	TimeUnit		"Time unit for 'DATE_ADD', 'DATE_SUB', 'ADDDATE', 'SUBDATE', 'EXTRACT'"
 	TimestampUnit		"Time unit for 'TIMESTAMPADD' and 'TIMESTAMPDIFF'"
-	TimestampBound		"Timestamp bound for start transaction with timestamp mode"
-	FlashbackUntil			"Flashback until timestamp"
-	FlashbackToNewName		"Flashback to new name"
 
 	TransactionChar		"Transaction characteristic"
 	TransactionChars	"Transaction characteristic list"
 	TrimDirection		"Trim string direction"
-	UnionOpt		"Union Option(empty/ALL/DISTINCT)"
-	UnionClauseList		"Union select clause list"
-	UnionSelect		"Union (select) item"
-	UserVariableList	"User defined variable name list"
 	Values			"values"
 	ValuesList		"values list"
 	ValuesOpt		"values optional"
@@ -1029,7 +1002,6 @@ import (
 	Varchar			"{VARCHAR|VARCHARACTER|CHARACTER VARYING|CHAR VARYING}"
 	NVarchar		"{NATIONAL VARCHAR|NATIONAL VARCHARACTER|NVARCHAR|NCHAR VARCHAR|NATIONAL CHARACTER VARYING|NATIONAL CHAR VARYING|NCHAR VARYING}"
 	Year			"{YEAR|SQL_TSI_YEAR}"
-	DeallocateSym		"Deallocate or drop"
 	OuterOpt		"optional OUTER clause"
 	CrossOpt		"Cross join option"
 	IsolationLevel		"Isolation level"
@@ -1638,138 +1610,6 @@ TableToTable:
 			NewTable: $3.(*ast.TableName),
 		}
 	}
-/*******************************************************************
- *
- *  Recover Table Statement
- *
- *  Example:
- *      RECOVER TABLE t1;
- *      RECOVER TABLE BY JOB 100;
- *
- *******************************************************************/
-RecoverTableStmt:
-	"RECOVER" "TABLE" "BY" "JOB" NUM
-    {
-        $$ = &ast.RecoverTableStmt{
-            JobID: $5.(int64),
-        }
-    }
-|	"RECOVER" "TABLE" TableName
-    {
-        $$ = &ast.RecoverTableStmt{
-            Table: $3.(*ast.TableName),
-        }
-    }
-|	"RECOVER" "TABLE" TableName NUM
-    {
-        $$ = &ast.RecoverTableStmt{
-            Table: $3.(*ast.TableName),
-            JobNum: $4.(int64),
-        }
-    }
-
-/*******************************************************************
- *
- *  Flush Back Table Statement
- *
- *  Example:
- *
- *******************************************************************/
- FlashbackTableStmt:
- 	"FLASHBACK" "TABLE" TableName FlashbackUntil FlashbackToNewName
- 	{
-		$$ = &ast.FlashBackTableStmt{
-			Table: $3.(*ast.TableName),
-			Timestamp: $4.(ast.ValueExpr),
-			NewName: $5.(string),
-		}
- 	}
-
-FlashbackUntil:
-	"UNTIL" "TIMESTAMP" StringLiteral
-	{
-		$$ = $3
-	}
-
- FlashbackToNewName:
- 	{
- 		$$ = ""
- 	}
- |	"TO" Identifier
- 	{
- 		$$ = $2
- 	}
-
-
-
-
-/*******************************************************************
- *
- *  Split index region statement
- *
- *  Example:
- *      SPLIT TABLE table_name INDEX index_name BY (val1...),(val2...)...
- *
- *******************************************************************/
-SplitRegionStmt:
-	"SPLIT" SplitSyntaxOption "TABLE" TableName SplitOption
-	{
-		$$ = &ast.SplitRegionStmt{
-			SplitSyntaxOpt: $2.(*ast.SplitSyntaxOption),
-			Table: $4.(*ast.TableName),
-			SplitOpt: $5.(*ast.SplitOption),
-		}
-	}
-|	"SPLIT" SplitSyntaxOption "TABLE" TableName "INDEX" Identifier SplitOption
-	{
-		$$ = &ast.SplitRegionStmt{
-			SplitSyntaxOpt: $2.(*ast.SplitSyntaxOption),
-			Table: $4.(*ast.TableName),
-			IndexName: model.NewCIStr($6),
-			SplitOpt: $7.(*ast.SplitOption),
-		}
-	}
-
-SplitOption:
-	"BETWEEN" RowValue "AND" RowValue "REGIONS" NUM
-	{
-		$$ = &ast.SplitOption{
-			Lower: $2.([]ast.ExprNode),
-			Upper: $4.([]ast.ExprNode),
-			Num: $6.(int64),
-		}
-	}
-|	"BY" ValuesList
-	{
-		$$ = &ast.SplitOption{
-			ValueLists: $2.([][]ast.ExprNode),
-		}
-	}
-
-SplitSyntaxOption:
-	/* empty */
-	{
-		$$ = &ast.SplitSyntaxOption{}
-	}
-|	"REGION" "FOR"
-	{
-		$$ = &ast.SplitSyntaxOption{
-			HasRegionFor: true,
-		}
-	}
-|	"PARTITION"
-	{
-		$$ = &ast.SplitSyntaxOption{
-			HasPartition: true,
-		}
-	}
-|	"REGION" "FOR" "PARTITION"
-	{
-		$$ = &ast.SplitSyntaxOption{
-			HasRegionFor: true,
-			HasPartition: true,
-		}
-	}
 
 /*******************************************************************************************/
 
@@ -1857,84 +1697,9 @@ BeginTransactionStmt:
 	{
 		$$ = &ast.BeginStmt{}
 	}
-|	"BEGIN" "PESSIMISTIC"
-	{
-		$$ = &ast.BeginStmt{
-			Mode: ast.Pessimistic,
-		}
-	}
-|	"BEGIN" "OPTIMISTIC"
-	{
-		$$ = &ast.BeginStmt{
-			Mode: ast.Optimistic,
-		}
-	}
 |	"START" "TRANSACTION"
 	{
 		$$ = &ast.BeginStmt{}
-	}
-|	"START" "TRANSACTION" "READ" "WRITE"
-	{
-		$$ = &ast.BeginStmt{}
-	}
-|	"START" "TRANSACTION" "WITH" "CONSISTENT" "SNAPSHOT"
-	{
-		$$ = &ast.BeginStmt{}
-	}
-|	"START" "TRANSACTION" "READ" "ONLY"
-	{
-		$$ = &ast.BeginStmt{
-			ReadOnly: true,
-		}
-	}
-| "START" "TRANSACTION" "READ" "ONLY" "WITH" "TIMESTAMP" "BOUND" TimestampBound
-	{
-		$$ = &ast.BeginStmt{
-			ReadOnly: true,
-			Bound: $8.(*ast.TimestampBound),
-		}
-	}
-
-TimestampBound:
-"STRONG"
-	{
-		$$ = &ast.TimestampBound{
-			Mode: ast.TimestampBoundStrong,
-		}
-	}
-| "READ" "TIMESTAMP" Expression
-	{
-		$$ = &ast.TimestampBound{
-			Mode: ast.TimestampBoundReadTimestamp,
-			Timestamp: $3.(ast.ExprNode),
-		}
-	}
-| "MIN" "READ" "TIMESTAMP" Expression
-	{
-		$$ = &ast.TimestampBound{
-			Mode: ast.TimestampBoundMinReadTimestamp,
-			Timestamp: $4.(ast.ExprNode),
-		}
-	}
-| "MAX" "STALENESS" Expression
-	{
-		$$ = &ast.TimestampBound{
-			Mode: ast.TimestampBoundMaxStaleness,
-			Timestamp: $3.(ast.ExprNode),
-		}
-	}
-| "EXACT" "STALENESS" Expression
-	{
-		$$ = &ast.TimestampBound{
-			Mode: ast.TimestampBoundExactStaleness,
-			Timestamp: $3.(ast.ExprNode),
-		}
-	}
-
-BinlogStmt:
-	"BINLOG" stringLit
-	{
-		$$ = &ast.BinlogStmt{Str: $2}
 	}
 
 ColumnDefList:
@@ -2846,11 +2611,6 @@ CreateTableSelectOpt:
 		$$ = &ast.CreateTableStmt{Select: $1}
 	}
 |
-	UnionStmt
-	{
-		$$ = &ast.CreateTableStmt{Select: $1}
-	}
-|
 	SubSelect %prec createTableSelect
 	// TODO: We may need better solution as issue #320.
 	{
@@ -2866,18 +2626,6 @@ LikeTableWithOrWithoutParen:
 	'(' "LIKE" TableName ')'
 	{
 		$$ = $3
-	}
-
-/******************************************************************
- * Do statement
- * See https://dev.mysql.com/doc/refman/5.7/en/do.html
- ******************************************************************/
-DoStmt:
-	"DO" ExpressionList
-	{
-		$$ = &ast.DoStmt {
-			Exprs: $2.([]ast.ExprNode),
-		}
 	}
 
 /*******************************************************************
@@ -3001,23 +2749,6 @@ OptTemporary:
 		parser.lastErrorAsWarn()
 	}
 
-DropViewStmt:
-	"DROP" "VIEW" TableNameList RestrictOrCascadeOpt
-	{
-		$$ = &ast.DropTableStmt{Tables: $3.([]*ast.TableName), IsView: true}
-	}
-|
-	"DROP" "VIEW" "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
-	{
-		$$ = &ast.DropTableStmt{IfExists: true, Tables: $5.([]*ast.TableName), IsView: true}
-	}
-
-DropStatsStmt:
-	"DROP" "STATS" TableName
-	{
-		$$ = &ast.DropStatsStmt{Table: $3.(*ast.TableName)}
-	}
-
 RestrictOrCascadeOpt:
 	{}
 |	"RESTRICT"
@@ -3035,26 +2766,6 @@ EmptyStmt:
 	/* EMPTY */
 	{
 		$$ = nil
-	}
-
-TraceStmt:
-	"TRACE" TraceableStmt
-	{
-		$$ = &ast.TraceStmt{
-			Stmt:	$2,
-			Format: "json",
-		}
-		startOffset := parser.startOffset(&yyS[yypt])
-		$2.SetText(string(parser.src[startOffset:]))
-	}
-|	"TRACE" "FORMAT" "=" stringLit TraceableStmt
-	{
-		$$ = &ast.TraceStmt{
-			Stmt: $5,
-			Format: $4,
-		}
-		startOffset := parser.startOffset(&yyS[yypt])
-		$5.SetText(string(parser.src[startOffset:]))
 	}
 
 ExplainSym:
@@ -3820,10 +3531,6 @@ InsertValues:
 	{
 		$$ = &ast.InsertStmt{Columns: $2.([]*ast.ColumnName), Select: $5.(*ast.SelectStmt)}
 	}
-|	'(' ColumnNameListOpt ')' UnionStmt
-	{
-		$$ = &ast.InsertStmt{Columns: $2.([]*ast.ColumnName), Select: $4.(*ast.UnionStmt)}
-	}
 |	ValueSym ValuesList %prec insertValues
 	{
 		$$ = &ast.InsertStmt{Lists:  $2.([][]ast.ExprNode)}
@@ -3835,10 +3542,6 @@ InsertValues:
 |	SelectStmt
 	{
 		$$ = &ast.InsertStmt{Select: $1.(*ast.SelectStmt)}
-	}
-|	UnionStmt
-	{
-		$$ = &ast.InsertStmt{Select: $1.(*ast.UnionStmt)}
 	}
 |	"SET" ColumnSetValueList
 	{
@@ -5132,100 +4835,10 @@ QuickOptional:
 		$$ = true
 	}
 
-/***************************Prepared Statement Start******************************
- * See https://dev.mysql.com/doc/refman/5.7/en/prepare.html
- * Example:
- * PREPARE stmt_name FROM 'SELECT SQRT(POW(?,2) + POW(?,2)) AS hypotenuse';
- * OR
- * SET @s = 'SELECT SQRT(POW(?,2) + POW(?,2)) AS hypotenuse';
- * PREPARE stmt_name FROM @s;
- */
-
-PreparedStmt:
-	"PREPARE" Identifier "FROM" PrepareSQL
-	{
-		var sqlText string
-		var sqlVar *ast.VariableExpr
-		switch $4.(type) {
-		case string:
-			sqlText = $4.(string)
-		case *ast.VariableExpr:
-			sqlVar = $4.(*ast.VariableExpr)
-		}
-		$$ = &ast.PrepareStmt{
-			Name:		$2,
-			SQLText:	sqlText,
-			SQLVar: 	sqlVar,
-		}
-	}
-
-PrepareSQL:
-	stringLit
-	{
-		$$ = $1
-	}
-|	UserVariable
-	{
-		$$ = $1.(interface{})
-	}
-
-
-/*
- * See https://dev.mysql.com/doc/refman/5.7/en/execute.html
- * Example:
- * EXECUTE stmt1 USING @a, @b;
- * OR
- * EXECUTE stmt1;
- */
-ExecuteStmt:
-	"EXECUTE" Identifier
-	{
-		$$ = &ast.ExecuteStmt{Name: $2}
-	}
-|	"EXECUTE" Identifier "USING" UserVariableList
-	{
-		$$ = &ast.ExecuteStmt{
-			Name: $2,
-			UsingVars: $4.([]ast.ExprNode),
-		}
-	}
-
-UserVariableList:
-	UserVariable
-	{
-		$$ = []ast.ExprNode{$1}
-	}
-|	UserVariableList ',' UserVariable
-	{
-		$$ = append($1.([]ast.ExprNode), $3)
-	}
-
-/*
- * See https://dev.mysql.com/doc/refman/5.0/en/deallocate-prepare.html
- */
-
-DeallocateStmt:
-	DeallocateSym "PREPARE" Identifier
-	{
-		$$ = &ast.DeallocateStmt{Name: $3}
-	}
-
-DeallocateSym:
-"DEALLOCATE" | "DROP"
-
-/****************************Prepared Statement End*******************************/
-
-
 RollbackStmt:
 	"ROLLBACK"
 	{
 		$$ = &ast.RollbackStmt{}
-	}
-
-ShutdownStmt:
-	"SHUTDOWN"
-	{
-		$$ = &ast.ShutdownStmt{}
 	}
 
 SelectStmtBasic:
@@ -5397,10 +5010,6 @@ TableFactor:
 		endOffset := parser.endOffset(&yyS[yypt-1])
 		parser.setLastSelectFieldText(st, endOffset)
 		$$ = &ast.TableSource{Source: $2.(*ast.SelectStmt), AsName: $4.(model.CIStr)}
-	}
-|	'(' UnionStmt ')' TableAsName
-	{
-		$$ = &ast.TableSource{Source: $2.(*ast.UnionStmt), AsName: $4.(model.CIStr)}
 	}
 |	'(' TableRefs ')'
 	{
@@ -5977,14 +5586,6 @@ SubSelect:
 		s.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
 		$$ = &ast.SubqueryExpr{Query: s}
 	}
-|	'(' UnionStmt ')'
-	{
-		s := $2.(*ast.UnionStmt)
-		src := parser.src
-		// See the implementation of yyParse function
-		s.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
-		$$ = &ast.SubqueryExpr{Query: s}
-	}
 
 // See https://dev.mysql.com/doc/refman/5.7/en/innodb-locking-reads.html
 SelectLockOpt:
@@ -6003,147 +5604,6 @@ SelectLockOpt:
 |	"LOCK" "IN" "SHARE" "MODE"
 	{
 		$$ = ast.SelectLockInShareMode
-	}
-
-// See https://dev.mysql.com/doc/refman/5.7/en/union.html
-UnionStmt:
-	UnionClauseList "UNION" UnionOpt SelectStmtBasic OrderByOptional SelectStmtLimit SelectLockOpt
-	{
-		st := $4.(*ast.SelectStmt)
-		union := $1.(*ast.UnionStmt)
-		st.IsAfterUnionDistinct = $3.(bool)
-		lastSelect := union.SelectList.Selects[len(union.SelectList.Selects)-1]
-		endOffset := parser.endOffset(&yyS[yypt-5])
-		parser.setLastSelectFieldText(lastSelect, endOffset)
-		union.SelectList.Selects = append(union.SelectList.Selects, st)
-		if $5 != nil {
-		    union.OrderBy = $5.(*ast.OrderByClause)
-		}
-		if $6 != nil {
-		    union.Limit = $6.(*ast.Limit)
-		}
-		if $5 == nil && $6 == nil {
-		    st.LockTp = $7.(ast.SelectLockType)
-		}
-		$$ = union
-	}
-|	UnionClauseList "UNION" UnionOpt SelectStmtFromDualTable OrderByOptional
-    SelectStmtLimit SelectLockOpt
-	{
-		st := $4.(*ast.SelectStmt)
-		union := $1.(*ast.UnionStmt)
-		st.IsAfterUnionDistinct = $3.(bool)
-		lastSelect := union.SelectList.Selects[len(union.SelectList.Selects)-1]
-		endOffset := parser.endOffset(&yyS[yypt-5])
-		parser.setLastSelectFieldText(lastSelect, endOffset)
-		union.SelectList.Selects = append(union.SelectList.Selects, st)
-		if $5 != nil {
-			union.OrderBy = $5.(*ast.OrderByClause)
-		}
-		if $6 != nil {
-			union.Limit = $6.(*ast.Limit)
-		}
-		if $5 == nil && $6 == nil {
-			st.LockTp = $7.(ast.SelectLockType)
-		}
-		$$ = union
-	}
-|	UnionClauseList "UNION" UnionOpt SelectStmtFromTable OrderByOptional
-   	SelectStmtLimit SelectLockOpt
-	{
-		st := $4.(*ast.SelectStmt)
-		union := $1.(*ast.UnionStmt)
-		st.IsAfterUnionDistinct = $3.(bool)
-		lastSelect := union.SelectList.Selects[len(union.SelectList.Selects)-1]
-		endOffset := parser.endOffset(&yyS[yypt-5])
-		parser.setLastSelectFieldText(lastSelect, endOffset)
-		union.SelectList.Selects = append(union.SelectList.Selects, st)
-		if $5 != nil {
-			union.OrderBy = $5.(*ast.OrderByClause)
-		}
-		if $6 != nil {
-			union.Limit = $6.(*ast.Limit)
-		}
-		if $5 == nil && $6 == nil {
-			st.LockTp = $7.(ast.SelectLockType)
-		}
-		$$ = union
-	}
-|	UnionClauseList "UNION" UnionOpt '(' SelectStmt ')' OrderByOptional SelectStmtLimit
-	{
-		union := $1.(*ast.UnionStmt)
-		lastSelect := union.SelectList.Selects[len(union.SelectList.Selects)-1]
-		endOffset := parser.endOffset(&yyS[yypt-6])
-		parser.setLastSelectFieldText(lastSelect, endOffset)
-		st := $5.(*ast.SelectStmt)
-		st.IsInBraces = true
-		st.IsAfterUnionDistinct = $3.(bool)
-		endOffset = parser.endOffset(&yyS[yypt-2])
-		parser.setLastSelectFieldText(st, endOffset)
-		union.SelectList.Selects = append(union.SelectList.Selects, st)
-		if $7 != nil {
-			union.OrderBy = $7.(*ast.OrderByClause)
-		}
-		if $8 != nil {
-			union.Limit = $8.(*ast.Limit)
-		}
-		$$ = union
-	}
-
-UnionClauseList:
-	UnionSelect
-	{
-		selectList := &ast.UnionSelectList{Selects: []*ast.SelectStmt{$1.(*ast.SelectStmt)}}
-		$$ = &ast.UnionStmt{
-			SelectList: selectList,
-		}
-	}
-|	UnionClauseList "UNION" UnionOpt UnionSelect
-	{
-		union := $1.(*ast.UnionStmt)
-		st := $4.(*ast.SelectStmt)
-		st.IsAfterUnionDistinct = $3.(bool)
-		lastSelect := union.SelectList.Selects[len(union.SelectList.Selects)-1]
-		endOffset := parser.endOffset(&yyS[yypt-2])
-		parser.setLastSelectFieldText(lastSelect, endOffset)
-		union.SelectList.Selects = append(union.SelectList.Selects, st)
-		$$ = union
-	}
-
-UnionSelect:
-	SelectStmt
-	{
-		$$ = $1.(interface{})
-	}
-|	'(' SelectStmt ')'
-	{
-		st := $2.(*ast.SelectStmt)
-		st.IsInBraces = true
-		endOffset := parser.endOffset(&yyS[yypt])
-		parser.setLastSelectFieldText(st, endOffset)
-		$$ = $2
-	}
-
-UnionOpt:
-DefaultTrueDistinctOpt
-
-/********************Change Statement*******************************/
-ChangeStmt:
-	"CHANGE" "PUMP" "TO" "NODE_STATE" eq stringLit forKwd "NODE_ID" stringLit
-	{
-		$$ = &ast.ChangeStmt{
-			NodeType: ast.PumpType,
-			State: $6,
-			NodeID: $9,
-		}
-	}
-|	"CHANGE" "DRAINER" "TO" "NODE_STATE" eq stringLit forKwd "NODE_ID" stringLit
-	{
-		$$ = &ast.ChangeStmt{
-			NodeType: ast.DrainerType,
-			State: $6,
-			NodeID: $9,
-		}
 	}
 
 /********************Set Statement*******************************/
@@ -7074,14 +6534,6 @@ ShowTableAliasOpt:
 		$$ = $2.(*ast.TableName)
 	}
 
-FlushStmt:
-	"FLUSH" NoWriteToBinLogAliasOpt FlushOption
-	{
-		tmp := $3.(*ast.FlushStmt)
-		tmp.NoWriteToBinLog = $2.(bool)
-		$$ = tmp
-	}
-
 PluginNameList:
 	Identifier
 	{
@@ -7090,61 +6542,6 @@ PluginNameList:
 |	PluginNameList ',' Identifier
 	{
 		$$ = append($1.([]string), $3)
-	}
-
-FlushOption:
-	"PRIVILEGES"
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushPrivileges,
-		}
-	}
-|	"STATUS"
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushStatus,
-		}
-	}
-|	"TIDB" "PLUGINS" PluginNameList
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushTiDBPlugin,
-			Plugins: $3.([]string),
-		}
-	}
-|	"HOSTS"
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushHosts,
-		}
-	}
-|	"LOGS"
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushLogs,
-		}
-	}
-|	TableOrTables TableNameListOpt WithReadLockOpt
-	{
-		$$ = &ast.FlushStmt{
-			Tp: ast.FlushTables,
-			Tables: $2.([]*ast.TableName),
-			ReadLock: $3.(bool),
-		}
-	}
-
-NoWriteToBinLogAliasOpt:
-	%prec lowerThanLocal
-	{
-		$$ = false
-	}
-|	"NO_WRITE_TO_BINLOG"
-	{
-		$$ = true
-	}
-|	"LOCAL"
-	{
-		$$ = true
 	}
 
 TableNameListOpt:
@@ -7173,34 +6570,21 @@ Statement:
 |	AlterTableStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
-|	BinlogStmt
 |	CommitStmt
-|	DeallocateStmt
 |	DeleteFromStmt
-|	ExecuteStmt
 |	ExplainStmt
-|	ChangeStmt
 |	CreateDatabaseStmt
 |	CreateIndexStmt
 |	CreateTableStmt
-|	DoStmt
 |	DropDatabaseStmt
 |	DropIndexStmt
 |	DropTableStmt
-|	DropViewStmt
-|	DropStatsStmt
-|	FlushStmt
-|	FlashbackTableStmt
 |	InsertIntoStmt
-|	PreparedStmt
 |	RollbackStmt
 |	RenameTableStmt
 |	ReplaceIntoStmt
-|	RecoverTableStmt
 |	SelectStmt
-|	UnionStmt
 |	SetStmt
-|	SplitRegionStmt
 |	ShowStmt
 |	SubSelect
 	{
@@ -7208,23 +6592,9 @@ Statement:
 		// TODO: This is used to fix issue #320. There may be a better solution.
 		$$ = $1.(*ast.SubqueryExpr).Query.(ast.StmtNode)
 	}
-|	TraceStmt
 |	TruncateTableStmt
 |	UpdateStmt
 |	UseStmt
-|	ShutdownStmt
-
-TraceableStmt:
-	SelectStmt
-|	DeleteFromStmt
-|	UpdateStmt
-|	InsertIntoStmt
-|	ReplaceIntoStmt
-|	UnionStmt
-|	BeginTransactionStmt
-|	CommitStmt
-|	RollbackStmt
-|	SetStmt
 
 ExplainableStmt:
 	SelectStmt
@@ -7232,7 +6602,6 @@ ExplainableStmt:
 |	UpdateStmt
 |	InsertIntoStmt
 |	ReplaceIntoStmt
-|	UnionStmt
 
 StatementList:
 	Statement

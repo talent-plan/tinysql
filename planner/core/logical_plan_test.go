@@ -507,19 +507,6 @@ func (s *testPlanSuite) checkDataSourceCols(p LogicalPlan, c *C, ans map[int][]s
 			})
 			c.Assert(col.String(), Equals, colList[i], comment)
 		}
-	case *LogicalUnionAll:
-		s.testData.OnRecord(func() {
-			ans[p.ID()] = make([]string, p.Schema().Len())
-		})
-		colList, ok := ans[p.ID()]
-		c.Assert(ok, IsTrue, Commentf("For %v UnionAll ID %d Not found", comment, p.ID()))
-		c.Assert(len(p.Schema().Columns), Equals, len(colList), comment)
-		for i, col := range p.Schema().Columns {
-			s.testData.OnRecord(func() {
-				colList[i] = col.String()
-			})
-			c.Assert(col.String(), Equals, colList[i], comment)
-		}
 	}
 	for _, child := range p.Children() {
 		s.checkDataSourceCols(child, c, ans, comment)
@@ -601,10 +588,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 			err: nil,
 		},
 		{
-			sql: "select 1 from t t1, t t2 where t1.a > all((select a) union (select a))",
-			err: ErrAmbiguous,
-		},
-		{
 			sql: "insert into t set a = 1, b = a + 1",
 			err: nil,
 		},
@@ -623,14 +606,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 		{
 			sql: "select a as c1, b as c1 from t order by c1",
 			err: ErrAmbiguous,
-		},
-		{
-			sql: "(select a as b, b from t) union (select a, b from t) order by b",
-			err: ErrAmbiguous,
-		},
-		{
-			sql: "(select a as b, b from t) union (select a, b from t) order by a",
-			err: ErrUnknownColumn,
 		},
 		{
 			sql: "select * from t t1 use index(e)",
@@ -748,42 +723,6 @@ func (s *testPlanSuite) TestAggPrune(c *C) {
 			output[i] = planString
 		})
 		c.Assert(planString, Equals, output[i], comment)
-	}
-}
-
-func (s *testPlanSuite) TestUnion(c *C) {
-	defer func() {
-		testleak.AfterTest(c)()
-	}()
-	var input []string
-	var output []struct {
-		Best string
-		Err  bool
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	ctx := context.TODO()
-	for i, tt := range input {
-		comment := Commentf("case:%v sql:%s", i, tt)
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil, comment)
-		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
-		plan, err := builder.Build(ctx, stmt)
-		s.testData.OnRecord(func() {
-			output[i].Err = err != nil
-		})
-		if output[i].Err {
-			c.Assert(err, NotNil)
-			continue
-		}
-		c.Assert(err, IsNil)
-		p := plan.(LogicalPlan)
-		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
-		s.testData.OnRecord(func() {
-			output[i].Best = ToString(p)
-		})
-		c.Assert(err, IsNil)
-		c.Assert(ToString(p), Equals, output[i].Best, comment)
 	}
 }
 

@@ -165,11 +165,6 @@ func (impl *UnionAllImpl) CalcCost(outCount float64, children ...memo.Implementa
 	return impl.cost
 }
 
-// NewUnionAllImpl creates a new UnionAllImpl.
-func NewUnionAllImpl(union *plannercore.PhysicalUnionAll) *UnionAllImpl {
-	return &UnionAllImpl{baseImpl{plan: union}}
-}
-
 // ApplyImpl is the implementation of PhysicalApply.
 type ApplyImpl struct {
 	baseImpl

@@ -462,7 +462,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 			WHERE stuff.value >= ALL (SELECT stuff.value
 			FROM stuff)`, true, "SELECT `stuff`.`id` FROM `stuff` WHERE `stuff`.`value`>=ALL (SELECT `stuff`.`value` FROM `stuff`)"},
 		{"BEGIN", true, "START TRANSACTION"},
-		{"START TRANSACTION", true, "START TRANSACTION"},
 		// 45
 		{"COMMIT", true, "COMMIT"},
 		{"ROLLBACK", true, "ROLLBACK"},
@@ -481,11 +480,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"SELECT a.b.* FROM t", true, "SELECT `a`.`b`.* FROM `t`"},
 		{"SELECT a FROM t", true, "SELECT `a` FROM `t`"},
 		{"SELECT a.b.c.d FROM t", false, ""},
-
-		// do statement
-		{"DO 1", true, "DO 1"},
-		{"DO 1, sleep(1)", true, "DO 1, SLEEP(1)"},
-		{"DO 1 from t", false, ""},
 
 		// select for update
 		{"SELECT * from t for update", true, "SELECT * FROM `t` FOR UPDATE"},
@@ -655,47 +649,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{`/** 20180417 */ show databases;`, true, "SHOW DATABASES"},
 		{`/** 20180417 ******/ show databases;`, true, "SHOW DATABASES"},
 
-		// for Binlog stmt
-		{`BINLOG '
-BxSFVw8JAAAA8QAAAPUAAAAAAAQANS41LjQ0LU1hcmlhREItbG9nAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAEzgNAAgAEgAEBAQEEgAA2QAEGggAAAAICAgCAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAA5gm5Mg==
-'/*!*/;`, true, `BINLOG '
-BxSFVw8JAAAA8QAAAPUAAAAAAAQANS41LjQ0LU1hcmlhREItbG9nAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAEzgNAAgAEgAEBAQEEgAA2QAEGggAAAAICAgCAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAA5gm5Mg==
-'`},
-
-		// for split table index region syntax
-		{"split table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split table t1 index idx1 by (1)", true, "SPLIT TABLE `t1` INDEX `idx1` BY (1)"},
-		{"split table t1 index idx1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` INDEX `idx1` BY ('abc',123),('xyz'),('yz',1000)"},
-		{"split table t1 index idx1 by ", false, ""},
-		{"split table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split table t1 index idx1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN ('a',1) AND ('z',2) REGIONS 10"},
-		{"split table t1 index idx1 between () and () regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN () AND () REGIONS 10"},
-		{"split table t1 index by (1)", false, ""},
-
-		// for split table region.
-		{"split table t1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split table t1 by (1)", true, "SPLIT TABLE `t1` BY (1)"},
-		{"split table t1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` BY ('abc',123),('xyz'),('yz',1000)"},
-		{"split table t1 by ", false, ""},
-		{"split table t1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split table t1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` BETWEEN ('a',1) AND ('z',2) REGIONS 10"},
-		{"split table t1 between () and () regions 10", true, "SPLIT TABLE `t1` BETWEEN () AND () REGIONS 10"},
-
-		{"split region for table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split partition table t1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split region for partition table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split region for table t1 between (1) and (1000) regions 10", true, "SPLIT REGION FOR TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
-		{"split partition table t1 between (1) and (1000) regions 10", true, "SPLIT PARTITION TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
-		{"split region for partition table t1 between (1) and (1000) regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
-
 		// for show table regions.
 		{"show table t1 regions", true, "SHOW TABLE `t1` REGIONS"},
 		{"show table t1 regions where a=1", true, "SHOW TABLE `t1` REGIONS WHERE `a`=1"},
@@ -703,10 +656,6 @@ AAAAAAAAAAAA5gm5Mg==
 		{"show table t1 index idx1 regions", true, "SHOW TABLE `t1` INDEX `idx1` REGIONS"},
 		{"show table t1 index idx1 regions where a=2", true, "SHOW TABLE `t1` INDEX `idx1` REGIONS WHERE `a`=2"},
 		{"show table t1 index idx1", false, ""},
-
-		// for transaction mode
-		{"begin pessimistic", true, "BEGIN PESSIMISTIC"},
-		{"begin optimistic", true, "BEGIN OPTIMISTIC"},
 
 		// for repair table mode.
 		{"ADMIN REPAIR TABLE t CREATE TABLE t (a int)", true, "ADMIN REPAIR TABLE `t` CREATE TABLE `t` (`a` INT)"},
@@ -758,26 +707,6 @@ func (s *testParserSuite) TestSetVariable(c *C) {
 
 	_, err := parser.ParseOneStmt("set xx.xx.xx = 666", "", "")
 	c.Assert(err, NotNil)
-}
-
-func (s *testParserSuite) TestFlushTable(c *C) {
-	parser := parser.New()
-	stmt, _, err := parser.Parse("flush local tables tbl1,tbl2 with read lock", "", "")
-	c.Assert(err, IsNil)
-	flushTable := stmt[0].(*ast.FlushStmt)
-	c.Assert(flushTable.Tp, Equals, ast.FlushTables)
-	c.Assert(flushTable.Tables[0].Name.L, Equals, "tbl1")
-	c.Assert(flushTable.Tables[1].Name.L, Equals, "tbl2")
-	c.Assert(flushTable.NoWriteToBinLog, IsTrue)
-	c.Assert(flushTable.ReadLock, IsTrue)
-}
-
-func (s *testParserSuite) TestFlushPrivileges(c *C) {
-	parser := parser.New()
-	stmt, _, err := parser.Parse("flush privileges", "", "")
-	c.Assert(err, IsNil)
-	flushPrivilege := stmt[0].(*ast.FlushStmt)
-	c.Assert(flushPrivilege.Tp, Equals, ast.FlushPrivileges)
 }
 
 func (s *testParserSuite) TestExpression(c *C) {
@@ -1663,12 +1592,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"drop table xxx restrict", true, "DROP TABLE `xxx`"},
 		{"drop table xxx, yyy cascade", true, "DROP TABLE `xxx`, `yyy`"},
 		{"drop table if exists xxx restrict", true, "DROP TABLE IF EXISTS `xxx`"},
-		{"drop view", false, "DROP VIEW"},
-		{"drop view xxx", true, "DROP VIEW `xxx`"},
-		{"drop view xxx, yyy", true, "DROP VIEW `xxx`, `yyy`"},
-		{"drop view if exists xxx", true, "DROP VIEW IF EXISTS `xxx`"},
-		{"drop view if exists xxx, yyy", true, "DROP VIEW IF EXISTS `xxx`, `yyy`"},
-		{"drop stats t", true, "DROP STATS `t`"},
 		// for issue 974
 		{`CREATE TABLE address (
 		id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -1750,13 +1673,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		INDEX FK_7rod8a71yep5vxasb0ms3osbg (user_id) comment ''
 		) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARACTER SET utf8 COLLATE UTF8_GENERAL_CI ROW_FORMAT=COMPACT COMMENT='' CHECKSUM=0 DELAY_KEY_WRITE=0;`, true, "CREATE TABLE `address` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`create_at` DATETIME NOT NULL,`deleted` TINYINT(1) NOT NULL,`update_at` DATETIME NOT NULL,`version` BIGINT(20) DEFAULT NULL,`address` VARCHAR(128) NOT NULL,`address_detail` VARCHAR(128) NOT NULL,`cellphone` VARCHAR(16) NOT NULL,`latitude` DOUBLE NOT NULL,`longitude` DOUBLE NOT NULL,`name` VARCHAR(16) NOT NULL,`sex` TINYINT(1) NOT NULL,`user_id` BIGINT(20) NOT NULL,PRIMARY KEY(`id`),CONSTRAINT `FK_7rod8a71yep5vxasb0ms3osbg` FOREIGN KEY (`user_id`) REFERENCES `waimaiqa`.`user`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION,INDEX `FK_7rod8a71yep5vxasb0ms3osbg`(`user_id`) ) ENGINE = InnoDB AUTO_INCREMENT = 30 DEFAULT CHARACTER SET = UTF8 DEFAULT COLLATE = UTF8_GENERAL_CI ROW_FORMAT = COMPACT COMMENT = '' CHECKSUM = 0 DELAY_KEY_WRITE = 0"},
 		{"CREATE TABLE address (\r\nid bigint(20) NOT NULL AUTO_INCREMENT,\r\ncreate_at datetime NOT NULL,\r\ndeleted tinyint(1) NOT NULL,\r\nupdate_at datetime NOT NULL,\r\nversion bigint(20) DEFAULT NULL,\r\naddress varchar(128) NOT NULL,\r\naddress_detail varchar(128) NOT NULL,\r\ncellphone varchar(16) NOT NULL,\r\nlatitude double NOT NULL,\r\nlongitude double NOT NULL,\r\nname varchar(16) NOT NULL,\r\nsex tinyint(1) NOT NULL,\r\nuser_id bigint(20) NOT NULL,\r\nPRIMARY KEY (id),\r\nCONSTRAINT FK_7rod8a71yep5vxasb0ms3osbg FOREIGN KEY (user_id) REFERENCES waimaiqa.user (id) ON DELETE CASCADE ON UPDATE NO ACTION,\r\nINDEX FK_7rod8a71yep5vxasb0ms3osbg (user_id) comment ''\r\n) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci ROW_FORMAT=COMPACT COMMENT='' CHECKSUM=0 DELAY_KEY_WRITE=0;", true, "CREATE TABLE `address` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`create_at` DATETIME NOT NULL,`deleted` TINYINT(1) NOT NULL,`update_at` DATETIME NOT NULL,`version` BIGINT(20) DEFAULT NULL,`address` VARCHAR(128) NOT NULL,`address_detail` VARCHAR(128) NOT NULL,`cellphone` VARCHAR(16) NOT NULL,`latitude` DOUBLE NOT NULL,`longitude` DOUBLE NOT NULL,`name` VARCHAR(16) NOT NULL,`sex` TINYINT(1) NOT NULL,`user_id` BIGINT(20) NOT NULL,PRIMARY KEY(`id`),CONSTRAINT `FK_7rod8a71yep5vxasb0ms3osbg` FOREIGN KEY (`user_id`) REFERENCES `waimaiqa`.`user`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION,INDEX `FK_7rod8a71yep5vxasb0ms3osbg`(`user_id`) ) ENGINE = InnoDB AUTO_INCREMENT = 30 DEFAULT CHARACTER SET = UTF8 DEFAULT COLLATE = UTF8_GENERAL_CI ROW_FORMAT = COMPACT COMMENT = '' CHECKSUM = 0 DELAY_KEY_WRITE = 0"},
-		// for issue 1802
-		{`CREATE TABLE t1 (
-		accout_id int(11) DEFAULT '0',
-		summoner_id int(11) DEFAULT '0',
-		union_name varbinary(52) NOT NULL,
-		union_id int(11) DEFAULT '0',
-		PRIMARY KEY (union_name)) ENGINE=MyISAM DEFAULT CHARSET=binary;`, true, "CREATE TABLE `t1` (`accout_id` INT(11) DEFAULT '0',`summoner_id` INT(11) DEFAULT '0',`union_name` VARBINARY(52) NOT NULL,`union_id` INT(11) DEFAULT '0',PRIMARY KEY(`union_name`)) ENGINE = MyISAM DEFAULT CHARACTER SET = BINARY"},
 		// for issue pingcap/parser#310
 		{`CREATE TABLE t (a DECIMAL(20,0), b DECIMAL(30), c FLOAT(25,0))`, true, "CREATE TABLE `t` (`a` DECIMAL(20,0),`b` DECIMAL(30),`c` FLOAT(25,0))"},
 		// Create table with multiple index options.
@@ -1792,7 +1708,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table a (unique(n)) as select n from b", true, "CREATE TABLE `a` (UNIQUE(`n`)) AS SELECT `n` FROM `b`"},
 		{"create table a ignore as select n from b", true, "CREATE TABLE `a`  IGNORE AS SELECT `n` FROM `b`"},
 		{"create table a replace as select n from b", true, "CREATE TABLE `a`  REPLACE AS SELECT `n` FROM `b`"},
-		{"create table a (m int) replace as (select n as m from b union select n+1 as m from c group by 1 limit 2)", true, "CREATE TABLE `a` (`m` INT) REPLACE AS (SELECT `n` AS `m` FROM `b` UNION SELECT `n`+1 AS `m` FROM `c` GROUP BY 1 LIMIT 2)"},
 
 		// Create table with no option is valid for parser
 		{"create table a", true, "CREATE TABLE `a` "},
@@ -2119,20 +2034,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (a int column_format default)", true, "CREATE TABLE `t` (`a` INT COLUMN_FORMAT DEFAULT)"},
 		{"create table t (a int column_format dynamic)", true, "CREATE TABLE `t` (`a` INT COLUMN_FORMAT DYNAMIC)"},
 		{"alter table t modify column a bigint column_format default", true, "ALTER TABLE `t` MODIFY COLUMN `a` BIGINT COLUMN_FORMAT DEFAULT"},
-
-		// for recover table
-		{"recover table by job 11", true, "RECOVER TABLE BY JOB 11"},
-		{"recover table by job 11,12,13", false, ""},
-		{"recover table by job", false, ""},
-		{"recover table t1", true, "RECOVER TABLE `t1`"},
-		{"recover table t1,t2", false, ""},
-		{"recover table ", false, ""},
-		{"recover table t1 100", true, "RECOVER TABLE `t1` 100"},
-		{"recover table t1 abc", false, ""},
-
-		// for flashback table.
-		{"flashback table t until timestamp '2019-09-24 20:16:31.124 +0800 CST'", true, "FLASHBACK TABLE `t` UNTIL TIMESTAMP '2019-09-24 20:16:31.124 +0800 CST'"},
-		{"flashback table t until timestamp '2019-09-24 20:16:31.124 +0800 CST' TO t1", true, "FLASHBACK TABLE `t` UNTIL TIMESTAMP '2019-09-24 20:16:31.124 +0800 CST' TO `t1`"},
 
 		// for references without IndexColNameList
 		{"alter table t add column a double (4,2) zerofill references b match full on update set null first", true, "ALTER TABLE `t` ADD COLUMN `a` DOUBLE(4,2) UNSIGNED ZEROFILL REFERENCES `b` MATCH FULL ON UPDATE SET NULL FIRST"},
@@ -2732,7 +2633,6 @@ func (s *testParserSuite) TestComment(c *C) {
 		{"create table t (c int) comment 'comment'", true, "CREATE TABLE `t` (`c` INT) COMMENT = 'comment'"},
 		{"create table t (c int) comment comment", false, ""},
 		{"create table t (comment text)", true, "CREATE TABLE `t` (`comment` TEXT)"},
-		{"START TRANSACTION /*!40108 WITH CONSISTENT SNAPSHOT */", true, "START TRANSACTION"},
 		// for comment in query
 		{"/*comment*/ /*comment*/ select c /* this is a comment */ from t;", true, "SELECT `c` FROM `t`"},
 		// for unclosed comment
@@ -2804,7 +2704,6 @@ func (s *testParserSuite) TestSubquery(c *C) {
 		text  string
 	}{
 		{"SELECT 1 > (select 1)", "select 1"},
-		{"SELECT 1 > (select 1 union select 2)", "select 1 union select 2"},
 	}
 	parser := parser.New()
 	for _, t := range tests {
@@ -2814,64 +2713,6 @@ func (s *testParserSuite) TestSubquery(c *C) {
 			text: t.text,
 			c:    c,
 		})
-	}
-}
-func (s *testParserSuite) TestUnion(c *C) {
-	table := []testCase{
-		{"select c1 from t1 union select c2 from t2", true, "SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
-		{"select c1 from t1 union (select c2 from t2)", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`)"},
-		{"select c1 from t1 union (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
-		{"select c1 from t1 union select c2 from t2 order by c2", true, "SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2` ORDER BY `c2`"},
-		{"select c1 from t1 union (select c2 from t2) limit 1", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1"},
-		{"select c1 from t1 union (select c2 from t2) limit 1, 1", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{"select c1 from t1 union (select c2 from t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
-		{"(select c1 from t1) union distinct select c2 from t2", true, "(SELECT `c1` FROM `t1`) UNION SELECT `c2` FROM `t2`"},
-		{"(select c1 from t1) union distinctrow select c2 from t2", true, "(SELECT `c1` FROM `t1`) UNION SELECT `c2` FROM `t2`"},
-		{"(select c1 from t1) union all select c2 from t2", true, "(SELECT `c1` FROM `t1`) UNION ALL SELECT `c2` FROM `t2`"},
-		{"(select c1 from t1) union distinct all select c2 from t2", false, ""},
-		{"(select c1 from t1) union distinctrow all select c2 from t2", false, ""},
-		{"(select c1 from t1) union (select c2 from t2) order by c1 union select c3 from t3", false, ""},
-		{"(select c1 from t1) union (select c2 from t2) limit 1 union select c3 from t3", false, ""},
-		{"(select c1 from t1) union select c2 from t2 union (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION SELECT `c2` FROM `t2` UNION (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
-		{"select (select 1 union select 1) as a", true, "SELECT (SELECT 1 UNION SELECT 1) AS `a`"},
-		{"select * from (select 1 union select 2) as a", true, "SELECT * FROM (SELECT 1 UNION SELECT 2) AS `a`"},
-		{"insert into t select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
-		{"insert into t (c) select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
-		{"select 2 as a from dual union select 1 as b from dual order by a", true, "SELECT 2 AS `a` UNION SELECT 1 AS `b` ORDER BY `a`"},
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestUnionOrderBy(c *C) {
-	parser := parser.New()
-
-	tests := []struct {
-		src        string
-		hasOrderBy []bool
-	}{
-		{"select 2 as a from dual union select 1 as b from dual order by a", []bool{false, false, true}},
-		{"select 2 as a from dual union (select 1 as b from dual order by a)", []bool{false, true, false}},
-		{"(select 2 as a from dual order by a) union select 1 as b from dual order by a", []bool{true, false, true}},
-		{"select 1 a, 2 b from dual order by a", []bool{true}},
-		{"select 1 a, 2 b from dual", []bool{false}},
-	}
-
-	for _, t := range tests {
-		stmt, _, err := parser.Parse(t.src, "", "")
-		c.Assert(err, IsNil)
-		us, ok := stmt[0].(*ast.UnionStmt)
-		if ok {
-			var i int
-			for _, s := range us.SelectList.Selects {
-				c.Assert(s.OrderBy != nil, Equals, t.hasOrderBy[i])
-				i++
-			}
-			c.Assert(us.OrderBy != nil, Equals, t.hasOrderBy[i])
-		}
-		ss, ok := stmt[0].(*ast.SelectStmt)
-		if ok {
-			c.Assert(ss.OrderBy != nil, Equals, t.hasOrderBy[0])
-		}
 	}
 }
 
@@ -2988,8 +2829,6 @@ func (s *testParserSuite) TestExplain(c *C) {
 		{"explain insert into t values (1), (2), (3)", true, "EXPLAIN FORMAT = 'row' INSERT INTO `t` VALUES (1),(2),(3)"},
 		{"explain replace into foo values (1 || 2)", true, "EXPLAIN FORMAT = 'row' REPLACE INTO `foo` VALUES (1 OR 2)"},
 		{"explain update t set id = id + 1 order by id desc;", true, "EXPLAIN FORMAT = 'row' UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
-		{"explain select c1 from t1 union (select c2 from t2) limit 1, 1", true, "EXPLAIN FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{`explain format = "row" select c1 from t1 union (select c2 from t2) limit 1, 1`, true, "EXPLAIN FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
 		{"DESC SCHE.TABL", true, "DESC `SCHE`.`TABL`"},
 		{"DESC SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
 		{"DESCRIBE SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
@@ -3007,50 +2846,6 @@ func (s *testParserSuite) TestExplain(c *C) {
 		{"EXPLAIN FORMAT = JSON FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'json' FOR CONNECTION 1"},
 		{"EXPLAIN FORMAT = JSON SELECT 1", true, "EXPLAIN FORMAT = 'json' SELECT 1"},
 		{"EXPLAIN FORMAT = 'hint' SELECT 1", true, "EXPLAIN FORMAT = 'hint' SELECT 1"},
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestPrepare(c *C) {
-	table := []testCase{
-		{"PREPARE pname FROM 'SELECT ?'", true, "PREPARE `pname` FROM 'SELECT ?'"},
-		{"PREPARE pname FROM @test", true, "PREPARE `pname` FROM @`test`"},
-		{"PREPARE `` FROM @test", true, "PREPARE `` FROM @`test`"},
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestDeallocate(c *C) {
-	table := []testCase{
-		{"DEALLOCATE PREPARE test", true, "DEALLOCATE PREPARE `test`"},
-		{"DEALLOCATE PREPARE ``", true, "DEALLOCATE PREPARE ``"},
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestExecute(c *C) {
-	table := []testCase{
-		{"EXECUTE test", true, "EXECUTE `test`"},
-		{"EXECUTE test USING @var1,@var2", true, "EXECUTE `test` USING @`var1`,@`var2`"},
-		{"EXECUTE `` USING @var1,@var2", true, "EXECUTE `` USING @`var1`,@`var2`"},
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestTrace(c *C) {
-	table := []testCase{
-		{"trace begin", true, "TRACE START TRANSACTION"},
-		{"trace commit", true, "TRACE COMMIT"},
-		{"trace rollback", true, "TRACE ROLLBACK"},
-		{"trace set a = 1", true, "TRACE SET @@SESSION.`a`=1"},
-		{"trace select c1 from t1", true, "TRACE SELECT `c1` FROM `t1`"},
-		{"trace delete t1, t2 from t1 inner join t2 inner join t3 where t1.id=t2.id and t2.id=t3.id;", true, "TRACE DELETE `t1`,`t2` FROM (`t1` JOIN `t2`) JOIN `t3` WHERE `t1`.`id`=`t2`.`id` AND `t2`.`id`=`t3`.`id`"},
-		{"trace insert into t values (1), (2), (3)", true, "TRACE INSERT INTO `t` VALUES (1),(2),(3)"},
-		{"trace replace into foo values (1 || 2)", true, "TRACE REPLACE INTO `foo` VALUES (1 OR 2)"},
-		{"trace update t set id = id + 1 order by id desc;", true, "TRACE UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
-		{"trace select c1 from t1 union (select c2 from t2) limit 1, 1", true, "TRACE SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{"trace format = 'row' select c1 from t1 union (select c2 from t2) limit 1, 1", true, "TRACE FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{"trace format = 'json' update t set id = id + 1 order by id desc;", true, "TRACE UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 	}
 	s.RunTest(c, table)
 }
@@ -3261,27 +3056,6 @@ func (s *testParserSuite) TestNotExistsSubquery(c *C) {
 	}
 }
 
-func (s *testParserSuite) TestFieldText(c *C) {
-	parser := parser.New()
-	stmts, _, err := parser.Parse("select a from t", "", "")
-	c.Assert(err, IsNil)
-	tmp := stmts[0].(*ast.SelectStmt)
-	c.Assert(tmp.Fields.Fields[0].Text(), Equals, "a")
-
-	sqls := []string{
-		"trace select a from t",
-		"trace format = 'row' select a from t",
-		"trace format = 'json' select a from t",
-	}
-	for _, sql := range sqls {
-		stmts, _, err = parser.Parse(sql, "", "")
-		c.Assert(err, IsNil)
-		traceStmt := stmts[0].(*ast.TraceStmt)
-		c.Assert(traceStmt.Text(), Equals, sql)
-		c.Assert(traceStmt.Stmt.Text(), Equals, "select a from t")
-	}
-}
-
 // See https://github.com/pingcap/tidb/parser/issue/94
 func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 	parser := parser.New()
@@ -3431,22 +3205,6 @@ func (s *testParserSuite) TestFulltextSearch(c *C) {
 	writer.Reset()
 	st.(*ast.SelectStmt).Where.Format(writer)
 	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\" WITH QUERY EXPANSION)")
-}
-
-func (s *testParserSuite) TestStartTransaction(c *C) {
-	cases := []testCase{
-		{"START TRANSACTION READ WRITE", true, "START TRANSACTION"},
-		{"START TRANSACTION READ ONLY", true, "START TRANSACTION READ ONLY"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND", false, ""},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND STRONG", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND STRONG"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MAX STALENESS '00:00:10'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MAX STALENESS '00:00:10'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND EXACT STALENESS '00:00:05'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND EXACT STALENESS '00:00:05'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND READ TIMESTAMP '2019-11-04 00:00:00'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND READ TIMESTAMP '2019-11-04 00:00:00'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN READ TIMESTAMP '2019-11-04 00:00:00'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN READ TIMESTAMP '2019-11-04 00:00:00'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN TIMESTAMP '2019-11-04 00:00:00'", false, ""},
-	}
-
-	s.RunTest(c, cases)
 }
 
 // CleanNodeText set the text of node and all child node empty.
