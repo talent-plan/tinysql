@@ -772,24 +772,6 @@ var btFuncTokenMap = map[string]int{
 	"VAR_SAMP":     builtinVarSamp,
 }
 
-var windowFuncTokenMap = map[string]int{
-	"CUME_DIST":    cumeDist,
-	"DENSE_RANK":   denseRank,
-	"FIRST_VALUE":  firstValue,
-	"GROUPS":       groups,
-	"LAG":          lag,
-	"LAST_VALUE":   lastValue,
-	"LEAD":         lead,
-	"NTH_VALUE":    nthValue,
-	"NTILE":        ntile,
-	"OVER":         over,
-	"PERCENT_RANK": percentRank,
-	"RANK":         rank,
-	"ROWS":         rows,
-	"ROW_NUMBER":   rowNumber,
-	"WINDOW":       window,
-}
-
 // aliases are strings directly map to another string and use the same token.
 var aliases = map[string]string{
 	"SCHEMA":    "DATABASE",
@@ -836,10 +818,7 @@ func (s *Scanner) isTokenIdentifier(lit string, offset int) int {
 			return tok
 		}
 	}
-	tok, ok := tokenMap[string(data)]
-	if !ok && s.supportWindowFunc {
-		tok = windowFuncTokenMap[string(data)]
-	}
+	tok, _ := tokenMap[string(data)]
 	return tok
 }
 

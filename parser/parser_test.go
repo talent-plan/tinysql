@@ -40,7 +40,6 @@ func TestT(t *testing.T) {
 var _ = Suite(&testParserSuite{})
 
 type testParserSuite struct {
-	enableWindowFunc bool
 }
 
 func (s *testParserSuite) TestSimple(c *C) {
@@ -308,7 +307,6 @@ type testErrMsgCase struct {
 
 func (s *testParserSuite) RunTest(c *C, table []testCase) {
 	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
 	for _, t := range table {
 		_, _, err := parser.Parse(t.src, "", "")
 		comment := Commentf("source %v", t.src)
@@ -323,7 +321,6 @@ func (s *testParserSuite) RunTest(c *C, table []testCase) {
 func (s *testParserSuite) RunRestoreTest(c *C, sourceSQLs, expectSQLs string) {
 	var sb strings.Builder
 	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
 	comment := Commentf("source %v", sourceSQLs)
 	stmts, _, err := parser.Parse(sourceSQLs, "", "")
 	c.Assert(err, IsNil, comment)
@@ -350,7 +347,6 @@ func (s *testParserSuite) RunRestoreTest(c *C, sourceSQLs, expectSQLs string) {
 
 func (s *testParserSuite) RunTestInRealAsFloatMode(c *C, table []testCase) {
 	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
 	parser.SetSQLMode(mysql.ModeRealAsFloat)
 	for _, t := range table {
 		_, _, err := parser.Parse(t.src, "", "")
@@ -370,7 +366,6 @@ func (s *testParserSuite) RunTestInRealAsFloatMode(c *C, table []testCase) {
 func (s *testParserSuite) RunRestoreTestInRealAsFloatMode(c *C, sourceSQLs, expectSQLs string) {
 	var sb strings.Builder
 	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
 	parser.SetSQLMode(mysql.ModeRealAsFloat)
 	comment := Commentf("source %v", sourceSQLs)
 	stmts, _, err := parser.Parse(sourceSQLs, "", "")
@@ -1397,32 +1392,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select avg(distinct all c1) from t;`, true, "SELECT AVG(DISTINCT `c1`) FROM `t`"},
 		{`select avg(distinctrow all c1) from t;`, true, "SELECT AVG(DISTINCT `c1`) FROM `t`"},
 		{`select avg(c2) from t;`, true, "SELECT AVG(`c2`) FROM `t`"},
-		{`select bit_and(c1) from t;`, true, "SELECT BIT_AND(`c1`) FROM `t`"},
-		{`select bit_and(all c1) from t;`, true, "SELECT BIT_AND(`c1`) FROM `t`"},
-		{`select bit_and(distinct c1) from t;`, false, ""},
-		{`select bit_and(distinctrow c1) from t;`, false, ""},
-		{`select bit_and(distinctrow all c1) from t;`, false, ""},
-		{`select bit_and(distinct all c1) from t;`, false, ""},
-		{`select bit_and(), bit_and(distinct c1) from t;`, false, ""},
-		{`select bit_and(), bit_and(distinctrow c1) from t;`, false, ""},
-		{`select bit_and(), bit_and(all c1) from t;`, false, ""},
-		{`select bit_or(c1) from t;`, true, "SELECT BIT_OR(`c1`) FROM `t`"},
-		{`select bit_or(all c1) from t;`, true, "SELECT BIT_OR(`c1`) FROM `t`"},
-		{`select bit_or(distinct c1) from t;`, false, ""},
-		{`select bit_or(distinctrow c1) from t;`, false, ""},
-		{`select bit_or(distinctrow all c1) from t;`, false, ""},
-		{`select bit_or(distinct all c1) from t;`, false, ""},
-		{`select bit_or(), bit_or(distinct c1) from t;`, false, ""},
-		{`select bit_or(), bit_or(distinctrow c1) from t;`, false, ""},
-		{`select bit_or(), bit_or(all c1) from t;`, false, ""},
-		{`select bit_xor(c1) from t;`, true, "SELECT BIT_XOR(`c1`) FROM `t`"},
-		{`select bit_xor(all c1) from t;`, true, "SELECT BIT_XOR(`c1`) FROM `t`"},
-		{`select bit_xor(distinct c1) from t;`, false, ""},
-		{`select bit_xor(distinctrow c1) from t;`, false, ""},
-		{`select bit_xor(distinctrow all c1) from t;`, false, ""},
-		{`select bit_xor(), bit_xor(distinct c1) from t;`, false, ""},
-		{`select bit_xor(), bit_xor(distinctrow c1) from t;`, false, ""},
-		{`select bit_xor(), bit_xor(all c1) from t;`, false, ""},
 		{`select max(c1,c2) from t;`, false, ""},
 		{`select max(distinct c1) from t;`, true, "SELECT MAX(DISTINCT `c1`) FROM `t`"},
 		{`select max(distinctrow c1) from t;`, true, "SELECT MAX(DISTINCT `c1`) FROM `t`"},
@@ -1451,25 +1420,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select count(all c1) from t;`, true, "SELECT COUNT(`c1`) FROM `t`"},
 		{`select count(distinct all c1) from t;`, false, ""},
 		{`select count(distinctrow all c1) from t;`, false, ""},
-		{`select group_concat(c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(`c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
-		{`select group_concat(c2,c1 SEPARATOR ';') from t group by c1;`, true, "SELECT GROUP_CONCAT(`c2`, `c1` SEPARATOR ';') FROM `t` GROUP BY `c1`"},
-		{`select group_concat(distinct c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(DISTINCT `c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
-		{`select group_concat(distinctrow c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(DISTINCT `c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
-		{`SELECT student_name, GROUP_CONCAT(DISTINCT test_score ORDER BY test_score DESC SEPARATOR ' ') FROM student GROUP BY student_name;`, true, "SELECT `student_name`,GROUP_CONCAT(DISTINCT `test_score` SEPARATOR ' ') FROM `student` GROUP BY `student_name`"},
-		{`select std(c1), std(all c1), std(distinct c1) from t`, true, "SELECT STD(`c1`),STD(`c1`),STD(DISTINCT `c1`) FROM `t`"},
-		{`select std(c1, c2) from t`, false, ""},
-		{`select stddev(c1), stddev(all c1), stddev(distinct c1) from t`, true, "SELECT STDDEV(`c1`),STDDEV(`c1`),STDDEV(DISTINCT `c1`) FROM `t`"},
-		{`select stddev(c1, c2) from t`, false, ""},
-		{`select stddev_pop(c1), stddev_pop(all c1), stddev_pop(distinct c1) from t`, true, "SELECT STDDEV_POP(`c1`),STDDEV_POP(`c1`),STDDEV_POP(DISTINCT `c1`) FROM `t`"},
-		{`select stddev_pop(c1, c2) from t`, false, ""},
-		{`select stddev_samp(c1), stddev_samp(all c1), stddev_samp(distinct c1) from t`, true, "SELECT STDDEV_SAMP(`c1`),STDDEV_SAMP(`c1`),STDDEV_SAMP(DISTINCT `c1`) FROM `t`"},
-		{`select stddev_samp(c1, c2) from t`, false, ""},
-		{`select variance(c1), variance(all c1), variance(distinct c1) from t`, true, "SELECT VAR_POP(`c1`),VAR_POP(`c1`),VAR_POP(DISTINCT `c1`) FROM `t`"},
-		{`select variance(c1, c2) from t`, false, ""},
-		{`select var_pop(c1), var_pop(all c1), var_pop(distinct c1) from t`, true, "SELECT VAR_POP(`c1`),VAR_POP(`c1`),VAR_POP(DISTINCT `c1`) FROM `t`"},
-		{`select var_pop(c1, c2) from t`, false, ""},
-		{`select var_samp(c1), var_samp(all c1), var_samp(distinct c1) from t`, true, "SELECT VAR_SAMP(`c1`),VAR_SAMP(`c1`),VAR_SAMP(DISTINCT `c1`) FROM `t`"},
-		{`select var_samp(c1, c2) from t`, false, ""},
 
 		// for encryption and compression functions
 		{`select AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3'))`, true, "SELECT AES_ENCRYPT('text', UNHEX('F3229A0B371ED2D9441B830D21A390C3'))"},
@@ -2894,7 +2844,6 @@ func (s *testParserSuite) TestUnion(c *C) {
 
 func (s *testParserSuite) TestUnionOrderBy(c *C) {
 	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
 
 	tests := []struct {
 		src        string
@@ -3310,148 +3259,6 @@ func (s *testParserSuite) TestNotExistsSubquery(c *C) {
 		c.Assert(ok, IsTrue)
 		c.Assert(exists.Not, Equals, tt.ok)
 	}
-}
-
-func (s *testParserSuite) TestWindowFunctionIdentifier(c *C) {
-	var table []testCase
-	s.enableWindowFunc = true
-	for key := range parser.WindowFuncTokenMapForTest {
-		table = append(table, testCase{fmt.Sprintf("select 1 %s", key), false, fmt.Sprintf("SELECT 1 AS `%s`", key)})
-	}
-	s.RunTest(c, table)
-
-	s.enableWindowFunc = false
-	for i := range table {
-		table[i].ok = true
-	}
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestWindowFunctions(c *C) {
-	table := []testCase{
-		// For window function descriptions.
-		// See https://dev.mysql.com/doc/refman/8.0/en/window-function-descriptions.html
-		{`SELECT CUME_DIST() OVER w FROM t;`, true, "SELECT CUME_DIST() OVER `w` FROM `t`"},
-		{`SELECT DENSE_RANK() OVER (w) FROM t;`, true, "SELECT DENSE_RANK() OVER (`w`) FROM `t`"},
-		{`SELECT FIRST_VALUE(val) OVER w FROM t;`, true, "SELECT FIRST_VALUE(`val`) OVER `w` FROM `t`"},
-		{`SELECT FIRST_VALUE(val) RESPECT NULLS OVER w FROM t;`, true, "SELECT FIRST_VALUE(`val`) OVER `w` FROM `t`"},
-		{`SELECT FIRST_VALUE(val) IGNORE NULLS OVER w FROM t;`, true, "SELECT FIRST_VALUE(`val`) IGNORE NULLS OVER `w` FROM `t`"},
-		{`SELECT LAG(val) OVER (w) FROM t;`, true, "SELECT LAG(`val`) OVER (`w`) FROM `t`"},
-		{`SELECT LAG(val, 1) OVER (w) FROM t;`, true, "SELECT LAG(`val`, 1) OVER (`w`) FROM `t`"},
-		{`SELECT LAG(val, 1, def) OVER (w) FROM t;`, true, "SELECT LAG(`val`, 1, `def`) OVER (`w`) FROM `t`"},
-		{`SELECT LAST_VALUE(val) OVER (w) FROM t;`, true, "SELECT LAST_VALUE(`val`) OVER (`w`) FROM `t`"},
-		{`SELECT LEAD(val) OVER w FROM t;`, true, "SELECT LEAD(`val`) OVER `w` FROM `t`"},
-		{`SELECT LEAD(val, 1) OVER w FROM t;`, true, "SELECT LEAD(`val`, 1) OVER `w` FROM `t`"},
-		{`SELECT LEAD(val, 1, def) OVER w FROM t;`, true, "SELECT LEAD(`val`, 1, `def`) OVER `w` FROM `t`"},
-		{`SELECT NTH_VALUE(val, 233) OVER w FROM t;`, true, "SELECT NTH_VALUE(`val`, 233) OVER `w` FROM `t`"},
-		{`SELECT NTH_VALUE(val, 233) FROM FIRST OVER w FROM t;`, true, "SELECT NTH_VALUE(`val`, 233) OVER `w` FROM `t`"},
-		{`SELECT NTH_VALUE(val, 233) FROM LAST OVER w FROM t;`, true, "SELECT NTH_VALUE(`val`, 233) FROM LAST OVER `w` FROM `t`"},
-		{`SELECT NTH_VALUE(val, 233) FROM LAST IGNORE NULLS OVER w FROM t;`, true, "SELECT NTH_VALUE(`val`, 233) FROM LAST IGNORE NULLS OVER `w` FROM `t`"},
-		{`SELECT NTH_VALUE(val) OVER w FROM t;`, false, ""},
-		{`SELECT NTILE(233) OVER (w) FROM t;`, true, "SELECT NTILE(233) OVER (`w`) FROM `t`"},
-		{`SELECT PERCENT_RANK() OVER (w) FROM t;`, true, "SELECT PERCENT_RANK() OVER (`w`) FROM `t`"},
-		{`SELECT RANK() OVER (w) FROM t;`, true, "SELECT RANK() OVER (`w`) FROM `t`"},
-		{`SELECT ROW_NUMBER() OVER (w) FROM t;`, true, "SELECT ROW_NUMBER() OVER (`w`) FROM `t`"},
-		{`SELECT n, LAG(n, 1, 0) OVER (w), LEAD(n, 1, 0) OVER w, n + LAG(n, 1, 0) OVER (w) FROM fib;`, true, "SELECT `n`,LAG(`n`, 1, 0) OVER (`w`),LEAD(`n`, 1, 0) OVER `w`,`n`+LAG(`n`, 1, 0) OVER (`w`) FROM `fib`"},
-
-		// For window function concepts and syntax.
-		// See https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html
-		{`SELECT SUM(profit) OVER(PARTITION BY country) AS country_profit FROM sales;`, true, "SELECT SUM(`profit`) OVER (PARTITION BY `country`) AS `country_profit` FROM `sales`"},
-		{`SELECT SUM(profit) OVER() AS country_profit FROM sales;`, true, "SELECT SUM(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT AVG(profit) OVER() AS country_profit FROM sales;`, true, "SELECT AVG(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT BIT_XOR(profit) OVER() AS country_profit FROM sales;`, true, "SELECT BIT_XOR(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT COUNT(profit) OVER() AS country_profit FROM sales;`, true, "SELECT COUNT(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT COUNT(ALL profit) OVER() AS country_profit FROM sales;`, true, "SELECT COUNT(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT COUNT(*) OVER() AS country_profit FROM sales;`, true, "SELECT COUNT(1) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT MAX(profit) OVER() AS country_profit FROM sales;`, true, "SELECT MAX(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT MIN(profit) OVER() AS country_profit FROM sales;`, true, "SELECT MIN(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT SUM(profit) OVER() AS country_profit FROM sales;`, true, "SELECT SUM(`profit`) OVER () AS `country_profit` FROM `sales`"},
-		{`SELECT ROW_NUMBER() OVER(PARTITION BY country) AS row_num1 FROM sales;`, true, "SELECT ROW_NUMBER() OVER (PARTITION BY `country`) AS `row_num1` FROM `sales`"},
-		{`SELECT ROW_NUMBER() OVER(PARTITION BY country, d ORDER BY year, product) AS row_num2 FROM sales;`, true, "SELECT ROW_NUMBER() OVER (PARTITION BY `country`, `d` ORDER BY `year`,`product`) AS `row_num2` FROM `sales`"},
-
-		// For window function frame specification.
-		// See https://dev.mysql.com/doc/refman/8.0/en/window-functions-frames.html
-		{`SELECT SUM(val) OVER (PARTITION BY subject ORDER BY time ROWS UNBOUNDED PRECEDING) FROM t;`, true, "SELECT SUM(`val`) OVER (PARTITION BY `subject` ORDER BY `time` ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM `t`"},
-		{`SELECT AVG(val) OVER (PARTITION BY subject ORDER BY time ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (PARTITION BY `subject` ORDER BY `time` ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM `t`"},
-		{`SELECT AVG(val) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM `t`"},
-		{`SELECT AVG(val) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM `t`"},
-		{`SELECT AVG(val) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL '2:30' MINUTE_SECOND FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL '2:30' MINUTE_SECOND FOLLOWING) FROM `t`"},
-		{`SELECT AVG(val) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM `t`"},
-		{`SELECT AVG(val) OVER (RANGE CURRENT ROW) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM `t`"},
-
-		// For named windows.
-		// See https://dev.mysql.com/doc/refman/8.0/en/window-functions-named-windows.html
-		{`SELECT RANK() OVER (w) FROM t WINDOW w AS (ORDER BY val);`, true, "SELECT RANK() OVER (`w`) FROM `t` WINDOW `w` AS (ORDER BY `val`)"},
-		{`SELECT RANK() OVER w FROM t WINDOW w AS ();`, true, "SELECT RANK() OVER `w` FROM `t` WINDOW `w` AS ()"},
-		{`SELECT FIRST_VALUE(year) OVER (w ORDER BY year ASC) AS first FROM sales WINDOW w AS (PARTITION BY country);`, true, "SELECT FIRST_VALUE(`year`) OVER (`w` ORDER BY `year`) AS `first` FROM `sales` WINDOW `w` AS (PARTITION BY `country`)"},
-		{`SELECT RANK() OVER (w1) FROM t WINDOW w1 AS (w2), w2 AS (), w3 AS (w1);`, true, "SELECT RANK() OVER (`w1`) FROM `t` WINDOW `w1` AS (`w2`),`w2` AS (),`w3` AS (`w1`)"},
-		{`SELECT RANK() OVER w1 FROM t WINDOW w1 AS (w2), w2 AS (w3), w3 AS (w1);`, true, "SELECT RANK() OVER `w1` FROM `t` WINDOW `w1` AS (`w2`),`w2` AS (`w3`),`w3` AS (`w1`)"},
-
-		// For tidb_parse_tso
-		{`select tidb_parse_tso(1)`, true, "SELECT TIDB_PARSE_TSO(1)"},
-		{`select from_unixtime(404411537129996288)`, true, "SELECT FROM_UNIXTIME(404411537129996288)"},
-		{`select from_unixtime(404411537129996288.22)`, true, "SELECT FROM_UNIXTIME(404411537129996288.22)"},
-	}
-	s.enableWindowFunc = true
-	s.RunTest(c, table)
-}
-
-type windowFrameBoundChecker struct {
-	fb     *ast.FrameBound
-	exprRc int
-	unit   ast.TimeUnitType
-	c      *C
-}
-
-// Enter implements ast.Visitor interface.
-func (wfc *windowFrameBoundChecker) Enter(inNode ast.Node) (outNode ast.Node, skipChildren bool) {
-	if _, ok := inNode.(*ast.FrameBound); ok {
-		wfc.fb = inNode.(*ast.FrameBound)
-		if wfc.fb.Unit != ast.TimeUnitInvalid {
-			_, ok := wfc.fb.Expr.(ast.ValueExpr)
-			wfc.c.Assert(ok, IsFalse)
-		}
-	}
-	return inNode, false
-}
-
-// Leave implements ast.Visitor interface.
-func (wfc *windowFrameBoundChecker) Leave(inNode ast.Node) (node ast.Node, ok bool) {
-	if _, ok := inNode.(*ast.FrameBound); ok {
-		wfc.fb = nil
-	}
-	if wfc.fb != nil {
-		if inNode == wfc.fb.Expr {
-			wfc.exprRc++
-		}
-		wfc.unit = wfc.fb.Unit
-	}
-	return inNode, true
-}
-
-// For issue #51
-// See https://github.com/pingcap/tidb/parser/pull/51 for details
-func (s *testParserSuite) TestVisitFrameBound(c *C) {
-	parser := parser.New()
-	parser.EnableWindowFunc(true)
-	table := []struct {
-		s      string
-		exprRc int
-		unit   ast.TimeUnitType
-	}{
-		{`SELECT AVG(val) OVER (RANGE INTERVAL 1+3 MINUTE_SECOND PRECEDING) FROM t;`, 1, ast.TimeUnitMinuteSecond},
-		{`SELECT AVG(val) OVER (RANGE 5 PRECEDING) FROM t;`, 1, ast.TimeUnitInvalid},
-		{`SELECT AVG(val) OVER () FROM t;`, 0, ast.TimeUnitInvalid},
-	}
-	for _, t := range table {
-		stmt, err := parser.ParseOneStmt(t.s, "", "")
-		c.Assert(err, IsNil)
-		checker := windowFrameBoundChecker{c: c}
-		stmt.Accept(&checker)
-		c.Assert(checker.exprRc, Equals, t.exprRc)
-		c.Assert(checker.unit, Equals, t.unit)
-	}
-
 }
 
 func (s *testParserSuite) TestFieldText(c *C) {

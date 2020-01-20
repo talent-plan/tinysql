@@ -28,7 +28,6 @@ var (
 	_ FuncNode = &AggregateFuncExpr{}
 	_ FuncNode = &FuncCallExpr{}
 	_ FuncNode = &FuncCastExpr{}
-	_ FuncNode = &WindowFuncExpr{}
 )
 
 // List scalar function names.
@@ -729,108 +728,6 @@ func (n *AggregateFuncExpr) Accept(v Visitor) (Node, bool) {
 		}
 		n.Args[i] = node.(ExprNode)
 	}
-	return v.Leave(n)
-}
-
-const (
-	// WindowFuncRowNumber is the name of row_number function.
-	WindowFuncRowNumber = "row_number"
-	// WindowFuncRank is the name of rank function.
-	WindowFuncRank = "rank"
-	// WindowFuncDenseRank is the name of dense_rank function.
-	WindowFuncDenseRank = "dense_rank"
-	// WindowFuncCumeDist is the name of cume_dist function.
-	WindowFuncCumeDist = "cume_dist"
-	// WindowFuncPercentRank is the name of percent_rank function.
-	WindowFuncPercentRank = "percent_rank"
-	// WindowFuncNtile is the name of ntile function.
-	WindowFuncNtile = "ntile"
-	// WindowFuncLead is the name of lead function.
-	WindowFuncLead = "lead"
-	// WindowFuncLag is the name of lag function.
-	WindowFuncLag = "lag"
-	// WindowFuncFirstValue is the name of first_value function.
-	WindowFuncFirstValue = "first_value"
-	// WindowFuncLastValue is the name of last_value function.
-	WindowFuncLastValue = "last_value"
-	// WindowFuncNthValue is the name of nth_value function.
-	WindowFuncNthValue = "nth_value"
-)
-
-// WindowFuncExpr represents window function expression.
-type WindowFuncExpr struct {
-	funcNode
-
-	// F is the function name.
-	F string
-	// Args is the function args.
-	Args []ExprNode
-	// Distinct cannot be true for most window functions, except `max` and `min`.
-	// We need to raise error if it is not allowed to be true.
-	Distinct bool
-	// IgnoreNull indicates how to handle null value.
-	// MySQL only supports `RESPECT NULLS`, so we need to raise error if it is true.
-	IgnoreNull bool
-	// FromLast indicates the calculation direction of this window function.
-	// MySQL only supports calculation from first, so we need to raise error if it is true.
-	FromLast bool
-	// Spec is the specification of this window.
-	Spec WindowSpec
-}
-
-// Restore implements Node interface.
-func (n *WindowFuncExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord(n.F)
-	ctx.WritePlain("(")
-	for i, v := range n.Args {
-		if i != 0 {
-			ctx.WritePlain(", ")
-		} else if n.Distinct {
-			ctx.WriteKeyWord("DISTINCT ")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore WindowFuncExpr.Args[%d]", i)
-		}
-	}
-	ctx.WritePlain(")")
-	if n.FromLast {
-		ctx.WriteKeyWord(" FROM LAST")
-	}
-	if n.IgnoreNull {
-		ctx.WriteKeyWord(" IGNORE NULLS")
-	}
-	ctx.WriteKeyWord(" OVER ")
-	if err := n.Spec.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore WindowFuncExpr.Spec")
-	}
-
-	return nil
-}
-
-// Format formats the window function expression into a Writer.
-func (n *WindowFuncExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *WindowFuncExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*WindowFuncExpr)
-	for i, val := range n.Args {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Args[i] = node.(ExprNode)
-	}
-	node, ok := n.Spec.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Spec = *node.(*WindowSpec)
 	return v.Leave(n)
 }
 

@@ -47,11 +47,6 @@ type Scanner struct {
 
 	sqlMode mysql.SQLMode
 
-	// If the lexer should recognize keywords for window function.
-	// It may break the compatibility when support those keywords,
-	// because some application may already use them as identifiers.
-	supportWindowFunc bool
-
 	// lastScanOffset indicates last offset returned by scan().
 	// It's used to substring sql in syntax error message.
 	lastScanOffset int
@@ -229,17 +224,11 @@ func (s *Scanner) GetSQLMode() mysql.SQLMode {
 	return s.sqlMode
 }
 
-// EnableWindowFunc controls whether the scanner recognize the keywords of window function.
-func (s *Scanner) EnableWindowFunc(val bool) {
-	s.supportWindowFunc = val
-}
-
 // InheritScanner returns a new scanner object which inherits configurations from the parent scanner.
 func (s *Scanner) InheritScanner(sql string) *Scanner {
 	return &Scanner{
-		r:                 reader{s: sql},
-		sqlMode:           s.sqlMode,
-		supportWindowFunc: s.supportWindowFunc,
+		r:       reader{s: sql},
+		sqlMode: s.sqlMode,
 	}
 }
 

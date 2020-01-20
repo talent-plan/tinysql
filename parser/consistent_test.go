@@ -57,7 +57,7 @@ func (s *testConsistentSuite) TestKeywordConsistent(c *C) {
 		c.Assert(tokenMap[k], Equals, tokenMap[v])
 	}
 	keywordCount := len(reservedKeywords) + len(unreservedKeywords) + len(notKeywordTokens) + len(tidbKeywords)
-	c.Assert(len(tokenMap)-len(aliases), Equals, keywordCount-len(windowFuncTokenMap))
+	c.Assert(len(tokenMap)-len(aliases), Equals, keywordCount)
 
 	unreservedCollectionDef := extractKeywordsFromCollectionDef(content, "\nUnReservedKeyword:")
 	c.Assert(unreservedKeywords, DeepEquals, unreservedCollectionDef)

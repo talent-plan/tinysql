@@ -32,7 +32,6 @@ func (ts *testFunctionsSuite) TestFunctionsVisitorCover(c *C) {
 		&AggregateFuncExpr{Args: []ExprNode{valueExpr}},
 		&FuncCallExpr{Args: []ExprNode{valueExpr}},
 		&FuncCastExpr{Expr: valueExpr},
-		&WindowFuncExpr{Spec: WindowSpec{}},
 	}
 
 	for _, stmt := range stmts {
