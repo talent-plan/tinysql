@@ -18,18 +18,12 @@ import (
 	"sync"
 	"time"
 
+	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	pb "github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/kvproto/pkg/pdpb"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockoracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
-
-var errStopped = errors.New("stopped")
 
 type testStoreSuite struct {
 	OneByOneSuite
@@ -101,112 +95,6 @@ func (s *testStoreSuite) TestOracle(c *C) {
 
 	wg.Wait()
 }
-
-type mockPDClient struct {
-	sync.RWMutex
-	client pd.Client
-	stop   bool
-}
-
-func (c *mockPDClient) disable() {
-	c.Lock()
-	defer c.Unlock()
-	c.stop = true
-}
-
-func (c *mockPDClient) GetClusterID(context.Context) uint64 {
-	return 1
-}
-
-func (c *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return 0, 0, errors.Trace(errStopped)
-	}
-	return c.client.GetTS(ctx)
-}
-
-func (c *mockPDClient) GetTSAsync(ctx context.Context) pd.TSFuture {
-	return nil
-}
-
-func (c *mockPDClient) GetRegion(ctx context.Context, key []byte) (*metapb.Region, *metapb.Peer, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return nil, nil, errors.Trace(errStopped)
-	}
-	return c.client.GetRegion(ctx, key)
-}
-
-func (c *mockPDClient) GetPrevRegion(ctx context.Context, key []byte) (*metapb.Region, *metapb.Peer, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return nil, nil, errors.Trace(errStopped)
-	}
-	return c.client.GetPrevRegion(ctx, key)
-}
-
-func (c *mockPDClient) GetRegionByID(ctx context.Context, regionID uint64) (*metapb.Region, *metapb.Peer, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return nil, nil, errors.Trace(errStopped)
-	}
-	return c.client.GetRegionByID(ctx, regionID)
-}
-
-func (c *mockPDClient) ScanRegions(ctx context.Context, startKey []byte, endKey []byte, limit int) ([]*metapb.Region, []*metapb.Peer, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return nil, nil, errors.Trace(errStopped)
-	}
-	return c.client.ScanRegions(ctx, startKey, endKey, limit)
-}
-
-func (c *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
-	c.RLock()
-	defer c.RUnlock()
-
-	if c.stop {
-		return nil, errors.Trace(errStopped)
-	}
-	return c.client.GetStore(ctx, storeID)
-}
-
-func (c *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error) {
-	c.RLock()
-	defer c.Unlock()
-
-	if c.stop {
-		return nil, errors.Trace(errStopped)
-	}
-	return c.client.GetAllStores(ctx)
-}
-
-func (c *mockPDClient) UpdateGCSafePoint(ctx context.Context, safePoint uint64) (uint64, error) {
-	panic("unimplemented")
-}
-
-func (c *mockPDClient) Close() {}
-
-func (c *mockPDClient) ScatterRegion(ctx context.Context, regionID uint64) error {
-	return nil
-}
-
-func (c *mockPDClient) GetOperator(ctx context.Context, regionID uint64) (*pdpb.GetOperatorResponse, error) {
-	return &pdpb.GetOperatorResponse{Status: pdpb.OperatorStatus_SUCCESS}, nil
-}
-
-func (c *mockPDClient) GetLeaderAddr() string { return "mockpd" }
 
 type checkRequestClient struct {
 	Client

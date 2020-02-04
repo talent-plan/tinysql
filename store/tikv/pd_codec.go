@@ -16,9 +16,9 @@ package tikv
 import (
 	"context"
 
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
+	"github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/util/codec"
 )
 

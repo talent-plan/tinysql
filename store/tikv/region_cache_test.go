@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/google/btree"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/kvproto/pkg/errorpb"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 )

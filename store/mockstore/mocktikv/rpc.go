@@ -22,12 +22,12 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/coprocessor"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/errorpb"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -358,34 +358,6 @@ func (h *rpcHandler) handleKvBatchGet(req *kvrpcpb.BatchGetRequest) *kvrpcpb.Bat
 	}
 }
 
-func (h *rpcHandler) handleMvccGetByKey(req *kvrpcpb.MvccGetByKeyRequest) *kvrpcpb.MvccGetByKeyResponse {
-	debugger, ok := h.mvccStore.(MVCCDebugger)
-	if !ok {
-		return &kvrpcpb.MvccGetByKeyResponse{
-			Error: "not implement",
-		}
-	}
-
-	if !h.checkKeyInRegion(req.Key) {
-		panic("MvccGetByKey: key not in region")
-	}
-	var resp kvrpcpb.MvccGetByKeyResponse
-	resp.Info = debugger.MvccGetByKey(req.Key)
-	return &resp
-}
-
-func (h *rpcHandler) handleMvccGetByStartTS(req *kvrpcpb.MvccGetByStartTsRequest) *kvrpcpb.MvccGetByStartTsResponse {
-	debugger, ok := h.mvccStore.(MVCCDebugger)
-	if !ok {
-		return &kvrpcpb.MvccGetByStartTsResponse{
-			Error: "not implement",
-		}
-	}
-	var resp kvrpcpb.MvccGetByStartTsResponse
-	resp.Info, resp.Key = debugger.MvccGetByStartTS(req.StartTs)
-	return &resp
-}
-
 func (h *rpcHandler) handleKvBatchRollback(req *kvrpcpb.BatchRollbackRequest) *kvrpcpb.BatchRollbackResponse {
 	err := h.mvccStore.Rollback(req.Keys, req.StartVersion)
 	if err != nil {
@@ -422,30 +394,6 @@ func (h *rpcHandler) handleKvResolveLock(req *kvrpcpb.ResolveLockRequest) *kvrpc
 	return &kvrpcpb.ResolveLockResponse{}
 }
 
-func (h *rpcHandler) handleKvGC(req *kvrpcpb.GCRequest) *kvrpcpb.GCResponse {
-	startKey := MvccKey(h.startKey).Raw()
-	endKey := MvccKey(h.endKey).Raw()
-	err := h.mvccStore.GC(startKey, endKey, req.GetSafePoint())
-	if err != nil {
-		return &kvrpcpb.GCResponse{
-			Error: convertToKeyError(err),
-		}
-	}
-	return &kvrpcpb.GCResponse{}
-}
-
-func (h *rpcHandler) handleKvDeleteRange(req *kvrpcpb.DeleteRangeRequest) *kvrpcpb.DeleteRangeResponse {
-	if !h.checkKeyInRegion(req.StartKey) {
-		panic("KvDeleteRange: key not in region")
-	}
-	var resp kvrpcpb.DeleteRangeResponse
-	err := h.mvccStore.DeleteRange(req.StartKey, req.EndKey)
-	if err != nil {
-		resp.Error = err.Error()
-	}
-	return &resp
-}
-
 func (h *rpcHandler) handleKvRawGet(req *kvrpcpb.RawGetRequest) *kvrpcpb.RawGetResponse {
 	rawKV, ok := h.mvccStore.(RawKV)
 	if !ok {
@@ -455,29 +403,6 @@ func (h *rpcHandler) handleKvRawGet(req *kvrpcpb.RawGetRequest) *kvrpcpb.RawGetR
 	}
 	return &kvrpcpb.RawGetResponse{
 		Value: rawKV.RawGet(req.GetKey()),
-	}
-}
-
-func (h *rpcHandler) handleKvRawBatchGet(req *kvrpcpb.RawBatchGetRequest) *kvrpcpb.RawBatchGetResponse {
-	rawKV, ok := h.mvccStore.(RawKV)
-	if !ok {
-		// TODO should we add error ?
-		return &kvrpcpb.RawBatchGetResponse{
-			RegionError: &errorpb.Error{
-				Message: "not implemented",
-			},
-		}
-	}
-	values := rawKV.RawBatchGet(req.Keys)
-	kvPairs := make([]*kvrpcpb.KvPair, len(values))
-	for i, key := range req.Keys {
-		kvPairs[i] = &kvrpcpb.KvPair{
-			Key:   key,
-			Value: values[i],
-		}
-	}
-	return &kvrpcpb.RawBatchGetResponse{
-		Pairs: kvPairs,
 	}
 }
 
@@ -492,23 +417,6 @@ func (h *rpcHandler) handleKvRawPut(req *kvrpcpb.RawPutRequest) *kvrpcpb.RawPutR
 	return &kvrpcpb.RawPutResponse{}
 }
 
-func (h *rpcHandler) handleKvRawBatchPut(req *kvrpcpb.RawBatchPutRequest) *kvrpcpb.RawBatchPutResponse {
-	rawKV, ok := h.mvccStore.(RawKV)
-	if !ok {
-		return &kvrpcpb.RawBatchPutResponse{
-			Error: "not implemented",
-		}
-	}
-	keys := make([][]byte, 0, len(req.Pairs))
-	values := make([][]byte, 0, len(req.Pairs))
-	for _, pair := range req.Pairs {
-		keys = append(keys, pair.Key)
-		values = append(values, pair.Value)
-	}
-	rawKV.RawBatchPut(keys, values)
-	return &kvrpcpb.RawBatchPutResponse{}
-}
-
 func (h *rpcHandler) handleKvRawDelete(req *kvrpcpb.RawDeleteRequest) *kvrpcpb.RawDeleteResponse {
 	rawKV, ok := h.mvccStore.(RawKV)
 	if !ok {
@@ -518,28 +426,6 @@ func (h *rpcHandler) handleKvRawDelete(req *kvrpcpb.RawDeleteRequest) *kvrpcpb.R
 	}
 	rawKV.RawDelete(req.GetKey())
 	return &kvrpcpb.RawDeleteResponse{}
-}
-
-func (h *rpcHandler) handleKvRawBatchDelete(req *kvrpcpb.RawBatchDeleteRequest) *kvrpcpb.RawBatchDeleteResponse {
-	rawKV, ok := h.mvccStore.(RawKV)
-	if !ok {
-		return &kvrpcpb.RawBatchDeleteResponse{
-			Error: "not implemented",
-		}
-	}
-	rawKV.RawBatchDelete(req.Keys)
-	return &kvrpcpb.RawBatchDeleteResponse{}
-}
-
-func (h *rpcHandler) handleKvRawDeleteRange(req *kvrpcpb.RawDeleteRangeRequest) *kvrpcpb.RawDeleteRangeResponse {
-	rawKV, ok := h.mvccStore.(RawKV)
-	if !ok {
-		return &kvrpcpb.RawDeleteRangeResponse{
-			Error: "not implemented",
-		}
-	}
-	rawKV.RawDeleteRange(req.GetStartKey(), req.GetEndKey())
-	return &kvrpcpb.RawDeleteRangeResponse{}
 }
 
 func (h *rpcHandler) handleKvRawScan(req *kvrpcpb.RawScanRequest) *kvrpcpb.RawScanResponse {
@@ -554,51 +440,16 @@ func (h *rpcHandler) handleKvRawScan(req *kvrpcpb.RawScanRequest) *kvrpcpb.RawSc
 	}
 
 	var pairs []Pair
-	if req.Reverse {
-		lowerBound := h.startKey
-		if bytes.Compare(req.EndKey, lowerBound) > 0 {
-			lowerBound = req.EndKey
-		}
-		pairs = rawKV.RawReverseScan(
-			req.StartKey,
-			lowerBound,
-			int(req.GetLimit()),
-		)
-	} else {
-		upperBound := h.endKey
-		if len(req.EndKey) > 0 && (len(upperBound) == 0 || bytes.Compare(req.EndKey, upperBound) < 0) {
-			upperBound = req.EndKey
-		}
-		pairs = rawKV.RawScan(
-			req.StartKey,
-			upperBound,
-			int(req.GetLimit()),
-		)
-	}
+	upperBound := h.endKey
+	pairs = rawKV.RawScan(
+		req.StartKey,
+		upperBound,
+		int(req.GetLimit()),
+	)
 
 	return &kvrpcpb.RawScanResponse{
 		Kvs: convertToPbPairs(pairs),
 	}
-}
-
-func (h *rpcHandler) handleSplitRegion(req *kvrpcpb.SplitRegionRequest) *kvrpcpb.SplitRegionResponse {
-	keys := req.GetSplitKeys()
-	resp := &kvrpcpb.SplitRegionResponse{Regions: make([]*metapb.Region, 0, len(keys)+1)}
-	for i, key := range keys {
-		k := NewMvccKey(key)
-		region, _ := h.cluster.GetRegionByKey(k)
-		if bytes.Equal(region.GetStartKey(), key) {
-			continue
-		}
-		if i == 0 {
-			// Set the leftmost region.
-			resp.Regions = append(resp.Regions, region)
-		}
-		newRegionID, newPeerIDs := h.cluster.AllocID(), h.cluster.AllocIDs(len(region.Peers))
-		newRegion := h.cluster.SplitRaw(region.GetId(), newRegionID, k, newPeerIDs, newPeerIDs[0])
-		resp.Regions = append(resp.Regions, newRegion)
-	}
-	return resp
 }
 
 // RPCClient sends kv RPC calls to mock cluster. RPCClient mocks the behavior of
@@ -775,20 +626,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvResolveLock(r)
-	case tikvrpc.CmdGC:
-		r := req.GC()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.GCResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvGC(r)
-	case tikvrpc.CmdDeleteRange:
-		r := req.DeleteRange()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.DeleteRangeResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvDeleteRange(r)
 	case tikvrpc.CmdRawGet:
 		r := req.RawGet()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
@@ -796,13 +633,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvRawGet(r)
-	case tikvrpc.CmdRawBatchGet:
-		r := req.RawBatchGet()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.RawBatchGetResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvRawBatchGet(r)
 	case tikvrpc.CmdRawPut:
 		r := req.RawPut()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
@@ -810,13 +640,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvRawPut(r)
-	case tikvrpc.CmdRawBatchPut:
-		r := req.RawBatchPut()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.RawBatchPutResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvRawBatchPut(r)
 	case tikvrpc.CmdRawDelete:
 		r := req.RawDelete()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
@@ -824,19 +647,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvRawDelete(r)
-	case tikvrpc.CmdRawBatchDelete:
-		r := req.RawBatchDelete()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.RawBatchDeleteResponse{RegionError: err}
-		}
-		resp.Resp = handler.handleKvRawBatchDelete(r)
-	case tikvrpc.CmdRawDeleteRange:
-		r := req.RawDeleteRange()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.RawDeleteRangeResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvRawDeleteRange(r)
 	case tikvrpc.CmdRawScan:
 		r := req.RawScan()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
@@ -844,8 +654,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvRawScan(r)
-	case tikvrpc.CmdUnsafeDestroyRange:
-		panic("unimplemented")
 	case tikvrpc.CmdCop:
 		r := req.Cop()
 		if err := handler.checkRequestContext(reqCtx); err != nil {
@@ -864,27 +672,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			panic(fmt.Sprintf("unknown coprocessor request type: %v", r.GetTp()))
 		}
 		resp.Resp = res
-	case tikvrpc.CmdMvccGetByKey:
-		r := req.MvccGetByKey()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.MvccGetByKeyResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleMvccGetByKey(r)
-	case tikvrpc.CmdMvccGetByStartTs:
-		r := req.MvccGetByStartTs()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.MvccGetByStartTsResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleMvccGetByStartTS(r)
-	case tikvrpc.CmdSplitRegion:
-		r := req.SplitRegion()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.SplitRegionResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleSplitRegion(r)
 	default:
 		return nil, errors.Errorf("unsupported this request type %v", req.Type)
 	}

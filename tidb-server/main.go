@@ -34,7 +34,6 @@ import (
 	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/gcworker"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/signal"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -121,7 +120,6 @@ func syncLog() {
 func registerStores() {
 	err := kvstore.Register("tikv", tikv.Driver{})
 	terror.MustNil(err)
-	tikv.NewGCHandlerFunc = gcworker.NewGCWorker
 	err = kvstore.Register("mocktikv", mockstore.MockDriver{})
 	terror.MustNil(err)
 }

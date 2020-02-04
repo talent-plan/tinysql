@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/cznic/mathutil"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/coprocessor"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"

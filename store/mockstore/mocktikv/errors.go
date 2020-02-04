@@ -16,7 +16,7 @@ package mocktikv
 import (
 	"fmt"
 
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 )
 
 // ErrLocked is returned when trying to Read/Write on a locked key. Client should

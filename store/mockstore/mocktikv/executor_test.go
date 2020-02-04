@@ -16,9 +16,9 @@ package mocktikv_test
 import (
 	"context"
 
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"

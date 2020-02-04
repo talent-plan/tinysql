@@ -21,10 +21,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
@@ -413,28 +413,6 @@ func (s *testLockSuite) TestLockTTL(c *C) {
 	s.prewriteTxn(c, txn.(*tikvTxn))
 	l = s.mustGetLock(c, []byte("key"))
 	s.ttlEquals(c, l.TTL, defaultLockTTL+uint64(time.Since(start)/time.Millisecond))
-}
-
-func (s *testLockSuite) TestBatchResolveLocks(c *C) {
-	txn, err := s.store.Begin()
-	c.Assert(err, IsNil)
-	txn.Set(kv.Key("key"), []byte("value"))
-	s.prewriteTxnWithTTL(c, txn.(*tikvTxn), 1000)
-	l := s.mustGetLock(c, []byte("key"))
-	msBeforeLockExpired := s.store.GetOracle().UntilExpired(l.TxnID, l.TTL)
-	c.Assert(msBeforeLockExpired, Greater, int64(0))
-
-	lr := newLockResolver(s.store)
-	bo := NewBackoffer(context.Background(), GcResolveLockMaxBackoff)
-	loc, err := lr.store.GetRegionCache().LocateKey(bo, l.Primary)
-	c.Assert(err, IsNil)
-	// Check BatchResolveLocks resolve the lock even the ttl is not expired.
-	succ, err := lr.BatchResolveLocks(bo, []*Lock{l}, loc.Region)
-	c.Assert(succ, IsTrue)
-	c.Assert(err, IsNil)
-
-	err = txn.Commit(context.Background())
-	c.Assert(err, NotNil)
 }
 
 func (s *testLockSuite) TestNewLockZeroTTL(c *C) {

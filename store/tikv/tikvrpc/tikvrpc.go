@@ -16,13 +16,13 @@ package tikvrpc
 import (
 	"context"
 	"fmt"
+
+	"github.com/pingcap-incubator/tinykv/proto/pkg/coprocessor"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/tikvpb"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/debugpb"
-	"github.com/pingcap/kvproto/pkg/errorpb"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"github.com/pingcap/tidb/kv"
 )
 
@@ -40,28 +40,14 @@ const (
 	CmdBatchRollback
 	CmdScanLock
 	CmdResolveLock
-	CmdGC
-	CmdDeleteRange
 	CmdCheckTxnStatus
 
 	CmdRawGet CmdType = 256 + iota
-	CmdRawBatchGet
 	CmdRawPut
-	CmdRawBatchPut
 	CmdRawDelete
-	CmdRawBatchDelete
-	CmdRawDeleteRange
 	CmdRawScan
 
-	CmdUnsafeDestroyRange
-
 	CmdCop CmdType = 512 + iota
-
-	CmdMvccGetByKey CmdType = 1024 + iota
-	CmdMvccGetByStartTs
-	CmdSplitRegion
-
-	CmdEmpty CmdType = 3072 + iota
 )
 
 func (t CmdType) String() string {
@@ -84,36 +70,16 @@ func (t CmdType) String() string {
 		return "ScanLock"
 	case CmdResolveLock:
 		return "ResolveLock"
-	case CmdGC:
-		return "GC"
-	case CmdDeleteRange:
-		return "DeleteRange"
 	case CmdRawGet:
 		return "RawGet"
-	case CmdRawBatchGet:
-		return "RawBatchGet"
 	case CmdRawPut:
 		return "RawPut"
-	case CmdRawBatchPut:
-		return "RawBatchPut"
 	case CmdRawDelete:
 		return "RawDelete"
-	case CmdRawBatchDelete:
-		return "RawBatchDelete"
-	case CmdRawDeleteRange:
-		return "RawDeleteRange"
 	case CmdRawScan:
 		return "RawScan"
-	case CmdUnsafeDestroyRange:
-		return "UnsafeDestroyRange"
 	case CmdCop:
 		return "Cop"
-	case CmdMvccGetByKey:
-		return "MvccGetByKey"
-	case CmdMvccGetByStartTs:
-		return "MvccGetByStartTS"
-	case CmdSplitRegion:
-		return "SplitRegion"
 	case CmdCheckTxnStatus:
 		return "CheckTxnStatus"
 	}
@@ -196,24 +162,9 @@ func (req *Request) ResolveLock() *kvrpcpb.ResolveLockRequest {
 	return req.req.(*kvrpcpb.ResolveLockRequest)
 }
 
-// GC returns GCRequest in request.
-func (req *Request) GC() *kvrpcpb.GCRequest {
-	return req.req.(*kvrpcpb.GCRequest)
-}
-
-// DeleteRange returns DeleteRangeRequest in request.
-func (req *Request) DeleteRange() *kvrpcpb.DeleteRangeRequest {
-	return req.req.(*kvrpcpb.DeleteRangeRequest)
-}
-
 // RawGet returns RawGetRequest in request.
 func (req *Request) RawGet() *kvrpcpb.RawGetRequest {
 	return req.req.(*kvrpcpb.RawGetRequest)
-}
-
-// RawBatchGet returns RawBatchGetRequest in request.
-func (req *Request) RawBatchGet() *kvrpcpb.RawBatchGetRequest {
-	return req.req.(*kvrpcpb.RawBatchGetRequest)
 }
 
 // RawPut returns RawPutRequest in request.
@@ -221,34 +172,14 @@ func (req *Request) RawPut() *kvrpcpb.RawPutRequest {
 	return req.req.(*kvrpcpb.RawPutRequest)
 }
 
-// RawBatchPut returns RawBatchPutRequest in request.
-func (req *Request) RawBatchPut() *kvrpcpb.RawBatchPutRequest {
-	return req.req.(*kvrpcpb.RawBatchPutRequest)
-}
-
 // RawDelete returns PrewriteRequest in request.
 func (req *Request) RawDelete() *kvrpcpb.RawDeleteRequest {
 	return req.req.(*kvrpcpb.RawDeleteRequest)
 }
 
-// RawBatchDelete returns RawBatchDeleteRequest in request.
-func (req *Request) RawBatchDelete() *kvrpcpb.RawBatchDeleteRequest {
-	return req.req.(*kvrpcpb.RawBatchDeleteRequest)
-}
-
-// RawDeleteRange returns RawDeleteRangeRequest in request.
-func (req *Request) RawDeleteRange() *kvrpcpb.RawDeleteRangeRequest {
-	return req.req.(*kvrpcpb.RawDeleteRangeRequest)
-}
-
 // RawScan returns RawScanRequest in request.
 func (req *Request) RawScan() *kvrpcpb.RawScanRequest {
 	return req.req.(*kvrpcpb.RawScanRequest)
-}
-
-// UnsafeDestroyRange returns UnsafeDestroyRangeRequest in request.
-func (req *Request) UnsafeDestroyRange() *kvrpcpb.UnsafeDestroyRangeRequest {
-	return req.req.(*kvrpcpb.UnsafeDestroyRangeRequest)
 }
 
 // Cop returns coprocessor request in request.
@@ -269,16 +200,6 @@ func (req *Request) MvccGetByStartTs() *kvrpcpb.MvccGetByStartTsRequest {
 // SplitRegion returns SplitRegionRequest in request.
 func (req *Request) SplitRegion() *kvrpcpb.SplitRegionRequest {
 	return req.req.(*kvrpcpb.SplitRegionRequest)
-}
-
-// DebugGetRegionProperties returns GetRegionPropertiesRequest in request.
-func (req *Request) DebugGetRegionProperties() *debugpb.GetRegionPropertiesRequest {
-	return req.req.(*debugpb.GetRegionPropertiesRequest)
-}
-
-// Empty returns BatchCommandsEmptyRequest in request.
-func (req *Request) Empty() *tikvpb.BatchCommandsEmptyRequest {
-	return req.req.(*tikvpb.BatchCommandsEmptyRequest)
 }
 
 // CheckTxnStatus returns CheckTxnStatusRequest in request.
@@ -324,38 +245,16 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 		req.ScanLock().Context = ctx
 	case CmdResolveLock:
 		req.ResolveLock().Context = ctx
-	case CmdGC:
-		req.GC().Context = ctx
-	case CmdDeleteRange:
-		req.DeleteRange().Context = ctx
 	case CmdRawGet:
 		req.RawGet().Context = ctx
-	case CmdRawBatchGet:
-		req.RawBatchGet().Context = ctx
 	case CmdRawPut:
 		req.RawPut().Context = ctx
-	case CmdRawBatchPut:
-		req.RawBatchPut().Context = ctx
 	case CmdRawDelete:
 		req.RawDelete().Context = ctx
-	case CmdRawBatchDelete:
-		req.RawBatchDelete().Context = ctx
-	case CmdRawDeleteRange:
-		req.RawDeleteRange().Context = ctx
 	case CmdRawScan:
 		req.RawScan().Context = ctx
-	case CmdUnsafeDestroyRange:
-		req.UnsafeDestroyRange().Context = ctx
 	case CmdCop:
 		req.Cop().Context = ctx
-	case CmdMvccGetByKey:
-		req.MvccGetByKey().Context = ctx
-	case CmdMvccGetByStartTs:
-		req.MvccGetByStartTs().Context = ctx
-	case CmdSplitRegion:
-		req.SplitRegion().Context = ctx
-	case CmdEmpty:
-		req.SplitRegion().Context = ctx
 	case CmdCheckTxnStatus:
 		req.CheckTxnStatus().Context = ctx
 	default:
@@ -406,67 +305,26 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 		p = &kvrpcpb.ResolveLockResponse{
 			RegionError: e,
 		}
-	case CmdGC:
-		p = &kvrpcpb.GCResponse{
-			RegionError: e,
-		}
-	case CmdDeleteRange:
-		p = &kvrpcpb.DeleteRangeResponse{
-			RegionError: e,
-		}
 	case CmdRawGet:
 		p = &kvrpcpb.RawGetResponse{
-			RegionError: e,
-		}
-	case CmdRawBatchGet:
-		p = &kvrpcpb.RawBatchGetResponse{
 			RegionError: e,
 		}
 	case CmdRawPut:
 		p = &kvrpcpb.RawPutResponse{
 			RegionError: e,
 		}
-	case CmdRawBatchPut:
-		p = &kvrpcpb.RawBatchPutResponse{
-			RegionError: e,
-		}
 	case CmdRawDelete:
 		p = &kvrpcpb.RawDeleteResponse{
-			RegionError: e,
-		}
-	case CmdRawBatchDelete:
-		p = &kvrpcpb.RawBatchDeleteResponse{
-			RegionError: e,
-		}
-	case CmdRawDeleteRange:
-		p = &kvrpcpb.RawDeleteRangeResponse{
 			RegionError: e,
 		}
 	case CmdRawScan:
 		p = &kvrpcpb.RawScanResponse{
 			RegionError: e,
 		}
-	case CmdUnsafeDestroyRange:
-		p = &kvrpcpb.UnsafeDestroyRangeResponse{
-			RegionError: e,
-		}
 	case CmdCop:
 		p = &coprocessor.Response{
 			RegionError: e,
 		}
-	case CmdMvccGetByKey:
-		p = &kvrpcpb.MvccGetByKeyResponse{
-			RegionError: e,
-		}
-	case CmdMvccGetByStartTs:
-		p = &kvrpcpb.MvccGetByStartTsResponse{
-			RegionError: e,
-		}
-	case CmdSplitRegion:
-		p = &kvrpcpb.SplitRegionResponse{
-			RegionError: e,
-		}
-	case CmdEmpty:
 	case CmdCheckTxnStatus:
 		p = &kvrpcpb.CheckTxnStatusResponse{
 			RegionError: e,
@@ -489,9 +347,6 @@ func (resp *Response) GetRegionError() (*errorpb.Error, error) {
 	}
 	err, ok := resp.Resp.(getRegionError)
 	if !ok {
-		if _, isEmpty := resp.Resp.(*tikvpb.BatchCommandsEmptyResponse); isEmpty {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("invalid response type %v", resp)
 	}
 	return err.GetRegionError(), nil
@@ -522,38 +377,16 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = client.KvScanLock(ctx, req.ScanLock())
 	case CmdResolveLock:
 		resp.Resp, err = client.KvResolveLock(ctx, req.ResolveLock())
-	case CmdGC:
-		resp.Resp, err = client.KvGC(ctx, req.GC())
-	case CmdDeleteRange:
-		resp.Resp, err = client.KvDeleteRange(ctx, req.DeleteRange())
 	case CmdRawGet:
 		resp.Resp, err = client.RawGet(ctx, req.RawGet())
-	case CmdRawBatchGet:
-		resp.Resp, err = client.RawBatchGet(ctx, req.RawBatchGet())
 	case CmdRawPut:
 		resp.Resp, err = client.RawPut(ctx, req.RawPut())
-	case CmdRawBatchPut:
-		resp.Resp, err = client.RawBatchPut(ctx, req.RawBatchPut())
 	case CmdRawDelete:
 		resp.Resp, err = client.RawDelete(ctx, req.RawDelete())
-	case CmdRawBatchDelete:
-		resp.Resp, err = client.RawBatchDelete(ctx, req.RawBatchDelete())
-	case CmdRawDeleteRange:
-		resp.Resp, err = client.RawDeleteRange(ctx, req.RawDeleteRange())
 	case CmdRawScan:
 		resp.Resp, err = client.RawScan(ctx, req.RawScan())
-	case CmdUnsafeDestroyRange:
-		resp.Resp, err = client.UnsafeDestroyRange(ctx, req.UnsafeDestroyRange())
 	case CmdCop:
 		resp.Resp, err = client.Coprocessor(ctx, req.Cop())
-	case CmdMvccGetByKey:
-		resp.Resp, err = client.MvccGetByKey(ctx, req.MvccGetByKey())
-	case CmdMvccGetByStartTs:
-		resp.Resp, err = client.MvccGetByStartTs(ctx, req.MvccGetByStartTs())
-	case CmdSplitRegion:
-		resp.Resp, err = client.SplitRegion(ctx, req.SplitRegion())
-	case CmdEmpty:
-		resp.Resp, err = &tikvpb.BatchCommandsEmptyResponse{}, nil
 	case CmdCheckTxnStatus:
 		resp.Resp, err = client.KvCheckTxnStatus(ctx, req.CheckTxnStatus())
 	default:

@@ -24,10 +24,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
+	pd "github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/tidb/util/logutil"

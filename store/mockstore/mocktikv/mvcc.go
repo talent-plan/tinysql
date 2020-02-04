@@ -20,8 +20,8 @@ import (
 	"math"
 
 	"github.com/google/btree"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/util/codec"
 )
 

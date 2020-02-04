@@ -17,8 +17,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"

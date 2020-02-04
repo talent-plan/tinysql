@@ -18,10 +18,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/kvproto/pkg/errorpb"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
@@ -87,18 +87,6 @@ func (s *RegionRequestSender) SendReqCtx(
 		switch val.(string) {
 		case "timeout":
 			failpoint.Return(nil, nil, errors.New("timeout"))
-		case "GCNotLeader":
-			if req.Type == tikvrpc.CmdGC {
-				failpoint.Return(&tikvrpc.Response{
-					Resp: &kvrpcpb.GCResponse{RegionError: &errorpb.Error{NotLeader: &errorpb.NotLeader{}}},
-				}, nil, nil)
-			}
-		case "GCServerIsBusy":
-			if req.Type == tikvrpc.CmdGC {
-				failpoint.Return(&tikvrpc.Response{
-					Resp: &kvrpcpb.GCResponse{RegionError: &errorpb.Error{ServerIsBusy: &errorpb.ServerIsBusy{}}},
-				}, nil, nil)
-			}
 		}
 	})
 

@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/coprocessor"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/kv"

@@ -18,16 +18,13 @@ import (
 	"container/list"
 	"context"
 	"fmt"
-	"math"
-	"sync"
-	"time"
-
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
+	"github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
-	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
+	"sync"
 )
 
 // ResolvedCacheSize is max number of cached txn status.
@@ -158,88 +155,6 @@ func (lr *LockResolver) getResolved(txnID uint64) (TxnStatus, bool) {
 
 	s, ok := lr.mu.resolved[txnID]
 	return s, ok
-}
-
-// BatchResolveLocks resolve locks in a batch.
-// Used it in gcworker only!
-func (lr *LockResolver) BatchResolveLocks(bo *Backoffer, locks []*Lock, loc RegionVerID) (bool, error) {
-	if len(locks) == 0 {
-		return true, nil
-	}
-
-	// The GCWorker kill all ongoing transactions, because it must make sure all
-	// locks have been cleaned before GC.
-	expiredLocks := locks
-
-	callerStartTS, err := lr.store.GetOracle().GetTimestamp(bo.ctx)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	txnInfos := make(map[uint64]uint64)
-	startTime := time.Now()
-	for _, l := range expiredLocks {
-		if _, ok := txnInfos[l.TxnID]; ok {
-			continue
-		}
-
-		// Use currentTS = math.MaxUint64 means rollback the txn, no matter the lock is expired or not!
-		status, err := lr.getTxnStatus(bo, l.TxnID, l.Primary, callerStartTS, math.MaxUint64, true)
-		if err != nil {
-			return false, err
-		}
-
-		if status.ttl > 0 {
-			logutil.BgLogger().Error("BatchResolveLocks fail to clean locks, this result is not expected!")
-			return false, errors.New("TiDB ask TiKV to rollback locks but it doesn't, the protocol maybe wrong")
-		}
-
-		txnInfos[l.TxnID] = uint64(status.commitTS)
-	}
-	logutil.BgLogger().Info("BatchResolveLocks: lookup txn status",
-		zap.Duration("cost time", time.Since(startTime)),
-		zap.Int("num of txn", len(txnInfos)))
-
-	listTxnInfos := make([]*kvrpcpb.TxnInfo, 0, len(txnInfos))
-	for txnID, status := range txnInfos {
-		listTxnInfos = append(listTxnInfos, &kvrpcpb.TxnInfo{
-			Txn:    txnID,
-			Status: status,
-		})
-	}
-
-	req := tikvrpc.NewRequest(tikvrpc.CmdResolveLock, &kvrpcpb.ResolveLockRequest{TxnInfos: listTxnInfos})
-	startTime = time.Now()
-	resp, err := lr.store.SendReq(bo, req, loc, readTimeoutShort)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	regionErr, err := resp.GetRegionError()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	if regionErr != nil {
-		err = bo.Backoff(BoRegionMiss, errors.New(regionErr.String()))
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-		return false, nil
-	}
-
-	if resp.Resp == nil {
-		return false, errors.Trace(ErrBodyMissing)
-	}
-	cmdResp := resp.Resp.(*kvrpcpb.ResolveLockResponse)
-	if keyErr := cmdResp.GetError(); keyErr != nil {
-		return false, errors.Errorf("unexpected resolve err: %s", keyErr)
-	}
-
-	logutil.BgLogger().Info("BatchResolveLocks: resolve locks in a batch",
-		zap.Duration("cost time", time.Since(startTime)),
-		zap.Int("num of locks", len(expiredLocks)))
-	return true, nil
 }
 
 // ResolveLocks tries to resolve Locks. The resolving process is in 3 steps:

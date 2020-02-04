@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
+	pd "github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/oracle/oracles"
@@ -102,7 +102,6 @@ func (d Driver) Open(path string) (kv.Storage, error) {
 type EtcdBackend interface {
 	EtcdAddrs() []string
 	TLSConfig() *tls.Config
-	StartGCWorker() error
 }
 
 // update oracle's lastTS every 2000ms.
@@ -116,7 +115,6 @@ type tikvStore struct {
 	pdClient     pd.Client
 	regionCache  *RegionCache
 	lockResolver *LockResolver
-	gcWorker     GCHandler
 	etcdAddrs    []string
 	mock         bool
 	enableGC     bool
@@ -187,21 +185,6 @@ func (s *tikvStore) EtcdAddrs() []string {
 	return s.etcdAddrs
 }
 
-// StartGCWorker starts GC worker, it's called in BootstrapSession, don't call this function more than once.
-func (s *tikvStore) StartGCWorker() error {
-	if !s.enableGC || NewGCHandlerFunc == nil {
-		return nil
-	}
-
-	gcWorker, err := NewGCHandlerFunc(s, s.pdClient)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	gcWorker.Start()
-	s.gcWorker = gcWorker
-	return nil
-}
-
 func (s *tikvStore) runSafePointChecker() {
 	d := gcSafePointUpdateInterval
 	for {
@@ -255,9 +238,6 @@ func (s *tikvStore) Close() error {
 	delete(mc.cache, s.uuid)
 	s.oracle.Close()
 	s.pdClient.Close()
-	if s.gcWorker != nil {
-		s.gcWorker.Close()
-	}
 
 	close(s.closed)
 	if err := s.client.Close(); err != nil {
@@ -352,10 +332,6 @@ func (s *tikvStore) GetRegionCache() *RegionCache {
 
 func (s *tikvStore) GetLockResolver() *LockResolver {
 	return s.lockResolver
-}
-
-func (s *tikvStore) GetGCHandler() GCHandler {
-	return s.gcWorker
 }
 
 func (s *tikvStore) Closed() <-chan struct{} {

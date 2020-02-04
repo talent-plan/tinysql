@@ -17,8 +17,8 @@ import (
 	"context"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/coprocessor"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/coprocessor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"

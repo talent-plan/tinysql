@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/kvproto/pkg/pdpb"
-	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/pdpb"
+	pd "github.com/pingcap-incubator/tinykv/scheduler/client"
 )
 
 // Use global variables to prevent pdClients from creating duplicate timestamps.

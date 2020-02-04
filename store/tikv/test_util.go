@@ -15,8 +15,8 @@ package tikv
 
 import (
 	"github.com/google/uuid"
+	"github.com/pingcap-incubator/tinykv/scheduler/client"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/kv"
 )
 

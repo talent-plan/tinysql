@@ -17,9 +17,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 )
 
 func TestT(t *testing.T) {
