@@ -246,32 +246,6 @@ func (s *testLockSuite) TestCheckTxnStatusTTL(c *C) {
 	c.Assert(status.commitTS, Equals, commitTS)
 }
 
-func (s *testLockSuite) TestTxnHeartBeat(c *C) {
-	txn, err := s.store.Begin()
-	c.Assert(err, IsNil)
-	txn.Set(kv.Key("key"), []byte("value"))
-	s.prewriteTxn(c, txn.(*tikvTxn))
-
-	bo := NewBackoffer(context.Background(), PrewriteMaxBackoff)
-	newTTL, err := sendTxnHeartBeat(bo, s.store, []byte("key"), txn.StartTS(), 666)
-	c.Assert(err, IsNil)
-	c.Assert(newTTL, Equals, uint64(666))
-
-	newTTL, err = sendTxnHeartBeat(bo, s.store, []byte("key"), txn.StartTS(), 555)
-	c.Assert(err, IsNil)
-	c.Assert(newTTL, Equals, uint64(666))
-
-	lock := s.mustGetLock(c, []byte("key"))
-	status := TxnStatus{ttl: newTTL}
-	cleanRegions := make(map[RegionVerID]struct{})
-	err = newLockResolver(s.store).resolveLock(bo, lock, status, cleanRegions)
-	c.Assert(err, IsNil)
-
-	newTTL, err = sendTxnHeartBeat(bo, s.store, []byte("key"), txn.StartTS(), 666)
-	c.Assert(err, NotNil)
-	c.Assert(newTTL, Equals, uint64(0))
-}
-
 func (s *testLockSuite) TestCheckTxnStatus(c *C) {
 	txn, err := s.store.Begin()
 	c.Assert(err, IsNil)

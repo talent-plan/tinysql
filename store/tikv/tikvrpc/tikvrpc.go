@@ -42,7 +42,6 @@ const (
 	CmdResolveLock
 	CmdGC
 	CmdDeleteRange
-	CmdTxnHeartBeat
 	CmdCheckTxnStatus
 
 	CmdRawGet CmdType = 256 + iota
@@ -117,8 +116,6 @@ func (t CmdType) String() string {
 		return "SplitRegion"
 	case CmdCheckTxnStatus:
 		return "CheckTxnStatus"
-	case CmdTxnHeartBeat:
-		return "TxnHeartBeat"
 	}
 	return "Unknown"
 }
@@ -359,8 +356,6 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 		req.SplitRegion().Context = ctx
 	case CmdEmpty:
 		req.SplitRegion().Context = ctx
-	case CmdTxnHeartBeat:
-		req.TxnHeartBeat().Context = ctx
 	case CmdCheckTxnStatus:
 		req.CheckTxnStatus().Context = ctx
 	default:
@@ -472,10 +467,6 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 			RegionError: e,
 		}
 	case CmdEmpty:
-	case CmdTxnHeartBeat:
-		p = &kvrpcpb.TxnHeartBeatResponse{
-			RegionError: e,
-		}
 	case CmdCheckTxnStatus:
 		p = &kvrpcpb.CheckTxnStatusResponse{
 			RegionError: e,
@@ -565,8 +556,6 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = &tikvpb.BatchCommandsEmptyResponse{}, nil
 	case CmdCheckTxnStatus:
 		resp.Resp, err = client.KvCheckTxnStatus(ctx, req.CheckTxnStatus())
-	case CmdTxnHeartBeat:
-		resp.Resp, err = client.KvTxnHeartBeat(ctx, req.TxnHeartBeat())
 	default:
 		return nil, errors.Errorf("invalid request type: %v", req.Type)
 	}
