@@ -841,7 +841,6 @@ func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {
 	deleteExec := &DeleteExec{
 		baseExecutor:   base,
 		tblID2Table:    tblID2table,
-		IsMultiTable:   v.IsMultiTable,
 		tblColPosInfos: v.TblColPosInfos,
 	}
 	return deleteExec

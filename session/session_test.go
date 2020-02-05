@@ -697,35 +697,6 @@ func (s *testSessionSuite2) TestReplace(c *C) {
 	tk.MustExec("replace into t select * from t1 limit 1;")
 }
 
-func (s *testSessionSuite2) TestDelete(c *C) {
-	// test for https://github.com/pingcap/tidb/pull/1135
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKit(c, s.store)
-	tk1.MustExec("create database test1")
-	tk1.MustExec("use test1")
-	tk1.MustExec("create table t (F1 VARCHAR(30));")
-	tk1.MustExec("insert into t (F1) values ('1'), ('4');")
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (F1 VARCHAR(30));")
-	tk.MustExec("insert into t (F1) values ('1'), ('2');")
-	tk.MustExec("delete m1 from t m1,t m2 where false;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows("1", "2"))
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (F1 VARCHAR(30));")
-	tk.MustExec("insert into t (F1) values ('1'), ('2');")
-	tk.MustExec("delete m1, m2 from t m1,t m2 where m1.F1>m2.F1;")
-	tk.MustQuery("select * from t;").Check(testkit.Rows())
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (F1 VARCHAR(30));")
-	tk.MustExec("insert into t (F1) values ('1'), ('2');")
-	tk.MustExec("delete test1.t from test1.t inner join test.t where test1.t.F1 > test.t.F1")
-	tk1.MustQuery("select * from t;").Check(testkit.Rows("1"))
-}
-
 func (s *testSessionSuite2) TestUnique(c *C) {
 	// test for https://github.com/pingcap/tidb/pull/461
 
@@ -1201,55 +1172,6 @@ func (s *testSchemaSuite) TestDeleteExecChunk(c *C) {
 
 	row := req.GetRow(0)
 	c.Assert(row.GetInt64(0), Equals, int64(99))
-	rs.Close()
-}
-
-func (s *testSchemaSuite) TestDeleteMultiTableExecChunk(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table chk1(a int)")
-	tk.MustExec("create table chk2(a int)")
-
-	for i := 0; i < 100; i++ {
-		tk.MustExec(fmt.Sprintf("insert chk1 values (%d)", i))
-	}
-
-	for i := 0; i < 50; i++ {
-		tk.MustExec(fmt.Sprintf("insert chk2 values (%d)", i))
-	}
-
-	tk.Se.GetSessionVars().DistSQLScanConcurrency = 1
-
-	tk.MustExec("delete chk1, chk2 from chk1 inner join chk2 where chk1.a = chk2.a")
-
-	rs, err := tk.Exec("select * from chk1")
-	c.Assert(err, IsNil)
-
-	var idx int
-	for {
-		req := rs.NewChunk()
-		err = rs.Next(context.TODO(), req)
-		c.Assert(err, IsNil)
-
-		if req.NumRows() == 0 {
-			break
-		}
-
-		for i := 0; i < req.NumRows(); i++ {
-			row := req.GetRow(i)
-			c.Assert(row.GetInt64(0), Equals, int64(idx+50))
-			idx++
-		}
-	}
-	c.Assert(idx, Equals, 50)
-	rs.Close()
-
-	rs, err = tk.Exec("select * from chk2")
-	c.Assert(err, IsNil)
-
-	req := rs.NewChunk()
-	err = rs.Next(context.TODO(), req)
-	c.Assert(err, IsNil)
-	c.Assert(req.NumRows(), Equals, 0)
 	rs.Close()
 }
 

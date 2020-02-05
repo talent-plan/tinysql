@@ -2632,65 +2632,27 @@ LikeTableWithOrWithoutParen:
  *
  *******************************************************************/
 DeleteFromStmt:
-	"DELETE" TableOptimizerHints PriorityOpt QuickOptional "FROM" TableName TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
+	"DELETE" PriorityOpt QuickOptional "FROM" TableName TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
 	{
 		// Single Table
-		tn := $6.(*ast.TableName)
-		tn.IndexHints = $8.([]*ast.IndexHint)
-		join := &ast.Join{Left: &ast.TableSource{Source: tn, AsName: $7.(model.CIStr)}, Right: nil}
+		tn := $5.(*ast.TableName)
+		tn.IndexHints = $7.([]*ast.IndexHint)
+		join := &ast.Join{Left: &ast.TableSource{Source: tn, AsName: $6.(model.CIStr)}, Right: nil}
 		x := &ast.DeleteStmt{
 			TableRefs: &ast.TableRefsClause{TableRefs: join},
-			Priority:  $3.(mysql.PriorityEnum),
-			Quick:	   $4.(bool),
-		}
-		if $9 != nil {
-			x.Where = $9.(ast.ExprNode)
-		}
-		if $10 != nil {
-			x.Order = $10.(*ast.OrderByClause)
-		}
-		if $11 != nil {
-			x.Limit = $11.(*ast.Limit)
-		}
-
-		$$ = x
-	}
-|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional TableAliasRefList "FROM" TableRefs WhereClauseOptional
-	{
-		// Multiple Table
-		x := &ast.DeleteStmt{
-			Priority:	  $3.(mysql.PriorityEnum),
-			Quick:		  $4.(bool),
-			IsMultiTable: 	  true,
-			BeforeFrom:	  true,
-			Tables:		  &ast.DeleteTableList{Tables: $5.([]*ast.TableName)},
-			TableRefs:	  &ast.TableRefsClause{TableRefs: $7.(*ast.Join)},
-		}
-		if $2 != nil {
-			x.TableHints = $2.([]*ast.TableOptimizerHint)
+			Priority:  $2.(mysql.PriorityEnum),
+			Quick:	   $3.(bool),
 		}
 		if $8 != nil {
 			x.Where = $8.(ast.ExprNode)
 		}
-		$$ = x
-	}
-
-|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional "FROM" TableAliasRefList "USING" TableRefs WhereClauseOptional
-	{
-		// Multiple Table
-		x := &ast.DeleteStmt{
-			Priority:	  $3.(mysql.PriorityEnum),
-			Quick:		  $4.(bool),
-			IsMultiTable:	  true,
-			Tables:		  &ast.DeleteTableList{Tables: $6.([]*ast.TableName)},
-			TableRefs:	  &ast.TableRefsClause{TableRefs: $8.(*ast.Join)},
-		}
-		if $2 != nil {
-			x.TableHints = $2.([]*ast.TableOptimizerHint)
-		}
 		if $9 != nil {
-			x.Where = $9.(ast.ExprNode)
+			x.Order = $9.(*ast.OrderByClause)
 		}
+		if $10 != nil {
+			x.Limit = $10.(*ast.Limit)
+		}
+
 		$$ = x
 	}
 

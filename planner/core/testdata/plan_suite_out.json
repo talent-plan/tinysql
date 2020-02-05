@@ -498,22 +498,6 @@
         "Best": "TableReader(Table(t))->Update"
       },
       {
-        "SQL": "delete /*+ TIDB_INLJ(t1, t2) */ t1 from t t1, t t2 where t1.c=t2.c",
-        "Best": "IndexJoin{TableReader(Table(t))->IndexLookUp(Index(t.c_d_e)[[NULL,+inf]], Table(t))}(test.t.c,test.t.c)->Delete"
-      },
-      {
-        "SQL": "delete /*+ TIDB_SMJ(t1, t2) */ from t1 using t t1, t t2 where t1.c=t2.c",
-        "Best": "MergeInnerJoin{IndexLookUp(Index(t.c_d_e)[[NULL,+inf]], Table(t))->IndexLookUp(Index(t.c_d_e)[[NULL,+inf]], Table(t))}(test.t.c,test.t.c)->Delete"
-      },
-      {
-        "SQL": "update /*+ TIDB_SMJ(t1, t2) */ t t1, t t2 set t1.a=1, t2.a=1 where t1.a=t2.a",
-        "Best": "MergeInnerJoin{TableReader(Table(t))->TableReader(Table(t))}(test.t.a,test.t.a)->Update"
-      },
-      {
-        "SQL": "update /*+ TIDB_HJ(t1, t2) */ t t1, t t2 set t1.a=1, t2.a=1 where t1.a=t2.a",
-        "Best": "LeftHashJoin{TableReader(Table(t))->TableReader(Table(t))}(test.t.a,test.t.a)->Update"
-      },
-      {
         "SQL": "delete from t where b < 1 order by d limit 1",
         "Best": "TableReader(Table(t)->Sel([lt(test.t.b, 1)])->TopN([test.t.d],0,1))->TopN([test.t.d],0,1)->Delete"
       },

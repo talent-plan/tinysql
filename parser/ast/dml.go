@@ -1140,17 +1140,11 @@ type DeleteStmt struct {
 
 	// TableRefs is used in both single table and multiple table delete statement.
 	TableRefs *TableRefsClause
-	// Tables is only used in multiple table delete statement.
-	Tables       *DeleteTableList
-	Where        ExprNode
-	Order        *OrderByClause
-	Limit        *Limit
-	Priority     mysql.PriorityEnum
-	Quick        bool
-	IsMultiTable bool
-	BeforeFrom   bool
-	// TableHints represents the table level Optimizer Hint for join type.
-	TableHints []*TableOptimizerHint
+	Where     ExprNode
+	Order     *OrderByClause
+	Limit     *Limit
+	Priority  mysql.PriorityEnum
+	Quick     bool
 }
 
 // Accept implements Node Accept interface.
@@ -1166,14 +1160,6 @@ func (n *DeleteStmt) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.TableRefs = node.(*TableRefsClause)
-
-	if n.Tables != nil {
-		node, ok = n.Tables.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Tables = node.(*DeleteTableList)
-	}
 
 	if n.Where != nil {
 		node, ok = n.Where.Accept(v)

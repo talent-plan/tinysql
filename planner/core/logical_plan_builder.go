@@ -2603,12 +2603,6 @@ func extractDefaultExpr(node ast.ExprNode) *ast.DefaultExpr {
 }
 
 func (b *PlanBuilder) buildDelete(ctx context.Context, delete *ast.DeleteStmt) (Plan, error) {
-	b.pushTableHints(delete.TableHints)
-	defer func() {
-		// table hints are only visible in the current DELETE statement.
-		b.popTableHints()
-	}()
-
 	p, err := b.buildResultSetNode(ctx, delete.TableRefs.TableRefs)
 	if err != nil {
 		return nil, err
@@ -2643,9 +2637,7 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, delete *ast.DeleteStmt) (
 	proj.names = p.OutputNames()[:oldLen]
 	p = proj
 
-	del := Delete{
-		IsMultiTable: delete.IsMultiTable,
-	}.Init(b.ctx)
+	del := Delete{}.Init(b.ctx)
 
 	del.names = p.OutputNames()
 	del.SelectPlan, err = DoOptimize(ctx, b.optFlag, p)
@@ -2653,59 +2645,9 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, delete *ast.DeleteStmt) (
 		return nil, err
 	}
 
-	var tableList []*ast.TableName
-	tableList = extractTableList(delete.TableRefs.TableRefs, tableList, true)
-
-	if delete.Tables != nil {
-		// Delete a, b from a, b, c, d... add a and b.
-		for _, tn := range delete.Tables.Tables {
-			foundMatch := false
-			for _, v := range tableList {
-				dbName := v.Schema.L
-				if dbName == "" {
-					dbName = b.ctx.GetSessionVars().CurrentDB
-				}
-				if (tn.Schema.L == "" || tn.Schema.L == dbName) && tn.Name.L == v.Name.L {
-					tn.Schema.L = dbName
-					tn.DBInfo = v.DBInfo
-					tn.TableInfo = v.TableInfo
-					foundMatch = true
-					break
-				}
-			}
-			if !foundMatch {
-				var asNameList []string
-				asNameList = extractTableSourceAsNames(delete.TableRefs.TableRefs, asNameList, false)
-				for _, asName := range asNameList {
-					tblName := tn.Name.L
-					if tn.Schema.L != "" {
-						tblName = tn.Schema.L + "." + tblName
-					}
-					if asName == tblName {
-						// check sql like: `delete a from (select * from t) as a, t`
-						return nil, ErrNonUpdatableTable.GenWithStackByArgs(tn.Name.O, "DELETE")
-					}
-				}
-				// check sql like: `delete b from (select * from t) as a, t`
-				return nil, ErrUnknownTable.GenWithStackByArgs(tn.Name.O, "MULTI DELETE")
-			}
-		}
-	}
-
 	tblID2Handle, err := resolveIndicesForTblID2Handle(b.handleHelper.tailMap(), del.SelectPlan.Schema())
 	if err != nil {
 		return nil, err
-	}
-	if del.IsMultiTable {
-		// tblID2TableName is the table map value is an array which contains table aliases.
-		// Table ID may not be unique for deleting multiple tables, for statements like
-		// `delete from t as t1, t as t2`, the same table has two alias, we have to identify a table
-		// by its alias instead of ID.
-		tblID2TableName := make(map[int64][]*ast.TableName, len(delete.Tables.Tables))
-		for _, tn := range delete.Tables.Tables {
-			tblID2TableName[tn.TableInfo.ID] = append(tblID2TableName[tn.TableInfo.ID], tn)
-		}
-		tblID2Handle = del.cleanTblID2HandleMap(tblID2TableName, tblID2Handle, del.names)
 	}
 	tblID2table := make(map[int64]table.Table)
 	for id := range tblID2Handle {
@@ -2727,41 +2669,6 @@ func resolveIndicesForTblID2Handle(tblID2Handle map[int64][]*expression.Column, 
 		}
 	}
 	return newMap, nil
-}
-
-func (p *Delete) cleanTblID2HandleMap(
-	tablesToDelete map[int64][]*ast.TableName,
-	tblID2Handle map[int64][]*expression.Column,
-	outputNames []*types.FieldName,
-) map[int64][]*expression.Column {
-	for id, cols := range tblID2Handle {
-		names, ok := tablesToDelete[id]
-		if !ok {
-			delete(tblID2Handle, id)
-			continue
-		}
-		for i := len(cols) - 1; i >= 0; i-- {
-			if !p.matchingDeletingTable(names, outputNames[cols[i].Index]) {
-				cols = append(cols[:i], cols[i+1:]...)
-			}
-		}
-		if len(cols) == 0 {
-			delete(tblID2Handle, id)
-			continue
-		}
-		tblID2Handle[id] = cols
-	}
-	return tblID2Handle
-}
-
-// matchingDeletingTable checks whether this column is from the table which is in the deleting list.
-func (p *Delete) matchingDeletingTable(names []*ast.TableName, name *types.FieldName) bool {
-	for _, n := range names {
-		if (name.DBName.L == "" || name.DBName.L == n.Schema.L) && name.TblName.L == n.Name.L {
-			return true
-		}
-	}
-	return false
 }
 
 // extractTableList extracts all the TableNames from node.

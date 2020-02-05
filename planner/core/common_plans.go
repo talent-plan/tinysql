@@ -114,8 +114,6 @@ type Update struct {
 type Delete struct {
 	baseSchemaProducer
 
-	IsMultiTable bool
-
 	SelectPlan PhysicalPlan
 
 	TblColPosInfos TblColPosInfoSlice

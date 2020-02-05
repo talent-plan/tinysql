@@ -853,7 +853,7 @@ func extractStmtHintsFromStmtNode(stmtNode ast.StmtNode) []*ast.TableOptimizerHi
 	case *ast.UpdateStmt:
 		return x.TableHints
 	case *ast.DeleteStmt:
-		return x.TableHints
+		return nil
 	// TODO: support hint for InsertStmt
 	case *ast.ExplainStmt:
 		return extractStmtHintsFromStmtNode(x.Stmt)

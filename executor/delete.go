@@ -28,8 +28,7 @@ import (
 type DeleteExec struct {
 	baseExecutor
 
-	IsMultiTable bool
-	tblID2Table  map[int64]table.Table
+	tblID2Table map[int64]table.Table
 
 	// tblColPosInfos stores relationship between column ordinal to its table handle.
 	// the columns ordinals is present in ordinal range format, @see plannercore.TblColPosInfos
@@ -39,9 +38,6 @@ type DeleteExec struct {
 // Next implements the Executor Next interface.
 func (e *DeleteExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
-	if e.IsMultiTable {
-		return e.deleteMultiTablesByChunk(ctx)
-	}
 	return e.deleteSingleTableByChunk(ctx)
 }
 
@@ -99,56 +95,6 @@ func (e *DeleteExec) deleteSingleTableByChunk(ctx context.Context) error {
 	return nil
 }
 
-func (e *DeleteExec) composeTblRowMap(tblRowMap tableRowMapType, colPosInfos []plannercore.TblColPosInfo, joinedRow []types.Datum) {
-	// iterate all the joined tables, and got the copresonding rows in joinedRow.
-	for _, info := range colPosInfos {
-		if tblRowMap[info.TblID] == nil {
-			tblRowMap[info.TblID] = make(map[int64][]types.Datum)
-		}
-		handle := joinedRow[info.HandleOrdinal].GetInt64()
-		// tblRowMap[info.TblID][handle] hold the row datas binding to this table and this handle.
-		tblRowMap[info.TblID][handle] = joinedRow[info.Start:info.End]
-	}
-}
-
-func (e *DeleteExec) deleteMultiTablesByChunk(ctx context.Context) error {
-	colPosInfos := e.tblColPosInfos
-	tblRowMap := make(tableRowMapType)
-	fields := retTypes(e.children[0])
-	chk := newFirstChunk(e.children[0])
-	for {
-		iter := chunk.NewIterator4Chunk(chk)
-		err := Next(ctx, e.children[0], chk)
-		if err != nil {
-			return err
-		}
-		if chk.NumRows() == 0 {
-			break
-		}
-
-		for joinedChunkRow := iter.Begin(); joinedChunkRow != iter.End(); joinedChunkRow = iter.Next() {
-			joinedDatumRow := joinedChunkRow.GetDatumRow(fields)
-			e.composeTblRowMap(tblRowMap, colPosInfos, joinedDatumRow)
-		}
-		chk = chunk.Renew(chk, e.maxChunkSize)
-	}
-
-	return e.removeRowsInTblRowMap(tblRowMap)
-}
-
-func (e *DeleteExec) removeRowsInTblRowMap(tblRowMap tableRowMapType) error {
-	for id, rowMap := range tblRowMap {
-		for handle, data := range rowMap {
-			err := e.removeRow(e.ctx, e.tblID2Table[id], handle, data)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 func (e *DeleteExec) removeRow(ctx sessionctx.Context, t table.Table, h int64, data []types.Datum) error {
 	err := t.RemoveRecord(ctx, h, data)
 	if err != nil {
@@ -167,8 +113,3 @@ func (e *DeleteExec) Close() error {
 func (e *DeleteExec) Open(ctx context.Context) error {
 	return e.children[0].Open(ctx)
 }
-
-// tableRowMapType is a map for unique (Table, Row) pair. key is the tableID.
-// the key in map[int64]Row is the joined table handle, which represent a unique reference row.
-// the value in map[int64]Row is the deleting row.
-type tableRowMapType map[int64]map[int64][]types.Datum
