@@ -736,8 +736,7 @@ func (cc *clientConn) flush() error {
 }
 
 func (cc *clientConn) writeOK() error {
-	msg := cc.ctx.LastMessage()
-	return cc.writeOkWith(msg, cc.ctx.AffectedRows(), cc.ctx.LastInsertID(), cc.ctx.Status(), cc.ctx.WarningCount())
+	return cc.writeOkWith("", cc.ctx.AffectedRows(), cc.ctx.LastInsertID(), cc.ctx.Status(), cc.ctx.WarningCount())
 }
 
 func (cc *clientConn) writeOkWith(msg string, affectedRows, lastInsertID uint64, status, warnCnt uint16) error {
@@ -1049,7 +1048,7 @@ func (cc *clientConn) writeMultiResultset(ctx context.Context, rss []ResultSet, 
 			if !lastRs {
 				status |= mysql.ServerMoreResultsExists
 			}
-			if err := cc.writeOkWith(r.LastMessage(), r.AffectedRows(), r.LastInsertID(), status, r.WarnCount()); err != nil {
+			if err := cc.writeOkWith("", r.AffectedRows(), r.LastInsertID(), status, r.WarnCount()); err != nil {
 				return err
 			}
 			continue

@@ -85,7 +85,6 @@ var (
 	errTooLongKey                = terror.ClassDDL.New(mysql.ErrTooLongKey,
 		fmt.Sprintf(mysql.MySQLErrName[mysql.ErrTooLongKey], maxPrefixLength))
 	errKeyColumnDoesNotExits    = terror.ClassDDL.New(mysql.ErrKeyColumnDoesNotExits, mysql.MySQLErrName[mysql.ErrKeyColumnDoesNotExits])
-	errInvalidDDLJobVersion     = terror.ClassDDL.New(mysql.ErrInvalidDDLJobVersion, mysql.MySQLErrName[mysql.ErrInvalidDDLJobVersion])
 	errInvalidUseOfNull         = terror.ClassDDL.New(mysql.ErrInvalidUseOfNull, mysql.MySQLErrName[mysql.ErrInvalidUseOfNull])
 	errTooManyFields            = terror.ClassDDL.New(mysql.ErrTooManyFields, mysql.MySQLErrName[mysql.ErrTooManyFields])
 	errInvalidSplitRegionRanges = terror.ClassDDL.New(mysql.ErrInvalidSplitRegionRanges, mysql.MySQLErrName[mysql.ErrInvalidSplitRegionRanges])
@@ -195,8 +194,8 @@ type ddl struct {
 	quitCh chan struct{}
 
 	*ddlCtx
-	workers     map[workerType]*worker
-	sessPool    *sessionPool
+	workers  map[workerType]*worker
+	sessPool *sessionPool
 }
 
 // ddlCtx is the context when we use worker to handle DDL jobs.
@@ -295,7 +294,7 @@ func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
 
 	d.workers = make(map[workerType]*worker, 2)
 	d.sessPool = newSessionPool(ctxPool)
-	d.workers[generalWorker] = newWorker(generalWorker,  d.sessPool)
+	d.workers[generalWorker] = newWorker(generalWorker, d.sessPool)
 	d.workers[addIdxWorker] = newWorker(addIdxWorker, d.sessPool)
 	for _, worker := range d.workers {
 		worker.wg.Add(1)

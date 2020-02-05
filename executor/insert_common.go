@@ -243,12 +243,7 @@ func (e *InsertValues) handleErr(col *table.Column, val *types.Datum, rowIdx int
 		err = table.ErrTruncatedWrongValueForField.GenWithStackByArgs(types.TypeStr(colTp), valStr, colName, rowIdx+1)
 	}
 
-	if !e.ctx.GetSessionVars().StmtCtx.DupKeyAsWarning {
-		return err
-	}
-	// TODO: should not filter all types of errors here.
-	e.handleWarning(err)
-	return nil
+	return err
 }
 
 // evalRow evaluates a to-be-inserted row. The value of the column may base on another column,
@@ -706,11 +701,6 @@ func getAutoRecordID(d types.Datum, target *types.FieldType, isInsert bool) (int
 	}
 
 	return recordID, nil
-}
-
-func (e *InsertValues) handleWarning(err error) {
-	sc := e.ctx.GetSessionVars().StmtCtx
-	sc.AppendWarning(err)
 }
 
 func (e *InsertValues) addRecord(ctx context.Context, row []types.Datum) (int64, error) {

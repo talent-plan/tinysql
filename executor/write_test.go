@@ -39,7 +39,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec(testSQL)
 	testSQL = `insert insert_test (c1) values (1),(2),(NULL);`
 	tk.MustExec(testSQL)
-	tk.CheckLastMessage("Records: 3  Duplicates: 0  Warnings: 0")
 
 	errInsertSelectSQL := `insert insert_test (c1) values ();`
 	tk.MustExec("begin")
@@ -67,7 +66,6 @@ func (s *testSuite4) TestInsert(c *C) {
 
 	insertSetSQL := `insert insert_test set c1 = 3;`
 	tk.MustExec(insertSetSQL)
-	tk.CheckLastMessage("")
 
 	errInsertSelectSQL = `insert insert_test set c1 = 4, c1 = 5;`
 	tk.MustExec("begin")
@@ -85,7 +83,6 @@ func (s *testSuite4) TestInsert(c *C) {
 	tk.MustExec(insertSelectSQL)
 	insertSelectSQL = `insert insert_test_1 select id, c1 from insert_test;`
 	tk.MustExec(insertSelectSQL)
-	tk.CheckLastMessage("Records: 4  Duplicates: 0  Warnings: 0")
 
 	errInsertSelectSQL = `insert insert_test_1 select c1 from insert_test;`
 	tk.MustExec("begin")
@@ -332,7 +329,6 @@ func (s *testSuite4) TestReplace(c *C) {
 	tk.MustExec(testSQL)
 	testSQL = `replace replace_test (c1) values (1),(2),(NULL);`
 	tk.MustExec(testSQL)
-	tk.CheckLastMessage("Records: 3  Duplicates: 0  Warnings: 0")
 
 	errReplaceSQL := `replace replace_test (c1) values ();`
 	tk.MustExec("begin")
@@ -360,7 +356,6 @@ func (s *testSuite4) TestReplace(c *C) {
 
 	replaceSetSQL := `replace replace_test set c1 = 3;`
 	tk.MustExec(replaceSetSQL)
-	tk.CheckLastMessage("")
 
 	errReplaceSetSQL := `replace replace_test set c1 = 4, c1 = 5;`
 	tk.MustExec("begin")
@@ -378,7 +373,6 @@ func (s *testSuite4) TestReplace(c *C) {
 	tk.MustExec(replaceSelectSQL)
 	replaceSelectSQL = `replace replace_test_1 select id, c1 from replace_test;`
 	tk.MustExec(replaceSelectSQL)
-	tk.CheckLastMessage("Records: 4  Duplicates: 0  Warnings: 0")
 
 	errReplaceSelectSQL := `replace replace_test_1 select c1 from replace_test;`
 	tk.MustExec("begin")
@@ -393,19 +387,16 @@ func (s *testSuite4) TestReplace(c *C) {
 	replaceUniqueIndexSQL = `replace into replace_test_3 set c2=1;`
 	tk.MustExec(replaceUniqueIndexSQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(1))
-	tk.CheckLastMessage("")
 
 	replaceUniqueIndexSQL = `replace into replace_test_3 set c1=1, c2=1;`
 	tk.MustExec(replaceUniqueIndexSQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(2))
-	tk.CheckLastMessage("")
 
 	replaceUniqueIndexSQL = `replace into replace_test_3 set c2=NULL;`
 	tk.MustExec(replaceUniqueIndexSQL)
 	replaceUniqueIndexSQL = `replace into replace_test_3 set c2=NULL;`
 	tk.MustExec(replaceUniqueIndexSQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(1))
-	tk.CheckLastMessage("")
 
 	replaceUniqueIndexSQL = `create table replace_test_4 (c1 int, c2 int, c3 int, UNIQUE INDEX (c1, c2));`
 	tk.MustExec(replaceUniqueIndexSQL)
@@ -414,7 +405,6 @@ func (s *testSuite4) TestReplace(c *C) {
 	replaceUniqueIndexSQL = `replace into replace_test_4 set c2=NULL;`
 	tk.MustExec(replaceUniqueIndexSQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(1))
-	tk.CheckLastMessage("")
 
 	replacePrimaryKeySQL := `create table replace_test_5 (c1 int, c2 int, c3 int, PRIMARY KEY (c1, c2));`
 	tk.MustExec(replacePrimaryKeySQL)
@@ -423,17 +413,14 @@ func (s *testSuite4) TestReplace(c *C) {
 	replacePrimaryKeySQL = `replace into replace_test_5 set c1=1, c2=2;`
 	tk.MustExec(replacePrimaryKeySQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(1))
-	tk.CheckLastMessage("")
 
 	// For Issue989
 	issue989SQL := `CREATE TABLE tIssue989 (a int, b int, PRIMARY KEY(a), UNIQUE KEY(b));`
 	tk.MustExec(issue989SQL)
 	issue989SQL = `insert into tIssue989 (a, b) values (1, 2);`
 	tk.MustExec(issue989SQL)
-	tk.CheckLastMessage("")
 	issue989SQL = `replace into tIssue989(a, b) values (111, 2);`
 	tk.MustExec(issue989SQL)
-	tk.CheckLastMessage("")
 	r := tk.MustQuery("select * from tIssue989;")
 	r.Check(testkit.Rows("111 2"))
 
@@ -447,7 +434,7 @@ func (s *testSuite4) TestReplace(c *C) {
 	issue1012SQL = `replace into tIssue1012(a, b) values (1, 1);`
 	tk.MustExec(issue1012SQL)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(3))
-	tk.CheckLastMessage("")
+
 	r = tk.MustQuery("select * from tIssue1012;")
 	r.Check(testkit.Rows("1 1"))
 
@@ -457,16 +444,13 @@ func (s *testSuite4) TestReplace(c *C) {
 	tk.MustExec(`insert into t1 values(1,1),(2,2),(3,3),(4,4),(5,5);`)
 	tk.MustExec(`replace into t1 values(1,1);`)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(1))
-	tk.CheckLastMessage("")
+
 	tk.MustExec(`replace into t1 values(1,1),(2,2);`)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(2))
-	tk.CheckLastMessage("Records: 2  Duplicates: 0  Warnings: 0")
 	tk.MustExec(`replace into t1 values(4,14),(5,15),(6,16),(7,17),(8,18)`)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(7))
-	tk.CheckLastMessage("Records: 5  Duplicates: 2  Warnings: 0")
 	tk.MustExec(`replace into t1 select * from (select 1, 2) as tmp;`)
 	c.Assert(int64(tk.Se.AffectedRows()), Equals, int64(2))
-	tk.CheckLastMessage("Records: 1  Duplicates: 1  Warnings: 0")
 
 	// Assign `DEFAULT` in `REPLACE` statement
 	tk.MustExec("drop table if exists t1, t2;")
@@ -490,7 +474,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	updateStr := `UPDATE update_test SET name = "abc" where id > 0;`
 	tk.MustExec(updateStr)
 	tk.CheckExecResult(2, 0)
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 
 	// select data
 	tk.MustExec("begin")
@@ -500,7 +483,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 
 	tk.MustExec(`UPDATE update_test SET name = "foo"`)
 	tk.CheckExecResult(2, 0)
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 
 	// table option is auto-increment
 	tk.MustExec("begin")
@@ -510,7 +492,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.MustExec("create table update_test(id int not null auto_increment, name varchar(255), primary key(id))")
 	tk.MustExec("insert into update_test(name) values ('aa')")
 	tk.MustExec("update update_test set id = 8 where name = 'aa'")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	tk.MustExec("insert into update_test(name) values ('bb')")
 	tk.MustExec("commit")
 	tk.MustExec("begin")
@@ -533,7 +514,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	tk.MustExec("begin")
 	tk.MustExec("insert into update_test(id) values (1)")
 	tk.MustExec("update update_test set id = 2 where id = 1 limit 1")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	r = tk.MustQuery("select * from update_test;")
 	r.Check(testkit.Rows("2"))
 	tk.MustExec("commit")
@@ -546,39 +526,6 @@ func (s *testSuite8) TestUpdate(c *C) {
 	c.Assert(err, NotNil)
 	tk.MustExec("commit")
 	tk.MustQuery("select * from update_unique").Check(testkit.Rows("1 1", "2 2"))
-
-	// test update ignore for pimary key
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint, primary key (a));")
-	tk.MustExec("insert into t values (1)")
-	tk.MustExec("insert into t values (2)")
-	_, err = tk.Exec("update ignore t set a = 1 where a = 2;")
-	c.Assert(err, IsNil)
-	tk.CheckLastMessage("Rows matched: 1  Changed: 0  Warnings: 1")
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1062 Duplicate entry '1' for key 'PRIMARY'"))
-	tk.MustQuery("select * from t").Check(testkit.Rows("1", "2"))
-
-	// test update ignore for truncate as warning
-	_, err = tk.Exec("update ignore t set a = 1 where a = (select '2a')")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1292 Truncated incorrect FLOAT value: '2a'", "Warning 1292 Truncated incorrect FLOAT value: '2a'", "Warning 1062 Duplicate entry '1' for key 'PRIMARY'"))
-
-	tk.MustExec("update ignore t set a = 42 where a = 2;")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1", "42"))
-
-	// test update ignore for unique key
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t(a bigint, unique key I_uniq (a));")
-	tk.MustExec("insert into t values (1)")
-	tk.MustExec("insert into t values (2)")
-	_, err = tk.Exec("update ignore t set a = 1 where a = 2;")
-	c.Assert(err, IsNil)
-	tk.CheckLastMessage("Rows matched: 1  Changed: 0  Warnings: 1")
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1062 Duplicate entry '1' for key 'I_uniq'"))
-	tk.MustQuery("select * from t").Check(testkit.Rows("1", "2"))
 
 	// for issue #5132
 	tk.MustExec("CREATE TABLE `tt1` (" +
@@ -593,22 +540,11 @@ func (s *testSuite8) TestUpdate(c *C) {
 	r = tk.MustQuery("select * from tt1;")
 	r.Check(testkit.Rows("1 a a", "2 d b"))
 	tk.MustExec("update tt1 set a=5 where c='b';")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	r = tk.MustQuery("select * from tt1;")
 	r.Check(testkit.Rows("1 a a", "5 d b"))
 
-	// test update ignore for bad null error
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec(`create table t (i int not null default 10)`)
-	tk.MustExec("insert into t values (1)")
-	tk.MustExec("update ignore t set i = null;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 1")
-	r = tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1048 Column 'i' cannot be null"))
-	tk.MustQuery("select * from t").Check(testkit.Rows("0"))
-
 	// issue 7237, update subquery table should be forbidden
-	tk.MustExec("drop table t")
+	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (k int, v int)")
 	_, err = tk.Exec("update t, (select * from t) as b set b.k = t.k")
 	c.Assert(err.Error(), Equals, "[planner:1288]The target table b of the UPDATE is not updatable")
@@ -660,7 +596,6 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 	s.fillMultiTableForUpdate(tk)
 
 	tk.MustExec(`UPDATE items, month  SET items.price=month.mprice WHERE items.id=month.mid;`)
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 	tk.MustExec("begin")
 	r := tk.MustQuery("SELECT * FROM items")
 	r.Check(testkit.Rows("11 month_price_11", "12 items_price_12", "13 month_price_13"))
@@ -668,7 +603,6 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 
 	// Single-table syntax but with multiple tables
 	tk.MustExec(`UPDATE items join month on items.id=month.mid SET items.price=month.mid;`)
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 	tk.MustExec("begin")
 	r = tk.MustQuery("SELECT * FROM items")
 	r.Check(testkit.Rows("11 11", "12 items_price_12", "13 13"))
@@ -676,7 +610,6 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 
 	// JoinTable with alias table name.
 	tk.MustExec(`UPDATE items T0 join month T1 on T0.id=T1.mid SET T0.price=T1.mprice;`)
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 	tk.MustExec("begin")
 	r = tk.MustQuery("SELECT * FROM items")
 	r.Check(testkit.Rows("11 month_price_11", "12 items_price_12", "13 month_price_13"))
@@ -691,7 +624,6 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 		insert into t2 values ("a"), ("b");
 		update t1, t2 set t1.c = 10, t2.c = "abc";`
 	tk.MustExec(testSQL)
-	tk.CheckLastMessage("Rows matched: 4  Changed: 4  Warnings: 0")
 
 	// fix https://github.com/pingcap/tidb/issues/376
 	testSQL = `DROP TABLE IF EXISTS t1, t2;
@@ -701,7 +633,6 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 		insert into t2 values (1), (2);
 		update t1, t2 set t1.c1 = 10, t2.c2 = 2 where t2.c2 = 1;`
 	tk.MustExec(testSQL)
-	tk.CheckLastMessage("Rows matched: 3  Changed: 3  Warnings: 0")
 
 	r = tk.MustQuery("select * from t1")
 	r.Check(testkit.Rows("10", "10"))
@@ -710,12 +641,9 @@ func (s *testSuite4) TestMultipleTableUpdate(c *C) {
 	tk.MustExec("drop table if exists t, t")
 	tk.MustExec("create table t (a int, b int)")
 	tk.MustExec("insert into t values(1, 1), (2, 2), (3, 3)")
-	tk.CheckLastMessage("Records: 3  Duplicates: 0  Warnings: 0")
 	tk.MustExec("update t m, t n set m.a = m.a + 1")
-	tk.CheckLastMessage("Rows matched: 3  Changed: 3  Warnings: 0")
 	tk.MustQuery("select * from t").Check(testkit.Rows("2 1", "3 2", "4 3"))
 	tk.MustExec("update t m, t n set n.a = n.a - 1, n.b = n.b + 1")
-	tk.CheckLastMessage("Rows matched: 3  Changed: 3  Warnings: 0")
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 2", "2 3", "3 4"))
 }
 
@@ -742,19 +670,6 @@ func (s *testSuite) TestDelete(c *C) {
 	rows := tk.MustQuery(`SELECT * from delete_test limit 2;`)
 	rows.Check(testkit.Rows("1 hello"))
 	tk.MustExec("commit")
-
-	// Test delete ignore
-	tk.MustExec("insert into delete_test values (2, 'abc')")
-	_, err := tk.Exec("delete from delete_test where id = (select '2a')")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("delete ignore from delete_test where id = (select '2a')")
-	c.Assert(err, IsNil)
-	tk.CheckExecResult(1, 0)
-	r := tk.MustQuery("SHOW WARNINGS;")
-	r.Check(testkit.Rows("Warning 1292 Truncated incorrect FLOAT value: '2a'", "Warning 1292 Truncated incorrect FLOAT value: '2a'"))
-
-	tk.MustExec(`delete from delete_test ;`)
-	tk.CheckExecResult(1, 0)
 }
 
 func (s *testSuite4) fillDataMultiTable(tk *testkit.TestKit) {
@@ -868,8 +783,6 @@ func (s *testSuite7) TestUpdateSelect(c *C) {
 	tk.MustExec("create table detail (id varchar(8), start varchar(8), status int, index idx_start(start))")
 	tk.MustExec("insert detail values ('abc', '123', 2)")
 	tk.MustExec("UPDATE msg SET msg.status = (SELECT detail.status FROM detail WHERE msg.id = detail.id)")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
-
 }
 
 func (s *testSuite7) TestUpdateDelete(c *C) {
@@ -880,11 +793,9 @@ func (s *testSuite7) TestUpdateDelete(c *C) {
 
 	tk.MustExec("begin")
 	tk.MustExec("update ttt set id = 0, host='9' where id = 9 limit 1;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	tk.MustExec("delete from ttt where id = 0 limit 1;")
 	tk.MustQuery("select * from ttt use index (i_host) order by host;").Check(testkit.Rows("8 8"))
 	tk.MustExec("update ttt set id = 0, host='8' where id = 8 limit 1;")
-	tk.CheckLastMessage("Rows matched: 1  Changed: 1  Warnings: 0")
 	tk.MustExec("delete from ttt where id = 0 limit 1;")
 	tk.MustQuery("select * from ttt use index (i_host) order by host;").Check(testkit.Rows())
 	tk.MustExec("commit")
@@ -900,7 +811,6 @@ func (s *testSuite7) TestUpdateAffectRowCnt(c *C) {
 	tk.MustExec("update a set id = id*10 where a = 1001")
 	ctx := tk.Se.(sessionctx.Context)
 	c.Assert(ctx.GetSessionVars().StmtCtx.AffectedRows(), Equals, uint64(2))
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 
 	tk.MustExec("drop table a")
 	tk.MustExec("create table a ( a bigint, b bigint)")
@@ -908,7 +818,6 @@ func (s *testSuite7) TestUpdateAffectRowCnt(c *C) {
 	tk.MustExec("update a set a = a*10 where b = 1001")
 	ctx = tk.Se.(sessionctx.Context)
 	c.Assert(ctx.GetSessionVars().StmtCtx.AffectedRows(), Equals, uint64(2))
-	tk.CheckLastMessage("Rows matched: 2  Changed: 2  Warnings: 0")
 }
 
 func (s *testSuite7) TestReplaceLog(c *C) {

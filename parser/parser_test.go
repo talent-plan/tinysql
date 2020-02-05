@@ -513,8 +513,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"DELETE from t1.*", false, ""},
 		{"DELETE LOW_priORITY from t1", true, "DELETE LOW_PRIORITY FROM `t1`"},
 		{"DELETE quick from t1", true, "DELETE QUICK FROM `t1`"},
-		{"DELETE ignore from t1", true, "DELETE IGNORE FROM `t1`"},
-		{"DELETE low_priority quick ignore from t1", true, "DELETE LOW_PRIORITY QUICK IGNORE FROM `t1`"},
 		{"DELETE FROM t1 WHERE t1.a > 0 ORDER BY t1.a", true, "DELETE FROM `t1` WHERE `t1`.`a`>0 ORDER BY `t1`.`a`"},
 		{"delete from t1 where a=26", true, "DELETE FROM `t1` WHERE `a`=26"},
 		{"DELETE from t1 where a=1 limit 1", true, "DELETE FROM `t1` WHERE `a`=1 LIMIT 1"},
@@ -525,8 +523,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// multi table syntax: before from
 		{"delete low_priority t1, t2 from t1, t2", true, "DELETE LOW_PRIORITY `t1`,`t2` FROM (`t1`) JOIN `t2`"},
 		{"delete quick t1, t2 from t1, t2", true, "DELETE QUICK `t1`,`t2` FROM (`t1`) JOIN `t2`"},
-		{"delete ignore t1, t2 from t1, t2", true, "DELETE IGNORE `t1`,`t2` FROM (`t1`) JOIN `t2`"},
-		{"delete low_priority quick ignore t1, t2 from t1, t2 where t1.a > 5", true, "DELETE LOW_PRIORITY QUICK IGNORE `t1`,`t2` FROM (`t1`) JOIN `t2` WHERE `t1`.`a`>5"},
 		{"delete t1, t2 from t1, t2", true, "DELETE `t1`,`t2` FROM (`t1`) JOIN `t2`"},
 		{"delete t1, t2 from t1, t2 where t1.a = 1 and t2.b <> 1", true, "DELETE `t1`,`t2` FROM (`t1`) JOIN `t2` WHERE `t1`.`a`=1 AND `t2`.`b`!=1"},
 		{"delete t1 from t1, t2", true, "DELETE `t1` FROM (`t1`) JOIN `t2`"},
@@ -542,8 +538,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 
 		// multi table syntax: with using
 		{"DELETE quick FROM t1,t2 USING t1,t2", true, "DELETE QUICK FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
-		{"DELETE low_priority ignore FROM t1,t2 USING t1,t2", true, "DELETE LOW_PRIORITY IGNORE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
-		{"DELETE low_priority quick ignore FROM t1,t2 USING t1,t2", true, "DELETE LOW_PRIORITY QUICK IGNORE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
 		{"DELETE FROM t1 USING t1 WHERE post='1'", true, "DELETE FROM `t1` USING `t1` WHERE `post`='1'"},
 		{"DELETE FROM t1,t2 USING t1,t2", true, "DELETE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
 		{"DELETE FROM t1,t2,t3 USING t1,t2,t3 where t3.a = 1", true, "DELETE FROM `t1`,`t2`,`t3` USING ((`t1`) JOIN `t2`) JOIN `t3` WHERE `t3`.`a`=1"},
@@ -600,7 +594,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"INSERT INTO t (a) SET a=1", false, ""},
 
 		// for update statement
-		{"UPDATE LOW_PRIORITY IGNORE t SET id = id + 1 ORDER BY id DESC;", true, "UPDATE LOW_PRIORITY IGNORE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"UPDATE t SET id = id + 1 ORDER BY id DESC;", true, "UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"UPDATE t SET id = id + 1 ORDER BY id DESC limit 3 ;", true, "UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC LIMIT 3"},
 		{"UPDATE t SET id = id + 1, name = 'jojo';", true, "UPDATE `t` SET `id`=`id`+1, `name`='jojo'"},
@@ -1702,7 +1695,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table a as select * from b", true, "CREATE TABLE `a`  AS SELECT * FROM `b`"},
 		{"create table a (m int, n datetime) as select * from b", true, "CREATE TABLE `a` (`m` INT,`n` DATETIME) AS SELECT * FROM `b`"},
 		{"create table a (unique(n)) as select n from b", true, "CREATE TABLE `a` (UNIQUE(`n`)) AS SELECT `n` FROM `b`"},
-		{"create table a ignore as select n from b", true, "CREATE TABLE `a`  IGNORE AS SELECT `n` FROM `b`"},
 		{"create table a replace as select n from b", true, "CREATE TABLE `a`  REPLACE AS SELECT `n` FROM `b`"},
 
 		// Create table with no option is valid for parser
@@ -2012,7 +2004,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 
 		// for create table select
 		{"CREATE TABLE bar (m INT)  SELECT n FROM foo;", true, "CREATE TABLE `bar` (`m` INT) AS SELECT `n` FROM `foo`"},
-		{"CREATE TABLE bar (m INT) IGNORE SELECT n FROM foo;", true, "CREATE TABLE `bar` (`m` INT) IGNORE AS SELECT `n` FROM `foo`"},
 		{"CREATE TABLE bar (m INT) REPLACE SELECT n FROM foo;", true, "CREATE TABLE `bar` (`m` INT) REPLACE AS SELECT `n` FROM `foo`"},
 
 		// for generated column definition
@@ -2201,382 +2192,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 	s.RunTest(c, table)
 }
 
-func (s *testParserSuite) TestOptimizerHints(c *C) {
-	parser := parser.New()
-	// Test USE_INDEX
-	stmt, _, err := parser.Parse("select /*+ USE_INDEX(T1,T2), use_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt := stmt[0].(*ast.SelectStmt)
-
-	hints := selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_index")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "use_index")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "t4")
-
-	// Test IGNORE_INDEX
-	stmt, _, err = parser.Parse("select /*+ IGNORE_INDEX(T1,T2), ignore_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "ignore_index")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "ignore_index")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "t4")
-
-	// Test TIDB_SMJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_SMJ(T1,t2), tidb_smj(T3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_smj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "tidb_smj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test SM_JOIN
-	stmt, _, err = parser.Parse("select /*+ SM_JOIN(t1, T2), sm_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "sm_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "sm_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test TIDB_INLJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_INLJ(t1, T2), tidb_inlj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_inlj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "tidb_inlj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test INL_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_JOIN(t1, T2), inl_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "inl_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test INL_HASH_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_HASH_JOIN(t1, T2), inl_hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "inl_hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test INL_MERGE_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_MERGE_JOIN(t1, T2), inl_merge_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_merge_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "inl_merge_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test TIDB_HJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_HJ(t1, T2), tidb_hj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_hj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "tidb_hj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test HASH_JOIN
-	stmt, _, err = parser.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	// Test HASH_JOIN with SWAP_JOIN_INPUTS/NO_SWAP_JOIN_INPUTS
-	// t1 for build, t4 for probe
-	stmt, _, err = parser.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4), SWAP_JOIN_INPUTS(t1), NO_SWAP_JOIN_INPUTS(t4)  */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 4)
-	c.Assert(hints[0].HintName.L, Equals, "hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-
-	c.Assert(hints[1].HintName.L, Equals, "hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
-
-	c.Assert(hints[2].HintName.L, Equals, "swap_join_inputs")
-	c.Assert(hints[2].Tables, HasLen, 1)
-	c.Assert(hints[2].Tables[0].TableName.L, Equals, "t1")
-
-	c.Assert(hints[3].HintName.L, Equals, "no_swap_join_inputs")
-	c.Assert(hints[3].Tables, HasLen, 1)
-	c.Assert(hints[3].Tables[0].TableName.L, Equals, "t4")
-
-	// Test MAX_EXECUTION_TIME
-	queries := []string{
-		"SELECT /*+ MAX_EXECUTION_TIME(1000) */ * FROM t1 INNER JOIN t2 where t1.c1 = t2.c1",
-		"SELECT /*+ MAX_EXECUTION_TIME(1000) */ 1",
-		"SELECT /*+ MAX_EXECUTION_TIME(1000) */ SLEEP(20)",
-		"SELECT /*+ MAX_EXECUTION_TIME(1000) */ 1 FROM DUAL",
-	}
-	for i, query := range queries {
-		stmt, _, err = parser.Parse(query, "", "")
-		c.Assert(err, IsNil)
-		selectStmt = stmt[0].(*ast.SelectStmt)
-		hints = selectStmt.TableHints
-		c.Assert(len(hints), Equals, 1)
-		c.Assert(hints[0].HintName.L, Equals, "max_execution_time", Commentf("case", i))
-		c.Assert(hints[0].MaxExecutionTime, Equals, uint64(1000))
-	}
-
-	// Test USE_INDEX_MERGE
-	stmt, _, err = parser.Parse("select /*+ USE_INDEX_MERGE(t1, c1), use_index_merge(t2, c1), use_index_merge(t3, c1, primary, c2) */ c1, c2 from t1, t2, t3 where t1.c1 = t2.c1 and t3.c2 = t1.c2", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 3)
-	c.Assert(hints[0].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "c1")
-
-	c.Assert(hints[1].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t2")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "c1")
-
-	c.Assert(hints[2].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[2].Tables, HasLen, 1)
-	c.Assert(hints[2].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[2].Indexes, HasLen, 3)
-	c.Assert(hints[2].Indexes[0].L, Equals, "c1")
-	c.Assert(hints[2].Indexes[1].L, Equals, "primary")
-	c.Assert(hints[2].Indexes[2].L, Equals, "c2")
-
-	// Test READ_FROM_STORAGE
-	stmt, _, err = parser.Parse("select /*+ READ_FROM_STORAGE(tiflash[t1, t2], tikv[t3]) */ c1, c2 from t1, t2, t1 t3 where t1.c1 = t2.c1 and t2.c1 = t3.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "read_from_storage")
-	c.Assert(hints[0].StoreType.L, Equals, "tiflash")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-	c.Assert(hints[1].HintName.L, Equals, "read_from_storage")
-	c.Assert(hints[1].StoreType.L, Equals, "tikv")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-
-	// Test USE_TOJA
-	stmt, _, err = parser.Parse("select /*+ USE_TOJA(true), use_toja(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_toja")
-	c.Assert(hints[0].HintFlag, IsTrue)
-
-	c.Assert(hints[1].HintName.L, Equals, "use_toja")
-	c.Assert(hints[1].HintFlag, IsFalse)
-
-	// Test ENABLE_PLAN_CACHE
-	stmt, _, err = parser.Parse("select /*+ ENABLE_PLAN_CACHE(true), enable_plan_cache(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "enable_plan_cache")
-	c.Assert(hints[0].HintFlag, IsTrue)
-
-	c.Assert(hints[1].HintName.L, Equals, "enable_plan_cache")
-	c.Assert(hints[1].HintFlag, IsFalse)
-
-	// Test USE_PLAN_CACHE
-	stmt, _, err = parser.Parse("select /*+ USE_PLAN_CACHE(), use_plan_cache() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_plan_cache")
-	c.Assert(hints[1].HintName.L, Equals, "use_plan_cache")
-
-	// Test QUERY_TYPE
-	stmt, _, err = parser.Parse("select /*+ QUERY_TYPE(OLAP), query_type(OLTP) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "query_type")
-	c.Assert(hints[0].QueryType.L, Equals, "olap")
-	c.Assert(hints[1].HintName.L, Equals, "query_type")
-	c.Assert(hints[1].QueryType.L, Equals, "oltp")
-
-	// Test MEMORY_QUOTA
-	stmt, _, err = parser.Parse("select /*+ MEMORY_QUOTA(1 MB), memory_quota(1 GB), memory_quota(1 NO_SUCH_UNIT) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 3)
-	c.Assert(hints[0].HintName.L, Equals, "memory_quota")
-	c.Assert(hints[0].MemoryQuota, Equals, int64(1024*1024))
-	c.Assert(hints[1].HintName.L, Equals, "memory_quota")
-	c.Assert(hints[1].MemoryQuota, Equals, int64(1024*1024*1024))
-	c.Assert(hints[2].HintName.L, Equals, "memory_quota")
-	c.Assert(hints[2].MemoryQuota, Equals, int64(-1))
-
-	// Test HASH_AGG
-	stmt, _, err = parser.Parse("select /*+ HASH_AGG(), hash_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "hash_agg")
-	c.Assert(hints[1].HintName.L, Equals, "hash_agg")
-
-	// Test STREAM_AGG
-	stmt, _, err = parser.Parse("select /*+ STREAM_AGG(), stream_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "stream_agg")
-	c.Assert(hints[1].HintName.L, Equals, "stream_agg")
-
-	// Test AGG_TO_COP
-	stmt, _, err = parser.Parse("select /*+ AGG_TO_COP(), agg_to_cop() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "agg_to_cop")
-	c.Assert(hints[1].HintName.L, Equals, "agg_to_cop")
-
-	// Test NO_INDEX_MERGE
-	stmt, _, err = parser.Parse("select /*+ NO_INDEX_MERGE(), no_index_merge() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "no_index_merge")
-	c.Assert(hints[1].HintName.L, Equals, "no_index_merge")
-
-	// Test READ_CONSISTENT_REPLICA
-	stmt, _, err = parser.Parse("select /*+ READ_CONSISTENT_REPLICA(), read_consistent_replica() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "read_consistent_replica")
-	c.Assert(hints[1].HintName.L, Equals, "read_consistent_replica")
-}
-
 func (s *testParserSuite) TestType(c *C) {
 	table := []testCase{
 		// for time fsp
@@ -2716,22 +2331,6 @@ func (s *testParserSuite) TestLikeEscape(c *C) {
 		{"select '''_' like '''_' escape ''''", true, "SELECT '''_' LIKE '''_' ESCAPE ''''"},
 	}
 
-	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestIndexHint(c *C) {
-	table := []testCase{
-		{`select * from t use index (primary)`, true, "SELECT * FROM `t` USE INDEX (`primary`)"},
-		{"select * from t use index (`primary`)", true, "SELECT * FROM `t` USE INDEX (`primary`)"},
-		{`select * from t use index ();`, true, "SELECT * FROM `t` USE INDEX ()"},
-		{`select * from t use index (idx);`, true, "SELECT * FROM `t` USE INDEX (`idx`)"},
-		{`select * from t use index (idx1, idx2);`, true, "SELECT * FROM `t` USE INDEX (`idx1`, `idx2`)"},
-		{`select * from t ignore key (idx1)`, true, "SELECT * FROM `t` IGNORE INDEX (`idx1`)"},
-		{`select * from t force index for join (idx1)`, true, "SELECT * FROM `t` FORCE INDEX FOR JOIN (`idx1`)"},
-		{`select * from t use index for order by (idx1)`, true, "SELECT * FROM `t` USE INDEX FOR ORDER BY (`idx1`)"},
-		{`select * from t force index for group by (idx1)`, true, "SELECT * FROM `t` FORCE INDEX FOR GROUP BY (`idx1`)"},
-		{`select * from t use index for group by (idx1) use index for order by (idx2), t2`, true, "SELECT * FROM (`t` USE INDEX FOR GROUP BY (`idx1`) USE INDEX FOR ORDER BY (`idx2`)) JOIN `t2`"},
-	}
 	s.RunTest(c, table)
 }
 

@@ -96,8 +96,6 @@ type RecordSet interface {
 type MultiQueryNoDelayResult interface {
 	// AffectedRows return affected row for one statement in multi-queries.
 	AffectedRows() uint64
-	// LastMessage return last message for one statement in multi-queries.
-	LastMessage() string
 	// WarnCount return warn count for one statement in multi-queries.
 	WarnCount() uint16
 	// Status return status when executing one statement in multi-queries.

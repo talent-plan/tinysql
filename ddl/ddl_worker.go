@@ -64,19 +64,19 @@ type worker struct {
 	quitCh   chan struct{}
 	wg       sync.WaitGroup
 
-	sessPool        *sessionPool // sessPool is used to new sessions to execute SQL in ddl package.
-	reorgCtx        *reorgCtx    // reorgCtx is used for reorganization.
-	logCtx          context.Context
+	sessPool *sessionPool // sessPool is used to new sessions to execute SQL in ddl package.
+	reorgCtx *reorgCtx    // reorgCtx is used for reorganization.
+	logCtx   context.Context
 }
 
 func newWorker(tp workerType, sessPool *sessionPool) *worker {
 	worker := &worker{
-		id:              atomic.AddInt32(&ddlWorkerID, 1),
-		tp:              tp,
-		ddlJobCh:        make(chan struct{}, 1),
-		quitCh:          make(chan struct{}),
-		reorgCtx:        &reorgCtx{notifyCancelReorgJob: 0},
-		sessPool:        sessPool,
+		id:       atomic.AddInt32(&ddlWorkerID, 1),
+		tp:       tp,
+		ddlJobCh: make(chan struct{}, 1),
+		quitCh:   make(chan struct{}),
+		reorgCtx: &reorgCtx{notifyCancelReorgJob: 0},
+		sessPool: sessPool,
 	}
 
 	worker.logCtx = logutil.WithKeyValue(context.Background(), "worker", worker.String())

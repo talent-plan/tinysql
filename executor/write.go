@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -40,8 +39,7 @@ var (
 //     2. handleChanged (bool) : is the handle changed after the update.
 //     3. newHandle (int64) : if handleChanged == true, the newHandle means the new handle after update.
 //     4. err (error) : error in the update.
-func updateRecord(ctx context.Context, sctx sessionctx.Context, h int64, oldData, newData []types.Datum, modified []bool, t table.Table,
-	onDup bool) (bool, bool, int64, error) {
+func updateRecord(ctx context.Context, sctx sessionctx.Context, h int64, oldData, newData []types.Datum, modified []bool, t table.Table) (bool, bool, int64, error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("executor.updateRecord", opentracing.ChildOf(span.Context()))
 		defer span1.Finish()
@@ -124,40 +122,22 @@ func updateRecord(ctx context.Context, sctx sessionctx.Context, h int64, oldData
 	// 4. If handle changed, remove the old then add the new record, otherwise update the record.
 	var err error
 	if handleChanged {
-		if sc.DupKeyAsWarning {
-			// For `UPDATE IGNORE`/`INSERT IGNORE ON DUPLICATE KEY UPDATE`
-			// If the new handle exists, this will avoid to remove the record.
-			err = tables.CheckHandleExists(ctx, sctx, t, newHandle, newData)
-			if err != nil {
-				return false, handleChanged, newHandle, err
-			}
-		}
 		if err = t.RemoveRecord(sctx, h, oldData); err != nil {
 			return false, false, 0, err
 		}
 		// the `affectedRows` is increased when adding new record.
-		if sc.DupKeyAsWarning {
-			newHandle, err = t.AddRecord(sctx, newData, table.IsUpdate, table.SkipHandleCheck, table.WithCtx(ctx))
-		} else {
-			newHandle, err = t.AddRecord(sctx, newData, table.IsUpdate, table.WithCtx(ctx))
-		}
+		newHandle, err = t.AddRecord(sctx, newData, table.IsUpdate, table.WithCtx(ctx))
 
 		if err != nil {
 			return false, false, 0, err
-		}
-		if onDup {
-			sc.AddAffectedRows(1)
 		}
 	} else {
 		// Update record to new value and update index.
 		if err = t.UpdateRecord(sctx, h, oldData, newData, modified); err != nil {
 			return false, false, 0, err
 		}
-		if onDup {
-			sc.AddAffectedRows(2)
-		} else {
-			sc.AddAffectedRows(1)
-		}
+
+		sc.AddAffectedRows(1)
 	}
 	sc.AddUpdatedRows(1)
 	sc.AddCopiedRows(1)
