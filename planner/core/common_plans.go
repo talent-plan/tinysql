@@ -87,10 +87,6 @@ type Insert struct {
 	Lists         [][]expression.Expression
 	SetList       []*expression.Assignment
 
-	OnDuplicate        []*expression.Assignment
-	Schema4OnDuplicate *expression.Schema
-	names4OnDuplicate  types.NameSlice
-
 	IsReplace bool
 
 	// NeedFillDefaultValue is true when expr in value list reference other column.

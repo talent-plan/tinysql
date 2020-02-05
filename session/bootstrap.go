@@ -266,9 +266,8 @@ func doDMLWorks(s Session) {
 		strings.Join(values, ", "))
 	mustExecute(s, sql)
 
-	sql = fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES("%s", "%s", "Bootstrap flag. Do not delete.")
-		ON DUPLICATE KEY UPDATE VARIABLE_VALUE="%s"`,
-		mysql.SystemDB, mysql.TiDBTable, bootstrappedVar, bootstrappedVarTrue, bootstrappedVarTrue)
+	sql = fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES("%s", "%s", "Bootstrap flag. Do not delete.")`,
+		mysql.SystemDB, mysql.TiDBTable, bootstrappedVar, bootstrappedVarTrue)
 	mustExecute(s, sql)
 
 	sql = fmt.Sprintf(`INSERT HIGH_PRIORITY INTO %s.%s VALUES("%s", "%d", "Bootstrap version. Do not delete.")`,

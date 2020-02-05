@@ -100,56 +100,16 @@ func (s *testSuite4) TestInsert(c *C) {
 	c.Assert(err, NotNil)
 	tk.MustExec("rollback")
 
-	// Updating column is PK handle.
-	// Make sure the record is "1, 1, nil, 1".
-	r := tk.MustQuery("select * from insert_test where id = 1;")
-	rowStr := fmt.Sprintf("%v %v %v %v", "1", "1", nil, "1")
-	r.Check(testkit.Rows(rowStr))
-	insertSQL := `insert into insert_test (id, c3) values (1, 2) on duplicate key update id=values(id), c2=10;`
-	tk.MustExec(insertSQL)
-	tk.CheckLastMessage("")
-	r = tk.MustQuery("select * from insert_test where id = 1;")
-	rowStr = fmt.Sprintf("%v %v %v %v", "1", "1", "10", "1")
-	r.Check(testkit.Rows(rowStr))
-
-	insertSQL = `insert into insert_test (id, c2) values (1, 1) on duplicate key update insert_test.c2=10;`
-	tk.MustExec(insertSQL)
-	tk.CheckLastMessage("")
-
-	_, err = tk.Exec(`insert into insert_test (id, c2) values(1, 1) on duplicate key update t.c2 = 10`)
-	c.Assert(err, NotNil)
-
-	// for on duplicate key
-	insertSQL = `INSERT INTO insert_test (id, c3) VALUES (1, 2) ON DUPLICATE KEY UPDATE c3=values(c3)+c3+3;`
-	tk.MustExec(insertSQL)
-	tk.CheckLastMessage("")
-	r = tk.MustQuery("select * from insert_test where id = 1;")
-	rowStr = fmt.Sprintf("%v %v %v %v", "1", "1", "10", "6")
-	r.Check(testkit.Rows(rowStr))
-
-	// for on duplicate key with ignore
-	insertSQL = `INSERT IGNORE INTO insert_test (id, c3) VALUES (1, 2) ON DUPLICATE KEY UPDATE c3=values(c3)+c3+3;`
-	tk.MustExec(insertSQL)
-	tk.CheckLastMessage("")
-	r = tk.MustQuery("select * from insert_test where id = 1;")
-	rowStr = fmt.Sprintf("%v %v %v %v", "1", "1", "10", "11")
-	r.Check(testkit.Rows(rowStr))
-
 	tk.MustExec("create table insert_err (id int, c1 varchar(8))")
 	_, err = tk.Exec("insert insert_err values (1, 'abcdabcdabcd')")
 	c.Assert(types.ErrDataTooLong.Equal(err), IsTrue)
 	_, err = tk.Exec("insert insert_err values (1, '你好，世界')")
 	c.Assert(err, IsNil)
 
-	tk.MustExec("create table TEST1 (ID INT NOT NULL, VALUE INT DEFAULT NULL, PRIMARY KEY (ID))")
-	_, err = tk.Exec("INSERT INTO TEST1(id,value) VALUE(3,3) on DUPLICATE KEY UPDATE VALUE=4")
-	c.Assert(err, IsNil)
-	tk.CheckLastMessage("")
-
 	tk.MustExec("create table t (id int)")
 	tk.MustExec("insert into t values(1)")
 	tk.MustExec("update t t1 set id = (select count(*) + 1 from t t2 where t1.id = t2.id)")
-	r = tk.MustQuery("select * from t;")
+	r := tk.MustQuery("select * from t;")
 	r.Check(testkit.Rows("2"))
 
 	tk.MustExec("drop table if exists t")
@@ -454,29 +414,6 @@ commit;`
 	tk.MustQuery(testSQL).Check(testkit.Rows("0"))
 }
 
-func (s *testSuite4) TestInsertIgnoreOnDup(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	testSQL := `drop table if exists t;
-    create table t (i int not null primary key, j int unique key);`
-	tk.MustExec(testSQL)
-	testSQL = `insert into t values (1, 1), (2, 2);`
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("Records: 2  Duplicates: 0  Warnings: 0")
-	testSQL = `insert ignore into t values(1, 1) on duplicate key update i = 2;`
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("")
-	testSQL = `select * from t;`
-	r := tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("1 1", "2 2"))
-	testSQL = `insert ignore into t values(1, 1) on duplicate key update j = 2;`
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("")
-	testSQL = `select * from t;`
-	r = tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("1 1", "2 2"))
-}
-
 func (s *testSuite4) TestInsertSetWithDefault(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -500,25 +437,6 @@ func (s *testSuite4) TestInsertSetWithDefault(c *C) {
 	tk.MustExec("delete from t1;")
 	tk.MustExec("insert into t1 set a=default(b)+default(a);")
 	tk.MustQuery("select * from t1;").Check(testkit.Rows("30 20"))
-}
-
-func (s *testSuite4) TestInsertOnDupUpdateDefault(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// Assign `DEFAULT` in `INSERT ... ON DUPLICATE KEY UPDATE ...` statement
-	tk.MustExec("drop table if exists t1, t2;")
-	tk.MustExec("create table t1 (a int unique, b int default 20, c int default 30);")
-	tk.MustExec("insert into t1 values (1,default,default);")
-	tk.MustExec("insert into t1 values (1,default,default) on duplicate key update b=default;")
-	tk.MustQuery("select * from t1;").Check(testkit.Rows("1 20 30"))
-	tk.MustExec("insert into t1 values (1,default,default) on duplicate key update c=default, b=default;")
-	tk.MustQuery("select * from t1;").Check(testkit.Rows("1 20 30"))
-	tk.MustExec("insert into t1 values (1,default,default) on duplicate key update c=default, a=2")
-	tk.MustQuery("select * from t1;").Check(testkit.Rows("2 20 30"))
-	tk.MustExec("insert into t1 values (2,default,default) on duplicate key update c=default(b)")
-	tk.MustQuery("select * from t1;").Check(testkit.Rows("2 20 20"))
-	tk.MustExec("insert into t1 values (2,default,default) on duplicate key update a=default(b)+default(c)")
-	tk.MustQuery("select * from t1;").Check(testkit.Rows("50 20 20"))
 }
 
 func (s *testSuite4) TestReplace(c *C) {
@@ -1136,87 +1054,6 @@ func (s *testSuite7) TestReplaceLog(c *C) {
 	c.Assert(err, NotNil)
 	expErr := errors.New(`can not be duplicated row, due to old row not found. handle 1 not found`)
 	c.Assert(expErr.Error() == err.Error(), IsTrue, Commentf("obtained error: (%s)\nexpected error: (%s)", err.Error(), expErr.Error()))
-}
-
-// TestRebaseIfNeeded is for issue 7422.
-// There is no need to do the rebase when updating a record if the auto-increment ID not changed.
-// This could make the auto ID increasing speed slower.
-func (s *testSuite7) TestRebaseIfNeeded(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`create table t (a int not null primary key auto_increment, b int unique key);`)
-	tk.MustExec(`insert into t (b) values (1);`)
-
-	s.ctx = mock.NewContext()
-	s.ctx.Store = s.store
-	tbl, err := s.domain.InfoSchema().TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
-	c.Assert(err, IsNil)
-	c.Assert(s.ctx.NewTxn(context.Background()), IsNil)
-	// AddRecord directly here will skip to rebase the auto ID in the insert statement,
-	// which could simulate another TiDB adds a large auto ID.
-	_, err = tbl.AddRecord(s.ctx, types.MakeDatums(30001, 2))
-	c.Assert(err, IsNil)
-	txn, err := s.ctx.Txn(true)
-	c.Assert(err, IsNil)
-	c.Assert(txn.Commit(context.Background()), IsNil)
-
-	tk.MustExec(`update t set b = 3 where a = 30001;`)
-	tk.MustExec(`insert into t (b) values (4);`)
-	tk.MustQuery(`select a from t where b = 4;`).Check(testkit.Rows("2"))
-
-	tk.MustExec(`insert into t set b = 3 on duplicate key update a = a;`)
-	tk.MustExec(`insert into t (b) values (5);`)
-	tk.MustQuery(`select a from t where b = 5;`).Check(testkit.Rows("4"))
-
-	tk.MustExec(`insert into t set b = 3 on duplicate key update a = a + 1;`)
-	tk.MustExec(`insert into t (b) values (6);`)
-	tk.MustQuery(`select a from t where b = 6;`).Check(testkit.Rows("30003"))
-}
-
-func (s *testSuite7) TestDeferConstraintCheckForInsert(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec(`use test`)
-
-	tk.MustExec(`drop table if exists t;create table t (a int primary key, b int);`)
-	tk.MustExec(`insert into t values (1,2),(2,2)`)
-	_, err := tk.Exec("update t set a=a+1 where b=2")
-	c.Assert(err, NotNil)
-
-	tk.MustExec(`drop table if exists t;create table t (i int key);`)
-	tk.MustExec(`insert t values (1);`)
-	tk.MustExec(`set tidb_constraint_check_in_place = 1;`)
-	tk.MustExec(`begin;`)
-	_, err = tk.Exec(`insert t values (1);`)
-	c.Assert(err, NotNil)
-	tk.MustExec(`update t set i = 2 where i = 1;`)
-	tk.MustExec(`commit;`)
-	tk.MustQuery(`select * from t;`).Check(testkit.Rows("2"))
-
-	tk.MustExec(`set tidb_constraint_check_in_place = 0;`)
-	tk.MustExec("replace into t values (1),(2)")
-	tk.MustExec("begin")
-	_, err = tk.Exec("update t set i = 2 where i = 1")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("insert into t values (1) on duplicate key update i = i + 1")
-	c.Assert(err, NotNil)
-	tk.MustExec("rollback")
-
-	tk.MustExec(`drop table t; create table t (id int primary key, v int unique);`)
-	tk.MustExec(`insert into t values (1, 1)`)
-	tk.MustExec(`set tidb_constraint_check_in_place = 1;`)
-	tk.MustExec(`set @@autocommit = 0;`)
-
-	_, err = tk.Exec("insert into t values (3, 1)")
-	c.Assert(err, NotNil)
-	_, err = tk.Exec("insert into t values (1, 3)")
-	c.Assert(err, NotNil)
-	tk.MustExec("commit")
-
-	tk.MustExec(`set tidb_constraint_check_in_place = 0;`)
-	tk.MustExec("insert into t values (3, 1)")
-	tk.MustExec("insert into t values (1, 3)")
-	_, err = tk.Exec("commit")
-	c.Assert(err, NotNil)
 }
 
 func (s *testSuite7) TestIssue11059(c *C) {

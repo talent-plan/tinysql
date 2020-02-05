@@ -55,26 +55,6 @@ func evalAstExpr(sctx sessionctx.Context, expr ast.ExprNode) (types.Datum, error
 	return newExpr.Eval(chunk.Row{})
 }
 
-func (b *PlanBuilder) rewriteInsertOnDuplicateUpdate(ctx context.Context, exprNode ast.ExprNode, mockPlan LogicalPlan, insertPlan *Insert) (expression.Expression, error) {
-	b.rewriterCounter++
-	defer func() { b.rewriterCounter-- }()
-
-	rewriter := b.getExpressionRewriter(ctx, mockPlan)
-	// The rewriter maybe is obtained from "b.rewriterPool", "rewriter.err" is
-	// not nil means certain previous procedure has not handled this error.
-	// Here we give us one more chance to make a correct behavior by handling
-	// this missed error.
-	if rewriter.err != nil {
-		return nil, rewriter.err
-	}
-
-	rewriter.insertPlan = insertPlan
-	rewriter.asScalar = true
-
-	expr, _, err := b.rewriteExprNode(rewriter, exprNode, true)
-	return expr, err
-}
-
 // rewrite function rewrites ast expr to expression.Expression.
 // aggMapper maps ast.AggregateFuncExpr to the columns offset in p's output schema.
 // asScalar means whether this expression must be treated as a scalar expression.

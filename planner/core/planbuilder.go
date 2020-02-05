@@ -928,56 +928,8 @@ func (b *PlanBuilder) buildInsert(ctx context.Context, insert *ast.InsertStmt) (
 		}
 	}
 
-	mockTablePlan.SetSchema(insertPlan.Schema4OnDuplicate)
-	mockTablePlan.names = insertPlan.names4OnDuplicate
-
-	_, err := insertPlan.resolveOnDuplicate(insert.OnDuplicate, tableInfo, func(node ast.ExprNode) (expression.Expression, error) {
-		return b.rewriteInsertOnDuplicateUpdate(ctx, node, mockTablePlan, insertPlan)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = insertPlan.ResolveIndices()
+	err := insertPlan.ResolveIndices()
 	return insertPlan, err
-}
-
-func (p *Insert) resolveOnDuplicate(onDup []*ast.Assignment, tblInfo *model.TableInfo, yield func(ast.ExprNode) (expression.Expression, error)) (map[string]struct{}, error) {
-	onDupColSet := make(map[string]struct{}, len(onDup))
-	colMap := make(map[string]*table.Column, len(p.Table.Cols()))
-	for _, col := range p.Table.Cols() {
-		colMap[col.Name.L] = col
-	}
-	for _, assign := range onDup {
-		// Check whether the column to be updated exists in the source table.
-		idx, err := expression.FindFieldName(p.tableColNames, assign.Column)
-		if err != nil {
-			return nil, err
-		} else if idx < 0 {
-			return nil, ErrUnknownColumn.GenWithStackByArgs(assign.Column.OrigColName(), "field list")
-		}
-
-		// Check whether the column to be updated is the generated column.
-		column := colMap[assign.Column.Name.L]
-		defaultExpr := extractDefaultExpr(assign.Expr)
-		if defaultExpr != nil {
-			defaultExpr.Name = assign.Column
-		}
-
-		onDupColSet[column.Name.L] = struct{}{}
-
-		expr, err := yield(assign.Expr)
-		if err != nil {
-			return nil, err
-		}
-
-		p.OnDuplicate = append(p.OnDuplicate, &expression.Assignment{
-			Col:     p.tableSchema.Columns[idx],
-			ColName: p.tableColNames[idx].ColName,
-			Expr:    expr,
-		})
-	}
-	return onDupColSet, nil
 }
 
 func (b *PlanBuilder) getAffectCols(insertStmt *ast.InsertStmt, insertPlan *Insert) (affectedValuesCols []*table.Column, err error) {
@@ -1039,8 +991,6 @@ func (b *PlanBuilder) buildSetValuesOfInsert(ctx context.Context, insert *ast.In
 			Expr:    expr,
 		})
 	}
-	insertPlan.Schema4OnDuplicate = insertPlan.tableSchema
-	insertPlan.names4OnDuplicate = insertPlan.tableColNames
 	return nil
 }
 
@@ -1101,8 +1051,6 @@ func (b *PlanBuilder) buildValuesListOfInsert(ctx context.Context, insert *ast.I
 		}
 		insertPlan.Lists = append(insertPlan.Lists, exprList)
 	}
-	insertPlan.Schema4OnDuplicate = insertPlan.tableSchema
-	insertPlan.names4OnDuplicate = insertPlan.tableColNames
 	return nil
 }
 
@@ -1148,8 +1096,6 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 			names4NewRow[i] = types.EmptyName
 		}
 	}
-	insertPlan.Schema4OnDuplicate = expression.MergeSchema(insertPlan.tableSchema, schema4NewRow)
-	insertPlan.names4OnDuplicate = append(insertPlan.tableColNames.Shallow(), names4NewRow...)
 	return nil
 }
 

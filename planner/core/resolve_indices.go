@@ -399,17 +399,6 @@ func (p *Insert) ResolveIndices() (err error) {
 	if err != nil {
 		return err
 	}
-	for _, asgn := range p.OnDuplicate {
-		newCol, err := asgn.Col.ResolveIndices(p.tableSchema)
-		if err != nil {
-			return err
-		}
-		asgn.Col = newCol.(*expression.Column)
-		asgn.Expr, err = asgn.Expr.ResolveIndices(p.Schema4OnDuplicate)
-		if err != nil {
-			return err
-		}
-	}
 	for _, set := range p.SetList {
 		newCol, err := set.Col.ResolveIndices(p.tableSchema)
 		if err != nil {

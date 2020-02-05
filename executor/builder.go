@@ -316,7 +316,6 @@ func (b *executorBuilder) buildInsert(v *plannercore.Insert) Executor {
 	}
 	insert := &InsertExec{
 		InsertValues: ivs,
-		OnDuplicate:  v.OnDuplicate,
 	}
 	return insert
 }

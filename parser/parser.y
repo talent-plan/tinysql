@@ -844,7 +844,6 @@ import (
 	LimitOption			"Limit option could be integer or parameter marker."
 	LockClause         		"Alter table lock clause"
 	NumLiteral			"Num/Int/Float/Decimal Literal"
-	OnDuplicateKeyUpdate		"ON DUPLICATE KEY UPDATE value list"
 	DuplicateOpt			"[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement or LOAD DATA statement"
 	OptFull				"Full or empty"
 	OptTemporary			"TEMPORARY or empty"
@@ -3494,10 +3493,9 @@ NotKeywordToken:
  *
  *  Insert Statements
  *
- *  TODO: support PARTITION
  **********************************************************************************/
 InsertIntoStmt:
-	"INSERT" PriorityOpt IgnoreOptional IntoOpt TableName InsertValues OnDuplicateKeyUpdate
+	"INSERT" PriorityOpt IgnoreOptional IntoOpt TableName InsertValues
 	{
 		x := $6.(*ast.InsertStmt)
 		x.Priority = $2.(mysql.PriorityEnum)
@@ -3505,9 +3503,6 @@ InsertIntoStmt:
 		// Wraps many layers here so that it can be processed the same way as select statement.
 		ts := &ast.TableSource{Source: $5.(*ast.TableName)}
 		x.Table = &ast.TableRefsClause{TableRefs: &ast.Join{Left: ts}}
-		if $7 != nil {
-			x.OnDuplicate = $7.([]*ast.Assignment)
-		}
 		$$ = x
 	}
 
@@ -3610,19 +3605,6 @@ ColumnSetValueList:
 |	ColumnSetValueList ',' ColumnSetValue
 	{
 		$$ = append($1.([]*ast.Assignment), $3.(*ast.Assignment))
-	}
-
-/*
- * ON DUPLICATE KEY UPDATE col_name=expr [, col_name=expr] ...
- * See https://dev.mysql.com/doc/refman/5.7/en/insert-on-duplicate.html
- */
-OnDuplicateKeyUpdate:
-	{
-		$$ = nil
-	}
-|	"ON" "DUPLICATE" "KEY" "UPDATE" AssignmentList
-	{
-		$$ = $5
 	}
 
 /***********************************Insert Statements END************************************/
