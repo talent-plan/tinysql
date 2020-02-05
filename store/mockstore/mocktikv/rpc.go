@@ -316,22 +316,6 @@ func (h *rpcHandler) handleKvCommit(req *kvrpcpb.CommitRequest) *kvrpcpb.CommitR
 	return &resp
 }
 
-func (h *rpcHandler) handleKvCleanup(req *kvrpcpb.CleanupRequest) *kvrpcpb.CleanupResponse {
-	if !h.checkKeyInRegion(req.Key) {
-		panic("KvCleanup: key not in region")
-	}
-	var resp kvrpcpb.CleanupResponse
-	err := h.mvccStore.Cleanup(req.Key, req.GetStartVersion(), req.GetCurrentTs())
-	if err != nil {
-		if commitTS, ok := errors.Cause(err).(ErrAlreadyCommitted); ok {
-			resp.CommitVersion = uint64(commitTS)
-		} else {
-			resp.Error = convertToKeyError(err)
-		}
-	}
-	return &resp
-}
-
 func (h *rpcHandler) handleKvCheckTxnStatus(req *kvrpcpb.CheckTxnStatusRequest) *kvrpcpb.CheckTxnStatusResponse {
 	if !h.checkKeyInRegion(req.PrimaryKey) {
 		panic("KvCheckTxnStatus: key not in region")
@@ -366,20 +350,6 @@ func (h *rpcHandler) handleKvBatchRollback(req *kvrpcpb.BatchRollbackRequest) *k
 		}
 	}
 	return &kvrpcpb.BatchRollbackResponse{}
-}
-
-func (h *rpcHandler) handleKvScanLock(req *kvrpcpb.ScanLockRequest) *kvrpcpb.ScanLockResponse {
-	startKey := MvccKey(h.startKey).Raw()
-	endKey := MvccKey(h.endKey).Raw()
-	locks, err := h.mvccStore.ScanLock(startKey, endKey, req.GetMaxVersion())
-	if err != nil {
-		return &kvrpcpb.ScanLockResponse{
-			Error: convertToKeyError(err),
-		}
-	}
-	return &kvrpcpb.ScanLockResponse{
-		Locks: locks,
-	}
 }
 
 func (h *rpcHandler) handleKvResolveLock(req *kvrpcpb.ResolveLockRequest) *kvrpcpb.ResolveLockResponse {
@@ -584,13 +554,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 				failpoint.Return(nil, undeterminedErr)
 			}
 		})
-	case tikvrpc.CmdCleanup:
-		r := req.Cleanup()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.CleanupResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvCleanup(r)
 	case tikvrpc.CmdCheckTxnStatus:
 		r := req.CheckTxnStatus()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
@@ -612,13 +575,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvBatchRollback(r)
-	case tikvrpc.CmdScanLock:
-		r := req.ScanLock()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.ScanLockResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvScanLock(r)
 	case tikvrpc.CmdResolveLock:
 		r := req.ResolveLock()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {

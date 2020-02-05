@@ -35,10 +35,8 @@ const (
 	CmdScan
 	CmdPrewrite
 	CmdCommit
-	CmdCleanup
 	CmdBatchGet
 	CmdBatchRollback
-	CmdScanLock
 	CmdResolveLock
 	CmdCheckTxnStatus
 
@@ -60,14 +58,10 @@ func (t CmdType) String() string {
 		return "Prewrite"
 	case CmdCommit:
 		return "Commit"
-	case CmdCleanup:
-		return "Cleanup"
 	case CmdBatchGet:
 		return "BatchGet"
 	case CmdBatchRollback:
 		return "BatchRollback"
-	case CmdScanLock:
-		return "ScanLock"
 	case CmdResolveLock:
 		return "ResolveLock"
 	case CmdRawGet:
@@ -235,14 +229,10 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 		req.Prewrite().Context = ctx
 	case CmdCommit:
 		req.Commit().Context = ctx
-	case CmdCleanup:
-		req.Cleanup().Context = ctx
 	case CmdBatchGet:
 		req.BatchGet().Context = ctx
 	case CmdBatchRollback:
 		req.BatchRollback().Context = ctx
-	case CmdScanLock:
-		req.ScanLock().Context = ctx
 	case CmdResolveLock:
 		req.ResolveLock().Context = ctx
 	case CmdRawGet:
@@ -285,20 +275,12 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 		p = &kvrpcpb.CommitResponse{
 			RegionError: e,
 		}
-	case CmdCleanup:
-		p = &kvrpcpb.CleanupResponse{
-			RegionError: e,
-		}
 	case CmdBatchGet:
 		p = &kvrpcpb.BatchGetResponse{
 			RegionError: e,
 		}
 	case CmdBatchRollback:
 		p = &kvrpcpb.BatchRollbackResponse{
-			RegionError: e,
-		}
-	case CmdScanLock:
-		p = &kvrpcpb.ScanLockResponse{
 			RegionError: e,
 		}
 	case CmdResolveLock:
@@ -367,14 +349,10 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = client.KvPrewrite(ctx, req.Prewrite())
 	case CmdCommit:
 		resp.Resp, err = client.KvCommit(ctx, req.Commit())
-	case CmdCleanup:
-		resp.Resp, err = client.KvCleanup(ctx, req.Cleanup())
 	case CmdBatchGet:
 		resp.Resp, err = client.KvBatchGet(ctx, req.BatchGet())
 	case CmdBatchRollback:
 		resp.Resp, err = client.KvBatchRollback(ctx, req.BatchRollback())
-	case CmdScanLock:
-		resp.Resp, err = client.KvScanLock(ctx, req.ScanLock())
 	case CmdResolveLock:
 		resp.Resp, err = client.KvResolveLock(ctx, req.ResolveLock())
 	case CmdRawGet:
