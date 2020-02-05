@@ -795,7 +795,7 @@ func (w *addIndexWorker) initBatchCheckBufs(batchCount int) {
 	w.distinctCheckFlags = w.distinctCheckFlags[:0]
 }
 
-func (w *addIndexWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords []*indexRecord) error {
+func (w *addIndexWorker) checkUniqueKey(txn kv.Transaction, idxRecords []*indexRecord) error {
 	idxInfo := w.index.Meta()
 	if !idxInfo.Unique {
 		// non-unique key need not to check, just overwrite it,
@@ -817,16 +817,23 @@ func (w *addIndexWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords []*i
 		w.distinctCheckFlags = append(w.distinctCheckFlags, distinct)
 	}
 
-	batchVals, err := txn.BatchGet(context.Background(), w.batchCheckKeys)
-	if err != nil {
-		return errors.Trace(err)
+	vals := make(map[string][]byte, len(w.batchCheckKeys))
+	for _, key := range w.batchCheckKeys {
+		val, err := txn.Get(context.Background(), key)
+		if kv.ErrNotExist.Equal(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		vals[string(key)] = val
 	}
 
 	// 1. unique-key/primary-key is duplicate and the handle is equal, skip it.
 	// 2. unique-key/primary-key is duplicate and the handle is not equal, return duplicate error.
 	// 3. non-unique-key is duplicate, skip it.
 	for i, key := range w.batchCheckKeys {
-		if val, found := batchVals[string(key)]; found {
+		if val, found := vals[string(key)]; found {
 			if w.distinctCheckFlags[i] {
 				handle, err1 := tables.DecodeHandle(val)
 				if err1 != nil {
@@ -842,7 +849,7 @@ func (w *addIndexWorker) batchCheckUniqueKey(txn kv.Transaction, idxRecords []*i
 			// The keys in w.batchCheckKeys also maybe duplicate,
 			// so we need to backfill the not found key into `batchVals` map.
 			if w.distinctCheckFlags[i] {
-				batchVals[string(key)] = tables.EncodeHandle(idxRecords[i].handle)
+				vals[string(key)] = tables.EncodeHandle(idxRecords[i].handle)
 			}
 		}
 	}
@@ -874,7 +881,7 @@ func (w *addIndexWorker) backfillIndexInTxn(handleRange reorgIndexTask) (taskCtx
 		taskCtx.nextHandle = nextHandle
 		taskCtx.done = taskDone
 
-		err = w.batchCheckUniqueKey(txn, idxRecords)
+		err = w.checkUniqueKey(txn, idxRecords)
 		if err != nil {
 			return errors.Trace(err)
 		}

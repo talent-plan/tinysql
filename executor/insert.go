@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -89,68 +88,6 @@ func (e *InsertExec) exec(ctx context.Context, rows [][]types.Datum) error {
 	return nil
 }
 
-func prefetchUniqueIndices(ctx context.Context, txn kv.Transaction, rows []toBeCheckedRow) (map[string][]byte, error) {
-	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("prefetchUniqueIndices", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-
-	nKeys := 0
-	for _, r := range rows {
-		if r.handleKey != nil {
-			nKeys++
-		}
-		nKeys += len(r.uniqueKeys)
-	}
-	batchKeys := make([]kv.Key, 0, nKeys)
-	for _, r := range rows {
-		if r.handleKey != nil {
-			batchKeys = append(batchKeys, r.handleKey.newKV.key)
-		}
-		for _, k := range r.uniqueKeys {
-			batchKeys = append(batchKeys, k.newKV.key)
-		}
-	}
-	return txn.BatchGet(ctx, batchKeys)
-}
-
-func prefetchConflictedOldRows(ctx context.Context, txn kv.Transaction, rows []toBeCheckedRow, values map[string][]byte) error {
-	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("prefetchConflictedOldRows", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-
-	batchKeys := make([]kv.Key, 0, len(rows))
-	for _, r := range rows {
-		for _, uk := range r.uniqueKeys {
-			if val, found := values[string(uk.newKV.key)]; found {
-				handle, err := tables.DecodeHandle(val)
-				if err != nil {
-					return err
-				}
-				batchKeys = append(batchKeys, r.t.RecordKey(handle))
-			}
-		}
-	}
-	_, err := txn.BatchGet(ctx, batchKeys)
-	return err
-}
-
-func prefetchDataCache(ctx context.Context, txn kv.Transaction, rows []toBeCheckedRow) error {
-	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("prefetchDataCache", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-	values, err := prefetchUniqueIndices(ctx, txn, rows)
-	if err != nil {
-		return err
-	}
-	return prefetchConflictedOldRows(ctx, txn, rows, values)
-}
-
 // updateDupRow updates a duplicate row to a new row.
 func (e *InsertExec) updateDupRow(ctx context.Context, txn kv.Transaction, row toBeCheckedRow, handle int64) error {
 	oldRow, err := getOldRow(ctx, e.ctx, txn, row.t, handle)
@@ -176,12 +113,6 @@ func (e *InsertExec) batchUpdateDupRows(ctx context.Context, newRows [][]types.D
 
 	txn, err := e.ctx.Txn(true)
 	if err != nil {
-		return err
-	}
-
-	// Use BatchGet to fill cache.
-	// It's an optimization and could be removed without affecting correctness.
-	if err = prefetchDataCache(ctx, txn, toBeCheckedRows); err != nil {
 		return err
 	}
 

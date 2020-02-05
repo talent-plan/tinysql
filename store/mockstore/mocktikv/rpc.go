@@ -330,18 +330,6 @@ func (h *rpcHandler) handleKvCheckTxnStatus(req *kvrpcpb.CheckTxnStatusRequest) 
 	return &resp
 }
 
-func (h *rpcHandler) handleKvBatchGet(req *kvrpcpb.BatchGetRequest) *kvrpcpb.BatchGetResponse {
-	for _, k := range req.Keys {
-		if !h.checkKeyInRegion(k) {
-			panic("KvBatchGet: key not in region")
-		}
-	}
-	pairs := h.mvccStore.BatchGet(req.Keys, req.GetVersion(), h.isolationLevel, req.Context.GetResolvedLocks())
-	return &kvrpcpb.BatchGetResponse{
-		Pairs: convertToPbPairs(pairs),
-	}
-}
-
 func (h *rpcHandler) handleKvBatchRollback(req *kvrpcpb.BatchRollbackRequest) *kvrpcpb.BatchRollbackResponse {
 	err := h.mvccStore.Rollback(req.Keys, req.StartVersion)
 	if err != nil {
@@ -561,13 +549,6 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			return resp, nil
 		}
 		resp.Resp = handler.handleKvCheckTxnStatus(r)
-	case tikvrpc.CmdBatchGet:
-		r := req.BatchGet()
-		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {
-			resp.Resp = &kvrpcpb.BatchGetResponse{RegionError: err}
-			return resp, nil
-		}
-		resp.Resp = handler.handleKvBatchGet(r)
 	case tikvrpc.CmdBatchRollback:
 		r := req.BatchRollback()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {

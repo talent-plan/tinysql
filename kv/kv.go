@@ -87,8 +87,6 @@ const (
 	ReplicaReadLeader ReplicaReadType = 1 << iota
 	// ReplicaReadFollower stands for 'read from follower'.
 	ReplicaReadFollower
-	// ReplicaReadLearner stands for 'read from learner'.
-	ReplicaReadLearner
 )
 
 // IsFollowerRead checks if leader is going to be used to read data.
@@ -179,10 +177,6 @@ type Transaction interface {
 	GetMemBuffer() MemBuffer
 	// SetVars sets variables to the transaction.
 	SetVars(vars *Variables)
-	// BatchGet gets kv from the memory buffer of statement and transaction, and the kv storage.
-	// Do not use len(value) == 0 or value == nil to represent non-exist.
-	// If a key doesn't exist, there shouldn't be any corresponding entry in the result map.
-	BatchGet(ctx context.Context, keys []Key) (map[string][]byte, error)
 }
 
 // LockCtx contains information for LockKeys method.
@@ -264,8 +258,6 @@ type Response interface {
 // Snapshot defines the interface for the snapshot fetched from KV store.
 type Snapshot interface {
 	Retriever
-	// BatchGet gets a batch of values from snapshot.
-	BatchGet(ctx context.Context, keys []Key) (map[string][]byte, error)
 	// SetOption sets an option with a value, when val is nil, uses the default
 	// value of this option. Only ReplicaRead is supported for snapshot
 	SetOption(opt Option, val interface{})

@@ -184,16 +184,10 @@ func (e *ReplaceExec) exec(ctx context.Context, newRows [][]types.Datum) error {
 		return err
 	}
 
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-
-	// Use BatchGet to fill cache.
-	// It's an optimization and could be removed without affecting correctness.
-	if err = prefetchDataCache(ctx, txn, toBeCheckedRows); err != nil {
-		return err
-	}
+	//txn, err := e.ctx.Txn(true)
+	//if err != nil {
+	//	return err
+	//}
 
 	e.ctx.GetSessionVars().StmtCtx.AddRecordRows(uint64(len(newRows)))
 	for _, r := range toBeCheckedRows {

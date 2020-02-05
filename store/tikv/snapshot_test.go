@@ -20,11 +20,7 @@ import (
 
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
 )
 
 type testSnapshotSuite struct {
@@ -67,111 +63,6 @@ func (s *testSnapshotSuite) beginTxn(c *C) *tikvTxn {
 	return txn.(*tikvTxn)
 }
 
-func (s *testSnapshotSuite) checkAll(keys []kv.Key, c *C) {
-	txn := s.beginTxn(c)
-	snapshot := newTiKVSnapshot(s.store, kv.Version{Ver: txn.StartTS()}, 0)
-	m, err := snapshot.BatchGet(context.Background(), keys)
-	c.Assert(err, IsNil)
-
-	scan, err := txn.Iter(encodeKey(s.prefix, ""), nil)
-	c.Assert(err, IsNil)
-	cnt := 0
-	for scan.Valid() {
-		cnt++
-		k := scan.Key()
-		v := scan.Value()
-		v2, ok := m[string(k)]
-		c.Assert(ok, IsTrue, Commentf("key: %q", k))
-		c.Assert(v, BytesEquals, v2)
-		scan.Next()
-	}
-	err = txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-	c.Assert(m, HasLen, cnt)
-}
-
-func (s *testSnapshotSuite) deleteKeys(keys []kv.Key, c *C) {
-	txn := s.beginTxn(c)
-	for _, k := range keys {
-		err := txn.Delete(k)
-		c.Assert(err, IsNil)
-	}
-	err := txn.Commit(context.Background())
-	c.Assert(err, IsNil)
-}
-
-func (s *testSnapshotSuite) TestBatchGet(c *C) {
-	for _, rowNum := range s.rowNums {
-		logutil.BgLogger().Debug("test BatchGet",
-			zap.Int("length", rowNum))
-		txn := s.beginTxn(c)
-		for i := 0; i < rowNum; i++ {
-			k := encodeKey(s.prefix, s08d("key", i))
-			err := txn.Set(k, valueBytes(i))
-			c.Assert(err, IsNil)
-		}
-		err := txn.Commit(context.Background())
-		c.Assert(err, IsNil)
-
-		keys := makeKeys(rowNum, s.prefix)
-		s.checkAll(keys, c)
-		s.deleteKeys(keys, c)
-	}
-}
-
-type contextKey string
-
-func (s *testSnapshotSuite) TestSnapshotCache(c *C) {
-	txn := s.beginTxn(c)
-	c.Assert(txn.Set(kv.Key("x"), []byte("x")), IsNil)
-	c.Assert(txn.Delete(kv.Key("y")), IsNil) // store data is affected by other tests.
-	c.Assert(txn.Commit(context.Background()), IsNil)
-
-	txn = s.beginTxn(c)
-	snapshot := newTiKVSnapshot(s.store, kv.Version{Ver: txn.StartTS()}, 0)
-	_, err := snapshot.BatchGet(context.Background(), []kv.Key{kv.Key("x"), kv.Key("y")})
-	c.Assert(err, IsNil)
-
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/store/tikv/snapshot-get-cache-fail", `return(true)`), IsNil)
-	ctx := context.WithValue(context.Background(), contextKey("TestSnapshotCache"), true)
-	_, err = snapshot.Get(ctx, kv.Key("x"))
-	c.Assert(err, IsNil)
-
-	_, err = snapshot.Get(ctx, kv.Key("y"))
-	c.Assert(kv.IsErrNotFound(err), IsTrue)
-
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/store/tikv/snapshot-get-cache-fail"), IsNil)
-}
-
-func (s *testSnapshotSuite) TestBatchGetNotExist(c *C) {
-	for _, rowNum := range s.rowNums {
-		logutil.BgLogger().Debug("test BatchGetNotExist",
-			zap.Int("length", rowNum))
-		txn := s.beginTxn(c)
-		for i := 0; i < rowNum; i++ {
-			k := encodeKey(s.prefix, s08d("key", i))
-			err := txn.Set(k, valueBytes(i))
-			c.Assert(err, IsNil)
-		}
-		err := txn.Commit(context.Background())
-		c.Assert(err, IsNil)
-
-		keys := makeKeys(rowNum, s.prefix)
-		keys = append(keys, kv.Key("noSuchKey"))
-		s.checkAll(keys, c)
-		s.deleteKeys(keys, c)
-	}
-}
-
-func makeKeys(rowNum int, prefix string) []kv.Key {
-	keys := make([]kv.Key, 0, rowNum)
-	for i := 0; i < rowNum; i++ {
-		k := encodeKey(prefix, s08d("key", i))
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 func (s *testSnapshotSuite) TestWriteConflictPrettyFormat(c *C) {
 	conflict := &pb.WriteConflict{
 		StartTs:          399402937522847774,
@@ -208,33 +99,4 @@ func (s *testSnapshotSuite) TestLockNotFoundPrint(c *C) {
 		"key: [116, 128, 0, 0, 0, 0, 0, 50, 137, 95, 105, 128, 0, 0, 0, 0,0 ,0, 1, 1, 67, 49, 57, 48, 57, 50, 57, 48, 255, 48, 48, 48, 48, 48, 52, 56, 54, 255, 50, 53, 53, 50, 51, 0, 0, 0, 252] }))"
 	key := prettyLockNotFoundKey(msg)
 	c.Assert(key, Equals, "{tableID=12937, indexID=1, indexValues={C19092900000048625523, }}")
-}
-
-func (s *testSnapshotSuite) TestSkipLargeTxnLock(c *C) {
-	txn := s.beginTxn(c)
-	c.Assert(txn.Set(kv.Key("x"), []byte("x")), IsNil)
-	c.Assert(txn.Set(kv.Key("y"), []byte("y")), IsNil)
-	ctx := context.Background()
-	bo := NewBackoffer(ctx, PrewriteMaxBackoff)
-	committer, err := newTwoPhaseCommitterWithInit(txn, 0)
-	c.Assert(err, IsNil)
-	committer.lockTTL = txnLockTTL(txn.startTime, 10<<20)
-	c.Assert(committer.prewriteKeys(bo, committer.keys), IsNil)
-
-	txn1 := s.beginTxn(c)
-	// txn1 is not blocked by txn in the large txn protocol.
-	_, err = txn1.Get(ctx, kv.Key("x"))
-	c.Assert(kv.IsErrNotFound(errors.Trace(err)), IsTrue)
-
-	res, err := txn1.BatchGet(ctx, []kv.Key{kv.Key("x"), kv.Key("y"), kv.Key("z")})
-	c.Assert(err, IsNil)
-	c.Assert(res, HasLen, 0)
-
-	// Commit txn, check the final commit ts is pushed.
-	committer.commitTS = txn.StartTS() + 1
-	c.Assert(committer.commitKeys(bo, committer.keys), IsNil)
-	status, err := s.store.lockResolver.GetTxnStatus(txn.StartTS(), 0, []byte("x"))
-	c.Assert(err, IsNil)
-	c.Assert(status.IsCommitted(), IsTrue)
-	c.Assert(status.CommitTS(), Greater, txn1.StartTS())
 }

@@ -150,27 +150,6 @@ func (s *testLockSuite) TestScanLockResolveWithSeekKeyOnly(c *C) {
 	}
 }
 
-func (s *testLockSuite) TestScanLockResolveWithBatchGet(c *C) {
-	s.putAlphabets(c)
-	s.prepareAlphabetLocks(c)
-
-	var keys []kv.Key
-	for ch := byte('a'); ch <= byte('z'); ch++ {
-		keys = append(keys, []byte{ch})
-	}
-
-	ver, err := s.store.CurrentVersion()
-	c.Assert(err, IsNil)
-	snapshot := newTiKVSnapshot(s.store, ver, 0)
-	m, err := snapshot.BatchGet(context.Background(), keys)
-	c.Assert(err, IsNil)
-	c.Assert(len(m), Equals, int('z'-'a'+1))
-	for ch := byte('a'); ch <= byte('z'); ch++ {
-		k := []byte{ch}
-		c.Assert(m[string(k)], BytesEquals, k)
-	}
-}
-
 func (s *testLockSuite) TestCleanLock(c *C) {
 	for ch := byte('a'); ch <= byte('z'); ch++ {
 		k := []byte{ch}

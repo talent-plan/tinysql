@@ -18,15 +18,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"sync"
-	"unsafe"
-
 	"github.com/opentracing/opentracing-go"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/kv"
+	"strings"
 
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
@@ -86,176 +83,6 @@ func (s *tikvSnapshot) setSnapshotTS(ts uint64) {
 	s.cached = nil
 	// And also the minCommitTS pushed information.
 	s.minCommitTSPushed.data = make(map[uint64]struct{}, 5)
-}
-
-// BatchGet gets all the keys' value from kv-server and returns a map contains key/value pairs.
-// The map will not contain nonexistent keys.
-func (s *tikvSnapshot) BatchGet(ctx context.Context, keys []kv.Key) (map[string][]byte, error) {
-	// Check the cached value first.
-	m := make(map[string][]byte)
-	if s.cached != nil {
-		tmp := keys[:0]
-		for _, key := range keys {
-			if val, ok := s.cached[string(key)]; ok {
-				if len(val) > 0 {
-					m[string(key)] = val
-				}
-			} else {
-				tmp = append(tmp, key)
-			}
-		}
-		keys = tmp
-	}
-
-	if len(keys) == 0 {
-		return m, nil
-	}
-
-	// We want [][]byte instead of []kv.Key, use some magic to save memory.
-	bytesKeys := *(*[][]byte)(unsafe.Pointer(&keys))
-	ctx = context.WithValue(ctx, txnStartKey, s.version.Ver)
-	bo := NewBackoffer(ctx, batchGetMaxBackoff).WithVars(s.vars)
-
-	// Create a map to collect key-values from region servers.
-	var mu sync.Mutex
-	err := s.batchGetKeysByRegions(bo, bytesKeys, func(k, v []byte) {
-		if len(v) == 0 {
-			return
-		}
-
-		mu.Lock()
-		m[string(k)] = v
-		mu.Unlock()
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	err = s.store.CheckVisibility(s.version.Ver)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// Update the cache.
-	if s.cached == nil {
-		s.cached = make(map[string][]byte, len(m))
-	}
-	for _, key := range keys {
-		s.cached[string(key)] = m[string(key)]
-	}
-
-	return m, nil
-}
-
-func (s *tikvSnapshot) batchGetKeysByRegions(bo *Backoffer, keys [][]byte, collectF func(k, v []byte)) error {
-	groups, _, err := s.store.regionCache.GroupKeysByRegion(bo, keys, nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	var batches []batchKeys
-	for id, g := range groups {
-		batches = appendBatchBySize(batches, id, g, func([]byte) int { return 1 }, batchGetSize)
-	}
-
-	if len(batches) == 0 {
-		return nil
-	}
-	if len(batches) == 1 {
-		return errors.Trace(s.batchGetSingleRegion(bo, batches[0], collectF))
-	}
-	ch := make(chan error)
-	for _, batch1 := range batches {
-		batch := batch1
-		go func() {
-			backoffer, cancel := bo.Fork()
-			defer cancel()
-			ch <- s.batchGetSingleRegion(backoffer, batch, collectF)
-		}()
-	}
-	for i := 0; i < len(batches); i++ {
-		if e := <-ch; e != nil {
-			logutil.BgLogger().Debug("snapshot batchGet failed",
-				zap.Error(e),
-				zap.Uint64("txnStartTS", s.version.Ver))
-			err = e
-		}
-	}
-	return errors.Trace(err)
-}
-
-func (s *tikvSnapshot) batchGetSingleRegion(bo *Backoffer, batch batchKeys, collectF func(k, v []byte)) error {
-	cli := clientHelper{
-		LockResolver:      s.store.lockResolver,
-		RegionCache:       s.store.regionCache,
-		minCommitTSPushed: &s.minCommitTSPushed,
-		Client:            s.store.client,
-	}
-
-	pending := batch.keys
-	for {
-		req := tikvrpc.NewReplicaReadRequest(tikvrpc.CmdBatchGet, &pb.BatchGetRequest{
-			Keys:    pending,
-			Version: s.version.Ver,
-		}, s.replicaRead, s.replicaReadSeed, pb.Context{
-			Priority:     s.priority,
-			NotFillCache: s.notFillCache,
-		})
-
-		resp, _, _, err := cli.SendReqCtx(bo, req, batch.region, ReadTimeoutMedium, "")
-
-		if err != nil {
-			return errors.Trace(err)
-		}
-		regionErr, err := resp.GetRegionError()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if regionErr != nil {
-			err = bo.Backoff(BoRegionMiss, errors.New(regionErr.String()))
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = s.batchGetKeysByRegions(bo, pending, collectF)
-			return errors.Trace(err)
-		}
-		if resp.Resp == nil {
-			return errors.Trace(ErrBodyMissing)
-		}
-		batchGetResp := resp.Resp.(*pb.BatchGetResponse)
-		var (
-			lockedKeys [][]byte
-			locks      []*Lock
-		)
-		for _, pair := range batchGetResp.Pairs {
-			keyErr := pair.GetError()
-			if keyErr == nil {
-				collectF(pair.GetKey(), pair.GetValue())
-				continue
-			}
-			lock, err := extractLockFromKeyErr(keyErr)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			lockedKeys = append(lockedKeys, lock.Key)
-			locks = append(locks, lock)
-		}
-		if len(lockedKeys) > 0 {
-			msBeforeExpired, err := cli.ResolveLocks(bo, s.version.Ver, locks)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if msBeforeExpired > 0 {
-				err = bo.BackoffWithMaxSleep(boTxnLockFast, int(msBeforeExpired), errors.Errorf("batchGet lockedKeys: %d", len(lockedKeys)))
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-			pending = lockedKeys
-			continue
-		}
-		return nil
-	}
 }
 
 // Get gets the value for key k from snapshot.

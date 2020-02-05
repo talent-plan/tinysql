@@ -20,7 +20,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/terror"
 )
 
@@ -48,15 +47,6 @@ func (s *testSafePointSuite) beginTxn(c *C) *tikvTxn {
 	txn, err := s.store.Begin()
 	c.Assert(err, IsNil)
 	return txn.(*tikvTxn)
-}
-
-func mymakeKeys(rowNum int, prefix string) []kv.Key {
-	keys := make([]kv.Key, 0, rowNum)
-	for i := 0; i < rowNum; i++ {
-		k := encodeKey(prefix, s08d("key", i))
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 func (s *testSafePointSuite) waitUntilErrorPlugIn(t uint64) {
@@ -102,20 +92,6 @@ func (s *testSafePointSuite) TestSafePoint(c *C) {
 
 	_, seekerr := txn3.Iter(encodeKey(s.prefix, ""), nil)
 	c.Assert(seekerr, NotNil)
-	isFallBehind = terror.ErrorEqual(errors.Cause(geterr2), ErrGCTooEarly)
-	isMayFallBehind = terror.ErrorEqual(errors.Cause(geterr2), ErrPDServerTimeout.GenWithStackByArgs("start timestamp may fall behind safe point"))
-	isBehind = isFallBehind || isMayFallBehind
-	c.Assert(isBehind, IsTrue)
-
-	// for snapshot batchGet
-	keys := mymakeKeys(10, s.prefix)
-	txn4 := s.beginTxn(c)
-
-	s.waitUntilErrorPlugIn(txn4.startTS)
-
-	snapshot := newTiKVSnapshot(s.store, kv.Version{Ver: txn4.StartTS()}, 0)
-	_, batchgeterr := snapshot.BatchGet(context.Background(), keys)
-	c.Assert(batchgeterr, NotNil)
 	isFallBehind = terror.ErrorEqual(errors.Cause(geterr2), ErrGCTooEarly)
 	isMayFallBehind = terror.ErrorEqual(errors.Cause(geterr2), ErrPDServerTimeout.GenWithStackByArgs("start timestamp may fall behind safe point"))
 	isBehind = isFallBehind || isMayFallBehind

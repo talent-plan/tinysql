@@ -47,14 +47,6 @@ func (s testFaultInjectionSuite) TestFaultInjectionBasic(c *C) {
 	c.Assert(err.Error(), Equals, err1.Error())
 	c.Assert(b, IsNil)
 
-	bs, err := snap.BatchGet(context.Background(), nil)
-	c.Assert(err.Error(), Equals, err1.Error())
-	c.Assert(bs, IsNil)
-
-	bs, err = txn.BatchGet(context.Background(), nil)
-	c.Assert(err.Error(), Equals, err1.Error())
-	c.Assert(bs, IsNil)
-
 	err = txn.Commit(context.Background())
 	c.Assert(err.Error(), Equals, err1.Error())
 
@@ -70,18 +62,6 @@ func (s testFaultInjectionSuite) TestFaultInjectionBasic(c *C) {
 	b, err = txn.Get(context.TODO(), []byte{'a'})
 	c.Assert(err, IsNil)
 	c.Assert(b, IsNil)
-
-	bs, err = txn.BatchGet(context.Background(), nil)
-	c.Assert(err, IsNil)
-	c.Assert(bs, IsNil)
-
-	b, err = snap.Get(context.TODO(), []byte{'a'})
-	c.Assert(terror.ErrorEqual(kv.ErrNotExist, err), IsTrue)
-	c.Assert(b, IsNil)
-
-	bs, err = snap.BatchGet(context.Background(), []kv.Key{[]byte("a")})
-	c.Assert(err, IsNil)
-	c.Assert(len(bs), Equals, 0)
 
 	err = txn.Commit(context.Background())
 	c.Assert(err, NotNil)

@@ -35,7 +35,6 @@ const (
 	CmdScan
 	CmdPrewrite
 	CmdCommit
-	CmdBatchGet
 	CmdBatchRollback
 	CmdResolveLock
 	CmdCheckTxnStatus
@@ -58,8 +57,6 @@ func (t CmdType) String() string {
 		return "Prewrite"
 	case CmdCommit:
 		return "Commit"
-	case CmdBatchGet:
-		return "BatchGet"
 	case CmdBatchRollback:
 		return "BatchRollback"
 	case CmdResolveLock:
@@ -229,8 +226,6 @@ func SetContext(req *Request, region *metapb.Region, peer *metapb.Peer) error {
 		req.Prewrite().Context = ctx
 	case CmdCommit:
 		req.Commit().Context = ctx
-	case CmdBatchGet:
-		req.BatchGet().Context = ctx
 	case CmdBatchRollback:
 		req.BatchRollback().Context = ctx
 	case CmdResolveLock:
@@ -273,10 +268,6 @@ func GenRegionErrorResp(req *Request, e *errorpb.Error) (*Response, error) {
 		}
 	case CmdCommit:
 		p = &kvrpcpb.CommitResponse{
-			RegionError: e,
-		}
-	case CmdBatchGet:
-		p = &kvrpcpb.BatchGetResponse{
 			RegionError: e,
 		}
 	case CmdBatchRollback:
@@ -349,8 +340,6 @@ func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Resp
 		resp.Resp, err = client.KvPrewrite(ctx, req.Prewrite())
 	case CmdCommit:
 		resp.Resp, err = client.KvCommit(ctx, req.Commit())
-	case CmdBatchGet:
-		resp.Resp, err = client.KvBatchGet(ctx, req.BatchGet())
 	case CmdBatchRollback:
 		resp.Resp, err = client.KvBatchRollback(ctx, req.BatchRollback())
 	case CmdResolveLock:
