@@ -20,8 +20,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/stringutil"
 )
 
 // InsertExec represents an insert executor.
@@ -32,13 +30,6 @@ type InsertExec struct {
 }
 
 func (e *InsertExec) exec(ctx context.Context, rows [][]types.Datum) error {
-	logutil.Eventf(ctx, "insert %d rows into table `%s`", len(rows), stringutil.MemoizeStr(func() string {
-		var tblName string
-		if meta := e.Table.Meta(); meta != nil {
-			tblName = meta.Name.L
-		}
-		return tblName
-	}))
 	sessVars := e.ctx.GetSessionVars()
 	defer sessVars.CleanBuffers()
 	txn, err := e.ctx.Txn(true)

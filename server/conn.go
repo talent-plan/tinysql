@@ -48,7 +48,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/executor"
@@ -666,15 +665,9 @@ func errStrForLog(err error) string {
 // It also gets a token from server which is used to limit the concurrently handling clients.
 // The most frequently used command is ComQuery.
 func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
-	span := opentracing.StartSpan("server.dispatch")
-
 	cc.lastPacket = data
 	cmd := data[0]
 	data = data[1:]
-	defer func() {
-		span.Finish()
-	}()
-
 	vars := cc.ctx.GetSessionVars()
 	atomic.StoreUint32(&vars.Killed, 0)
 	if cmd < mysql.ComEnd {

@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -618,22 +617,10 @@ func (actionCleanup) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batc
 }
 
 func (c *twoPhaseCommitter) prewriteKeys(bo *Backoffer, keys [][]byte) error {
-	if span := opentracing.SpanFromContext(bo.ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("twoPhaseCommitter.prewriteKeys", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		bo.ctx = opentracing.ContextWithSpan(bo.ctx, span1)
-	}
-
 	return c.doActionOnKeys(bo, actionPrewrite{}, keys)
 }
 
 func (c *twoPhaseCommitter) commitKeys(bo *Backoffer, keys [][]byte) error {
-	if span := opentracing.SpanFromContext(bo.ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("twoPhaseCommitter.commitKeys", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		bo.ctx = opentracing.ContextWithSpan(bo.ctx, span1)
-	}
-
 	return c.doActionOnKeys(bo, actionCommit{}, keys)
 }
 
@@ -677,7 +664,6 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	logutil.Event(ctx, "start get commit ts")
 	commitTS, err := c.store.getTimestampWithRetry(NewBackoffer(ctx, tsoMaxBackoff).WithVars(c.txn.vars))
 	if err != nil {
 		logutil.Logger(ctx).Warn("2PC get commitTS failed",
@@ -685,8 +671,6 @@ func (c *twoPhaseCommitter) execute(ctx context.Context) (err error) {
 			zap.Uint64("txnStartTS", c.startTS))
 		return errors.Trace(err)
 	}
-	logutil.Event(ctx, "finish get commit ts")
-	logutil.SetTag(ctx, "commitTs", commitTS)
 
 	// check commitTS
 	if commitTS <= c.startTS {

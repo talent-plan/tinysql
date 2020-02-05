@@ -113,7 +113,6 @@ func (s *RegionRequestSender) SendReqCtx(
 			return resp, nil, err
 		}
 
-		logutil.Eventf(bo.ctx, "send %s request to region %d at %s", req.Type, regionID.id, rpcCtx.Addr)
 		s.storeAddr = rpcCtx.Addr
 		var retry bool
 		resp, retry, err = s.sendReqToRegion(bo, rpcCtx, req, timeout)

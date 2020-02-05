@@ -15,16 +15,13 @@ package executor
 
 import (
 	"context"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/ranger"
-	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -59,12 +56,6 @@ type TableReaderExecutor struct {
 
 // Open initialzes necessary variables for using this executor.
 func (e *TableReaderExecutor) Open(ctx context.Context) error {
-	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
-		span1 := span.Tracer().StartSpan("TableReaderExecutor.Open", opentracing.ChildOf(span.Context()))
-		defer span1.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-
 	var err error
 	if e.corColInFilter {
 		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
@@ -104,13 +95,6 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 // Next fills data into the chunk passed by its caller.
 // The task was actually done by tableReaderHandler.
 func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
-	logutil.Eventf(ctx, "table scan table: %s, range: %v", stringutil.MemoizeStr(func() string {
-		var tableName string
-		if meta := e.table.Meta(); meta != nil {
-			tableName = meta.Name.L
-		}
-		return tableName
-	}), e.ranges)
 	return e.resultHandler.nextChunk(ctx, req)
 }
 

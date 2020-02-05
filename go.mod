@@ -18,7 +18,6 @@ require (
 	github.com/gorilla/mux v1.6.2
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7
-	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pingcap-incubator/tinykv v0.0.0-20200204065607-1cfa2bb4c5e2
 	github.com/pingcap/check v0.0.0-20191107115940-caf2b9e6ccf4
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
