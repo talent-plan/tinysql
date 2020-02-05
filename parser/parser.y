@@ -3495,13 +3495,12 @@ NotKeywordToken:
  *
  **********************************************************************************/
 InsertIntoStmt:
-	"INSERT" PriorityOpt IgnoreOptional IntoOpt TableName InsertValues
+	"INSERT" PriorityOpt IntoOpt TableName InsertValues
 	{
-		x := $6.(*ast.InsertStmt)
+		x := $5.(*ast.InsertStmt)
 		x.Priority = $2.(mysql.PriorityEnum)
-		x.IgnoreErr = $3.(bool)
 		// Wraps many layers here so that it can be processed the same way as select statement.
-		ts := &ast.TableSource{Source: $5.(*ast.TableName)}
+		ts := &ast.TableSource{Source: $4.(*ast.TableName)}
 		x.Table = &ast.TableRefsClause{TableRefs: &ast.Join{Left: ts}}
 		$$ = x
 	}

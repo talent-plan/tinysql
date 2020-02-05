@@ -713,62 +713,6 @@ func (e *InsertValues) handleWarning(err error) {
 	sc.AppendWarning(err)
 }
 
-// batchCheckAndInsert checks rows with duplicate errors.
-// All duplicate rows will be ignored and appended as duplicate warnings.
-func (e *InsertValues) batchCheckAndInsert(ctx context.Context, rows [][]types.Datum, addRecord func(ctx context.Context, row []types.Datum) (int64, error)) error {
-	// all the rows will be checked, so it is safe to set BatchCheck = true
-	e.ctx.GetSessionVars().StmtCtx.BatchCheck = true
-
-	// Get keys need to be checked.
-	toBeCheckedRows, err := getKeysNeedCheck(ctx, e.ctx, e.Table, rows)
-	if err != nil {
-		return err
-	}
-
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-
-	// append warnings and get no duplicated error rows
-	for i, r := range toBeCheckedRows {
-		skip := false
-		if r.handleKey != nil {
-			_, err := txn.Get(ctx, r.handleKey.newKV.key)
-			if err == nil {
-				e.ctx.GetSessionVars().StmtCtx.AppendWarning(r.handleKey.dupErr)
-				continue
-			}
-			if !kv.IsErrNotFound(err) {
-				return err
-			}
-		}
-		for _, uk := range r.uniqueKeys {
-			_, err := txn.Get(ctx, uk.newKV.key)
-			if err == nil {
-				// If duplicate keys were found in BatchGet, mark row = nil.
-				e.ctx.GetSessionVars().StmtCtx.AppendWarning(uk.dupErr)
-				skip = true
-				break
-			}
-			if !kv.IsErrNotFound(err) {
-				return err
-			}
-		}
-		// If row was checked with no duplicate keys,
-		// it should be add to values map for the further row check.
-		// There may be duplicate keys inside the insert statement.
-		if !skip {
-			e.ctx.GetSessionVars().StmtCtx.AddCopiedRows(1)
-			_, err = addRecord(ctx, rows[i])
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (e *InsertValues) addRecord(ctx context.Context, row []types.Datum) (int64, error) {
 	txn, err := e.ctx.Txn(true)
 	if err != nil {

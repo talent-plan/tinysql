@@ -197,7 +197,6 @@ type ddl struct {
 	*ddlCtx
 	workers     map[workerType]*worker
 	sessPool    *sessionPool
-	delRangeMgr delRangeManager
 }
 
 // ddlCtx is the context when we use worker to handle DDL jobs.
@@ -285,19 +284,6 @@ func (d *ddl) Stop() error {
 	return nil
 }
 
-func (d *ddl) newDeleteRangeManager(mock bool) delRangeManager {
-	var delRangeMgr delRangeManager
-	if !mock {
-		delRangeMgr = newDelRangeManager(d.store, d.sessPool)
-		logutil.BgLogger().Info("[ddl] start delRangeManager OK", zap.Bool("is a emulator", !d.store.SupportDeleteRange()))
-	} else {
-		delRangeMgr = newMockDelRangeManager()
-	}
-
-	delRangeMgr.start()
-	return delRangeMgr
-}
-
 // start campaigns the owner and starts workers.
 // ctxPool is used for the worker's delRangeManager and creates sessions.
 func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
@@ -309,9 +295,8 @@ func (d *ddl) start(ctx context.Context, ctxPool *pools.ResourcePool) {
 
 	d.workers = make(map[workerType]*worker, 2)
 	d.sessPool = newSessionPool(ctxPool)
-	d.delRangeMgr = d.newDeleteRangeManager(ctxPool == nil)
-	d.workers[generalWorker] = newWorker(generalWorker, d.store, d.sessPool, d.delRangeMgr)
-	d.workers[addIdxWorker] = newWorker(addIdxWorker, d.store, d.sessPool, d.delRangeMgr)
+	d.workers[generalWorker] = newWorker(generalWorker,  d.sessPool)
+	d.workers[addIdxWorker] = newWorker(addIdxWorker, d.sessPool)
 	for _, worker := range d.workers {
 		worker.wg.Add(1)
 		w := worker
@@ -357,11 +342,6 @@ func (d *ddl) close() {
 
 	for _, worker := range d.workers {
 		worker.close()
-	}
-	// d.delRangeMgr using sessions from d.sessPool.
-	// Put it before d.sessPool.close to reduce the time spent by d.sessPool.close.
-	if d.delRangeMgr != nil {
-		d.delRangeMgr.clear()
 	}
 	if d.sessPool != nil {
 		d.sessPool.close()

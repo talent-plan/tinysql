@@ -971,14 +971,11 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 	case *ast.InsertStmt:
 		sc.InInsertStmt = true
 		// For insert statement (not for update statement), disabling the StrictSQLMode
-		// should make TruncateAsWarning and DividedByZeroAsWarning,
-		// but should not make DupKeyAsWarning or BadNullAsWarning,
-		sc.DupKeyAsWarning = stmt.IgnoreErr
-		sc.BadNullAsWarning = stmt.IgnoreErr
-		sc.TruncateAsWarning = !vars.StrictSQLMode || stmt.IgnoreErr
-		sc.DividedByZeroAsWarning = !vars.StrictSQLMode || stmt.IgnoreErr
+		// should make TruncateAsWarning and DividedByZeroAsWarning.
+		sc.TruncateAsWarning = !vars.StrictSQLMode
+		sc.DividedByZeroAsWarning = !vars.StrictSQLMode
 		sc.AllowInvalidDate = vars.SQLMode.HasAllowInvalidDatesMode()
-		sc.IgnoreZeroInDate = !vars.StrictSQLMode || stmt.IgnoreErr || sc.AllowInvalidDate
+		sc.IgnoreZeroInDate = !vars.StrictSQLMode || sc.AllowInvalidDate
 	case *ast.CreateTableStmt, *ast.AlterTableStmt:
 		// Make sure the sql_mode is strict when checking column default value.
 	case *ast.SelectStmt:

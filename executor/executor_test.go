@@ -916,56 +916,6 @@ func (s *testSuiteP1) TestUnsignedPKColumn(c *C) {
 	result.Check(testkit.Rows("1 1 2"))
 }
 
-func (s *testSuiteP2) TestSQLMode(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a tinyint not null)")
-	tk.MustExec("set sql_mode = 'STRICT_TRANS_TABLES'")
-	_, err := tk.Exec("insert t values ()")
-	c.Check(err, NotNil)
-
-	_, err = tk.Exec("insert t values ('1000')")
-	c.Check(err, NotNil)
-
-	tk.MustExec("create table if not exists tdouble (a double(3,2))")
-	_, err = tk.Exec("insert tdouble values (10.23)")
-	c.Check(err, NotNil)
-
-	tk.MustExec("set sql_mode = ''")
-	tk.MustExec("insert t values ()")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1364 Field 'a' doesn't have a default value"))
-	_, err = tk.Exec("insert t values (null)")
-	c.Check(err, NotNil)
-	tk.MustExec("insert ignore t values (null)")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1048 Column 'a' cannot be null"))
-	tk.MustExec("insert t select null")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1048 Column 'a' cannot be null"))
-	tk.MustExec("insert t values (1000)")
-	tk.MustQuery("select * from t order by a").Check(testkit.Rows("0", "0", "0", "127"))
-
-	tk.MustExec("insert tdouble values (10.23)")
-	tk.MustQuery("select * from tdouble").Check(testkit.Rows("9.99"))
-
-	tk.MustExec("set sql_mode = 'STRICT_TRANS_TABLES'")
-	tk.MustExec("set @@global.sql_mode = ''")
-
-	// Disable global variable cache, so load global session variable take effect immediate.
-	s.domain.GetGlobalVarsCache().Disable()
-	tk2 := testkit.NewTestKit(c, s.store)
-	tk2.MustExec("use test")
-	tk2.MustExec("drop table if exists t2")
-	tk2.MustExec("create table t2 (a varchar(3))")
-	tk2.MustExec("insert t2 values ('abcd')")
-	tk2.MustQuery("select * from t2").Check(testkit.Rows("abc"))
-
-	// session1 is still in strict mode.
-	_, err = tk.Exec("insert t2 values ('abcd')")
-	c.Check(err, NotNil)
-	// Restore original global strict mode.
-	tk.MustExec("set @@global.sql_mode = 'STRICT_TRANS_TABLES'")
-}
-
 func (s *testSuiteP2) TestTableDual(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

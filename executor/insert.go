@@ -40,27 +40,17 @@ func (e *InsertExec) exec(ctx context.Context, rows [][]types.Datum) error {
 		}
 		return tblName
 	}))
-	// If tidb_batch_insert is ON and not in a transaction, we could use BatchInsert mode.
 	sessVars := e.ctx.GetSessionVars()
 	defer sessVars.CleanBuffers()
-	ignoreErr := sessVars.StmtCtx.DupKeyAsWarning
-
 	txn, err := e.ctx.Txn(true)
 	if err != nil {
 		return err
 	}
 	sessVars.GetWriteStmtBufs().BufStore = kv.NewBufferStore(txn, kv.TempTxnMemBufCap)
 	sessVars.StmtCtx.AddRecordRows(uint64(len(rows)))
-	if ignoreErr {
-		err := e.batchCheckAndInsert(ctx, rows, e.addRecord)
-		if err != nil {
+	for _, row := range rows {
+		if _, err := e.addRecord(ctx, row); err != nil {
 			return err
-		}
-	} else {
-		for _, row := range rows {
-			if _, err := e.addRecord(ctx, row); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

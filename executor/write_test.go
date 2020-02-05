@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table/tables"
@@ -298,120 +297,6 @@ func (s *testSuite4) TestInsertAutoInc(c *C) {
 	r = tk.MustQuery("select * from insert_autoinc_test;")
 	rowStr8 := fmt.Sprintf("%v %v", "11", "9")
 	r.Check(testkit.Rows(rowStr4, rowStr1, rowStr2, rowStr3, rowStr5, rowStr6, rowStr7, rowStr8))
-}
-
-func (s *testSuite4) TestInsertIgnore(c *C) {
-	var cfg kv.InjectionConfig
-	tk := testkit.NewTestKit(c, kv.NewInjectedStore(s.store, &cfg))
-	tk.MustExec("use test")
-	testSQL := `drop table if exists t;
-    create table t (id int PRIMARY KEY AUTO_INCREMENT, c1 int unique key);`
-	tk.MustExec(testSQL)
-	testSQL = `insert into t values (1, 2);`
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("")
-
-	r := tk.MustQuery("select * from t;")
-	rowStr := fmt.Sprintf("%v %v", "1", "2")
-	r.Check(testkit.Rows(rowStr))
-
-	tk.MustExec("insert ignore into t values (1, 3), (2, 3)")
-	tk.CheckLastMessage("Records: 2  Duplicates: 1  Warnings: 1")
-	r = tk.MustQuery("select * from t;")
-	rowStr1 := fmt.Sprintf("%v %v", "2", "3")
-	r.Check(testkit.Rows(rowStr, rowStr1))
-
-	tk.MustExec("insert ignore into t values (3, 4), (3, 4)")
-	tk.CheckLastMessage("Records: 2  Duplicates: 1  Warnings: 1")
-	r = tk.MustQuery("select * from t;")
-	rowStr2 := fmt.Sprintf("%v %v", "3", "4")
-	r.Check(testkit.Rows(rowStr, rowStr1, rowStr2))
-
-	tk.MustExec("begin")
-	tk.MustExec("insert ignore into t values (4, 4), (4, 5), (4, 6)")
-	tk.CheckLastMessage("Records: 3  Duplicates: 2  Warnings: 2")
-	r = tk.MustQuery("select * from t;")
-	rowStr3 := fmt.Sprintf("%v %v", "4", "5")
-	r.Check(testkit.Rows(rowStr, rowStr1, rowStr2, rowStr3))
-	tk.MustExec("commit")
-
-	cfg.SetGetError(errors.New("foo"))
-	_, err := tk.Exec("insert ignore into t values (1, 3)")
-	c.Assert(err, NotNil)
-	cfg.SetGetError(nil)
-
-	// for issue 4268
-	testSQL = `drop table if exists t;
-	create table t (a bigint);`
-	tk.MustExec(testSQL)
-	testSQL = "insert ignore into t select '1a';"
-	_, err = tk.Exec(testSQL)
-	c.Assert(err, IsNil)
-	tk.CheckLastMessage("Records: 1  Duplicates: 0  Warnings: 1")
-	r = tk.MustQuery("SHOW WARNINGS")
-	r.Check(testkit.Rows("Warning 1292 Truncated incorrect FLOAT value: '1a'"))
-	testSQL = "insert ignore into t values ('1a')"
-	_, err = tk.Exec(testSQL)
-	c.Assert(err, IsNil)
-	tk.CheckLastMessage("")
-	r = tk.MustQuery("SHOW WARNINGS")
-	r.Check(testkit.Rows("Warning 1292 Truncated incorrect FLOAT value: '1a'"))
-
-	// for duplicates with warning
-	testSQL = `drop table if exists t;
-	create table t(a int primary key, b int);`
-	tk.MustExec(testSQL)
-	testSQL = "insert ignore into t values (1,1);"
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("")
-	_, err = tk.Exec(testSQL)
-	tk.CheckLastMessage("")
-	c.Assert(err, IsNil)
-	r = tk.MustQuery("SHOW WARNINGS")
-	r.Check(testkit.Rows("Warning 1062 Duplicate entry '1' for key 'PRIMARY'"))
-
-	testSQL = `drop table if exists test;
-create table test (i int primary key, j int unique);
-begin;
-insert into test values (1,1);
-insert ignore into test values (2,1);
-commit;`
-	tk.MustExec(testSQL)
-	testSQL = `select * from test;`
-	r = tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("1 1"))
-
-	testSQL = `delete from test;
-insert into test values (1, 1);
-begin;
-delete from test where i = 1;
-insert ignore into test values (2, 1);
-commit;`
-	tk.MustExec(testSQL)
-	testSQL = `select * from test;`
-	r = tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("2 1"))
-
-	testSQL = `delete from test;
-insert into test values (1, 1);
-begin;
-update test set i = 2, j = 2 where i = 1;
-insert ignore into test values (1, 3);
-insert ignore into test values (2, 4);
-commit;`
-	tk.MustExec(testSQL)
-	testSQL = `select * from test order by i;`
-	r = tk.MustQuery(testSQL)
-	r.Check(testkit.Rows("1 3", "2 2"))
-
-	testSQL = `create table badnull (i int not null)`
-	tk.MustExec(testSQL)
-	testSQL = `insert ignore into badnull values (null)`
-	tk.MustExec(testSQL)
-	tk.CheckLastMessage("")
-	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1048 Column 'i' cannot be null"))
-	testSQL = `select * from badnull`
-	tk.MustQuery(testSQL).Check(testkit.Rows("0"))
 }
 
 func (s *testSuite4) TestInsertSetWithDefault(c *C) {

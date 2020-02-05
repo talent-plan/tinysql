@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/ddl/util"
-	"github.com/pingcap/tidb/parser/model"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -120,27 +119,3 @@ func (s *MockSchemaSyncer) StartCleanWork() {}
 
 // CloseCleanWork implements SchemaSyncer.CloseCleanWork interface.
 func (s *MockSchemaSyncer) CloseCleanWork() {}
-
-type mockDelRange struct {
-}
-
-// newMockDelRangeManager creates a mock delRangeManager only used for test.
-func newMockDelRangeManager() delRangeManager {
-	return &mockDelRange{}
-}
-
-// addDelRangeJob implements delRangeManager interface.
-func (dr *mockDelRange) addDelRangeJob(job *model.Job) error {
-	return nil
-}
-
-// removeFromGCDeleteRange implements delRangeManager interface.
-func (dr *mockDelRange) removeFromGCDeleteRange(jobID int64, tableIDs []int64) error {
-	return nil
-}
-
-// start implements delRangeManager interface.
-func (dr *mockDelRange) start() {}
-
-// clear implements delRangeManager interface.
-func (dr *mockDelRange) clear() {}

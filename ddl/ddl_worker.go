@@ -66,11 +66,10 @@ type worker struct {
 
 	sessPool        *sessionPool // sessPool is used to new sessions to execute SQL in ddl package.
 	reorgCtx        *reorgCtx    // reorgCtx is used for reorganization.
-	delRangeManager delRangeManager
 	logCtx          context.Context
 }
 
-func newWorker(tp workerType, store kv.Storage, sessPool *sessionPool, delRangeMgr delRangeManager) *worker {
+func newWorker(tp workerType, sessPool *sessionPool) *worker {
 	worker := &worker{
 		id:              atomic.AddInt32(&ddlWorkerID, 1),
 		tp:              tp,
@@ -78,7 +77,6 @@ func newWorker(tp workerType, store kv.Storage, sessPool *sessionPool, delRangeM
 		quitCh:          make(chan struct{}),
 		reorgCtx:        &reorgCtx{notifyCancelReorgJob: 0},
 		sessPool:        sessPool,
-		delRangeManager: delRangeMgr,
 	}
 
 	worker.logCtx = logutil.WithKeyValue(context.Background(), "worker", worker.String())
@@ -254,36 +252,9 @@ func (w *worker) updateDDLJob(t *meta.Meta, job *model.Job, meetErr bool) error 
 	return errors.Trace(t.UpdateDDLJob(0, job, updateRawArgs))
 }
 
-func (w *worker) deleteRange(job *model.Job) error {
-	var err error
-	if job.Version <= currentVersion {
-		err = w.delRangeManager.addDelRangeJob(job)
-	} else {
-		err = errInvalidDDLJobVersion.GenWithStackByArgs(job.Version, currentVersion)
-	}
-	return errors.Trace(err)
-}
-
 // finishDDLJob deletes the finished DDL job in the ddl queue and puts it to history queue.
 // If the DDL job need to handle in background, it will prepare a background job.
 func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
-	if !job.IsCancelled() {
-		switch job.Type {
-		case model.ActionAddIndex, model.ActionAddPrimaryKey:
-			if job.State != model.JobStateRollbackDone {
-				break
-			}
-
-			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
-			err = w.deleteRange(job)
-		case model.ActionDropSchema, model.ActionDropTable, model.ActionDropIndex, model.ActionDropPrimaryKey:
-			err = w.deleteRange(job)
-		}
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	_, err = t.DeQueueDDLJob()
 	if err != nil {
 		return errors.Trace(err)

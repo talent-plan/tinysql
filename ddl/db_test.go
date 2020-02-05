@@ -39,19 +39,11 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
-)
-
-const (
-	// waitForCleanDataRound indicates how many times should we check data is cleaned or not.
-	waitForCleanDataRound = 150
-	// waitForCleanDataInterval is a min duration between 2 check for data clean.
-	waitForCleanDataInterval = time.Millisecond * 100
 )
 
 var _ = Suite(&testDBSuite1{&testDBSuite{}})
@@ -306,7 +298,6 @@ func testCancelAddIndex(c *C, store kv.Storage, d ddl.DDL, lease time.Duration, 
 		tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i, i, i))
 	}
 
-	var c3IdxInfo *model.IndexInfo
 	hook := &ddl.TestDDLCallback{}
 	originBatchSize := tk.MustQuery("select @@global.tidb_ddl_reorg_batch_size")
 	// Set batch size to lower try to slow down add-index reorganization, This if for hook to cancel this ddl job.
@@ -317,7 +308,7 @@ func testCancelAddIndex(c *C, store kv.Storage, d ddl.DDL, lease time.Duration, 
 	// After that ddl call d.hook.OnJobUpdated(job), so that we can canceled the job in this test case.
 	var checkErr error
 	ctx := tk.Se.(sessionctx.Context)
-	hook.OnJobUpdatedExported, c3IdxInfo, checkErr = backgroundExecOnJobUpdatedExported(c, store, ctx, hook, idxName)
+	hook.OnJobUpdatedExported, _, checkErr = backgroundExecOnJobUpdatedExported(c, store, ctx, hook, idxName)
 	originalHook := d.GetHook()
 	d.(ddl.DDLForTest).SetHook(hook)
 	done := make(chan error, 1)
@@ -355,8 +346,6 @@ LOOP:
 		c.Assert(strings.EqualFold(tidx.Meta().Name.L, idxName), IsFalse)
 	}
 
-	idx := tables.NewIndex(t.Meta().ID, t.Meta(), c3IdxInfo)
-	checkDelRangeDone(c, ctx, idx)
 	d.(ddl.DDLForTest).SetHook(originalHook)
 }
 
@@ -913,50 +902,7 @@ LOOP:
 		}
 	}
 	c.Assert(nidx, IsNil)
-
-	idx := tables.NewIndex(t.Meta().ID, t.Meta(), c3idx.Meta())
-	checkDelRangeDone(c, ctx, idx)
 	tk.MustExec("drop table test_drop_index")
-}
-
-func checkDelRangeDone(c *C, ctx sessionctx.Context, idx table.Index) {
-	startTime := time.Now()
-	f := func() map[int64]struct{} {
-		handles := make(map[int64]struct{})
-
-		c.Assert(ctx.NewTxn(context.Background()), IsNil)
-		txn, err := ctx.Txn(true)
-		c.Assert(err, IsNil)
-		defer txn.Rollback()
-
-		txn, err = ctx.Txn(true)
-		c.Assert(err, IsNil)
-		it, err := idx.SeekFirst(txn)
-		c.Assert(err, IsNil)
-		defer it.Close()
-
-		for {
-			_, h, err := it.Next()
-			if terror.ErrorEqual(err, io.EOF) {
-				break
-			}
-
-			c.Assert(err, IsNil)
-			handles[h] = struct{}{}
-		}
-		return handles
-	}
-
-	var handles map[int64]struct{}
-	for i := 0; i < waitForCleanDataRound; i++ {
-		handles = f()
-		if len(handles) != 0 {
-			time.Sleep(waitForCleanDataInterval)
-		} else {
-			break
-		}
-	}
-	c.Assert(handles, HasLen, 0, Commentf("take time %v", time.Since(startTime)))
 }
 
 func (s *testDBSuite4) TestAddIndexWithDupCols(c *C) {
