@@ -233,12 +233,6 @@ func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInf
 	return &p
 }
 
-// Init initializes Update.
-func (p Update) Init(ctx sessionctx.Context) *Update {
-	p.basePlan = newBasePlan(ctx, TypeUpdate)
-	return &p
-}
-
 // Init initializes Delete.
 func (p Delete) Init(ctx sessionctx.Context) *Delete {
 	p.basePlan = newBasePlan(ctx, TypeDelete)

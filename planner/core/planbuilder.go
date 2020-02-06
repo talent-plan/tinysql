@@ -287,8 +287,6 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 		return b.buildInsert(ctx, x)
 	case *ast.SelectStmt:
 		return b.buildSelect(ctx, x)
-	case *ast.UpdateStmt:
-		return b.buildUpdate(ctx, x)
 	case *ast.ShowStmt:
 		return b.buildShow(ctx, x)
 	case *ast.SetStmt:

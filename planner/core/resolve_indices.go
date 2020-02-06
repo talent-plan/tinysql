@@ -373,27 +373,6 @@ func (p *PhysicalApply) ResolveIndices() (err error) {
 }
 
 // ResolveIndices implements Plan interface.
-func (p *Update) ResolveIndices() (err error) {
-	err = p.baseSchemaProducer.ResolveIndices()
-	if err != nil {
-		return err
-	}
-	schema := p.SelectPlan.Schema()
-	for _, assign := range p.OrderedList {
-		newCol, err := assign.Col.ResolveIndices(schema)
-		if err != nil {
-			return err
-		}
-		assign.Col = newCol.(*expression.Column)
-		assign.Expr, err = assign.Expr.ResolveIndices(schema)
-		if err != nil {
-			return err
-		}
-	}
-	return
-}
-
-// ResolveIndices implements Plan interface.
 func (p *Insert) ResolveIndices() (err error) {
 	err = p.baseSchemaProducer.ResolveIndices()
 	if err != nil {

@@ -67,11 +67,6 @@ func (ts *TidbTestSuite) TearDownSuite(c *C) {
 	}
 }
 
-func (ts *TidbTestSuite) TestConcurrentUpdate(c *C) {
-	c.Parallel()
-	runTestConcurrentUpdate(c)
-}
-
 func (ts *TidbTestSuite) TestErrorCode(c *C) {
 	c.Parallel()
 	runTestErrorCode(c)
@@ -90,11 +85,6 @@ func (ts *TidbTestSuite) TestDBNameEscape(c *C) {
 func (ts *TidbTestSuite) TestResultFieldTableIsNull(c *C) {
 	c.Parallel()
 	runTestResultFieldTableIsNull(c)
-}
-
-func (ts *TidbTestSuite) TestMultiStatements(c *C) {
-	c.Parallel()
-	runTestMultiStatements(c)
 }
 
 func (ts *TidbTestSuite) TestShowTablesFlen(c *C) {

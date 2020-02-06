@@ -114,43 +114,6 @@ func (dbt *DBTest) mustExec(query string) (res sql.Result) {
 	return res
 }
 
-func (dbt *DBTest) mustQuery(query string) (rows *sql.Rows) {
-	rows, err := dbt.db.Query(query)
-	dbt.Assert(err, IsNil, Commentf("Query %s", query))
-	return rows
-}
-
-func runTestConcurrentUpdate(c *C) {
-	dbName := "Concurrent"
-	runTestsOnNewDB(c, nil, dbName, func(dbt *DBTest) {
-		dbt.mustExec("drop table if exists test2")
-		dbt.mustExec("create table test2 (a int, b int)")
-		dbt.mustExec("insert test2 values (1, 1)")
-		dbt.mustExec("set @@tidb_disable_txn_auto_retry = 0")
-
-		txn1, err := dbt.db.Begin()
-		c.Assert(err, IsNil)
-		_, err = txn1.Exec(fmt.Sprintf("USE `%s`;", dbName))
-		c.Assert(err, IsNil)
-
-		txn2, err := dbt.db.Begin()
-		c.Assert(err, IsNil)
-		_, err = txn2.Exec(fmt.Sprintf("USE `%s`;", dbName))
-		c.Assert(err, IsNil)
-
-		_, err = txn2.Exec("update test2 set a = a + 1 where b = 1")
-		c.Assert(err, IsNil)
-		err = txn2.Commit()
-		c.Assert(err, IsNil)
-
-		_, err = txn1.Exec("update test2 set a = a + 1 where b = 1")
-		c.Assert(err, IsNil)
-
-		err = txn1.Commit()
-		c.Assert(err, IsNil)
-	})
-}
-
 func runTestErrorCode(c *C) {
 	runTestsOnNewDB(c, nil, "ErrorCode", func(dbt *DBTest) {
 		dbt.mustExec("create table test (c int PRIMARY KEY);")
@@ -251,39 +214,6 @@ func runTestResultFieldTableIsNull(c *C) {
 		dbt.mustExec("drop table if exists test;")
 		dbt.mustExec("create table test (c int);")
 		dbt.mustExec("explain select * from test;")
-	})
-}
-
-func runTestMultiStatements(c *C) {
-	runTestsOnNewDB(c, nil, "MultiStatements", func(dbt *DBTest) {
-		// Create Table
-		dbt.mustExec("CREATE TABLE `test` (`id` int(11) NOT NULL, `value` int(11) NOT NULL) ")
-
-		// Create Data
-		res := dbt.mustExec("INSERT INTO test VALUES (1, 1)")
-		count, err := res.RowsAffected()
-		c.Assert(err, IsNil, Commentf("res.RowsAffected() returned error"))
-		c.Assert(count, Equals, int64(1))
-
-		// Update
-		res = dbt.mustExec("UPDATE test SET value = 3 WHERE id = 1; UPDATE test SET value = 4 WHERE id = 1; UPDATE test SET value = 5 WHERE id = 1;")
-		count, err = res.RowsAffected()
-		c.Assert(err, IsNil, Commentf("res.RowsAffected() returned error"))
-		c.Assert(count, Equals, int64(1))
-
-		// Read
-		var out int
-		rows := dbt.mustQuery("SELECT value FROM test WHERE id=1;")
-		if rows.Next() {
-			rows.Scan(&out)
-			c.Assert(out, Equals, 5)
-
-			if rows.Next() {
-				dbt.Error("unexpected data")
-			}
-		} else {
-			dbt.Error("no data")
-		}
 	})
 }
 

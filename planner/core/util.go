@@ -180,8 +180,6 @@ func GetStatsInfo(i interface{}) map[string]uint64 {
 	switch x := p.(type) {
 	case *Insert:
 		physicalPlan = x.SelectPlan
-	case *Update:
-		physicalPlan = x.SelectPlan
 	case *Delete:
 		physicalPlan = x.SelectPlan
 	case PhysicalPlan:

@@ -16,17 +16,13 @@ package session_test
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
@@ -104,78 +100,12 @@ func (s *testSessionSuiteBase) TearDownTest(c *C) {
 	}
 }
 
-func (s *testSessionSuite) TestErrorRollback(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t_rollback")
-	tk.MustExec("create table t_rollback (c1 int, c2 int, primary key(c1))")
-	tk.MustExec("insert into t_rollback values (0, 0)")
-
-	var wg sync.WaitGroup
-	cnt := 4
-	wg.Add(cnt)
-	num := 20
-
-	for i := 0; i < cnt; i++ {
-		go func() {
-			defer wg.Done()
-			localTk := testkit.NewTestKitWithInit(c, s.store)
-			localTk.MustExec("set @@session.tidb_retry_limit = 100")
-			for j := 0; j < num; j++ {
-				localTk.Exec("insert into t_rollback values (1, 1)")
-				localTk.MustExec("update t_rollback set c2 = c2 + 1 where c1 = 0")
-			}
-		}()
-	}
-
-	wg.Wait()
-	tk.MustQuery("select c2 from t_rollback where c1 = 0").Check(testkit.Rows(fmt.Sprint(cnt * num)))
-}
-
 func (s *testSessionSuite) TestQueryString(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 
 	tk.MustExec("create table mutil1 (a int);create table multi2 (a int)")
 	queryStr := tk.Se.Value(sessionctx.QueryString)
 	c.Assert(queryStr, Equals, "create table multi2 (a int)")
-}
-
-// TestRowLock . See http://dev.mysql.com/doc/refman/5.7/en/commit.html.
-func (s *testSessionSuite) TestRowLock(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	txn, err := tk.Se.Txn(true)
-	c.Assert(kv.ErrInvalidTxn.Equal(err), IsTrue)
-	c.Assert(txn.Valid(), IsFalse)
-	tk.MustExec("create table t (c1 int, c2 int, c3 int)")
-	tk.MustExec("insert t values (11, 2, 3)")
-	tk.MustExec("insert t values (12, 2, 3)")
-	tk.MustExec("insert t values (13, 2, 3)")
-
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("begin")
-	tk1.MustExec("update t set c2=21 where c1=11")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=211 where c1=11")
-	tk2.MustExec("commit")
-
-	// tk1 will retry and the final value is 21
-	tk1.MustExec("commit")
-
-	// Check the result is correct
-	tk.MustQuery("select c2 from t where c1=11").Check(testkit.Rows("21"))
-
-	tk1.MustExec("begin")
-	tk1.MustExec("update t set c2=21 where c1=11")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update t set c2=22 where c1=12")
-	tk2.MustExec("commit")
-
-	tk1.MustExec("commit")
 }
 
 // TestAutocommit . See https://dev.mysql.com/doc/internals/en/status-flags.html
@@ -301,49 +231,6 @@ func (s *testSessionSuite) TestGetSysVariables(c *C) {
 	c.Assert(terror.ErrorEqual(err, variable.ErrIncorrectScope), IsTrue, Commentf("err %v", err))
 }
 
-func (s *testSessionSuite) TestRetryResetStmtCtx(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table retrytxn (a int unique, b int)")
-	tk.MustExec("insert retrytxn values (1, 1)")
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("begin")
-	tk.MustExec("update retrytxn set b = b + 1 where a = 1")
-
-	// Make retryable error.
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustExec("update retrytxn set b = b + 1 where a = 1")
-
-	err := tk.Se.CommitTxn(context.TODO())
-	c.Assert(err, IsNil)
-	c.Assert(tk.Se.AffectedRows(), Equals, uint64(1))
-}
-
-func (s *testSessionSuite) TestRetryCleanTxn(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table retrytxn (a int unique, b int)")
-	tk.MustExec("insert retrytxn values (1, 1)")
-	tk.MustExec("begin")
-	tk.MustExec("update retrytxn set b = b + 1 where a = 1")
-
-	// Make retryable error.
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustExec("update retrytxn set b = b + 1 where a = 1")
-
-	// Hijack retry history, add a statement that returns error.
-	history := session.GetHistory(tk.Se)
-	stmtNode, err := parser.New().ParseOneStmt("insert retrytxn values (2, 'a')", "", "")
-	c.Assert(err, IsNil)
-	stmt, _ := session.Compile(context.TODO(), tk.Se, stmtNode)
-	executor.ResetContextOfStmt(tk.Se, stmtNode)
-	history.Add(stmt, tk.Se.GetSessionVars().StmtCtx)
-	_, err = tk.Exec("commit")
-	c.Assert(err, NotNil)
-	txn, err := tk.Se.Txn(false)
-	c.Assert(err, IsNil)
-	c.Assert(txn.Valid(), IsFalse)
-	c.Assert(tk.Se.GetSessionVars().InTxn(), IsFalse)
-}
-
 func (s *testSessionSuite) TestReadOnlyNotInHistory(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("create table history (a int)")
@@ -361,41 +248,6 @@ func (s *testSessionSuite) TestReadOnlyNotInHistory(c *C) {
 	tk.MustQuery("select * from history")
 	history = session.GetHistory(tk.Se)
 	c.Assert(history.Count(), Equals, 0)
-}
-
-func (s *testSessionSuite) TestNoRetryForCurrentTxn(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table history (a int)")
-	tk.MustExec("insert history values (1)")
-
-	// Firstly, disable retry.
-	tk.MustExec("set tidb_disable_txn_auto_retry = 1")
-	tk.MustExec("begin")
-	tk.MustExec("update history set a = 2")
-	// Enable retry now.
-	tk.MustExec("set tidb_disable_txn_auto_retry = 0")
-
-	tk1.MustExec("update history set a = 3")
-	c.Assert(tk.ExecToErr("commit"), NotNil)
-}
-
-func (s *testSessionSuite) TestRetryForCurrentTxn(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table history (a int)")
-	tk.MustExec("insert history values (1)")
-
-	// Firstly, enable retry.
-	tk.MustExec("set tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("begin")
-	tk.MustExec("update history set a = 2")
-	// Disable retry now.
-	tk.MustExec("set tidb_disable_txn_auto_retry = 1")
-
-	tk1.MustExec("update history set a = 3")
-	tk.MustExec("commit")
-	tk.MustQuery("select * from history").Check(testkit.Rows("2"))
 }
 
 func (s *testSessionSuite) TestString(c *C) {
@@ -484,78 +336,6 @@ func (s *testSessionSuite) TestSession(c *C) {
 	tk.Se.Close()
 }
 
-func (s *testSessionSuite) TestAutoIncrementWithRetry(c *C) {
-	// test for https://github.com/pingcap/tidb/issues/827
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("create table t (c2 int, c1 int not null auto_increment, PRIMARY KEY (c1))")
-	tk.MustExec("insert into t (c2) values (1), (2), (3), (4), (5)")
-
-	// insert values
-	lastInsertID := tk.Se.LastInsertID()
-	tk.MustExec("begin")
-	tk.MustExec("insert into t (c2) values (11), (12), (13)")
-	tk.MustQuery("select c1 from t where c2 = 11").Check(testkit.Rows("6"))
-	tk.MustExec("update t set c2 = 33 where c2 = 1")
-
-	tk1.MustExec("update t set c2 = 22 where c2 = 1")
-
-	tk.MustExec("commit")
-
-	tk.MustQuery("select c1 from t where c2 = 11").Check(testkit.Rows("6"))
-	currLastInsertID := tk.Se.GetSessionVars().StmtCtx.PrevLastInsertID
-	c.Assert(lastInsertID+5, Equals, currLastInsertID)
-
-	// insert set
-	lastInsertID = currLastInsertID
-	tk.MustExec("begin")
-	tk.MustExec("insert into t set c2 = 31")
-	tk.MustQuery("select c1 from t where c2 = 31").Check(testkit.Rows("9"))
-	tk.MustExec("update t set c2 = 44 where c2 = 2")
-
-	tk1.MustExec("update t set c2 = 55 where c2 = 2")
-
-	tk.MustExec("commit")
-
-	tk.MustQuery("select c1 from t where c2 = 31").Check(testkit.Rows("9"))
-	currLastInsertID = tk.Se.GetSessionVars().StmtCtx.PrevLastInsertID
-	c.Assert(lastInsertID+3, Equals, currLastInsertID)
-
-	// replace
-	lastInsertID = currLastInsertID
-	tk.MustExec("begin")
-	tk.MustExec("insert into t (c2) values (21), (22), (23)")
-	tk.MustQuery("select c1 from t where c2 = 21").Check(testkit.Rows("10"))
-	tk.MustExec("update t set c2 = 66 where c2 = 3")
-
-	tk1.MustExec("update t set c2 = 77 where c2 = 3")
-
-	tk.MustExec("commit")
-
-	tk.MustQuery("select c1 from t where c2 = 21").Check(testkit.Rows("10"))
-	currLastInsertID = tk.Se.GetSessionVars().StmtCtx.PrevLastInsertID
-	c.Assert(lastInsertID+1, Equals, currLastInsertID)
-
-	// update
-	lastInsertID = currLastInsertID
-	tk.MustExec("begin")
-	tk.MustExec("insert into t set c2 = 41")
-	tk.MustExec("update t set c1 = 0 where c2 = 41")
-	tk.MustQuery("select c1 from t where c2 = 41").Check(testkit.Rows("0"))
-	tk.MustExec("update t set c2 = 88 where c2 = 4")
-
-	tk1.MustExec("update t set c2 = 99 where c2 = 4")
-
-	tk.MustExec("commit")
-
-	tk.MustQuery("select c1 from t where c2 = 41").Check(testkit.Rows("0"))
-	currLastInsertID = tk.Se.GetSessionVars().StmtCtx.PrevLastInsertID
-	c.Assert(lastInsertID+3, Equals, currLastInsertID)
-}
-
 func (s *testSessionSuite) TestResultField(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("create table t (id int);")
@@ -621,52 +401,6 @@ func (s *testSessionSuite2) TestISColumns(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("select ORDINAL_POSITION from INFORMATION_SCHEMA.COLUMNS;")
 	tk.MustQuery("SELECT CHARACTER_SET_NAME FROM INFORMATION_SCHEMA.CHARACTER_SETS WHERE CHARACTER_SET_NAME = 'utf8mb4'").Check(testkit.Rows("utf8mb4"))
-}
-
-func (s *testSessionSuite2) TestRetry(c *C) {
-	// For https://github.com/pingcap/tidb/issues/571
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("begin")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (c int)")
-	tk.MustExec("insert t values (1), (2), (3)")
-	tk.MustExec("commit")
-
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk3 := testkit.NewTestKitWithInit(c, s.store)
-	tk3.MustExec("SET SESSION autocommit=0;")
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk2.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk3.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-
-	var wg sync.WaitGroup
-	wg.Add(3)
-	f1 := func() {
-		defer wg.Done()
-		for i := 0; i < 30; i++ {
-			tk1.MustExec("update t set c = 1;")
-		}
-	}
-	f2 := func() {
-		defer wg.Done()
-		for i := 0; i < 30; i++ {
-			tk2.MustExec("update t set c = 1;")
-		}
-	}
-	f3 := func() {
-		defer wg.Done()
-		for i := 0; i < 30; i++ {
-			tk3.MustExec("begin")
-			tk3.MustExec("update t set c = 1;")
-			tk3.MustExec("commit")
-		}
-	}
-	go f1()
-	go f2()
-	go f3()
-	wg.Wait()
 }
 
 func (s *testSessionSuite2) TestMultiStmts(c *C) {
@@ -751,18 +485,6 @@ func (s *testSessionSuite2) TestUnique(c *C) {
 	tk.MustExec("commit;")
 	tk1.Exec("commit")
 	tk1.MustExec("insert into test(id, val) values(5, 5);")
-
-	tk.MustExec("drop table test;")
-	tk.MustExec(`CREATE TABLE test (
-			id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-			val1 int UNIQUE,
-			val2 int UNIQUE,
-			PRIMARY KEY (id)
-		);`)
-	tk.MustExec("insert into test(id, val1, val2) values(1, 1, 1);")
-	tk.MustExec("insert into test(id, val1, val2) values(2, 2, 2);")
-	tk.Exec("update test set val1 = 3, val2 = 2 where id = 1;")
-	tk.MustExec("insert into test(id, val1, val2) values(3, 3, 3);")
 }
 
 func (s *testSessionSuite2) TestIssue986(c *C) {
@@ -795,9 +517,6 @@ func (s *testSessionSuite2) TestTableInfoMeta(c *C) {
 	tk.MustExec(`INSERT INTO tbl_test VALUES (2, "hello");`)
 	checkResult(1, 0)
 
-	tk.MustExec(`UPDATE tbl_test SET name = "abc" where id = 2;`)
-	checkResult(1, 0)
-
 	tk.MustExec(`DELETE from tbl_test where id = 2;`)
 	checkResult(1, 0)
 
@@ -821,9 +540,6 @@ func (s *testSessionSuite2) TestCaseInsensitive(c *C) {
 	rs, _ = tk.Exec("select a as A from t where A > 0")
 	fields = rs.Fields()
 	c.Assert(fields[0].ColumnAsName.O, Equals, "A")
-	tk.MustExec("update T set b = B + 1")
-	tk.MustExec("update T set B = b + 1")
-	tk.MustQuery("select b from T").Check(testkit.Rows("3"))
 }
 
 // TestDeletePanic is for delete panic
@@ -991,55 +707,6 @@ func (s *testSchemaSuite) TestCommitWhenSchemaChanged(c *C) {
 	c.Assert(terror.ErrorEqual(err, plannercore.ErrWrongValueCountOnRow), IsTrue, Commentf("err %v", err))
 }
 
-func (s *testSchemaSuite) TestRetrySchemaChange(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table t (a int primary key, b int)")
-	tk.MustExec("insert into t values (1, 1)")
-
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("begin")
-	tk1.MustExec("update t set b = 5 where a = 1")
-
-	tk.MustExec("alter table t add index b_i (b)")
-
-	run := false
-	hook := func() {
-		if !run {
-			tk.MustExec("update t set b = 3 where a = 1")
-			run = true
-		}
-	}
-
-	// In order to cover a bug that statement history is not updated during retry.
-	// See https://github.com/pingcap/tidb/pull/5202
-	// Step1: when tk1 commit, it find schema changed and retry().
-	// Step2: during retry, hook() is called, tk update primary key.
-	// Step3: tk1 continue commit in retry() meet a retryable error(write conflict), retry again.
-	// Step4: tk1 retry() success, if it use the stale statement, data and index will inconsistent.
-	err := tk1.Se.CommitTxn(context.WithValue(context.Background(), "preCommitHook", hook))
-	c.Assert(err, IsNil)
-	tk.MustQuery("select * from t where t.b = 5").Check(testkit.Rows("1 5"))
-}
-
-func (s *testSchemaSuite) TestRetryMissingUnionScan(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table t (a int primary key, b int unique, c int)")
-	tk.MustExec("insert into t values (1, 1, 1)")
-
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("begin")
-	tk1.MustExec("update t set b = 1, c = 2 where b = 2")
-	tk1.MustExec("update t set b = 1, c = 2 where a = 1")
-
-	// Create a conflict to reproduces the bug that the second update statement in retry
-	// has a dirty table but doesn't use UnionScan.
-	tk.MustExec("update t set b = 2 where a = 1")
-
-	tk1.MustExec("commit")
-}
-
 func (s *testSchemaSuite) TestTableReaderChunk(c *C) {
 	// Since normally a single region mock tikv only returns one partial result we need to manually split the
 	// table to test multiple chunks.
@@ -1106,40 +773,6 @@ func (s *testSchemaSuite) TestInsertExecChunk(c *C) {
 		for rowIdx := 0; rowIdx < req.NumRows(); rowIdx++ {
 			row := req.GetRow(rowIdx)
 			c.Assert(row.GetInt64(0), Equals, int64(idx))
-			idx++
-		}
-	}
-
-	c.Assert(idx, Equals, 100)
-	rs.Close()
-}
-
-func (s *testSchemaSuite) TestUpdateExecChunk(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table chk(a int)")
-	for i := 0; i < 100; i++ {
-		tk.MustExec(fmt.Sprintf("insert chk values (%d)", i))
-	}
-
-	tk.Se.GetSessionVars().DistSQLScanConcurrency = 1
-	for i := 0; i < 100; i++ {
-		tk.MustExec(fmt.Sprintf("update chk set a = a + 100 where a = %d", i))
-	}
-
-	rs, err := tk.Exec("select * from chk")
-	c.Assert(err, IsNil)
-	var idx int
-	for {
-		req := rs.NewChunk()
-		err = rs.Next(context.TODO(), req)
-		c.Assert(err, IsNil)
-		if req.NumRows() == 0 {
-			break
-		}
-
-		for rowIdx := 0; rowIdx < req.NumRows(); rowIdx++ {
-			row := req.GetRow(rowIdx)
-			c.Assert(row.GetInt64(0), Equals, int64(idx+100))
 			idx++
 		}
 	}
@@ -1239,22 +872,6 @@ func (s *testSessionSuite2) TestStatementErrorInTransaction(c *C) {
 	tk.MustQuery(`select * from statement_side_effect`).Check(testkit.Rows("1"))
 	tk.MustExec("commit")
 	tk.MustQuery(`select * from statement_side_effect`).Check(testkit.Rows("1"))
-
-	tk.MustExec("drop table if exists test;")
-	tk.MustExec(`create table test (
- 		  a int(11) DEFAULT NULL,
- 		  b int(11) DEFAULT NULL
- 	) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`)
-	tk.MustExec("insert into test values (1, 2), (1, 2), (1, 1), (1, 1);")
-
-	tk.MustExec("start transaction;")
-	// In the transaction, statement error should not rollback the transaction.
-	_, err = tk.Exec("update tset set b=11 where a=1 and b=2;")
-	c.Assert(err, NotNil)
-	// Test for a bug that last line rollback and exit transaction, this line autocommit.
-	tk.MustExec("update test set b = 11 where a = 1 and b = 2;")
-	tk.MustExec("rollback")
-	tk.MustQuery("select * from test where a = 1 and b = 11").Check(testkit.Rows())
 }
 
 func (s *testSessionSuite2) TestSetTransactionIsolationOneShot(c *C) {
@@ -1279,163 +896,6 @@ func (s *testSessionSuite2) TestSetTransactionIsolationOneShot(c *C) {
 	tk.MustExec("begin")
 	_, err := tk.Se.Execute(ctx, "set transaction isolation level read committed")
 	c.Assert(err, NotNil)
-}
-
-func (s *testSessionSuite2) TestKVVars(c *C) {
-	c.Skip("there is no backoff here in the large txn, so this test is stale")
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table kvvars (a int, b int)")
-	tk.MustExec("insert kvvars values (1, 1)")
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk2.MustExec("set @@tidb_backoff_lock_fast = 1")
-	tk2.MustExec("set @@tidb_backoff_weight = 100")
-	backoffVal := new(int64)
-	backOffWeightVal := new(int32)
-	tk2.Se.GetSessionVars().KVVars.Hook = func(name string, vars *kv.Variables) {
-		atomic.StoreInt64(backoffVal, int64(vars.BackoffLockFast))
-		atomic.StoreInt32(backOffWeightVal, int32(vars.BackOffWeight))
-	}
-	wg := new(sync.WaitGroup)
-	wg.Add(2)
-	go func() {
-		for {
-			tk2.MustQuery("select * from kvvars")
-			if atomic.LoadInt64(backoffVal) != 0 {
-				break
-			}
-		}
-		wg.Done()
-	}()
-
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/store/tikv/mockSleepBetween2PC", "return"), IsNil)
-	go func() {
-		for {
-			tk.MustExec("update kvvars set b = b + 1 where a = 1")
-			if atomic.LoadInt64(backoffVal) != 0 {
-				break
-			}
-		}
-		wg.Done()
-	}()
-	wg.Wait()
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/store/tikv/mockSleepBetween2PC"), IsNil)
-
-	for {
-		tk2.MustQuery("select * from kvvars")
-		if atomic.LoadInt32(backOffWeightVal) != 0 {
-			break
-		}
-	}
-	c.Assert(atomic.LoadInt64(backoffVal), Equals, int64(1))
-	c.Assert(atomic.LoadInt32(backOffWeightVal), Equals, int32(100))
-}
-
-func (s *testSessionSuite2) TestCommitRetryCount(c *C) {
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustExec("create table no_retry (id int)")
-	tk1.MustExec("insert into no_retry values (1)")
-	tk1.MustExec("set @@tidb_retry_limit = 0")
-
-	tk1.MustExec("begin")
-	tk1.MustExec("update no_retry set id = 2")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update no_retry set id = 3")
-	tk2.MustExec("commit")
-
-	// No auto retry because retry limit is set to 0.
-	_, err := tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(err, NotNil)
-}
-
-func (s *testSessionSuite2) TestTxnRetryErrMsg(c *C) {
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustExec("create table no_retry (id int)")
-	tk1.MustExec("insert into no_retry values (1)")
-	tk1.MustExec("begin")
-	tk2.MustExec("update no_retry set id = id + 1")
-	tk1.MustExec("update no_retry set id = id + 1")
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/store/tikv/ErrMockRetryableOnly", `return(true)`), IsNil)
-	_, err := tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/store/tikv/ErrMockRetryableOnly"), IsNil)
-	c.Assert(err, NotNil)
-	c.Assert(kv.ErrTxnRetryable.Equal(err), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), "mock retryable error"), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
-}
-
-func (s *testSchemaSuite) TestDisableTxnAutoRetry(c *C) {
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-	tk1.MustExec("create table no_retry (id int)")
-	tk1.MustExec("insert into no_retry values (1)")
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 1")
-
-	tk1.MustExec("begin")
-	tk1.MustExec("update no_retry set id = 2")
-
-	tk2.MustExec("begin")
-	tk2.MustExec("update no_retry set id = 3")
-	tk2.MustExec("commit")
-
-	// No auto retry because tidb_disable_txn_auto_retry is set to 1.
-	_, err := tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(err, NotNil)
-
-	// session 1 starts a transaction early.
-	// execute a select statement to clear retry history.
-	tk1.MustExec("select 1")
-	tk1.Se.PrepareTxnCtx(context.Background())
-	// session 2 update the value.
-	tk2.MustExec("update no_retry set id = 4")
-	// AutoCommit update will retry, so it would not fail.
-	tk1.MustExec("update no_retry set id = 5")
-
-	// RestrictedSQL should retry.
-	tk1.Se.GetSessionVars().InRestrictedSQL = true
-	tk1.MustExec("begin")
-
-	tk2.MustExec("update no_retry set id = 6")
-
-	tk1.MustExec("update no_retry set id = 7")
-	tk1.MustExec("commit")
-
-	tk1.Se.GetSessionVars().InRestrictedSQL = false
-	tk1.MustExec("begin")
-	tk1.MustExec("update no_retry set id = 9")
-
-	tk2.MustExec("update no_retry set id = 8")
-
-	_, err = tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(err, NotNil)
-	c.Assert(kv.ErrWriteConflict.Equal(err), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
-	tk1.MustExec("rollback")
-
-	// set autocommit to begin and commit
-	tk1.MustExec("set autocommit = 0")
-	tk1.MustQuery("select * from no_retry").Check(testkit.Rows("8"))
-	tk2.MustExec("update no_retry set id = 11")
-	tk1.MustExec("update no_retry set id = 12")
-	_, err = tk1.Se.Execute(context.Background(), "set autocommit = 1")
-	c.Assert(err, NotNil)
-	c.Assert(kv.ErrWriteConflict.Equal(err), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
-	tk1.MustExec("rollback")
-	tk2.MustQuery("select * from no_retry").Check(testkit.Rows("11"))
-
-	tk1.MustExec("set autocommit = 0")
-	tk1.MustQuery("select * from no_retry").Check(testkit.Rows("11"))
-	tk2.MustExec("update no_retry set id = 13")
-	tk1.MustExec("update no_retry set id = 14")
-	_, err = tk1.Se.Execute(context.Background(), "commit")
-	c.Assert(err, NotNil)
-	c.Assert(kv.ErrWriteConflict.Equal(err), IsTrue, Commentf("error: %s", err))
-	c.Assert(strings.Contains(err.Error(), kv.TxnRetryableMark), IsTrue, Commentf("error: %s", err))
-	tk1.MustExec("rollback")
-	tk2.MustQuery("select * from no_retry").Check(testkit.Rows("13"))
 }
 
 // TestSetGroupConcatMaxLen is for issue #7034

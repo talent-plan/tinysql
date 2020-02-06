@@ -23,7 +23,6 @@ import (
 var (
 	_ DMLNode = &DeleteStmt{}
 	_ DMLNode = &InsertStmt{}
-	_ DMLNode = &UpdateStmt{}
 	_ DMLNode = &SelectStmt{}
 	_ DMLNode = &ShowStmt{}
 
@@ -1161,64 +1160,6 @@ func (n *DeleteStmt) Accept(v Visitor) (Node, bool) {
 	}
 	n.TableRefs = node.(*TableRefsClause)
 
-	if n.Where != nil {
-		node, ok = n.Where.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Where = node.(ExprNode)
-	}
-	if n.Order != nil {
-		node, ok = n.Order.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Order = node.(*OrderByClause)
-	}
-	if n.Limit != nil {
-		node, ok = n.Limit.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Limit = node.(*Limit)
-	}
-	return v.Leave(n)
-}
-
-// UpdateStmt is a statement to update columns of existing rows in tables with new values.
-// See https://dev.mysql.com/doc/refman/5.7/en/update.html
-type UpdateStmt struct {
-	dmlNode
-
-	TableRefs     *TableRefsClause
-	List          []*Assignment
-	Where         ExprNode
-	Order         *OrderByClause
-	Limit         *Limit
-	Priority      mysql.PriorityEnum
-	MultipleTable bool
-	TableHints    []*TableOptimizerHint
-}
-
-// Accept implements Node Accept interface.
-func (n *UpdateStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*UpdateStmt)
-	node, ok := n.TableRefs.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.TableRefs = node.(*TableRefsClause)
-	for i, val := range n.List {
-		node, ok = val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.List[i] = node.(*Assignment)
-	}
 	if n.Where != nil {
 		node, ok = n.Where.Accept(v)
 		if !ok {

@@ -81,7 +81,6 @@ var _ = Suite(&testSuite6{&baseTestSuite{}})
 var _ = Suite(&testSuite7{&baseTestSuite{}})
 var _ = Suite(&testSuite8{&baseTestSuite{}})
 var _ = Suite(&testBypassSuite{})
-var _ = Suite(&testUpdateSuite{})
 
 type testSuite struct{ *baseTestSuite }
 type testSuiteP1 struct{ *baseTestSuite }
@@ -658,38 +657,6 @@ func (s *testSuiteP1) TestSelectErrorRow(c *C) {
 	c.Assert(err, NotNil)
 }
 
-// TestIssue345 is related with https://github.com/pingcap/tidb/issues/345
-func (s *testSuiteP1) TestIssue345(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec(`drop table if exists t1, t2`)
-	tk.MustExec(`create table t1 (c1 int);`)
-	tk.MustExec(`create table t2 (c2 int);`)
-	tk.MustExec(`insert into t1 values (1);`)
-	tk.MustExec(`insert into t2 values (2);`)
-	tk.MustExec(`update t1, t2 set t1.c1 = 2, t2.c2 = 1;`)
-	tk.MustExec(`update t1, t2 set c1 = 2, c2 = 1;`)
-	tk.MustExec(`update t1 as a, t2 as b set a.c1 = 2, b.c2 = 1;`)
-
-	// Check t1 content
-	r := tk.MustQuery("SELECT * FROM t1;")
-	r.Check(testkit.Rows("2"))
-	// Check t2 content
-	r = tk.MustQuery("SELECT * FROM t2;")
-	r.Check(testkit.Rows("1"))
-
-	tk.MustExec(`update t1 as a, t2 as t1 set a.c1 = 1, t1.c2 = 2;`)
-	// Check t1 content
-	r = tk.MustQuery("SELECT * FROM t1;")
-	r.Check(testkit.Rows("1"))
-	// Check t2 content
-	r = tk.MustQuery("SELECT * FROM t2;")
-	r.Check(testkit.Rows("2"))
-
-	_, err := tk.Exec(`update t1 as a, t2 set t1.c1 = 10;`)
-	c.Assert(err, NotNil)
-}
-
 func (s *testSuiteP1) TestIssue5055(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -887,22 +854,6 @@ func (s *testSuiteP1) TestTableReverseOrder(c *C) {
 	result.Check(testkit.Rows("7", "6", "2", "1"))
 }
 
-func (s *testSuiteP1) TestDefaultNull(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (a int primary key auto_increment, b int default 1, c int)")
-	tk.MustExec("insert t values ()")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 1 <nil>"))
-	tk.MustExec("update t set b = NULL where a = 1")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 <nil> <nil>"))
-	tk.MustExec("update t set c = 1")
-	tk.MustQuery("select * from t ").Check(testkit.Rows("1 <nil> 1"))
-	tk.MustExec("delete from t where a = 1")
-	tk.MustExec("insert t (a) values (1)")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 1 <nil>"))
-}
-
 func (s *testSuiteP1) TestUnsignedPKColumn(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -911,9 +862,6 @@ func (s *testSuiteP1) TestUnsignedPKColumn(c *C) {
 	tk.MustExec("insert t values (1, 1, 1)")
 	result := tk.MustQuery("select * from t;")
 	result.Check(testkit.Rows("1 1 1"))
-	tk.MustExec("update t set c=2 where a=1;")
-	result = tk.MustQuery("select * from t where b=1;")
-	result.Check(testkit.Rows("1 1 2"))
 }
 
 func (s *testSuiteP2) TestTableDual(c *C) {
@@ -1064,28 +1012,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	c.Assert(fields[0].ColumnAsName.L, Equals, "if(1,c,c)")
 }
 
-func (s *testSuite2) TestLowResolutionTSORead(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("set @@autocommit=1")
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists low_resolution_tso")
-	tk.MustExec("create table low_resolution_tso(a int)")
-	tk.MustExec("insert low_resolution_tso values (1)")
-
-	// enable low resolution tso
-	c.Assert(tk.Se.GetSessionVars().LowResolutionTSO, IsFalse)
-	tk.Exec("set @@tidb_low_resolution_tso = 'on'")
-	c.Assert(tk.Se.GetSessionVars().LowResolutionTSO, IsTrue)
-
-	time.Sleep(3 * time.Second)
-	tk.MustQuery("select * from low_resolution_tso").Check(testkit.Rows("1"))
-	_, err := tk.Exec("update low_resolution_tso set a = 2")
-	c.Assert(err, NotNil)
-	tk.MustExec("set @@tidb_low_resolution_tso = 'off'")
-	tk.MustExec("update low_resolution_tso set a = 2")
-	tk.MustQuery("select * from low_resolution_tso").Check(testkit.Rows("2"))
-}
-
 func (s *testSuite) TestScanControlSelection(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
@@ -1125,24 +1051,6 @@ func (s *testSuite) TestSimpleDAG(c *C) {
 	tk.MustQuery("select * from t where b = 2").Check(testkit.Rows("4 2 3"))
 	tk.MustQuery("select count(*) from t where b = 1").Check(testkit.Rows("3"))
 	tk.MustQuery("select * from t where b = 1 and a > 1 limit 1").Check(testkit.Rows("2 1 1"))
-}
-
-// TestIssue4024 This tests https://github.com/pingcap/tidb/issues/4024
-func (s *testSuite) TestIssue4024(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database test2")
-	tk.MustExec("use test2")
-	tk.MustExec("create table t(a int)")
-	tk.MustExec("insert into t values(1)")
-	tk.MustExec("use test")
-	tk.MustExec("create table t(a int)")
-	tk.MustExec("insert into t values(1)")
-	tk.MustExec("update t, test2.t set test2.t.a=2")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1"))
-	tk.MustQuery("select * from test2.t").Check(testkit.Rows("2"))
-	tk.MustExec("update test.t, test2.t set test.t.a=3")
-	tk.MustQuery("select * from t").Check(testkit.Rows("3"))
-	tk.MustQuery("select * from test2.t").Check(testkit.Rows("2"))
 }
 
 const (
@@ -1362,17 +1270,15 @@ func (s *testSuite) TestHandleTransfer(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
 	tk.MustExec("create table t(a int, index idx(a))")
-	tk.MustExec("insert into t values(1), (2), (4)")
+	tk.MustExec("insert into t values(1), (2), (3)")
 	tk.MustExec("begin")
-	tk.MustExec("update t set a = 3 where a = 4")
 	// test table scan read whose result need handle.
 	tk.MustQuery("select * from t ignore index(idx)").Check(testkit.Rows("1", "2", "3"))
 	tk.MustExec("insert into t values(4)")
 	// test single read whose result need handle
 	tk.MustQuery("select * from t use index(idx)").Check(testkit.Rows("1", "2", "3", "4"))
 	tk.MustQuery("select * from t use index(idx) order by a desc").Check(testkit.Rows("4", "3", "2", "1"))
-	tk.MustExec("update t set a = 5 where a = 3")
-	tk.MustQuery("select * from t use index(idx)").Check(testkit.Rows("1", "2", "4", "5"))
+	tk.MustQuery("select * from t use index(idx)").Check(testkit.Rows("1", "2", "3", "4"))
 	tk.MustExec("commit")
 
 	tk.MustExec("drop table if exists t")
@@ -1524,79 +1430,6 @@ func (s *testSuite3) TestIndexJoinTableDualPanic(c *C) {
 	tk.MustExec("insert into a (f1,f2) values (1,'a'), (2,'b'), (3,'c')")
 	tk.MustQuery("select a.* from a inner join (select 1 as k1,'k2-1' as k2) as k on a.f1=k.k1;").
 		Check(testkit.Rows("1 a"))
-}
-
-func (s *testSuite3) TestUpdateJoin(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1, t2, t3, t4, t5, t6, t7")
-	tk.MustExec("create table t1(k int, v int)")
-	tk.MustExec("create table t2(k int, v int)")
-	tk.MustExec("create table t3(id int auto_increment, k int, v int, primary key(id))")
-	tk.MustExec("create table t4(k int, v int)")
-	tk.MustExec("create table t5(v int, k int, primary key(k))")
-	tk.MustExec("insert into t1 values (1, 1)")
-	tk.MustExec("insert into t4 values (3, 3)")
-	tk.MustExec("create table t6 (id int, v longtext)")
-	tk.MustExec("create table t7 (x int, id int, v longtext, primary key(id))")
-
-	// test the normal case that update one row for a single table.
-	tk.MustExec("update t1 set v = 0 where k = 1")
-	tk.MustQuery("select k, v from t1 where k = 1").Check(testkit.Rows("1 0"))
-
-	// test the case that the table with auto_increment or none-null columns as the right table of left join.
-	tk.MustExec("update t1 left join t3 on t1.k = t3.k set t1.v = 1")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 1"))
-	tk.MustQuery("select id, k, v from t3").Check(testkit.Rows())
-
-	// test left join and the case that the right table has no matching record but has updated the right table columns.
-	tk.MustExec("update t1 left join t2 on t1.k = t2.k set t1.v = t2.v, t2.v = 3")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 <nil>"))
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows())
-
-	// test the case that the update operation in the left table references data in the right table while data of the right table columns is modified.
-	tk.MustExec("update t1 left join t2 on t1.k = t2.k set t2.v = 3, t1.v = t2.v")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 <nil>"))
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows())
-
-	// test right join and the case that the left table has no matching record but has updated the left table columns.
-	tk.MustExec("update t2 right join t1 on t2.k = t1.k set t2.v = 4, t1.v = 0")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 0"))
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows())
-
-	// test the case of right join and left join at the same time.
-	tk.MustExec("update t1 left join t2 on t1.k = t2.k right join t4 on t4.k = t2.k set t1.v = 4, t2.v = 4, t4.v = 4")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 0"))
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows())
-	tk.MustQuery("select k, v from t4").Check(testkit.Rows("3 4"))
-
-	// test normal left join and the case that the right table has matching rows.
-	tk.MustExec("insert t2 values (1, 10)")
-	tk.MustExec("update t1 left join t2 on t1.k = t2.k set t2.v = 11")
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows("1 11"))
-
-	// test the case of continuously joining the same table and updating the unmatching records.
-	tk.MustExec("update t1 t11 left join t2 on t11.k = t2.k left join t1 t12 on t2.v = t12.k set t12.v = 233, t11.v = 111")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("1 111"))
-	tk.MustQuery("select k, v from t2").Check(testkit.Rows("1 11"))
-
-	// test the left join case that the left table has records but all records are null.
-	tk.MustExec("delete from t1")
-	tk.MustExec("delete from t2")
-	tk.MustExec("insert into t1 values (null, null)")
-	tk.MustExec("update t1 left join t2 on t1.k = t2.k set t1.v = 1")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("<nil> 1"))
-
-	// test the case that the right table of left join has an primary key.
-	tk.MustExec("insert t5 values(0, 0)")
-	tk.MustExec("update t1 left join t5 on t1.k = t5.k set t1.v = 2")
-	tk.MustQuery("select k, v from t1").Check(testkit.Rows("<nil> 2"))
-	tk.MustQuery("select k, v from t5").Check(testkit.Rows("0 0"))
-
-	tk.MustExec("insert into t6 values (1, NULL)")
-	tk.MustExec("insert into t7 values (5, 1, 'a')")
-	tk.MustExec("update t6, t7 set t6.v = t7.v where t6.id = t7.id and t7.x = 5")
-	tk.MustQuery("select v from t6").Check(testkit.Rows("a"))
 }
 
 func (s *testSuite3) TestMaxOneRow(c *C) {

@@ -97,19 +97,6 @@ type Insert struct {
 	AllAssignmentsAreConstant bool
 }
 
-// Update represents Update plan.
-type Update struct {
-	baseSchemaProducer
-
-	OrderedList []*expression.Assignment
-
-	AllAssignmentsAreConstant bool
-
-	SelectPlan PhysicalPlan
-
-	TblColPosInfos TblColPosInfoSlice
-}
-
 // Delete represents a delete plan.
 type Delete struct {
 	baseSchemaProducer
@@ -256,10 +243,6 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, indent string, isLast
 		err = e.explainPlanInRowFormat(x.indexPlan, "cop", childIndent, false)
 		err = e.explainPlanInRowFormat(x.tablePlan, "cop", childIndent, true)
 	case *Insert:
-		if x.SelectPlan != nil {
-			err = e.explainPlanInRowFormat(x.SelectPlan, "root", childIndent, true)
-		}
-	case *Update:
 		if x.SelectPlan != nil {
 			err = e.explainPlanInRowFormat(x.SelectPlan, "root", childIndent, true)
 		}

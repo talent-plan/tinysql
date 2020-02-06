@@ -666,8 +666,7 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 	s.tk.MustExec("create database tidb;")
 	s.tk.MustExec("use tidb;")
 	s.tk.MustExec("create table tidb.test (a int auto_increment primary key, b int);")
-	s.tk.MustExec("insert tidb.test values (1, 1);")
-	s.tk.MustExec("update tidb.test set b = b + 1 where a = 1;")
+	s.tk.MustExec("insert tidb.test values (1, 2);")
 	s.tk.MustExec("insert into tidb.test values (2, 2);")
 	// Test that the b value is nil.
 	s.tk.MustExec("insert into tidb.test (a) values (3);")
@@ -878,10 +877,8 @@ LOOP:
 			c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
 		case <-ticker.C:
 			step := 5
-			// delete some rows, and add some data
+			// add some data
 			for i := num; i < num+step; i++ {
-				n := rand.Intn(num)
-				tk.MustExec(fmt.Sprintf("update test_drop_index set c2 = 1 where c1 = %d", n))
 				tk.MustExec(fmt.Sprintf("insert into test_drop_index values (%d, %d, %d)", i, i, i))
 			}
 			num += step
@@ -1098,32 +1095,6 @@ func (s *testDBSuite1) TestCreateTable(c *C) {
 	s.tk.MustGetErrCode(failSQL, mysql.ErrDuplicatedValueInType)
 	_, err = s.tk.Exec("create table t_enum (a enum('B','b'));")
 	c.Assert(err.Error(), Equals, "[types:1291]Column 'a' has duplicated value 'B' in ENUM")
-}
-
-func (s *testDBSuite2) TestAddNotNullColumn(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test_db")
-	// for different databases
-	s.tk.MustExec("create table tnn (c1 int primary key auto_increment, c2 int)")
-	s.tk.MustExec("insert tnn (c2) values (0)" + strings.Repeat(",(0)", 99))
-	done := make(chan error, 1)
-	testddlutil.SessionExecInGoroutine(c, s.store, "alter table tnn add column c3 int not null default 3", done)
-	updateCnt := 0
-out:
-	for {
-		select {
-		case err := <-done:
-			c.Assert(err, IsNil)
-			break out
-		default:
-			s.tk.MustExec("update tnn set c2 = c2 + 1 where c1 = 99")
-			updateCnt++
-		}
-	}
-	expected := fmt.Sprintf("%d %d", updateCnt, 3)
-	s.tk.MustQuery("select c2, c3 from tnn where c1 = 99").Check(testkit.Rows(expected))
-
-	s.tk.MustExec("drop table tnn")
 }
 
 func (s *testDBSuite5) TestCheckColumnDefaultValue(c *C) {
@@ -1376,14 +1347,12 @@ func (s *testDBSuite2) TestTransactionOnAddDropColumn(c *C) {
 	transactions := [][]string{
 		{
 			"begin",
-			"insert into t1 set a=1",
-			"update t1 set b=1 where a=1",
+			"insert into t1 set a=1, b=1",
 			"commit",
 		},
 		{
 			"begin",
-			"insert into t1 select a,b from t2",
-			"update t1 set b=2 where a=2",
+			"insert into t1 set a=2, b=2",
 			"commit",
 		},
 	}
@@ -1429,8 +1398,7 @@ func (s *testDBSuite3) TestTransactionWithWriteOnlyColumn(c *C) {
 	transactions := [][]string{
 		{
 			"begin",
-			"insert into t1 set a=1",
-			"update t1 set a=2 where a=1",
+			"insert into t1 set a=2",
 			"commit",
 		},
 	}

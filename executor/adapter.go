@@ -252,7 +252,7 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 	// Check if "tidb_snapshot" is set for the write executors.
 	// In history read mode, we can not do write operations.
 	switch e.(type) {
-	case *DeleteExec, *InsertExec, *UpdateExec, *ReplaceExec, *DDLExec:
+	case *DeleteExec, *InsertExec, *ReplaceExec, *DDLExec:
 		snapshotTS := sctx.GetSessionVars().SnapshotTS
 		if snapshotTS != 0 {
 			return nil, errors.New("can not execute write statement when 'tidb_snapshot' is set")

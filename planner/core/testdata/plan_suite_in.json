@@ -194,10 +194,6 @@
   {
     "name": "TestDAGPlanBuilderBasePhysicalPlan",
     "cases": [
-      // Test complex update.
-      "update t set a = 5 where b < 1 order by d limit 1",
-      // Test simple update.
-      "update t set a = 5",
       // Test complex delete.
       "delete from t where b < 1 order by d limit 1",
       // Test simple delete.

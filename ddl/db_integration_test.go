@@ -275,65 +275,6 @@ func (s *testIntegrationSuite1) TestTableDDLWithTimeType(c *C) {
 	s.tk.MustExec("drop table t")
 }
 
-func (s *testIntegrationSuite2) TestUpdateMultipleTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database umt_db")
-	tk.MustExec("use umt_db")
-	tk.MustExec("create table t1 (c1 int, c2 int)")
-	tk.MustExec("insert t1 values (1, 1), (2, 2)")
-	tk.MustExec("create table t2 (c1 int, c2 int)")
-	tk.MustExec("insert t2 values (1, 3), (2, 5)")
-	ctx := tk.Se.(sessionctx.Context)
-	dom := domain.GetDomain(ctx)
-	is := dom.InfoSchema()
-	db, ok := is.SchemaByName(model.NewCIStr("umt_db"))
-	c.Assert(ok, IsTrue)
-	t1Tbl, err := is.TableByName(model.NewCIStr("umt_db"), model.NewCIStr("t1"))
-	c.Assert(err, IsNil)
-	t1Info := t1Tbl.Meta()
-
-	// Add a new column in write only state.
-	newColumn := &model.ColumnInfo{
-		ID:                 100,
-		Name:               model.NewCIStr("c3"),
-		Offset:             2,
-		DefaultValue:       9,
-		OriginDefaultValue: 9,
-		FieldType:          *types.NewFieldType(mysql.TypeLonglong),
-		State:              model.StateWriteOnly,
-	}
-	t1Info.Columns = append(t1Info.Columns, newColumn)
-
-	kv.RunInNewTxn(s.store, false, func(txn kv.Transaction) error {
-		m := meta.NewMeta(txn)
-		_, err = m.GenSchemaVersion()
-		c.Assert(err, IsNil)
-		c.Assert(m.UpdateTable(db.ID, t1Info), IsNil)
-		return nil
-	})
-	err = dom.Reload()
-	c.Assert(err, IsNil)
-
-	tk.MustExec("update t1, t2 set t1.c1 = 8, t2.c2 = 10 where t1.c2 = t2.c1")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("8 1", "8 2"))
-	tk.MustQuery("select * from t2").Check(testkit.Rows("1 10", "2 10"))
-
-	newColumn.State = model.StatePublic
-
-	kv.RunInNewTxn(s.store, false, func(txn kv.Transaction) error {
-		m := meta.NewMeta(txn)
-		_, err = m.GenSchemaVersion()
-		c.Assert(err, IsNil)
-		c.Assert(m.UpdateTable(db.ID, t1Info), IsNil)
-		return nil
-	})
-	err = dom.Reload()
-	c.Assert(err, IsNil)
-
-	tk.MustQuery("select * from t1").Check(testkit.Rows("8 1 9", "8 2 9"))
-	tk.MustExec("drop database umt_db")
-}
-
 func (s *testIntegrationSuite5) TestModifyingColumnOption(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test")

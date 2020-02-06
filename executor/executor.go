@@ -850,8 +850,6 @@ func extractStmtHintsFromStmtNode(stmtNode ast.StmtNode) []*ast.TableOptimizerHi
 	switch x := stmtNode.(type) {
 	case *ast.SelectStmt:
 		return x.TableHints
-	case *ast.UpdateStmt:
-		return x.TableHints
 	case *ast.DeleteStmt:
 		return nil
 	// TODO: support hint for InsertStmt
@@ -940,13 +938,6 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 	// IgnoreErr and StrictSQLMode) to avoid setting the same bool variables and
 	// pushing them down to TiKV as flags.
 	switch stmt := s.(type) {
-	case *ast.UpdateStmt:
-		sc.InUpdateStmt = true
-		sc.BadNullAsWarning = !vars.StrictSQLMode
-		sc.TruncateAsWarning = !vars.StrictSQLMode
-		sc.DividedByZeroAsWarning = !vars.StrictSQLMode
-		sc.AllowInvalidDate = vars.SQLMode.HasAllowInvalidDatesMode()
-		sc.IgnoreZeroInDate = !vars.StrictSQLMode || sc.AllowInvalidDate
 	case *ast.DeleteStmt:
 		sc.InDeleteStmt = true
 		sc.BadNullAsWarning = !vars.StrictSQLMode

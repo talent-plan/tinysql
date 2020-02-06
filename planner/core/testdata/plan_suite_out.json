@@ -490,14 +490,6 @@
     "Name": "TestDAGPlanBuilderBasePhysicalPlan",
     "Cases": [
       {
-        "SQL": "update t set a = 5 where b < 1 order by d limit 1",
-        "Best": "TableReader(Table(t)->Sel([lt(test.t.b, 1)])->TopN([test.t.d],0,1))->TopN([test.t.d],0,1)->Update"
-      },
-      {
-        "SQL": "update t set a = 5",
-        "Best": "TableReader(Table(t))->Update"
-      },
-      {
         "SQL": "delete from t where b < 1 order by d limit 1",
         "Best": "TableReader(Table(t)->Sel([lt(test.t.b, 1)])->TopN([test.t.d],0,1))->TopN([test.t.d],0,1)->Delete"
       },

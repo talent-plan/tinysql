@@ -740,7 +740,6 @@ import (
 	ShowStmt			"Show engines/databases/tables/user/columns/warnings/status statement"
 	Statement			"statement"
 	TruncateTableStmt		"TRUNCATE TABLE statement"
-	UpdateStmt			"UPDATE statement"
 	UseStmt				"USE statement"
 
 %type   <item>
@@ -6522,13 +6521,11 @@ Statement:
 		$$ = $1.(*ast.SubqueryExpr).Query.(ast.StmtNode)
 	}
 |	TruncateTableStmt
-|	UpdateStmt
 |	UseStmt
 
 ExplainableStmt:
 	SelectStmt
 |	DeleteFromStmt
-|	UpdateStmt
 |	InsertIntoStmt
 |	ReplaceIntoStmt
 
@@ -7491,54 +7488,6 @@ StringName:
 |	Identifier
 	{
 		$$ = $1
-	}
-
-/***********************************************************************************
- * Update Statement
- * See https://dev.mysql.com/doc/refman/5.7/en/update.html
- ***********************************************************************************/
-UpdateStmt:
-	"UPDATE" TableOptimizerHints PriorityOpt TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause
-	{
-		var refs *ast.Join
-		if x, ok := $4.(*ast.Join); ok {
-			refs = x
-		} else {
-			refs = &ast.Join{Left: $4.(ast.ResultSetNode)}
-		}
-		st := &ast.UpdateStmt{
-			Priority:  $3.(mysql.PriorityEnum),
-			TableRefs: &ast.TableRefsClause{TableRefs: refs},
-			List:	   $6.([]*ast.Assignment),
-		}
-		if $2 != nil {
-			st.TableHints = $2.([]*ast.TableOptimizerHint)
-		}
-		if $7 != nil {
-			st.Where = $7.(ast.ExprNode)
-		}
-		if $8 != nil {
-			st.Order = $8.(*ast.OrderByClause)
-		}
-		if $9 != nil {
-			st.Limit = $9.(*ast.Limit)
-		}
-		$$ = st
-	}
-|	"UPDATE" TableOptimizerHints PriorityOpt TableRefs "SET" AssignmentList WhereClauseOptional
-	{
-		st := &ast.UpdateStmt{
-			Priority:  $3.(mysql.PriorityEnum),
-			TableRefs: &ast.TableRefsClause{TableRefs: $4.(*ast.Join)},
-			List:	   $6.([]*ast.Assignment),
-		}
-		if $2 != nil {
-			st.TableHints = $2.([]*ast.TableOptimizerHint)
-		}
-		if $7 != nil {
-			st.Where = $7.(ast.ExprNode)
-		}
-		$$ = st
 	}
 
 UseStmt:

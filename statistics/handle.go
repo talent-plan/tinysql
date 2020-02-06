@@ -367,12 +367,7 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 
 	version := txn.StartTS()
 	sqls := make([]string, 0, 4)
-	// If the count is less than 0, then we do not want to update the modify count and count.
-	if count >= 0 {
-		sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_meta (version, table_id, count) values (%d, %d, %d)", version, tableID, count))
-	} else {
-		sqls = append(sqls, fmt.Sprintf("update mysql.stats_meta set version = %d where table_id = %d", version, tableID))
-	}
+	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_meta (version, table_id, count) values (%d, %d, %d)", version, tableID, count))
 	data, err := EncodeCMSketch(cms)
 	if err != nil {
 		return

@@ -101,8 +101,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildSort(v)
 	case *plannercore.PhysicalTopN:
 		return b.buildTopN(v)
-	case *plannercore.Update:
-		return b.buildUpdate(v)
 	case *plannercore.PhysicalUnionScan:
 		return b.buildUnionScanExec(v)
 	case *plannercore.PhysicalHashJoin:
@@ -802,28 +800,6 @@ func (b *executorBuilder) buildMaxOneRow(v *plannercore.PhysicalMaxOneRow) Execu
 	base.maxChunkSize = 2
 	e := &MaxOneRowExec{baseExecutor: base}
 	return e
-}
-
-func (b *executorBuilder) buildUpdate(v *plannercore.Update) Executor {
-	tblID2table := make(map[int64]table.Table)
-	for _, info := range v.TblColPosInfos {
-		tblID2table[info.TblID], _ = b.is.TableByID(info.TblID)
-	}
-	b.startTS = b.ctx.GetSessionVars().TxnCtx.GetForUpdateTS()
-	selExec := b.build(v.SelectPlan)
-	if b.err != nil {
-		return nil
-	}
-	base := newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), selExec)
-	base.initCap = chunk.ZeroCapacity
-	updateExec := &UpdateExec{
-		baseExecutor:              base,
-		OrderedList:               v.OrderedList,
-		allAssignmentsAreConstant: v.AllAssignmentsAreConstant,
-		tblID2table:               tblID2table,
-		tblColPosInfos:            v.TblColPosInfos,
-	}
-	return updateExec
 }
 
 func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {

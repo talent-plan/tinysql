@@ -50,7 +50,6 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 
 		// TODO: cover childrens
 		{&InsertStmt{Table: tableRefsClause}, 1, 1},
-		{&UpdateStmt{TableRefs: tableRefsClause}, 1, 1},
 		{&SelectStmt{}, 0, 0},
 		{&FieldList{}, 0, 0},
 		{&UnionSelectList{}, 0, 0},
