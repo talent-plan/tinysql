@@ -30,7 +30,6 @@ var (
 	_ DDLNode = &DropTableStmt{}
 	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
-	_ DDLNode = &RepairTableStmt{}
 
 	_ Node = &AlterTableSpec{}
 	_ Node = &ColumnDef{}
@@ -1083,46 +1082,6 @@ func (n *CleanupTableLockStmt) Restore(ctx *RestoreCtx) error {
 	return nil
 }
 
-// RepairTableStmt is a statement to repair tableInfo.
-type RepairTableStmt struct {
-	ddlNode
-	Table      *TableName
-	CreateStmt *CreateTableStmt
-}
-
-// Accept implements Node Accept interface.
-func (n *RepairTableStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*RepairTableStmt)
-	node, ok := n.Table.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Table = node.(*TableName)
-	node, ok = n.CreateStmt.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.CreateStmt = node.(*CreateTableStmt)
-	return v.Leave(n)
-}
-
-// Restore implements Node interface.
-func (n *RepairTableStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ADMIN REPAIR TABLE ")
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotatef(err, "An error occurred while restore RepairTableStmt.table : [%v]", n.Table)
-	}
-	ctx.WritePlain(" ")
-	if err := n.CreateStmt.Restore(ctx); err != nil {
-		return errors.Annotatef(err, "An error occurred while restore RepairTableStmt.createStmt : [%v]", n.CreateStmt)
-	}
-	return nil
-}
-
 // TableOptionType is the type for TableOption
 type TableOptionType int
 
@@ -1200,69 +1159,6 @@ type TableOption struct {
 	StrValue   string
 	UintValue  uint64
 	TableNames []*TableName
-}
-
-// SequenceOptionType is the type for SequenceOption
-type SequenceOptionType int
-
-// SequenceOption types.
-const (
-	SequenceOptionNone SequenceOptionType = iota
-	SequenceOptionIncrementBy
-	SequenceStartWith
-	SequenceNoMinValue
-	SequenceMinValue
-	SequenceNoMaxValue
-	SequenceMaxValue
-	SequenceNoCache
-	SequenceCache
-	SequenceNoCycle
-	SequenceCycle
-	SequenceNoOrder
-	SequenceOrder
-)
-
-// SequenceOption is used for parsing sequence option from SQL.
-type SequenceOption struct {
-	Tp       SequenceOptionType
-	IntValue int64
-}
-
-func (n *SequenceOption) Restore(ctx *RestoreCtx) error {
-	switch n.Tp {
-	case SequenceOptionIncrementBy:
-		ctx.WriteKeyWord("INCREMENT BY ")
-		ctx.WritePlainf("%d", n.IntValue)
-	case SequenceStartWith:
-		ctx.WriteKeyWord("START WITH ")
-		ctx.WritePlainf("%d", n.IntValue)
-	case SequenceNoMinValue:
-		ctx.WriteKeyWord("NO MINVALUE")
-	case SequenceMinValue:
-		ctx.WriteKeyWord("MINVALUE ")
-		ctx.WritePlainf("%d", n.IntValue)
-	case SequenceNoMaxValue:
-		ctx.WriteKeyWord("NO MAXVALUE")
-	case SequenceMaxValue:
-		ctx.WriteKeyWord("MAXVALUE ")
-		ctx.WritePlainf("%d", n.IntValue)
-	case SequenceNoCache:
-		ctx.WriteKeyWord("NOCACHE")
-	case SequenceCache:
-		ctx.WriteKeyWord("CACHE ")
-		ctx.WritePlainf("%d", n.IntValue)
-	case SequenceNoCycle:
-		ctx.WriteKeyWord("NOCYCLE")
-	case SequenceCycle:
-		ctx.WriteKeyWord("CYCLE")
-	case SequenceNoOrder:
-		ctx.WriteKeyWord("NOORDER")
-	case SequenceOrder:
-		ctx.WriteKeyWord("ORDER")
-	default:
-		return errors.Errorf("invalid SequenceOption: %d", n.Tp)
-	}
-	return nil
 }
 
 // ColumnPositionType is the type for ColumnPosition.

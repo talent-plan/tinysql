@@ -5866,13 +5866,6 @@ AdminStmt:
 			HandleRanges: $6.([]ast.HandleRange),
 		}
 	}
-|	"ADMIN" "CHECKSUM" "TABLE" TableNameList
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminChecksumTable,
-			Tables: $4.([]*ast.TableName),
-		}
-	}
 |	"ADMIN" "CANCEL" "DDL" "JOBS" NumList
 	{
 		$$ = &ast.AdminStmt{
@@ -5894,63 +5887,6 @@ AdminStmt:
 			ShowSlow: $4.(*ast.ShowSlow),
 		}
 	}
-|	"ADMIN" "RELOAD" "EXPR_PUSHDOWN_BLACKLIST"
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminReloadExprPushdownBlacklist,
- 		}
- 	}
-|	"ADMIN" "RELOAD" "OPT_RULE_BLACKLIST"
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminReloadOptRuleBlacklist,
- 		}
- 	}
-|	"ADMIN" "PLUGINS" "ENABLE" PluginNameList
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminPluginEnable,
- 			Plugins: $4.([]string),
- 		}
- 	}
-|	"ADMIN" "PLUGINS" "DISABLE" PluginNameList
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminPluginDisable,
- 			Plugins: $4.([]string),
- 		}
- 	}
-|	"ADMIN" "CLEANUP" "TABLE" "LOCK" TableNameList
-	{
-		$$ = &ast.CleanupTableLockStmt{
-			Tables: $5.([]*ast.TableName),
-		}
-	}
-|	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
-	{
-		$$ = &ast.RepairTableStmt{
-			Table: $4.(*ast.TableName),
-			CreateStmt: $5.(*ast.CreateTableStmt),
-		}
-	}
-|	"ADMIN" "FLUSH" "BINDINGS"
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminFlushBindings,
- 		}
- 	}
-|	"ADMIN" "CAPTURE" "BINDINGS"
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminCaptureBindings,
- 		}
- 	}
-|	"ADMIN" "EVOLVE" "BINDINGS"
- 	{
- 		$$ = &ast.AdminStmt{
- 			Tp: ast.AdminEvolveBindings,
- 		}
- 	}
 
 AdminShowSlow:
 	"RECENT" NUM
