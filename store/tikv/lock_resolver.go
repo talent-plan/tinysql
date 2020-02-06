@@ -254,7 +254,7 @@ func (t *txnExpireTime) value() int64 {
 func (lr *LockResolver) GetTxnStatus(txnID uint64, callerStartTS uint64, primary []byte) (TxnStatus, error) {
 	var status TxnStatus
 	bo := NewBackoffer(context.Background(), cleanupMaxBackoff)
-	currentTS, err := lr.store.GetOracle().GetLowResolutionTimestamp(bo.ctx)
+	currentTS, err := lr.store.GetOracle().GetTimestamp(bo.ctx)
 	if err != nil {
 		return status, err
 	}
@@ -265,7 +265,7 @@ func (lr *LockResolver) getTxnStatusFromLock(bo *Backoffer, l *Lock, callerStart
 	var currentTS uint64
 	var err error
 	var status TxnStatus
-	currentTS, err = lr.store.GetOracle().GetLowResolutionTimestamp(bo.ctx)
+	currentTS, err = lr.store.GetOracle().GetTimestamp(bo.ctx)
 	if err != nil {
 		return TxnStatus{}, err
 	}

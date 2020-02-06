@@ -348,12 +348,7 @@ func (tf *txnFuture) wait() (kv.Transaction, error) {
 
 func (s *session) getTxnFuture(ctx context.Context) *txnFuture {
 	oracleStore := s.store.GetOracle()
-	var tsFuture oracle.Future
-	if s.sessionVars.LowResolutionTSO {
-		tsFuture = oracleStore.GetLowResolutionTimestampAsync(ctx)
-	} else {
-		tsFuture = oracleStore.GetTimestampAsync(ctx)
-	}
+	tsFuture := oracleStore.GetTimestampAsync(ctx)
 	ret := &txnFuture{future: tsFuture, store: s.store}
 	failpoint.InjectContext(ctx, "mockGetTSFail", func() {
 		ret.future = txnFailFuture{}

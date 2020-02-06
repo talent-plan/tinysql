@@ -22,8 +22,6 @@ import (
 type Oracle interface {
 	GetTimestamp(ctx context.Context) (uint64, error)
 	GetTimestampAsync(ctx context.Context) Future
-	GetLowResolutionTimestamp(ctx context.Context) (uint64, error)
-	GetLowResolutionTimestampAsync(ctx context.Context) Future
 	IsExpired(lockTimestamp uint64, TTL uint64) bool
 	UntilExpired(lockTimeStamp uint64, TTL uint64) int64
 	Close()
@@ -49,11 +47,6 @@ func ExtractPhysical(ts uint64) int64 {
 // GetPhysical returns physical from an instant time with millisecond precision.
 func GetPhysical(t time.Time) int64 {
 	return t.UnixNano() / int64(time.Millisecond)
-}
-
-// EncodeTSO encodes a millisecond into tso.
-func EncodeTSO(ts int64) uint64 {
-	return uint64(ts) << physicalShiftBits
 }
 
 // GetTimeFromTS extracts time.Time from a timestamp.

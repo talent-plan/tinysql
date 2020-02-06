@@ -15,13 +15,11 @@ package tikv
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/mockoracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
 
@@ -51,49 +49,6 @@ func (s *testStoreSuite) TestParsePath(c *C) {
 	_, disableGC, err = parsePath("tikv://node1:2379?disableGC=true")
 	c.Assert(err, IsNil)
 	c.Assert(disableGC, IsTrue)
-}
-
-func (s *testStoreSuite) TestOracle(c *C) {
-	o := &mockoracle.MockOracle{}
-	s.store.oracle = o
-
-	ctx := context.Background()
-	t1, err := s.store.getTimestampWithRetry(NewBackoffer(ctx, 100))
-	c.Assert(err, IsNil)
-	t2, err := s.store.getTimestampWithRetry(NewBackoffer(ctx, 100))
-	c.Assert(err, IsNil)
-	c.Assert(t1, Less, t2)
-
-	t1, err = o.GetLowResolutionTimestamp(ctx)
-	c.Assert(err, IsNil)
-	t2, err = o.GetLowResolutionTimestamp(ctx)
-	c.Assert(err, IsNil)
-	c.Assert(t1, Less, t2)
-	f := o.GetLowResolutionTimestampAsync(ctx)
-	c.Assert(f, NotNil)
-	_ = o.UntilExpired(0, 0)
-
-	// Check retry.
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	o.Disable()
-	go func() {
-		defer wg.Done()
-		time.Sleep(time.Millisecond * 100)
-		o.Enable()
-	}()
-
-	go func() {
-		defer wg.Done()
-		t3, err := s.store.getTimestampWithRetry(NewBackoffer(ctx, tsoMaxBackoff))
-		c.Assert(err, IsNil)
-		c.Assert(t2, Less, t3)
-		expired := s.store.oracle.IsExpired(t2, 50)
-		c.Assert(expired, IsTrue)
-	}()
-
-	wg.Wait()
 }
 
 type checkRequestClient struct {

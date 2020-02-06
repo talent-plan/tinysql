@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/gcutil"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -148,25 +146,11 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 		if err != nil {
 			return err
 		}
-		oldSnapshotTS := sessionVars.SnapshotTS
 		if name == variable.TxnIsolationOneShot && sessionVars.InTxn() {
 			return errors.Trace(ErrCantChangeTxCharacteristics)
 		}
 		err = variable.SetSessionSystemVar(sessionVars, name, value)
 		if err != nil {
-			return err
-		}
-		newSnapshotIsSet := sessionVars.SnapshotTS > 0 && sessionVars.SnapshotTS != oldSnapshotTS
-		if newSnapshotIsSet {
-			err = gcutil.ValidateSnapshot(e.ctx, sessionVars.SnapshotTS)
-			if err != nil {
-				sessionVars.SnapshotTS = oldSnapshotTS
-				return err
-			}
-		}
-		err = e.loadSnapshotInfoSchemaIfNeeded(name)
-		if err != nil {
-			sessionVars.SnapshotTS = oldSnapshotTS
 			return err
 		}
 		if value.IsNull() {
@@ -222,23 +206,4 @@ func (e *SetExecutor) getVarValue(v *expression.VarAssignment, sysVar *variable.
 	}
 	value, err = v.Expr.Eval(chunk.Row{})
 	return value, err
-}
-
-func (e *SetExecutor) loadSnapshotInfoSchemaIfNeeded(name string) error {
-	if name != variable.TiDBSnapshot {
-		return nil
-	}
-	vars := e.ctx.GetSessionVars()
-	if vars.SnapshotTS == 0 {
-		vars.SnapshotInfoschema = nil
-		return nil
-	}
-	logutil.BgLogger().Info("load snapshot info schema", zap.Uint64("conn", vars.ConnectionID), zap.Uint64("SnapshotTS", vars.SnapshotTS))
-	dom := domain.GetDomain(e.ctx)
-	snapInfo, err := dom.GetSnapshotInfoSchema(vars.SnapshotTS)
-	if err != nil {
-		return err
-	}
-	vars.SnapshotInfoschema = snapInfo
-	return nil
 }

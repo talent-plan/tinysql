@@ -698,19 +698,15 @@ func (b *executorBuilder) getStartTS() (uint64, error) {
 		return b.startTS, nil
 	}
 
-	startTS := b.ctx.GetSessionVars().SnapshotTS
 	txn, err := b.ctx.Txn(true)
 	if err != nil {
 		return 0, err
 	}
-	if startTS == 0 {
-		startTS = txn.StartTS()
-	}
-	b.startTS = startTS
+	b.startTS = txn.StartTS()
 	if b.startTS == 0 {
 		return 0, errors.Trace(ErrGetStartTS)
 	}
-	return startTS, nil
+	return b.startTS, nil
 }
 
 func (b *executorBuilder) buildMemTable(v *plannercore.PhysicalMemTable) Executor {

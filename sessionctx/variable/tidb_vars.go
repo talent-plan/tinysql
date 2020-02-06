@@ -70,9 +70,6 @@ const (
 	// isolation level.
 	TiDBSkipIsolationLevelCheck = "tidb_skip_isolation_level_check"
 
-	// TiDBLowResolutionTSO is used for reading data with low resolution TSO which is updated once every two seconds
-	TiDBLowResolutionTSO = "tidb_low_resolution_tso"
-
 	// TiDBReplicaRead is used for reading data from replicas, followers for example.
 	TiDBReplicaRead = "tidb_replica_read"
 
@@ -280,7 +277,6 @@ const (
 	DefTiDBUseRadixJoin              = false
 	DefEnableVectorizedExpression    = true
 	DefTiDBOptJoinReorderThreshold   = 0
-	DefTiDBUseFastAnalyze            = false
 	DefTiDBSkipIsolationLevelCheck   = false
 	DefTiDBScatterRegion             = false
 	DefTiDBWaitSplitRegionFinish     = true

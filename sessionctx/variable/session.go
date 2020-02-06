@@ -225,13 +225,6 @@ type SessionVars struct {
 	// InRestrictedSQL indicates if the session is handling restricted SQL execution.
 	InRestrictedSQL bool
 
-	// SnapshotTS is used for reading history data. For simplicity, SnapshotTS only supports distsql request.
-	SnapshotTS uint64
-
-	// SnapshotInfoschema is used with SnapshotTS, when the schema version at snapshotTS less than current schema
-	// version, we load an old version schema for query.
-	SnapshotInfoschema interface{}
-
 	// GlobalVarsAccessor is used to set and get global variables.
 	GlobalVarsAccessor GlobalVarAccessor
 
@@ -328,12 +321,6 @@ type SessionVars struct {
 
 	// SlowQueryFile indicates which slow query log file for SLOW_QUERY table to parse.
 	SlowQueryFile string
-
-	// EnableFastAnalyze indicates whether to take fast analyze.
-	EnableFastAnalyze bool
-
-	// LowResolutionTSO is used for reading data with low resolution TSO which is updated once every two seconds.
-	LowResolutionTSO bool
 
 	// MaxExecutionTime is the timeout for select statement, in milliseconds.
 	// If the value is 0, timeouts are not enabled.
@@ -706,8 +693,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.WaitSplitRegionFinish = TiDBOptOn(val)
 	case TiDBWaitSplitRegionTimeout:
 		s.WaitSplitRegionTimeout = uint64(tidbOptPositiveInt32(val, DefWaitSplitRegionTimeout))
-	case TiDBLowResolutionTSO:
-		s.LowResolutionTSO = TiDBOptOn(val)
 	case TiDBEnableNoopFuncs:
 		s.EnableNoopFuncs = TiDBOptOn(val)
 	case TiDBReplicaRead:

@@ -243,26 +243,6 @@ func (do *Domain) InfoSchema() infoschema.InfoSchema {
 	return do.infoHandle.Get()
 }
 
-// GetSnapshotInfoSchema gets a snapshot information schema.
-func (do *Domain) GetSnapshotInfoSchema(snapshotTS uint64) (infoschema.InfoSchema, error) {
-	snapHandle := do.infoHandle.EmptyClone()
-	// For the snapHandle, it's an empty Handle, so its usedSchemaVersion is initialVersion.
-	_, _, _, err := do.loadInfoSchema(snapHandle, initialVersion, snapshotTS)
-	if err != nil {
-		return nil, err
-	}
-	return snapHandle.Get(), nil
-}
-
-// GetSnapshotMeta gets a new snapshot meta at startTS.
-func (do *Domain) GetSnapshotMeta(startTS uint64) (*meta.Meta, error) {
-	snapshot, err := do.store.GetSnapshot(kv.NewVersion(startTS))
-	if err != nil {
-		return nil, err
-	}
-	return meta.NewSnapshotMeta(snapshot), nil
-}
-
 // DDL gets DDL from domain.
 func (do *Domain) DDL() ddl.DDL {
 	return do.ddl

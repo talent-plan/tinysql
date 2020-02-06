@@ -22,7 +22,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -341,9 +340,6 @@ func (s *session) String() string {
 		// if txn is committed or rolled back, txn is nil.
 		data["txn"] = s.txn.String()
 	}
-	if sessVars.SnapshotTS != 0 {
-		data["snapshotTS"] = sessVars.SnapshotTS
-	}
 	if sessVars.StmtCtx.LastInsertID > 0 {
 		data["lastInsertID"] = sessVars.StmtCtx.LastInsertID
 	}
@@ -507,51 +503,6 @@ func (s *session) ExecRestrictedSQL(sql string) ([]chunk.Row, []*ast.ResultField
 	se := tmp.(*session)
 	defer s.sysSessionPool().Put(tmp)
 
-	return execRestrictedSQL(ctx, se, sql)
-}
-
-// ExecRestrictedSQLWithSnapshot implements RestrictedSQLExecutor interface.
-// This is used for executing some restricted sql statements with snapshot.
-// If current session sets the snapshot timestamp, then execute with this snapshot timestamp.
-// Otherwise, execute with the current transaction start timestamp if the transaction is valid.
-func (s *session) ExecRestrictedSQLWithSnapshot(sql string) ([]chunk.Row, []*ast.ResultField, error) {
-	ctx := context.TODO()
-
-	// Use special session to execute the sql.
-	tmp, err := s.sysSessionPool().Get()
-	if err != nil {
-		return nil, nil, err
-	}
-	se := tmp.(*session)
-	defer s.sysSessionPool().Put(tmp)
-
-	var snapshot uint64
-	txn, err := s.Txn(false)
-	if err != nil {
-		return nil, nil, err
-	}
-	if txn.Valid() {
-		snapshot = s.txn.StartTS()
-	}
-	if s.sessionVars.SnapshotTS != 0 {
-		snapshot = s.sessionVars.SnapshotTS
-	}
-	// Set snapshot.
-	if snapshot != 0 {
-		se.sessionVars.SnapshotInfoschema, err = domain.GetDomain(s).GetSnapshotInfoSchema(snapshot)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := se.sessionVars.SetSystemVar(variable.TiDBSnapshot, strconv.FormatUint(snapshot, 10)); err != nil {
-			return nil, nil, err
-		}
-		defer func() {
-			if err := se.sessionVars.SetSystemVar(variable.TiDBSnapshot, ""); err != nil {
-				logutil.BgLogger().Error("set tidbSnapshot error", zap.Error(err))
-			}
-			se.sessionVars.SnapshotInfoschema = nil
-		}()
-	}
 	return execRestrictedSQL(ctx, se, sql)
 }
 

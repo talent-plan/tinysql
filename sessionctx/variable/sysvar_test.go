@@ -31,28 +31,6 @@ var _ = Suite(&testSysVarSuite{})
 type testSysVarSuite struct {
 }
 
-func (*testSysVarSuite) TestSysVar(c *C) {
-	f := GetSysVar("autocommit")
-	c.Assert(f, NotNil)
-
-	f = GetSysVar("wrong-var-name")
-	c.Assert(f, IsNil)
-
-	f = GetSysVar("explicit_defaults_for_timestamp")
-	c.Assert(f, NotNil)
-	c.Assert(f.Value, Equals, "1")
-
-	f = GetSysVar("port")
-	c.Assert(f, NotNil)
-	c.Assert(f.Value, Equals, "4000")
-
-	f = GetSysVar("tidb_low_resolution_tso")
-	c.Assert(f.Value, Equals, "0")
-
-	f = GetSysVar("tidb_replica_read")
-	c.Assert(f.Value, Equals, "leader")
-}
-
 func (*testSysVarSuite) TestBoolToInt32(c *C) {
 	c.Assert(BoolToInt32(true), Equals, int32(1))
 	c.Assert(BoolToInt32(false), Equals, int32(0))
