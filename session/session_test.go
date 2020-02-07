@@ -431,62 +431,6 @@ func (s *testSessionSuite2) TestReplace(c *C) {
 	tk.MustExec("replace into t select * from t1 limit 1;")
 }
 
-func (s *testSessionSuite2) TestUnique(c *C) {
-	// test for https://github.com/pingcap/tidb/pull/461
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk2 := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec(`CREATE TABLE test ( id int(11) UNSIGNED NOT NULL AUTO_INCREMENT, val int UNIQUE, PRIMARY KEY (id)); `)
-	tk.MustExec("begin;")
-	tk.MustExec("insert into test(id, val) values(1, 1);")
-	tk1.MustExec("begin;")
-	tk1.MustExec("insert into test(id, val) values(2, 2);")
-	tk2.MustExec("begin;")
-	tk2.MustExec("insert into test(id, val) values(1, 2);")
-	tk2.MustExec("commit;")
-	_, err := tk.Exec("commit")
-	c.Assert(err, NotNil)
-	// Check error type and error message
-	c.Assert(terror.ErrorEqual(err, kv.ErrKeyExists), IsTrue, Commentf("err %v", err))
-	c.Assert(err.Error(), Equals, "previous statement: insert into test(id, val) values(1, 1);: [kv:1062]Duplicate entry '1' for key 'PRIMARY'")
-
-	_, err = tk1.Exec("commit")
-	c.Assert(err, NotNil)
-	c.Assert(terror.ErrorEqual(err, kv.ErrKeyExists), IsTrue, Commentf("err %v", err))
-	c.Assert(err.Error(), Equals, "previous statement: insert into test(id, val) values(2, 2);: [kv:1062]Duplicate entry '2' for key 'val'")
-
-	// Test for https://github.com/pingcap/tidb/issues/463
-	tk.MustExec("drop table test;")
-	tk.MustExec(`CREATE TABLE test (
-			id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-			val int UNIQUE,
-			PRIMARY KEY (id)
-		);`)
-	tk.MustExec("insert into test(id, val) values(1, 1);")
-	_, err = tk.Exec("insert into test(id, val) values(2, 1);")
-	c.Assert(err, NotNil)
-	tk.MustExec("insert into test(id, val) values(2, 2);")
-
-	tk.MustExec("begin;")
-	tk.MustExec("insert into test(id, val) values(3, 3);")
-	_, err = tk.Exec("insert into test(id, val) values(4, 3);")
-	c.Assert(err, NotNil)
-	tk.MustExec("insert into test(id, val) values(4, 4);")
-	tk.MustExec("commit;")
-
-	tk1.MustExec("begin;")
-	tk1.MustExec("insert into test(id, val) values(5, 6);")
-	tk.MustExec("begin;")
-	tk.MustExec("insert into test(id, val) values(20, 6);")
-	tk.MustExec("commit;")
-	tk1.Exec("commit")
-	tk1.MustExec("insert into test(id, val) values(5, 5);")
-}
-
 func (s *testSessionSuite2) TestIssue986(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	sqlText := `CREATE TABLE address (

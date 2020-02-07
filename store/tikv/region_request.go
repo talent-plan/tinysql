@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
-	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/kv"
@@ -90,12 +89,7 @@ func (s *RegionRequestSender) SendReqCtx(
 		}
 	})
 
-	var replicaRead kv.ReplicaReadType
-	if req.ReplicaRead {
-		replicaRead = kv.ReplicaReadFollower
-	} else {
-		replicaRead = kv.ReplicaReadLeader
-	}
+	replicaRead := kv.ReplicaReadLeader
 	seed := req.ReplicaReadSeed
 	for {
 		rpcCtx, err = s.regionCache.GetTiKVRPCContext(bo, regionID, replicaRead, seed)
@@ -270,15 +264,4 @@ func (s *RegionRequestSender) onRegionError(bo *Backoffer, ctx *RPCContext, seed
 		s.regionCache.InvalidateCachedRegion(ctx.Region)
 	}
 	return false, nil
-}
-
-func pbIsolationLevel(level kv.IsoLevel) kvrpcpb.IsolationLevel {
-	switch level {
-	case kv.RC:
-		return kvrpcpb.IsolationLevel_RC
-	case kv.SI:
-		return kvrpcpb.IsolationLevel_SI
-	default:
-		return kvrpcpb.IsolationLevel_SI
-	}
 }

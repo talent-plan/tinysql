@@ -14,7 +14,6 @@
 package tikv
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"math/rand"
@@ -24,7 +23,6 @@ import (
 	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
@@ -436,86 +434,4 @@ func (s *testCommitterSuite) TestPrewriteTxnSize(c *C) {
 	ctx := context.Background()
 	err = committer.prewriteKeys(NewBackoffer(ctx, PrewriteMaxBackoff), committer.keys)
 	c.Assert(err, IsNil)
-
-	// Check the written locks in the first region (50 keys)
-	for i := byte(50); i < 100; i++ {
-		lock := s.getLockInfo(c, []byte{i})
-		c.Assert(int(lock.TxnSize), Equals, 50)
-	}
-
-	// Check the written locks in the second region (20 keys)
-	for i := byte(100); i < 120; i++ {
-		lock := s.getLockInfo(c, []byte{i})
-		c.Assert(int(lock.TxnSize), Equals, 20)
-	}
-}
-
-func (s *testCommitterSuite) TestRejectCommitTS(c *C) {
-	txn := s.begin(c)
-	c.Assert(txn.Set([]byte("x"), []byte("v")), IsNil)
-
-	committer, err := newTwoPhaseCommitterWithInit(txn, 1)
-	c.Assert(err, IsNil)
-	bo := NewBackoffer(context.Background(), getMaxBackoff)
-	loc, err := s.store.regionCache.LocateKey(bo, []byte("x"))
-	c.Assert(err, IsNil)
-	batch := batchKeys{region: loc.Region, keys: [][]byte{[]byte("x")}}
-	mutations := make([]*kvrpcpb.Mutation, len(batch.keys))
-	for i, k := range batch.keys {
-		tmp := committer.mutations[string(k)]
-		mutations[i] = &tmp.Mutation
-	}
-	prewrite := &kvrpcpb.PrewriteRequest{
-		Mutations:    mutations,
-		PrimaryLock:  committer.primary(),
-		StartVersion: committer.startTS,
-		LockTtl:      committer.lockTTL,
-		MinCommitTs:  committer.startTS + 100, // Set minCommitTS
-	}
-	req := tikvrpc.NewRequest(tikvrpc.CmdPrewrite, prewrite)
-	_, err = s.store.SendReq(bo, req, loc.Region, readTimeoutShort)
-	c.Assert(err, IsNil)
-
-	// Make commitTS less than minCommitTS.
-	committer.commitTS = committer.startTS + 1
-	// Ensure that the new commit ts is greater than minCommitTS when retry
-	time.Sleep(3 * time.Millisecond)
-	err = committer.commitKeys(bo, committer.keys)
-	c.Assert(err, IsNil)
-
-	// Use startTS+2 to read the data and get nothing.
-	// Use max.Uint64 to read the data and success.
-	// That means the final commitTS > startTS+2, it's not the one we provide.
-	// So we cover the rety commitTS logic.
-	txn1, err := s.store.BeginWithStartTS(committer.startTS + 2)
-	c.Assert(err, IsNil)
-	_, err = txn1.Get(bo.ctx, []byte("x"))
-	c.Assert(kv.IsErrNotFound(err), IsTrue)
-
-	txn2, err := s.store.BeginWithStartTS(math.MaxUint64)
-	c.Assert(err, IsNil)
-	val, err := txn2.Get(bo.ctx, []byte("x"))
-	c.Assert(err, IsNil)
-	c.Assert(bytes.Equal(val, []byte("v")), IsTrue)
-}
-
-func (s *testCommitterSuite) getLockInfo(c *C, key []byte) *kvrpcpb.LockInfo {
-	txn := s.begin(c)
-	err := txn.Set(key, key)
-	c.Assert(err, IsNil)
-	committer, err := newTwoPhaseCommitterWithInit(txn, 1)
-	c.Assert(err, IsNil)
-	bo := NewBackoffer(context.Background(), getMaxBackoff)
-	loc, err := s.store.regionCache.LocateKey(bo, key)
-	c.Assert(err, IsNil)
-	batch := batchKeys{region: loc.Region, keys: [][]byte{key}}
-	req := committer.buildPrewriteRequest(batch, 1)
-	resp, err := s.store.SendReq(bo, req, loc.Region, readTimeoutShort)
-	c.Assert(err, IsNil)
-	c.Assert(resp.Resp, NotNil)
-	keyErrs := (resp.Resp.(*kvrpcpb.PrewriteResponse)).Errors
-	c.Assert(keyErrs, HasLen, 1)
-	locked := keyErrs[0].Locked
-	c.Assert(locked, NotNil)
-	return locked
 }

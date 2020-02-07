@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -245,74 +244,12 @@ func (s *testLockSuite) TestCheckTxnStatus(c *C) {
 	c.Assert(status.IsCommitted(), IsFalse)
 	c.Assert(status.ttl, Greater, uint64(0))
 	c.Assert(status.CommitTS(), Equals, uint64(0))
-	c.Assert(status.action, Equals, kvrpcpb.Action_MinCommitTSPushed)
 
 	// Test the ResolveLocks API
 	lock := s.mustGetLock(c, []byte("second"))
 	timeBeforeExpire, _, err := resolver.ResolveLocks(bo, currentTS, []*Lock{lock})
 	c.Assert(err, IsNil)
 	c.Assert(timeBeforeExpire > int64(0), IsTrue)
-}
-
-func (s *testLockSuite) TestCheckTxnStatusNoWait(c *C) {
-	txn, err := s.store.Begin()
-	c.Assert(err, IsNil)
-	txn.Set(kv.Key("key"), []byte("value"))
-	txn.Set(kv.Key("second"), []byte("xxx"))
-	committer, err := newTwoPhaseCommitterWithInit(txn.(*tikvTxn), 0)
-	c.Assert(err, IsNil)
-	// Increase lock TTL to make CI more stable.
-	committer.lockTTL = txnLockTTL(txn.(*tikvTxn).startTime, 200*1024*1024)
-
-	// Only prewrite the secondary key to simulate a concurrent prewrite case:
-	// prewrite secondary regions success and prewrite the primary region is pending.
-	err = committer.prewriteKeys(NewBackoffer(context.Background(), PrewriteMaxBackoff), [][]byte{[]byte("second")})
-	c.Assert(err, IsNil)
-
-	oracle := s.store.GetOracle()
-	currentTS, err := oracle.GetTimestamp(context.Background())
-	c.Assert(err, IsNil)
-	bo := NewBackoffer(context.Background(), PrewriteMaxBackoff)
-	resolver := newLockResolver(s.store)
-
-	// Call getTxnStatus for the TxnNotFound case.
-	_, err = resolver.getTxnStatus(bo, txn.StartTS(), []byte("key"), currentTS, currentTS, false)
-	c.Assert(err, NotNil)
-	_, ok := errors.Cause(err).(txnNotFoundErr)
-	c.Assert(ok, IsTrue)
-
-	errCh := make(chan error)
-	go func() {
-		errCh <- committer.prewriteKeys(NewBackoffer(context.Background(), PrewriteMaxBackoff), [][]byte{[]byte("key")})
-	}()
-
-	lock := &Lock{
-		Key:     []byte("second"),
-		Primary: []byte("key"),
-		TxnID:   txn.StartTS(),
-		TTL:     100000,
-	}
-	// Call getTxnStatusFromLock to cover the retry logic.
-	status, err := resolver.getTxnStatusFromLock(bo, lock, currentTS)
-	c.Assert(err, IsNil)
-	c.Assert(status.ttl, Greater, uint64(0))
-	c.Assert(<-errCh, IsNil)
-	c.Assert(committer.cleanupKeys(bo, committer.keys), IsNil)
-
-	// Call getTxnStatusFromLock to cover TxnNotFound and retry timeout.
-	startTS, err := oracle.GetTimestamp(context.Background())
-	c.Assert(err, IsNil)
-	lock = &Lock{
-		Key:     []byte("second"),
-		Primary: []byte("key_not_exist"),
-		TxnID:   startTS,
-		TTL:     1000,
-	}
-	status, err = resolver.getTxnStatusFromLock(bo, lock, currentTS)
-	c.Assert(err, IsNil)
-	c.Assert(status.ttl, Equals, uint64(0))
-	c.Assert(status.commitTS, Equals, uint64(0))
-	c.Assert(status.action, Equals, kvrpcpb.Action_LockNotExistRollback)
 }
 
 func (s *testLockSuite) prewriteTxn(c *C, txn *tikvTxn) {

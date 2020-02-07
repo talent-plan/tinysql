@@ -17,15 +17,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"math"
-	"os"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
-
-	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -33,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -41,12 +31,14 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
+	"math"
+	"os"
+	"strconv"
+	"testing"
 )
 
 func TestT(t *testing.T) {
@@ -142,40 +134,6 @@ func (s *testSuiteP1) TestChange(c *C) {
 	tk.MustExec("alter table t change a b int")
 	tk.MustExec("alter table t change b c bigint")
 	c.Assert(tk.ExecToErr("alter table t change c d varchar(100)"), NotNil)
-}
-
-func (s *testSuiteP2) TestAdminShowDDLJobs(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database if not exists test_admin_show_ddl_jobs")
-	tk.MustExec("use test_admin_show_ddl_jobs")
-	tk.MustExec("create table t (a int);")
-
-	re := tk.MustQuery("admin show ddl jobs 1")
-	row := re.Rows()[0]
-	c.Assert(row[1], Equals, "test_admin_show_ddl_jobs")
-	jobID, err := strconv.Atoi(row[0].(string))
-	c.Assert(err, IsNil)
-
-	c.Assert(tk.Se.NewTxn(context.Background()), IsNil)
-	txn, err := tk.Se.Txn(true)
-	c.Assert(err, IsNil)
-	t := meta.NewMeta(txn)
-	job, err := t.GetHistoryDDLJob(int64(jobID))
-	c.Assert(err, IsNil)
-	c.Assert(job, NotNil)
-	job.SchemaName = ""
-	err = t.AddHistoryDDLJob(job, true)
-	c.Assert(err, IsNil)
-	err = tk.Se.CommitTxn(context.Background())
-	c.Assert(err, IsNil)
-
-	re = tk.MustQuery("admin show ddl jobs 1")
-	row = re.Rows()[0]
-	c.Assert(row[1], Equals, "test_admin_show_ddl_jobs")
-
-	re = tk.MustQuery("admin show ddl jobs 1 where job_type='create table'")
-	row = re.Rows()[0]
-	c.Assert(row[1], Equals, "test_admin_show_ddl_jobs")
 }
 
 func (s *baseTestSuite) fillData(tk *testkit.TestKit, table string) {
@@ -1053,78 +1011,14 @@ func (s *testSuite) TestSimpleDAG(c *C) {
 	tk.MustQuery("select * from t where b = 1 and a > 1 limit 1").Check(testkit.Rows("2 1 1"))
 }
 
-const (
-	checkRequestOff = iota
-	checkRequestSyncLog
-	checkDDLAddIndexPriority
-)
-
-type checkRequestClient struct {
-	tikv.Client
-	priority       pb.CommandPri
-	lowPriorityCnt uint32
-	mu             struct {
-		sync.RWMutex
-		checkFlags uint32
-		syncLog    bool
-	}
-}
-
-func (c *checkRequestClient) setCheckPriority(priority pb.CommandPri) {
-	atomic.StoreInt32((*int32)(&c.priority), int32(priority))
-}
-
-func (c *checkRequestClient) getCheckPriority() pb.CommandPri {
-	return (pb.CommandPri)(atomic.LoadInt32((*int32)(&c.priority)))
-}
-
-func (c *checkRequestClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
-	resp, err := c.Client.SendRequest(ctx, addr, req, timeout)
-	c.mu.RLock()
-	checkFlags := c.mu.checkFlags
-	c.mu.RUnlock()
-	if checkFlags == checkRequestSyncLog {
-		switch req.Type {
-		case tikvrpc.CmdPrewrite, tikvrpc.CmdCommit:
-			c.mu.RLock()
-			syncLog := c.mu.syncLog
-			c.mu.RUnlock()
-			if syncLog != req.SyncLog {
-				return nil, errors.New("fail to set sync log")
-			}
-		}
-	} else if checkFlags == checkDDLAddIndexPriority {
-		if req.Type == tikvrpc.CmdScan {
-			if c.getCheckPriority() != req.Priority {
-				return nil, errors.New("fail to set priority")
-			}
-		} else if req.Type == tikvrpc.CmdPrewrite {
-			if c.getCheckPriority() == pb.CommandPri_Low {
-				atomic.AddUint32(&c.lowPriorityCnt, 1)
-			}
-		}
-	}
-	return resp, err
-}
-
 type testSuite1 struct {
 	store kv.Storage
 	dom   *domain.Domain
-	cli   *checkRequestClient
 }
 
 func (s *testSuite1) SetUpSuite(c *C) {
-	cli := &checkRequestClient{}
-	hijackClient := func(c tikv.Client) tikv.Client {
-		cli.Client = c
-		return cli
-	}
-	s.cli = cli
-
 	var err error
-	s.store, err = mockstore.NewMockTikvStore(
-		mockstore.WithHijackClient(hijackClient),
-	)
+	s.store, err = mockstore.NewMockTikvStore()
 	c.Assert(err, IsNil)
 	session.SetStatsLease(0)
 	s.dom, err = session.BootstrapSession(s.store)
@@ -1144,126 +1038,6 @@ func (s *testSuite1) TearDownTest(c *C) {
 		tableName := tb[0]
 		tk.MustExec(fmt.Sprintf("drop table %v", tableName))
 	}
-}
-
-func (s *testSuite2) TestAddIndexPriority(c *C) {
-	cli := &checkRequestClient{}
-	hijackClient := func(c tikv.Client) tikv.Client {
-		cli.Client = c
-		return cli
-	}
-
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithHijackClient(hijackClient),
-	)
-	c.Assert(err, IsNil)
-	dom, err := session.BootstrapSession(store)
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t1 (id int, v int)")
-
-	// Insert some data to make sure plan build IndexLookup for t1.
-	for i := 0; i < 10; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d)", i, i))
-	}
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkDDLAddIndexPriority
-	cli.mu.Unlock()
-
-	cli.setCheckPriority(pb.CommandPri_Low)
-	tk.MustExec("alter table t1 add index t1_index (id);")
-
-	c.Assert(atomic.LoadUint32(&cli.lowPriorityCnt) > 0, IsTrue)
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkRequestOff
-	cli.mu.Unlock()
-
-	tk.MustExec("alter table t1 drop index t1_index;")
-	tk.MustExec("SET SESSION tidb_ddl_reorg_priority = 'PRIORITY_NORMAL'")
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkDDLAddIndexPriority
-	cli.mu.Unlock()
-
-	cli.setCheckPriority(pb.CommandPri_Normal)
-	tk.MustExec("alter table t1 add index t1_index (id);")
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkRequestOff
-	cli.mu.Unlock()
-
-	tk.MustExec("alter table t1 drop index t1_index;")
-	tk.MustExec("SET SESSION tidb_ddl_reorg_priority = 'PRIORITY_HIGH'")
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkDDLAddIndexPriority
-	cli.mu.Unlock()
-
-	cli.setCheckPriority(pb.CommandPri_High)
-	tk.MustExec("alter table t1 add index t1_index (id);")
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkRequestOff
-	cli.mu.Unlock()
-}
-
-func (s *testSuite) TestNotFillCacheFlag(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t (id int primary key)")
-	defer tk.MustExec("drop table t")
-	tk.MustExec("insert into t values (1)")
-
-	tests := []struct {
-		sql    string
-		expect bool
-	}{
-		{"select SQL_NO_CACHE * from t", true},
-		{"select SQL_CACHE * from t", false},
-		{"select * from t", false},
-	}
-	count := 0
-	ctx := context.Background()
-	for _, test := range tests {
-		ctx1 := context.WithValue(ctx, "CheckSelectRequestHook", func(req *kv.Request) {
-			count++
-			if req.NotFillCache != test.expect {
-				c.Errorf("sql=%s, expect=%v, get=%v", test.sql, test.expect, req.NotFillCache)
-			}
-		})
-		rs, err := tk.Se.Execute(ctx1, test.sql)
-		c.Assert(err, IsNil)
-		tk.ResultSetToResult(rs[0], Commentf("sql: %v", test.sql))
-	}
-	c.Assert(count, Equals, len(tests)) // Make sure the hook function is called.
-}
-
-func (s *testSuite1) TestSyncLog(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	cli := s.cli
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkRequestSyncLog
-	cli.mu.syncLog = true
-	cli.mu.Unlock()
-	tk.MustExec("create table t (id int primary key)")
-	cli.mu.Lock()
-	cli.mu.syncLog = false
-	cli.mu.Unlock()
-	tk.MustExec("insert into t values (1)")
-
-	cli.mu.Lock()
-	cli.mu.checkFlags = checkRequestOff
-	cli.mu.Unlock()
 }
 
 func (s *testSuite) TestHandleTransfer(c *C) {

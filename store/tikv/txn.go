@@ -57,13 +57,13 @@ func newTiKVTxn(store *tikvStore) (*tikvTxn, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newTikvTxnWithStartTS(store, startTS, store.nextReplicaReadSeed())
+	return newTikvTxnWithStartTS(store, startTS)
 }
 
 // newTikvTxnWithStartTS creates a txn with startTS.
-func newTikvTxnWithStartTS(store *tikvStore, startTS uint64, replicaReadSeed uint32) (*tikvTxn, error) {
+func newTikvTxnWithStartTS(store *tikvStore, startTS uint64) (*tikvTxn, error) {
 	ver := kv.NewVersion(startTS)
-	snapshot := newTiKVSnapshot(store, ver, replicaReadSeed)
+	snapshot := newTiKVSnapshot(store, ver)
 	return &tikvTxn{
 		snapshot:  snapshot,
 		us:        kv.NewUnionStore(snapshot),
@@ -137,10 +137,6 @@ func (txn *tikvTxn) Delete(k kv.Key) error {
 func (txn *tikvTxn) SetOption(opt kv.Option, val interface{}) {
 	txn.us.SetOption(opt, val)
 	switch opt {
-	case kv.Priority:
-		txn.snapshot.priority = kvPriorityToCommandPri(val.(int))
-	case kv.NotFillCache:
-		txn.snapshot.notFillCache = val.(bool)
 	case kv.SyncLog:
 		txn.snapshot.syncLog = val.(bool)
 	case kv.KeyOnly:

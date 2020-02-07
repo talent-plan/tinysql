@@ -14,7 +14,6 @@
 package mocktikv
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -54,8 +53,6 @@ func convertToKeyError(err error) *kvrpcpb.KeyError {
 				PrimaryLock: locked.Primary,
 				LockVersion: locked.StartTS,
 				LockTtl:     locked.TTL,
-				TxnSize:     locked.TxnSize,
-				LockType:    locked.LockType,
 			},
 		}
 	}
@@ -69,26 +66,15 @@ func convertToKeyError(err error) *kvrpcpb.KeyError {
 	if writeConflict, ok := errors.Cause(err).(*ErrConflict); ok {
 		return &kvrpcpb.KeyError{
 			Conflict: &kvrpcpb.WriteConflict{
-				Key:              writeConflict.Key,
-				ConflictTs:       writeConflict.ConflictTS,
-				ConflictCommitTs: writeConflict.ConflictCommitTS,
-				StartTs:          writeConflict.StartTS,
+				Key:        writeConflict.Key,
+				ConflictTs: writeConflict.ConflictTS,
+				StartTs:    writeConflict.StartTS,
 			},
 		}
 	}
 	if retryable, ok := errors.Cause(err).(ErrRetryable); ok {
 		return &kvrpcpb.KeyError{
 			Retryable: retryable.Error(),
-		}
-	}
-	if expired, ok := errors.Cause(err).(*ErrCommitTSExpired); ok {
-		return &kvrpcpb.KeyError{
-			CommitTsExpired: &expired.CommitTsExpired,
-		}
-	}
-	if tmp, ok := errors.Cause(err).(*ErrTxnNotFound); ok {
-		return &kvrpcpb.KeyError{
-			TxnNotFound: &tmp.TxnNotFound,
 		}
 	}
 	return &kvrpcpb.KeyError{
@@ -139,9 +125,6 @@ type rpcHandler struct {
 	// rawStartKey is used for handling coprocessor request.
 	rawStartKey []byte
 	rawEndKey   []byte
-	// isolationLevel is used for current request.
-	isolationLevel kvrpcpb.IsolationLevel
-	resolvedLocks  []uint64
 }
 
 func (h *rpcHandler) checkRequestContext(ctx *kvrpcpb.Context) *errorpb.Error {
@@ -214,8 +197,6 @@ func (h *rpcHandler) checkRequestContext(ctx *kvrpcpb.Context) *errorpb.Error {
 		}
 	}
 	h.startKey, h.endKey = region.StartKey, region.EndKey
-	h.isolationLevel = ctx.IsolationLevel
-	h.resolvedLocks = ctx.ResolvedLocks
 	return nil
 }
 
@@ -246,7 +227,7 @@ func (h *rpcHandler) handleKvGet(req *kvrpcpb.GetRequest) *kvrpcpb.GetResponse {
 		panic("KvGet: key not in region")
 	}
 
-	val, err := h.mvccStore.Get(req.Key, req.GetVersion(), h.isolationLevel, req.Context.GetResolvedLocks())
+	val, err := h.mvccStore.Get(req.Key, req.GetVersion())
 	if err != nil {
 		return &kvrpcpb.GetResponse{
 			Error: convertToKeyError(err),
@@ -259,30 +240,10 @@ func (h *rpcHandler) handleKvGet(req *kvrpcpb.GetRequest) *kvrpcpb.GetResponse {
 
 func (h *rpcHandler) handleKvScan(req *kvrpcpb.ScanRequest) *kvrpcpb.ScanResponse {
 	endKey := MvccKey(h.endKey).Raw()
-	var pairs []Pair
-	if !req.Reverse {
-		if !h.checkKeyInRegion(req.GetStartKey()) {
-			panic("KvScan: startKey not in region")
-		}
-		if len(req.EndKey) > 0 && (len(endKey) == 0 || bytes.Compare(NewMvccKey(req.EndKey), h.endKey) < 0) {
-			endKey = req.EndKey
-		}
-		pairs = h.mvccStore.Scan(req.GetStartKey(), endKey, int(req.GetLimit()), req.GetVersion(), h.isolationLevel, req.Context.ResolvedLocks)
-	} else {
-		// TiKV use range [end_key, start_key) for reverse scan.
-		// Should use the req.EndKey to check in region.
-		if !h.checkKeyInRegion(req.GetEndKey()) {
-			panic("KvScan: startKey not in region")
-		}
-
-		// TiKV use range [end_key, start_key) for reverse scan.
-		// So the req.StartKey actually is the end_key.
-		if len(req.StartKey) > 0 && (len(endKey) == 0 || bytes.Compare(NewMvccKey(req.StartKey), h.endKey) < 0) {
-			endKey = req.StartKey
-		}
-
-		pairs = h.mvccStore.ReverseScan(req.EndKey, endKey, int(req.GetLimit()), req.GetVersion(), h.isolationLevel, req.Context.ResolvedLocks)
+	if !h.checkKeyInRegion(req.GetStartKey()) {
+		panic("KvScan: startKey not in region")
 	}
+	pairs := h.mvccStore.Scan(req.GetStartKey(), endKey, int(req.GetLimit()), req.GetVersion())
 
 	return &kvrpcpb.ScanResponse{
 		Pairs: convertToPbPairs(pairs),

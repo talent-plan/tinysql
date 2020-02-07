@@ -13,7 +13,9 @@
 
 package kv
 
-import "context"
+import (
+	"context"
+)
 
 // UnionStore is a store that wraps a snapshot for read and a BufferStore for buffered write.
 // Also, it provides some transaction related utilities.
@@ -191,14 +193,11 @@ func (lmb *lazyMemBuffer) SetCap(cap int) {
 func (us *unionStore) Get(ctx context.Context, k Key) ([]byte, error) {
 	v, err := us.MemBuffer.Get(ctx, k)
 	if IsErrNotFound(err) {
-		if _, ok := us.opts.Get(PresumeKeyNotExists); ok {
-			e, ok := us.opts.Get(PresumeKeyNotExistsError)
-			if ok {
-				us.keyExistErrs[string(k)] = e.(*existErrInfo)
-			}
-			return nil, ErrNotExist
-		}
 		v, err = us.BufferStore.r.Get(ctx, k)
+	}
+	e, ok := us.opts.Get(PresumeKeyNotExistsError)
+	if ok && len(v) > 0 {
+		return nil, e.(*existErrInfo).Err()
 	}
 	if err != nil {
 		return v, err

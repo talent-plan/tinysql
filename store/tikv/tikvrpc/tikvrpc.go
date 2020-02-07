@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
 	"github.com/pingcap-incubator/tinykv/proto/pkg/tikvpb"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
 )
 
 // CmdType represents the concrete request type in Request or response type in Response.
@@ -100,14 +99,6 @@ func NewRequest(typ CmdType, pointer interface{}, ctxs ...kvrpcpb.Context) *Requ
 	}
 }
 
-// NewReplicaReadRequest returns new kv rpc request with replica read.
-func NewReplicaReadRequest(typ CmdType, pointer interface{}, replicaReadType kv.ReplicaReadType, replicaReadSeed uint32, ctxs ...kvrpcpb.Context) *Request {
-	req := NewRequest(typ, pointer, ctxs...)
-	req.ReplicaRead = replicaReadType.IsFollowerRead()
-	req.ReplicaReadSeed = replicaReadSeed
-	return req
-}
-
 // Get returns GetRequest in request.
 func (req *Request) Get() *kvrpcpb.GetRequest {
 	return req.req.(*kvrpcpb.GetRequest)
@@ -128,24 +119,9 @@ func (req *Request) Commit() *kvrpcpb.CommitRequest {
 	return req.req.(*kvrpcpb.CommitRequest)
 }
 
-// Cleanup returns CleanupRequest in request.
-func (req *Request) Cleanup() *kvrpcpb.CleanupRequest {
-	return req.req.(*kvrpcpb.CleanupRequest)
-}
-
-// BatchGet returns BatchGetRequest in request.
-func (req *Request) BatchGet() *kvrpcpb.BatchGetRequest {
-	return req.req.(*kvrpcpb.BatchGetRequest)
-}
-
 // BatchRollback returns BatchRollbackRequest in request.
 func (req *Request) BatchRollback() *kvrpcpb.BatchRollbackRequest {
 	return req.req.(*kvrpcpb.BatchRollbackRequest)
-}
-
-// ScanLock returns ScanLockRequest in request.
-func (req *Request) ScanLock() *kvrpcpb.ScanLockRequest {
-	return req.req.(*kvrpcpb.ScanLockRequest)
 }
 
 // ResolveLock returns ResolveLockRequest in request.
@@ -176,16 +152,6 @@ func (req *Request) RawScan() *kvrpcpb.RawScanRequest {
 // Cop returns coprocessor request in request.
 func (req *Request) Cop() *coprocessor.Request {
 	return req.req.(*coprocessor.Request)
-}
-
-// MvccGetByKey returns MvccGetByKeyRequest in request.
-func (req *Request) MvccGetByKey() *kvrpcpb.MvccGetByKeyRequest {
-	return req.req.(*kvrpcpb.MvccGetByKeyRequest)
-}
-
-// MvccGetByStartTs returns MvccGetByStartTsRequest in request.
-func (req *Request) MvccGetByStartTs() *kvrpcpb.MvccGetByStartTsRequest {
-	return req.req.(*kvrpcpb.MvccGetByStartTsRequest)
 }
 
 // SplitRegion returns SplitRegionRequest in request.

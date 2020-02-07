@@ -31,23 +31,6 @@ import (
 	"strings"
 )
 
-// TestInTxnExecDDLFail tests the following case:
-//  1. Execute the SQL of "begin";
-//  2. A SQL that will fail to execute;
-//  3. Execute DDL.
-func (s *testSuite6) TestInTxnExecDDLFail(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t (i int key);")
-	tk.MustExec("insert into t values (1);")
-	tk.MustExec("begin;")
-	tk.MustExec("insert into t values (1);")
-	_, err := tk.Exec("alter table t comment = 'xx' ")
-	c.Assert(err.Error(), Equals, "[kv:1062]Duplicate entry '1' for key 'PRIMARY'")
-	result := tk.MustQuery("select count(*) from t")
-	result.Check(testkit.Rows("1"))
-}
-
 func (s *testSuite6) TestCreateTable(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

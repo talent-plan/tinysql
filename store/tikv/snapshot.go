@@ -36,20 +36,15 @@ var (
 
 const (
 	scanBatchSize = 256
-	batchGetSize  = 5120
 )
 
 // tikvSnapshot implements the kv.Snapshot interface.
 type tikvSnapshot struct {
-	store           *tikvStore
-	version         kv.Version
-	priority        pb.CommandPri
-	notFillCache    bool
-	syncLog         bool
-	keyOnly         bool
-	vars            *kv.Variables
-	replicaRead     kv.ReplicaReadType
-	replicaReadSeed uint32
+	store   *tikvStore
+	version kv.Version
+	syncLog bool
+	keyOnly bool
+	vars    *kv.Variables
 	minCommitTSPushed
 
 	// Cache the result of BatchGet.
@@ -63,13 +58,11 @@ type tikvSnapshot struct {
 }
 
 // newTiKVSnapshot creates a snapshot of an TiKV store.
-func newTiKVSnapshot(store *tikvStore, ver kv.Version, replicaReadSeed uint32) *tikvSnapshot {
+func newTiKVSnapshot(store *tikvStore, ver kv.Version) *tikvSnapshot {
 	return &tikvSnapshot{
-		store:           store,
-		version:         ver,
-		priority:        pb.CommandPri_Normal,
-		vars:            kv.DefaultVars,
-		replicaReadSeed: replicaReadSeed,
+		store:   store,
+		version: ver,
+		vars:    kv.DefaultVars,
 		minCommitTSPushed: minCommitTSPushed{
 			data: make(map[uint64]struct{}, 5),
 		},
@@ -118,14 +111,11 @@ func (s *tikvSnapshot) get(bo *Backoffer, k kv.Key) ([]byte, error) {
 		Client:            s.store.client,
 	}
 
-	req := tikvrpc.NewReplicaReadRequest(tikvrpc.CmdGet,
+	req := tikvrpc.NewRequest(tikvrpc.CmdGet,
 		&pb.GetRequest{
 			Key:     k,
 			Version: s.version.Ver,
-		}, s.replicaRead, s.replicaReadSeed, pb.Context{
-			Priority:     s.priority,
-			NotFillCache: s.notFillCache,
-		})
+		}, pb.Context{})
 	for {
 		loc, err := s.store.regionCache.LocateKey(bo, k)
 		if err != nil {
@@ -182,25 +172,6 @@ func (s *tikvSnapshot) Iter(k kv.Key, upperBound kv.Key) (kv.Iterator, error) {
 func (s *tikvSnapshot) IterReverse(k kv.Key) (kv.Iterator, error) {
 	scanner, err := newScanner(s, nil, k, scanBatchSize, true)
 	return scanner, errors.Trace(err)
-}
-
-// SetOption sets an option with a value, when val is nil, uses the default
-// value of this option. Only ReplicaRead is supported for snapshot
-func (s *tikvSnapshot) SetOption(opt kv.Option, val interface{}) {
-	switch opt {
-	case kv.ReplicaRead:
-		s.replicaRead = val.(kv.ReplicaReadType)
-	case kv.Priority:
-		s.priority = kvPriorityToCommandPri(val.(int))
-	}
-}
-
-// ClearFollowerRead disables follower read on current transaction
-func (s *tikvSnapshot) DelOption(opt kv.Option) {
-	switch opt {
-	case kv.ReplicaRead:
-		s.replicaRead = kv.ReplicaReadLeader
-	}
 }
 
 func extractLockFromKeyErr(keyErr *pb.KeyError) (*Lock, error) {
@@ -262,7 +233,7 @@ func newWriteConflictError(conflict *pb.WriteConflict) error {
 	prettyWriteKey(&buf, conflict.Key)
 	buf.WriteString(" primary=")
 	prettyWriteKey(&buf, conflict.Primary)
-	return kv.ErrWriteConflict.FastGenByArgs(conflict.StartTs, conflict.ConflictTs, conflict.ConflictCommitTs, buf.String())
+	return kv.ErrWriteConflict.FastGenByArgs(conflict.StartTs, conflict.ConflictTs, buf.String())
 }
 
 func prettyWriteKey(buf *bytes.Buffer, key []byte) {

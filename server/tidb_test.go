@@ -67,11 +67,6 @@ func (ts *TidbTestSuite) TearDownSuite(c *C) {
 	}
 }
 
-func (ts *TidbTestSuite) TestErrorCode(c *C) {
-	c.Parallel()
-	runTestErrorCode(c)
-}
-
 func (ts *TidbTestSuite) TestIssues(c *C) {
 	c.Parallel()
 	runTestIssue3662(c)

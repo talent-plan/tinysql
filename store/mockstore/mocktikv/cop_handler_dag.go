@@ -173,13 +173,11 @@ func (h *rpcHandler) buildTableScan(ctx *dagContext, executor *tipb.Executor) (*
 		startTS = ctx.dagReq.GetStartTsFallback()
 	}
 	e := &tableScanExec{
-		TableScan:      executor.TblScan,
-		kvRanges:       ranges,
-		colIDs:         ctx.evalCtx.colIDs,
-		startTS:        startTS,
-		isolationLevel: h.isolationLevel,
-		resolvedLocks:  h.resolvedLocks,
-		mvccStore:      h.mvccStore,
+		TableScan: executor.TblScan,
+		kvRanges:  ranges,
+		colIDs:    ctx.evalCtx.colIDs,
+		startTS:   startTS,
+		mvccStore: h.mvccStore,
 	}
 	if ctx.dagReq.CollectRangeCounts != nil && *ctx.dagReq.CollectRangeCounts {
 		e.counts = make([]int64, len(ranges))
@@ -215,14 +213,12 @@ func (h *rpcHandler) buildIndexScan(ctx *dagContext, executor *tipb.Executor) (*
 		startTS = ctx.dagReq.GetStartTsFallback()
 	}
 	e := &indexScanExec{
-		IndexScan:      executor.IdxScan,
-		kvRanges:       ranges,
-		colsLen:        len(columns),
-		startTS:        startTS,
-		isolationLevel: h.isolationLevel,
-		resolvedLocks:  h.resolvedLocks,
-		mvccStore:      h.mvccStore,
-		pkStatus:       pkStatus,
+		IndexScan: executor.IdxScan,
+		kvRanges:  ranges,
+		colsLen:   len(columns),
+		startTS:   startTS,
+		mvccStore: h.mvccStore,
+		pkStatus:  pkStatus,
 	}
 	if ctx.dagReq.CollectRangeCounts != nil && *ctx.dagReq.CollectRangeCounts {
 		e.counts = make([]int64, len(ranges))

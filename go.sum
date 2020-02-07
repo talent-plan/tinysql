@@ -210,9 +210,9 @@ github.com/opentracing/opentracing-go v1.0.2 h1:3jA2P6O1F9UOrWVpwrIo17pu01KWvNWg
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.3.0/go.mod h1:PN7xzY2wHTK0K9p34ErDQMlFxa51Fk0OUruD3k1mMwo=
-github.com/pierrec/lz4 v2.0.5+incompatible/go.mod h1:pdkljMzZIN41W+lC3N2tnIh5sFi+IEE17M5jbnwPHcY=
-github.com/pingcap-incubator/tinykv v0.0.0-20200204065607-1cfa2bb4c5e2 h1:sf4UYy4PsW89jJ/HOQevM+Id/99twl0glDqZf3hyHZM=
-github.com/pingcap-incubator/tinykv v0.0.0-20200204065607-1cfa2bb4c5e2/go.mod h1:CWDRcYHb/IwJO3rpIWzSjh45ddr7D+AyDqL25eMJ2yY=
+github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99/go.mod h1:HUpKUBZnpzkdx0kD/+Yfuft+uD3zHGtXF/XJB14TUr4=
+github.com/pingcap-incubator/tinykv v0.0.0-20200207031745-8d8c5ae0f7f0 h1:egXg8BNiTrXUN3rFoLXgvUM+pr95ppOkBbAOuRmx8xM=
+github.com/pingcap-incubator/tinykv v0.0.0-20200207031745-8d8c5ae0f7f0/go.mod h1:UcopdAEEMT//6PnhF5p3mwXzLUUNIel0srl+bAeaZuI=
 github.com/pingcap/errcode v0.0.0-20180921232412-a1a7271709d9 h1:KH4f4Si9XK6/IW50HtoaiLIFHGkapOM6w83za47UYik=
 github.com/pingcap/errcode v0.0.0-20180921232412-a1a7271709d9/go.mod h1:4b2X8xSqxIroj/IZ9MX/VGZhAwc11wB9wRIzHvz6SeM=
 github.com/pingcap/errors v0.10.1/go.mod h1:Oi8TUi2kEtXXLMJk9l1cGmz20kV3TaQ0usTwv5KuLY8=

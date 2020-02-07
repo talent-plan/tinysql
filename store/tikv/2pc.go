@@ -22,7 +22,6 @@ import (
 
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/terror"
 
@@ -73,20 +72,17 @@ type twoPhaseCommitter struct {
 	mutations map[string]*mutationEx
 	lockTTL   uint64
 	commitTS  uint64
-	priority  pb.CommandPri
 	connID    uint64 // connID is used for log.
 	cleanWg   sync.WaitGroup
 	txnSize   int
 
-	primaryKey  []byte
-	forUpdateTS uint64
+	primaryKey []byte
 
 	mu struct {
 		sync.RWMutex
 		undeterminedErr error // undeterminedErr saves the rpc error we encounter when commit primary key.
 		committed       bool
 	}
-	syncLog bool
 	// regionTxnSize stores the number of keys involved in each region
 	regionTxnSize map[uint64]int
 }
@@ -132,9 +128,6 @@ func (c *twoPhaseCommitter) initKeysAndMutations() error {
 				return nil
 			}
 			op := pb.Op_Put
-			if c := txn.us.GetKeyExistErrInfo(k); c != nil {
-				op = pb.Op_Insert
-			}
 			mutations[string(k)] = &mutationEx{
 				Mutation: pb.Mutation{
 					Op:    op,
@@ -212,8 +205,6 @@ func (c *twoPhaseCommitter) initKeysAndMutations() error {
 	c.keys = keys
 	c.mutations = mutations
 	c.lockTTL = txnLockTTL(txn.startTime, size)
-	c.priority = getTxnPriority(txn)
-	c.syncLog = getTxnSyncLog(txn)
 	return nil
 }
 
@@ -354,47 +345,24 @@ func (c *twoPhaseCommitter) keySize(key []byte) int {
 	return len(key)
 }
 
-func (c *twoPhaseCommitter) buildPrewriteRequest(batch batchKeys, txnSize uint64) *tikvrpc.Request {
+func (c *twoPhaseCommitter) buildPrewriteRequest(batch batchKeys) *tikvrpc.Request {
 	mutations := make([]*pb.Mutation, len(batch.keys))
 	for i, k := range batch.keys {
 		tmp := c.mutations[string(k)]
 		mutations[i] = &tmp.Mutation
 	}
-	var minCommitTS uint64
-	if c.forUpdateTS > 0 {
-		minCommitTS = c.forUpdateTS + 1
-	} else {
-		minCommitTS = c.startTS + 1
-	}
-
-	failpoint.Inject("mockZeroCommitTS", func(val failpoint.Value) {
-		// Should be val.(uint64) but failpoint doesn't support that.
-		if tmp, ok := val.(int); ok && uint64(tmp) == c.startTS {
-			minCommitTS = 0
-		}
-	})
 
 	req := &pb.PrewriteRequest{
 		Mutations:    mutations,
 		PrimaryLock:  c.primary(),
 		StartVersion: c.startTS,
 		LockTtl:      c.lockTTL,
-		ForUpdateTs:  c.forUpdateTS,
-		TxnSize:      txnSize,
-		MinCommitTs:  minCommitTS,
 	}
-	return tikvrpc.NewRequest(tikvrpc.CmdPrewrite, req, pb.Context{Priority: c.priority, SyncLog: c.syncLog})
+	return tikvrpc.NewRequest(tikvrpc.CmdPrewrite, req, pb.Context{})
 }
 
 func (actionPrewrite) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batch batchKeys) error {
-	txnSize := uint64(c.regionTxnSize[batch.region.id])
-	// When we retry because of a region miss, we don't know the transaction size. We set the transaction size here
-	// to MaxUint64 to avoid unexpected "resolve lock lite".
-	if len(bo.errors) > 0 {
-		txnSize = math.MaxUint64
-	}
-
-	req := c.buildPrewriteRequest(batch, txnSize)
+	req := c.buildPrewriteRequest(batch)
 	for {
 		resp, err := c.store.SendReq(bo, req, batch.region, readTimeoutShort)
 		if err != nil {
@@ -456,31 +424,6 @@ func (actionPrewrite) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, bat
 	}
 }
 
-func getTxnPriority(txn *tikvTxn) pb.CommandPri {
-	if pri := txn.us.GetOption(kv.Priority); pri != nil {
-		return kvPriorityToCommandPri(pri.(int))
-	}
-	return pb.CommandPri_Normal
-}
-
-func getTxnSyncLog(txn *tikvTxn) bool {
-	if syncOption := txn.us.GetOption(kv.SyncLog); syncOption != nil {
-		return syncOption.(bool)
-	}
-	return false
-}
-
-func kvPriorityToCommandPri(pri int) pb.CommandPri {
-	switch pri {
-	case kv.PriorityLow:
-		return pb.CommandPri_Low
-	case kv.PriorityHigh:
-		return pb.CommandPri_High
-	default:
-		return pb.CommandPri_Normal
-	}
-}
-
 func (c *twoPhaseCommitter) setUndeterminedErr(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -498,7 +441,7 @@ func (actionCommit) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batch
 		StartVersion:  c.startTS,
 		Keys:          batch.keys,
 		CommitVersion: c.commitTS,
-	}, pb.Context{Priority: c.priority, SyncLog: c.syncLog})
+	}, pb.Context{})
 
 	sender := NewRegionRequestSender(c.store.regionCache, c.store.client)
 	resp, err := sender.SendReq(bo, req, batch.region, readTimeoutShort)
@@ -539,26 +482,6 @@ func (actionCommit) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batch
 		c.setUndeterminedErr(nil)
 	}
 	if keyErr := commitResp.GetError(); keyErr != nil {
-		if rejected := keyErr.GetCommitTsExpired(); rejected != nil {
-			logutil.Logger(bo.ctx).Info("2PC commitTS rejected by TiKV, retry with a newer commitTS",
-				zap.Uint64("txnStartTS", c.startTS),
-				zap.Stringer("info", logutil.Hex(rejected)))
-
-			// Update commit ts and retry.
-			commitTS, err := c.store.getTimestampWithRetry(bo)
-			if err != nil {
-				logutil.Logger(bo.ctx).Warn("2PC get commitTS failed",
-					zap.Error(err),
-					zap.Uint64("txnStartTS", c.startTS))
-				return errors.Trace(err)
-			}
-
-			c.mu.Lock()
-			c.commitTS = commitTS
-			c.mu.Unlock()
-			return c.commitKeys(bo, batch.keys)
-		}
-
 		c.mu.RLock()
 		defer c.mu.RUnlock()
 		err = extractKeyErr(keyErr)
@@ -589,7 +512,7 @@ func (actionCleanup) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batc
 	req := tikvrpc.NewRequest(tikvrpc.CmdBatchRollback, &pb.BatchRollbackRequest{
 		Keys:         batch.keys,
 		StartVersion: c.startTS,
-	}, pb.Context{Priority: c.priority, SyncLog: c.syncLog})
+	}, pb.Context{})
 	resp, err := c.store.SendReq(bo, req, batch.region, readTimeoutShort)
 	if err != nil {
 		return errors.Trace(err)

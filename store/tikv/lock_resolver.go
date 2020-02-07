@@ -124,12 +124,10 @@ func (l *Lock) String() string {
 // NewLock creates a new *Lock.
 func NewLock(l *kvrpcpb.LockInfo) *Lock {
 	return &Lock{
-		Key:      l.GetKey(),
-		Primary:  l.GetPrimaryLock(),
-		TxnID:    l.GetLockVersion(),
-		TTL:      l.GetLockTtl(),
-		TxnSize:  l.GetTxnSize(),
-		LockType: l.LockType,
+		Key:     l.GetKey(),
+		Primary: l.GetPrimaryLock(),
+		TxnID:   l.GetLockVersion(),
+		TTL:     l.GetLockTtl(),
 	}
 }
 
@@ -205,11 +203,8 @@ func (lr *LockResolver) ResolveLocks(bo *Backoffer, callerStartTS uint64, locks 
 			msBeforeTxnExpired.update(msBeforeLockExpired)
 			// In the write conflict scenes, callerStartTS is set to 0 to avoid unnecessary push minCommitTS operation.
 			if callerStartTS > 0 {
-				if status.action != kvrpcpb.Action_MinCommitTSPushed {
-					pushFail = true
-					continue
-				}
-				pushed = append(pushed, l.TxnID)
+				pushFail = true
+				continue
 			}
 		}
 	}
@@ -276,32 +271,8 @@ func (lr *LockResolver) getTxnStatusFromLock(bo *Backoffer, l *Lock, callerStart
 		if err == nil {
 			return status, nil
 		}
-		// If the error is something other than txnNotFoundErr, throw the error (network
-		// unavailable, tikv down, backoff timeout etc) to the caller.
-		if _, ok := errors.Cause(err).(txnNotFoundErr); !ok {
-			return TxnStatus{}, err
-		}
-
-		// Handle txnNotFound error.
-		// getTxnStatus() returns it when the secondary locks exist while the primary lock doesn't.
-		// This is likely to happen in the concurrently prewrite when secondary regions
-		// success before the primary region.
-		if err := bo.Backoff(boTxnNotFound, err); err != nil {
-			logutil.BgLogger().Warn("getTxnStatusFromLock backoff fail", zap.Error(err))
-		}
-
-		if lr.store.GetOracle().UntilExpired(l.TxnID, l.TTL) <= 0 {
-			rollbackIfNotExist = true
-		}
+		return TxnStatus{}, err
 	}
-}
-
-type txnNotFoundErr struct {
-	*kvrpcpb.TxnNotFound
-}
-
-func (e txnNotFoundErr) Error() string {
-	return e.TxnNotFound.String()
 }
 
 // getTxnStatus sends the CheckTxnStatus request to the TiKV server.
@@ -353,11 +324,6 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 		}
 		cmdResp := resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
 		if keyErr := cmdResp.GetError(); keyErr != nil {
-			txnNotFound := keyErr.GetTxnNotFound()
-			if txnNotFound != nil {
-				return status, txnNotFoundErr{txnNotFound}
-			}
-
 			err = errors.Errorf("unexpected err: %s, tid: %v", keyErr, txnID)
 			logutil.BgLogger().Error("getTxnStatus error", zap.Error(err))
 			return status, err

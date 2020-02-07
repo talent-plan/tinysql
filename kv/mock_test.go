@@ -27,11 +27,6 @@ func (s testMockSuite) TestInterface(c *C) {
 	storage := NewMockStorage()
 	storage.GetClient()
 	storage.UUID()
-	version, err := storage.CurrentVersion()
-	c.Check(err, IsNil)
-	snapshot, err := storage.GetSnapshot(version)
-	c.Check(err, IsNil)
-	snapshot.SetOption(Priority, PriorityNormal)
 
 	transaction, err := storage.Begin()
 	c.Check(err, IsNil)

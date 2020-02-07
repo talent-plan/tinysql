@@ -47,8 +47,6 @@ type mvccLock struct {
 	op          kvrpcpb.Op
 	ttl         uint64
 	forUpdateTS uint64
-	txnSize     uint64
-	minCommitTS uint64
 }
 
 type mvccEntry struct {
@@ -69,8 +67,6 @@ func (l *mvccLock) MarshalBinary() ([]byte, error) {
 	mh.WriteNumber(&buf, l.op)
 	mh.WriteNumber(&buf, l.ttl)
 	mh.WriteNumber(&buf, l.forUpdateTS)
-	mh.WriteNumber(&buf, l.txnSize)
-	mh.WriteNumber(&buf, l.minCommitTS)
 	return buf.Bytes(), errors.Trace(mh.err)
 }
 
@@ -84,8 +80,6 @@ func (l *mvccLock) UnmarshalBinary(data []byte) error {
 	mh.ReadNumber(buf, &l.op)
 	mh.ReadNumber(buf, &l.ttl)
 	mh.ReadNumber(buf, &l.forUpdateTS)
-	mh.ReadNumber(buf, &l.txnSize)
-	mh.ReadNumber(buf, &l.minCommitTS)
 	return errors.Trace(mh.err)
 }
 
@@ -196,12 +190,11 @@ func (l *mvccLock) lockErr(key []byte) error {
 		Primary:  l.primary,
 		StartTS:  l.startTS,
 		TTL:      l.ttl,
-		TxnSize:  l.txnSize,
 		LockType: l.op,
 	}
 }
 
-func (l *mvccLock) check(ts uint64, key []byte, resolvedLocks []uint64) (uint64, error) {
+func (l *mvccLock) check(ts uint64, key []byte) (uint64, error) {
 	// ignore when ts is older than lock or lock's type is Lock.
 	if l.startTS > ts || l.op == kvrpcpb.Op_Lock {
 		return ts, nil
@@ -210,12 +203,6 @@ func (l *mvccLock) check(ts uint64, key []byte, resolvedLocks []uint64) (uint64,
 	if ts == math.MaxUint64 && bytes.Equal(l.primary, key) {
 		return l.startTS - 1, nil
 	}
-	// Skip lock if the lock is resolved.
-	for _, resolved := range resolvedLocks {
-		if l.startTS == resolved {
-			return ts, nil
-		}
-	}
 	return 0, l.lockErr(key)
 }
 
@@ -223,10 +210,10 @@ func (e *mvccEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.key, than.(*mvccEntry).key) < 0
 }
 
-func (e *mvccEntry) Get(ts uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) ([]byte, error) {
-	if isoLevel == kvrpcpb.IsolationLevel_SI && e.lock != nil {
+func (e *mvccEntry) Get(ts uint64) ([]byte, error) {
+	if e.lock != nil {
 		var err error
-		ts, err = e.lock.check(ts, e.key.Raw(), resolvedLocks)
+		ts, err = e.lock.check(ts, e.key.Raw())
 		if err != nil {
 			return nil, err
 		}
@@ -241,10 +228,9 @@ func (e *mvccEntry) Get(ts uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLock
 
 // MVCCStore is a mvcc key-value storage.
 type MVCCStore interface {
-	Get(key []byte, startTS uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) ([]byte, error)
-	Scan(startKey, endKey []byte, limit int, startTS uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) []Pair
-	ReverseScan(startKey, endKey []byte, limit int, startTS uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) []Pair
-	BatchGet(ks [][]byte, startTS uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) []Pair
+	Get(key []byte, startTS uint64) ([]byte, error)
+	Scan(startKey, endKey []byte, limit int, startTS uint64) []Pair
+	ReverseScan(startKey, endKey []byte, limit int, startTS uint64) []Pair
 	Prewrite(req *kvrpcpb.PrewriteRequest) []error
 	Commit(keys [][]byte, startTS, commitTS uint64) error
 	Rollback(keys [][]byte, startTS uint64) error
@@ -270,12 +256,6 @@ type RawKV interface {
 	RawDelete(key []byte)
 	RawBatchDelete(keys [][]byte)
 	RawDeleteRange(startKey, endKey []byte)
-}
-
-// MVCCDebugger is for debugging.
-type MVCCDebugger interface {
-	MvccGetByStartTS(starTS uint64) (*kvrpcpb.MvccInfo, []byte)
-	MvccGetByKey(key []byte) *kvrpcpb.MvccInfo
 }
 
 // Pair is a KV pair read from MvccStore or an error if any occurs.

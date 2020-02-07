@@ -21,7 +21,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	pd "github.com/pingcap-incubator/tinykv/scheduler/client"
@@ -191,7 +190,6 @@ func (s *tikvStore) runSafePointChecker() {
 		case spCachedTime := <-time.After(d):
 			cachedSafePoint, err := loadSafePoint(s.GetSafePointKV())
 			if err == nil {
-
 				s.UpdateSPCache(cachedSafePoint, spCachedTime)
 				d = gcSafePointUpdateInterval
 			} else {
@@ -216,7 +214,7 @@ func (s *tikvStore) Begin() (kv.Transaction, error) {
 
 // BeginWithStartTS begins a transaction with startTS.
 func (s *tikvStore) BeginWithStartTS(startTS uint64) (kv.Transaction, error) {
-	txn, err := newTikvTxnWithStartTS(s, startTS, s.nextReplicaReadSeed())
+	txn, err := newTikvTxnWithStartTS(s, startTS)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -225,7 +223,7 @@ func (s *tikvStore) BeginWithStartTS(startTS uint64) (kv.Transaction, error) {
 }
 
 func (s *tikvStore) GetSnapshot(ver kv.Version) (kv.Snapshot, error) {
-	snapshot := newTiKVSnapshot(s, ver, s.nextReplicaReadSeed())
+	snapshot := newTiKVSnapshot(s, ver)
 
 	return snapshot, nil
 }
@@ -283,14 +281,9 @@ func (s *tikvStore) getTimestampWithRetry(bo *Backoffer) (uint64, error) {
 	}
 }
 
-func (s *tikvStore) nextReplicaReadSeed() uint32 {
-	return atomic.AddUint32(&s.replicaReadSeed, 1)
-}
-
 func (s *tikvStore) GetClient() kv.Client {
 	return &CopClient{
-		store:           s,
-		replicaReadSeed: s.nextReplicaReadSeed(),
+		store: s,
 	}
 }
 

@@ -69,12 +69,11 @@ func (h *rpcHandler) handleAnalyzeIndexReq(req *coprocessor.Request, analyzeReq 
 		startTS = analyzeReq.GetStartTsFallback()
 	}
 	e := &indexScanExec{
-		colsLen:        int(analyzeReq.IdxReq.NumColumns),
-		kvRanges:       ranges,
-		startTS:        startTS,
-		isolationLevel: h.isolationLevel,
-		mvccStore:      h.mvccStore,
-		IndexScan:      &tipb.IndexScan{Desc: false},
+		colsLen:   int(analyzeReq.IdxReq.NumColumns),
+		kvRanges:  ranges,
+		startTS:   startTS,
+		mvccStore: h.mvccStore,
+		IndexScan: &tipb.IndexScan{Desc: false},
 	}
 	statsBuilder := statistics.NewSortedBuilder(flagsToStatementContext(analyzeReq.Flags), analyzeReq.IdxReq.BucketSize, 0, types.NewFieldType(mysql.TypeBlob))
 	var cms *statistics.CMSketch
@@ -140,12 +139,11 @@ func (h *rpcHandler) handleAnalyzeColumnsReq(req *coprocessor.Request, analyzeRe
 	}
 	e := &analyzeColumnsExec{
 		tblExec: &tableScanExec{
-			TableScan:      &tipb.TableScan{Columns: columns},
-			kvRanges:       ranges,
-			colIDs:         evalCtx.colIDs,
-			startTS:        startTS,
-			isolationLevel: h.isolationLevel,
-			mvccStore:      h.mvccStore,
+			TableScan: &tipb.TableScan{Columns: columns},
+			kvRanges:  ranges,
+			colIDs:    evalCtx.colIDs,
+			startTS:   startTS,
+			mvccStore: h.mvccStore,
 		},
 	}
 	e.fields = make([]*ast.ResultField, len(columns))

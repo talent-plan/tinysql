@@ -160,7 +160,7 @@ func (s *Scanner) getData(bo *Backoffer) error {
 		zap.Bool("reverse", s.reverse),
 		zap.Uint64("txnStartTS", s.startTS()))
 	sender := NewRegionRequestSender(s.snapshot.store.regionCache, s.snapshot.store.client)
-	var reqEndKey, reqStartKey []byte
+	var reqStartKey []byte
 	var loc *KeyLocation
 	var err error
 	for {
@@ -173,12 +173,7 @@ func (s *Scanner) getData(bo *Backoffer) error {
 			return errors.Trace(err)
 		}
 
-		if !s.reverse {
-			reqEndKey = s.endKey
-			if len(reqEndKey) > 0 && len(loc.EndKey) > 0 && bytes.Compare(loc.EndKey, reqEndKey) < 0 {
-				reqEndKey = loc.EndKey
-			}
-		} else {
+		if s.reverse {
 			reqStartKey = s.nextStartKey
 			if len(reqStartKey) == 0 ||
 				(len(loc.StartKey) > 0 && bytes.Compare(loc.StartKey, reqStartKey) > 0) {
@@ -188,20 +183,13 @@ func (s *Scanner) getData(bo *Backoffer) error {
 
 		sreq := &pb.ScanRequest{
 			StartKey: s.nextStartKey,
-			EndKey:   reqEndKey,
 			Limit:    uint32(s.batchSize),
 			Version:  s.startTS(),
-			KeyOnly:  s.snapshot.keyOnly,
 		}
 		if s.reverse {
 			sreq.StartKey = s.nextEndKey
-			sreq.EndKey = reqStartKey
-			sreq.Reverse = true
 		}
-		req := tikvrpc.NewReplicaReadRequest(tikvrpc.CmdScan, sreq, s.snapshot.replicaRead, s.snapshot.replicaReadSeed, pb.Context{
-			Priority:     s.snapshot.priority,
-			NotFillCache: s.snapshot.notFillCache,
-		})
+		req := tikvrpc.NewRequest(tikvrpc.CmdScan, sreq, pb.Context{})
 		resp, err := sender.SendReq(bo, req, loc.Region, ReadTimeoutMedium)
 		if err != nil {
 			return errors.Trace(err)

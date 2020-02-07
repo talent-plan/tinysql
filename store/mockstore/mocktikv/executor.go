@@ -16,7 +16,7 @@ package mocktikv
 import (
 	"bytes"
 	"context"
-	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -49,16 +49,14 @@ type executor interface {
 
 type tableScanExec struct {
 	*tipb.TableScan
-	colIDs         map[int64]int
-	kvRanges       []kv.KeyRange
-	startTS        uint64
-	isolationLevel kvrpcpb.IsolationLevel
-	resolvedLocks  []uint64
-	mvccStore      MVCCStore
-	cursor         int
-	seekKey        []byte
-	start          int
-	counts         []int64
+	colIDs    map[int64]int
+	kvRanges  []kv.KeyRange
+	startTS   uint64
+	mvccStore MVCCStore
+	cursor    int
+	seekKey   []byte
+	start     int
+	counts    []int64
 
 	src executor
 }
@@ -124,7 +122,7 @@ func (e *tableScanExec) Next(ctx context.Context) (value [][]byte, err error) {
 }
 
 func (e *tableScanExec) getRowFromPoint(ran kv.KeyRange) ([][]byte, error) {
-	val, err := e.mvccStore.Get(ran.StartKey, e.startTS, e.isolationLevel, e.resolvedLocks)
+	val, err := e.mvccStore.Get(ran.StartKey, e.startTS)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -153,9 +151,9 @@ func (e *tableScanExec) getRowFromRange(ran kv.KeyRange) ([][]byte, error) {
 	var pairs []Pair
 	var pair Pair
 	if e.Desc {
-		pairs = e.mvccStore.ReverseScan(ran.StartKey, e.seekKey, 1, e.startTS, e.isolationLevel, e.resolvedLocks)
+		pairs = e.mvccStore.ReverseScan(ran.StartKey, e.seekKey, 1, e.startTS)
 	} else {
-		pairs = e.mvccStore.Scan(e.seekKey, ran.EndKey, 1, e.startTS, e.isolationLevel, e.resolvedLocks)
+		pairs = e.mvccStore.Scan(e.seekKey, ran.EndKey, 1, e.startTS)
 	}
 	if len(pairs) > 0 {
 		pair = pairs[0]
@@ -192,17 +190,15 @@ func (e *tableScanExec) getRowFromRange(ran kv.KeyRange) ([][]byte, error) {
 
 type indexScanExec struct {
 	*tipb.IndexScan
-	colsLen        int
-	kvRanges       []kv.KeyRange
-	startTS        uint64
-	isolationLevel kvrpcpb.IsolationLevel
-	resolvedLocks  []uint64
-	mvccStore      MVCCStore
-	cursor         int
-	seekKey        []byte
-	pkStatus       tablecodec.PrimaryKeyStatus
-	start          int
-	counts         []int64
+	colsLen   int
+	kvRanges  []kv.KeyRange
+	startTS   uint64
+	mvccStore MVCCStore
+	cursor    int
+	seekKey   []byte
+	pkStatus  tablecodec.PrimaryKeyStatus
+	start     int
+	counts    []int64
 
 	src executor
 }
@@ -273,7 +269,7 @@ func (e *indexScanExec) Next(ctx context.Context) (value [][]byte, err error) {
 
 // getRowFromPoint is only used for unique key.
 func (e *indexScanExec) getRowFromPoint(ran kv.KeyRange) ([][]byte, error) {
-	val, err := e.mvccStore.Get(ran.StartKey, e.startTS, e.isolationLevel, e.resolvedLocks)
+	val, err := e.mvccStore.Get(ran.StartKey, e.startTS)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -294,9 +290,9 @@ func (e *indexScanExec) getRowFromRange(ran kv.KeyRange) ([][]byte, error) {
 	var pairs []Pair
 	var pair Pair
 	if e.Desc {
-		pairs = e.mvccStore.ReverseScan(ran.StartKey, e.seekKey, 1, e.startTS, e.isolationLevel, e.resolvedLocks)
+		pairs = e.mvccStore.ReverseScan(ran.StartKey, e.seekKey, 1, e.startTS)
 	} else {
-		pairs = e.mvccStore.Scan(e.seekKey, ran.EndKey, 1, e.startTS, e.isolationLevel, e.resolvedLocks)
+		pairs = e.mvccStore.Scan(e.seekKey, ran.EndKey, 1, e.startTS)
 	}
 	if len(pairs) > 0 {
 		pair = pairs[0]

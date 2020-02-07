@@ -258,11 +258,6 @@ type Response interface {
 // Snapshot defines the interface for the snapshot fetched from KV store.
 type Snapshot interface {
 	Retriever
-	// SetOption sets an option with a value, when val is nil, uses the default
-	// value of this option. Only ReplicaRead is supported for snapshot
-	SetOption(opt Option, val interface{})
-	// DelOption deletes an option.
-	DelOption(opt Option)
 }
 
 // Driver is the interface that must be implemented by a KV storage.

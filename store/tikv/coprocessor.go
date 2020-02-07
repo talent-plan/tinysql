@@ -37,8 +37,7 @@ import (
 // CopClient is coprocessor client.
 type CopClient struct {
 	kv.RequestTypeSupportedChecker
-	store           *tikvStore
-	replicaReadSeed uint32
+	store *tikvStore
 }
 
 // Send builds the request and gets the coprocessor iterator response.
@@ -50,12 +49,11 @@ func (c *CopClient) Send(ctx context.Context, req *kv.Request, vars *kv.Variable
 		return copErrorResponse{err}
 	}
 	it := &copIterator{
-		store:           c.store,
-		req:             req,
-		concurrency:     req.Concurrency,
-		finishCh:        make(chan struct{}),
-		vars:            vars,
-		replicaReadSeed: c.replicaReadSeed,
+		store:       c.store,
+		req:         req,
+		concurrency: req.Concurrency,
+		finishCh:    make(chan struct{}),
+		vars:        vars,
 	}
 	it.minCommitTSPushed.data = make(map[uint64]struct{}, 5)
 	it.tasks = tasks
@@ -605,17 +603,12 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		}
 	})
 
-	req := tikvrpc.NewReplicaReadRequest(task.cmdType, &coprocessor.Request{
+	req := tikvrpc.NewRequest(task.cmdType, &coprocessor.Request{
 		Tp:      worker.req.Tp,
 		StartTs: worker.req.StartTs,
 		Data:    worker.req.Data,
 		Ranges:  task.ranges.toPBRanges(),
-	}, worker.req.ReplicaRead, worker.replicaReadSeed, kvrpcpb.Context{
-		IsolationLevel: pbIsolationLevel(worker.req.IsolationLevel),
-		NotFillCache:   worker.req.NotFillCache,
-		HandleTime:     true,
-		ScanDetail:     true,
-	})
+	}, kvrpcpb.Context{})
 	startTime := time.Now()
 	resp, rpcCtx, storeAddr, err := worker.SendReqCtx(bo, req, task.region, ReadTimeoutMedium, task.storeAddr)
 	if err != nil {
@@ -691,7 +684,6 @@ func (ch *clientHelper) SendReqCtx(bo *Backoffer, req *tikvrpc.Request, regionID
 	if len(directStoreAddr) > 0 {
 		sender.storeAddr = directStoreAddr
 	}
-	req.Context.ResolvedLocks = ch.minCommitTSPushed.Get()
 	resp, ctx, err := sender.SendReqCtx(bo, req, regionID, timeout)
 	return resp, ctx, sender.storeAddr, err
 }

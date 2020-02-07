@@ -79,21 +79,3 @@ type ErrConflict struct {
 func (e *ErrConflict) Error() string {
 	return "write conflict"
 }
-
-// ErrCommitTSExpired is returned when commit.CommitTS < lock.MinCommitTS
-type ErrCommitTSExpired struct {
-	kvrpcpb.CommitTsExpired
-}
-
-func (e *ErrCommitTSExpired) Error() string {
-	return "commit ts expired"
-}
-
-// ErrTxnNotFound is returned when the primary lock of the txn is not found.
-type ErrTxnNotFound struct {
-	kvrpcpb.TxnNotFound
-}
-
-func (e *ErrTxnNotFound) Error() string {
-	return "txn not found"
-}

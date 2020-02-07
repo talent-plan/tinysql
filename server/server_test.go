@@ -25,7 +25,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -112,74 +111,6 @@ func (dbt *DBTest) mustExec(query string) (res sql.Result) {
 	res, err := dbt.db.Exec(query)
 	dbt.Assert(err, IsNil, Commentf("Exec %s", query))
 	return res
-}
-
-func runTestErrorCode(c *C) {
-	runTestsOnNewDB(c, nil, "ErrorCode", func(dbt *DBTest) {
-		dbt.mustExec("create table test (c int PRIMARY KEY);")
-		dbt.mustExec("insert into test values (1);")
-		txn1, err := dbt.db.Begin()
-		c.Assert(err, IsNil)
-		_, err = txn1.Exec("insert into test values(1)")
-		c.Assert(err, IsNil)
-		err = txn1.Commit()
-		checkErrorCode(c, err, tmysql.ErrDupEntry)
-
-		// Schema errors
-		txn2, err := dbt.db.Begin()
-		c.Assert(err, IsNil)
-		_, err = txn2.Exec("use db_not_exists;")
-		checkErrorCode(c, err, tmysql.ErrBadDB)
-		_, err = txn2.Exec("select * from tbl_not_exists;")
-		checkErrorCode(c, err, tmysql.ErrNoSuchTable)
-		_, err = txn2.Exec("create database test;")
-		// Make tests stable. Some times the error may be the ErrInfoSchemaChanged.
-		checkErrorCode(c, err, tmysql.ErrDBCreateExists, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("create database aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;")
-		checkErrorCode(c, err, tmysql.ErrTooLongIdent, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("create table test (c int);")
-		checkErrorCode(c, err, tmysql.ErrTableExists, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("drop table unknown_table;")
-		checkErrorCode(c, err, tmysql.ErrBadTable, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("drop database unknown_db;")
-		checkErrorCode(c, err, tmysql.ErrDBDropExists, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("create table aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (a int);")
-		checkErrorCode(c, err, tmysql.ErrTooLongIdent, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("create table long_column_table (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa int);")
-		checkErrorCode(c, err, tmysql.ErrTooLongIdent, tmysql.ErrInfoSchemaChanged)
-		_, err = txn2.Exec("alter table test add aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa int;")
-		checkErrorCode(c, err, tmysql.ErrTooLongIdent, tmysql.ErrInfoSchemaChanged)
-
-		// Optimizer errors
-		_, err = txn2.Exec("select *, * from test;")
-		checkErrorCode(c, err, tmysql.ErrInvalidWildCard)
-		_, err = txn2.Exec("select row(1, 2) > 1;")
-		checkErrorCode(c, err, tmysql.ErrOperandColumns)
-		_, err = txn2.Exec("select * from test order by row(c, c);")
-		checkErrorCode(c, err, tmysql.ErrOperandColumns)
-
-		// Variable errors
-		_, err = txn2.Exec("select @@unknown_sys_var;")
-		checkErrorCode(c, err, tmysql.ErrUnknownSystemVariable)
-		_, err = txn2.Exec("set @@unknown_sys_var='1';")
-		checkErrorCode(c, err, tmysql.ErrUnknownSystemVariable)
-	})
-}
-
-func checkErrorCode(c *C, e error, codes ...uint16) {
-	me, ok := e.(*mysql.MySQLError)
-	c.Assert(ok, IsTrue, Commentf("err: %v", e))
-	if len(codes) == 1 {
-		c.Assert(me.Number, Equals, codes[0])
-	}
-	isMatchCode := false
-	for _, code := range codes {
-		if me.Number == code {
-			isMatchCode = true
-			break
-		}
-	}
-	c.Assert(isMatchCode, IsTrue, Commentf("got err %v, expected err codes %v", me, codes))
 }
 
 func runTestIssue3662(c *C) {
