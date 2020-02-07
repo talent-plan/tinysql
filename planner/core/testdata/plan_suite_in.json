@@ -377,28 +377,9 @@
     ]
   },
   {
-    "name": "TestIndexJoinUnionScan",
-    "cases": [
-      // Test Index Join + UnionScan + TableScan.
-      "select /*+ TIDB_INLJ(t2) */ * from t t1, t t2 where t1.a = t2.a",
-      // Test Index Join + UnionScan + DoubleRead.
-      "select /*+ TIDB_INLJ(t1, t2) */ * from t t1, t t2 where t1.a = t2.c",
-      // Test Index Join + UnionScan + IndexScan.
-      "select /*+ TIDB_INLJ(t1, t2) */ t1.a , t2.c from t t1, t t2 where t1.a = t2.c"
-    ]
-  },
-  {
     "name": "TestSemiJoinToInner",
     "cases": [
       "select t1.a, (select count(t2.a) from t t2 where t2.g in (select t3.d from t t3 where t3.c = t1.a)) as agg_col from t t1;"
-    ]
-  },
-  {
-    "name": "TestIndexJoinHint",
-    "cases": [
-      "select /*+ INL_JOIN(t1) */ * from t1 join t2 on t1.a = t2.a;",
-      "select /*+ INL_HASH_JOIN(t1) */ * from t1 join t2 on t1.a = t2.a;",
-      "select /*+ INL_MERGE_JOIN(t1) */ * from t1 join t2 on t1.a = t2.a;"
     ]
   }
 ]

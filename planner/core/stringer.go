@@ -165,18 +165,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		str = fmt.Sprintf("IndexLookUp(%s, %s)", ToString(x.indexPlan), ToString(x.tablePlan))
 	case *PhysicalUnionScan:
 		str = fmt.Sprintf("UnionScan(%s)", x.Conditions)
-	case *PhysicalIndexJoin:
-		last := len(idxs) - 1
-		idx := idxs[last]
-		children := strs[idx:]
-		strs = strs[:idx]
-		idxs = idxs[:last]
-		str = "IndexJoin{" + strings.Join(children, "->") + "}"
-		for i := range x.OuterJoinKeys {
-			l := x.OuterJoinKeys[i]
-			r := x.InnerJoinKeys[i]
-			str += fmt.Sprintf("(%s,%s)", l, r)
-		}
 	case *Analyze:
 		str = "Analyze{"
 		var children []string

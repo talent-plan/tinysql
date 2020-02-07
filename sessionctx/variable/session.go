@@ -428,10 +428,9 @@ func NewSessionVars() *SessionVars {
 		HashAggFinalConcurrency:    DefTiDBHashAggFinalConcurrency,
 	}
 	vars.BatchSize = BatchSize{
-		IndexJoinBatchSize: DefIndexJoinBatchSize,
-		IndexLookupSize:    DefIndexLookupSize,
-		InitChunkSize:      DefInitChunkSize,
-		MaxChunkSize:       DefMaxChunkSize,
+		IndexLookupSize: DefIndexLookupSize,
+		InitChunkSize:   DefInitChunkSize,
+		MaxChunkSize:    DefMaxChunkSize,
 	}
 	return vars
 }
@@ -641,8 +640,6 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.IndexLookupConcurrency = tidbOptPositiveInt32(val, DefIndexLookupConcurrency)
 	case TiDBIndexLookupJoinConcurrency:
 		s.IndexLookupJoinConcurrency = tidbOptPositiveInt32(val, DefIndexLookupJoinConcurrency)
-	case TiDBIndexJoinBatchSize:
-		s.IndexJoinBatchSize = tidbOptPositiveInt32(val, DefIndexJoinBatchSize)
 	case TiDBIndexLookupSize:
 		s.IndexLookupSize = tidbOptPositiveInt32(val, DefIndexLookupSize)
 	case TiDBHashJoinConcurrency:
@@ -788,8 +785,6 @@ type Concurrency struct {
 
 // BatchSize defines batch size values.
 type BatchSize struct {
-	// IndexJoinBatchSize is the batch size of a index lookup join.
-	IndexJoinBatchSize int
 
 	// IndexLookupSize is the number of handles for an index lookup task in index double read executor.
 	IndexLookupSize int

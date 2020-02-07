@@ -426,7 +426,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		return checkUInt64SystemVar(name, value, uint64(MinDDLReorgBatchSize), uint64(MaxDDLReorgBatchSize), vars)
 	case TiDBDDLErrorCountLimit:
 		return checkUInt64SystemVar(name, value, uint64(0), math.MaxInt64, vars)
-	case TiDBIndexLookupConcurrency, TiDBIndexLookupJoinConcurrency, TiDBIndexJoinBatchSize,
+	case TiDBIndexLookupConcurrency, TiDBIndexLookupJoinConcurrency,
 		TiDBIndexLookupSize,
 		TiDBHashJoinConcurrency,
 		TiDBHashAggPartialConcurrency,

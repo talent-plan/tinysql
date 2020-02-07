@@ -14,7 +14,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"sort"
@@ -30,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	plannercore "github.com/pingcap/tidb/planner/core"
@@ -39,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -107,8 +104,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildHashJoin(v)
 	case *plannercore.PhysicalMergeJoin:
 		return b.buildMergeJoin(v)
-	case *plannercore.PhysicalIndexJoin:
-		return b.buildIndexLookUpJoin(v)
 	case *plannercore.PhysicalSelection:
 		return b.buildSelection(v)
 	case *plannercore.PhysicalHashAgg:
@@ -948,82 +943,6 @@ func (b *executorBuilder) corColInAccess(p plannercore.PhysicalPlan) bool {
 	return false
 }
 
-func (b *executorBuilder) buildIndexLookUpJoin(v *plannercore.PhysicalIndexJoin) Executor {
-	outerExec := b.build(v.Children()[1-v.InnerChildIdx])
-	if b.err != nil {
-		return nil
-	}
-	outerTypes := retTypes(outerExec)
-	innerPlan := v.Children()[v.InnerChildIdx]
-	innerTypes := make([]*types.FieldType, innerPlan.Schema().Len())
-	for i, col := range innerPlan.Schema().Columns {
-		innerTypes[i] = col.RetType
-	}
-
-	var (
-		outerFilter           []expression.Expression
-		leftTypes, rightTypes []*types.FieldType
-	)
-
-	if v.InnerChildIdx == 0 {
-		leftTypes, rightTypes = innerTypes, outerTypes
-		outerFilter = v.RightConditions
-		if len(v.LeftConditions) > 0 {
-			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
-			return nil
-		}
-	} else {
-		leftTypes, rightTypes = outerTypes, innerTypes
-		outerFilter = v.LeftConditions
-		if len(v.RightConditions) > 0 {
-			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
-			return nil
-		}
-	}
-	defaultValues := v.DefaultValues
-	if defaultValues == nil {
-		defaultValues = make([]types.Datum, len(innerTypes))
-	}
-	hasPrefixCol := false
-	for _, l := range v.IdxColLens {
-		if l != types.UnspecifiedLength {
-			hasPrefixCol = true
-			break
-		}
-	}
-	e := &IndexLookUpJoin{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), outerExec),
-		outerCtx: outerCtx{
-			rowTypes: outerTypes,
-			filter:   outerFilter,
-		},
-		innerCtx: innerCtx{
-			readerBuilder: &dataReaderBuilder{Plan: innerPlan, executorBuilder: b},
-			rowTypes:      innerTypes,
-			colLens:       v.IdxColLens,
-			hasPrefixCol:  hasPrefixCol,
-		},
-		workerWg:      new(sync.WaitGroup),
-		joiner:        newJoiner(b.ctx, v.JoinType, v.InnerChildIdx == 0, defaultValues, v.OtherConditions, leftTypes, rightTypes),
-		isOuterJoin:   v.JoinType.IsOuterJoin(),
-		indexRanges:   v.Ranges,
-		keyOff2IdxOff: v.KeyOff2IdxOff,
-		lastColHelper: v.CompareFilters,
-	}
-	outerKeyCols := make([]int, len(v.OuterJoinKeys))
-	for i := 0; i < len(v.OuterJoinKeys); i++ {
-		outerKeyCols[i] = v.OuterJoinKeys[i].Index
-	}
-	e.outerCtx.keyCols = outerKeyCols
-	innerKeyCols := make([]int, len(v.InnerJoinKeys))
-	for i := 0; i < len(v.InnerJoinKeys); i++ {
-		innerKeyCols[i] = v.InnerJoinKeys[i].Index
-	}
-	e.innerCtx.keyCols = innerKeyCols
-	e.joinResult = newFirstChunk(e)
-	return e
-}
-
 func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableReader) (*TableReaderExecutor, error) {
 	dagReq, err := b.constructDAGReq(v.TablePlans)
 	if err != nil {
@@ -1197,61 +1116,6 @@ type dataReaderBuilder struct {
 	*executorBuilder
 }
 
-type mockPhysicalIndexReader struct {
-	plannercore.PhysicalPlan
-
-	e Executor
-}
-
-func (builder *dataReaderBuilder) buildExecutorForIndexJoin(ctx context.Context, lookUpContents []*indexJoinLookUpContent,
-	IndexRanges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) (Executor, error) {
-	switch v := builder.Plan.(type) {
-	case *plannercore.PhysicalTableReader:
-		return builder.buildTableReaderForIndexJoin(ctx, v, lookUpContents)
-	case *plannercore.PhysicalIndexReader:
-		return builder.buildIndexReaderForIndexJoin(ctx, v, lookUpContents, IndexRanges, keyOff2IdxOff, cwc)
-	case *plannercore.PhysicalIndexLookUpReader:
-		return builder.buildIndexLookUpReaderForIndexJoin(ctx, v, lookUpContents, IndexRanges, keyOff2IdxOff, cwc)
-	case *plannercore.PhysicalUnionScan:
-		return builder.buildUnionScanForIndexJoin(ctx, v, lookUpContents, IndexRanges, keyOff2IdxOff, cwc)
-	// The inner child of IndexJoin might be Projection when a combination of the following conditions is true:
-	// 	1. The inner child fetch data using indexLookupReader
-	// 	2. PK is not handle
-	// 	3. The inner child needs to keep order
-	// In this case, an extra column tidb_rowid will be appended in the output result of IndexLookupReader(see copTask.doubleReadNeedProj).
-	// Then we need a Projection upon IndexLookupReader to prune the redundant column.
-	case *plannercore.PhysicalProjection:
-		return builder.buildProjectionForIndexJoin(ctx, v, lookUpContents, IndexRanges, keyOff2IdxOff, cwc)
-	case *mockPhysicalIndexReader:
-		return v.e, nil
-	}
-	return nil, errors.New("Wrong plan type for dataReaderBuilder")
-}
-
-func (builder *dataReaderBuilder) buildUnionScanForIndexJoin(ctx context.Context, v *plannercore.PhysicalUnionScan,
-	values []*indexJoinLookUpContent, indexRanges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) (Executor, error) {
-	childBuilder := &dataReaderBuilder{Plan: v.Children()[0], executorBuilder: builder.executorBuilder}
-	reader, err := childBuilder.buildExecutorForIndexJoin(ctx, values, indexRanges, keyOff2IdxOff, cwc)
-	if err != nil {
-		return nil, err
-	}
-	us := builder.buildUnionScanFromReader(reader, v).(*UnionScanExec)
-	err = us.open(ctx)
-	return us, err
-}
-
-func (builder *dataReaderBuilder) buildTableReaderForIndexJoin(ctx context.Context, v *plannercore.PhysicalTableReader, lookUpContents []*indexJoinLookUpContent) (Executor, error) {
-	e, err := buildNoRangeTableReader(builder.executorBuilder, v)
-	if err != nil {
-		return nil, err
-	}
-	handles := make([]int64, 0, len(lookUpContents))
-	for _, content := range lookUpContents {
-		handles = append(handles, content.keys[0].GetInt64())
-	}
-	return builder.buildTableReaderFromHandles(ctx, e, handles)
-}
-
 func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Context, e *TableReaderExecutor, handles []int64) (Executor, error) {
 	if e.dagPB.CollectExecutionSummaries == nil {
 		colExec := true
@@ -1282,110 +1146,6 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 	}
 	e.resultHandler.open(nil, result)
 	return e, nil
-}
-
-func (builder *dataReaderBuilder) buildIndexReaderForIndexJoin(ctx context.Context, v *plannercore.PhysicalIndexReader,
-	lookUpContents []*indexJoinLookUpContent, indexRanges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) (Executor, error) {
-	e, err := buildNoRangeIndexReader(builder.executorBuilder, v)
-	if err != nil {
-		return nil, err
-	}
-	kvRanges, err := buildKvRangesForIndexJoin(e.ctx, e.physicalTableID, e.index.ID, lookUpContents, indexRanges, keyOff2IdxOff, cwc)
-	if err != nil {
-		return nil, err
-	}
-	err = e.open(ctx, kvRanges)
-	return e, err
-}
-
-func (builder *dataReaderBuilder) buildIndexLookUpReaderForIndexJoin(ctx context.Context, v *plannercore.PhysicalIndexLookUpReader,
-	lookUpContents []*indexJoinLookUpContent, indexRanges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) (Executor, error) {
-	e, err := buildNoRangeIndexLookUpReader(builder.executorBuilder, v)
-	if err != nil {
-		return nil, err
-	}
-	e.kvRanges, err = buildKvRangesForIndexJoin(e.ctx, getPhysicalTableID(e.table), e.index.ID, lookUpContents, indexRanges, keyOff2IdxOff, cwc)
-	if err != nil {
-		return nil, err
-	}
-	err = e.open(ctx)
-	return e, err
-}
-
-func (builder *dataReaderBuilder) buildProjectionForIndexJoin(ctx context.Context, v *plannercore.PhysicalProjection,
-	lookUpContents []*indexJoinLookUpContent, indexRanges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) (Executor, error) {
-	physicalIndexLookUp, isDoubleRead := v.Children()[0].(*plannercore.PhysicalIndexLookUpReader)
-	if !isDoubleRead {
-		return nil, errors.Errorf("inner child of Projection should be IndexLookupReader, but got %T", v)
-	}
-	childExec, err := builder.buildIndexLookUpReaderForIndexJoin(ctx, physicalIndexLookUp, lookUpContents, indexRanges, keyOff2IdxOff, cwc)
-	if err != nil {
-		return nil, err
-	}
-
-	e := &ProjectionExec{
-		baseExecutor:     newBaseExecutor(builder.ctx, v.Schema(), v.ExplainID(), childExec),
-		numWorkers:       builder.ctx.GetSessionVars().ProjectionConcurrency,
-		evaluatorSuit:    expression.NewEvaluatorSuite(v.Exprs, v.AvoidColumnEvaluator),
-		calculateNoDelay: v.CalculateNoDelay,
-	}
-
-	// If the calculation row count for this Projection operator is smaller
-	// than a Chunk size, we turn back to the un-parallel Projection
-	// implementation to reduce the goroutine overhead.
-	if int64(v.StatsCount()) < int64(builder.ctx.GetSessionVars().MaxChunkSize) {
-		e.numWorkers = 0
-	}
-	err = e.open(ctx)
-
-	return e, err
-}
-
-// buildKvRangesForIndexJoin builds kv ranges for index join when the inner plan is index scan plan.
-func buildKvRangesForIndexJoin(ctx sessionctx.Context, tableID, indexID int64, lookUpContents []*indexJoinLookUpContent,
-	ranges []*ranger.Range, keyOff2IdxOff []int, cwc *plannercore.ColWithCmpFuncManager) ([]kv.KeyRange, error) {
-	kvRanges := make([]kv.KeyRange, 0, len(ranges)*len(lookUpContents))
-	lastPos := len(ranges[0].LowVal) - 1
-	sc := ctx.GetSessionVars().StmtCtx
-	for _, content := range lookUpContents {
-		for _, ran := range ranges {
-			for keyOff, idxOff := range keyOff2IdxOff {
-				ran.LowVal[idxOff] = content.keys[keyOff]
-				ran.HighVal[idxOff] = content.keys[keyOff]
-			}
-		}
-		if cwc != nil {
-			nextColRanges, err := cwc.BuildRangesByRow(ctx, content.row)
-			if err != nil {
-				return nil, err
-			}
-			for _, nextColRan := range nextColRanges {
-				for _, ran := range ranges {
-					ran.LowVal[lastPos] = nextColRan.LowVal[0]
-					ran.HighVal[lastPos] = nextColRan.HighVal[0]
-					ran.LowExclude = nextColRan.LowExclude
-					ran.HighExclude = nextColRan.HighExclude
-				}
-				tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges)
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
-				kvRanges = append(kvRanges, tmpKvRanges...)
-			}
-			continue
-		}
-
-		tmpKvRanges, err := distsql.IndexRangesToKVRanges(sc, tableID, indexID, ranges)
-		if err != nil {
-			return nil, err
-		}
-		kvRanges = append(kvRanges, tmpKvRanges...)
-	}
-	// kvRanges don't overlap each other. So compare StartKey is enough.
-	sort.Slice(kvRanges, func(i, j int) bool {
-		return bytes.Compare(kvRanges[i].StartKey, kvRanges[j].StartKey) < 0
-	})
-	return kvRanges, nil
 }
 
 func getPhysicalTableID(t table.Table) int64 {

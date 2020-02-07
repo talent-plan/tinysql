@@ -41,7 +41,6 @@ var (
 	_ PhysicalPlan = &PhysicalHashAgg{}
 	_ PhysicalPlan = &PhysicalStreamAgg{}
 	_ PhysicalPlan = &PhysicalApply{}
-	_ PhysicalPlan = &PhysicalIndexJoin{}
 	_ PhysicalPlan = &PhysicalHashJoin{}
 	_ PhysicalPlan = &PhysicalMergeJoin{}
 	_ PhysicalPlan = &PhysicalUnionScan{}
@@ -274,26 +273,6 @@ func NewPhysicalHashJoin(p *LogicalJoin, innerIdx int, newStats *property.StatsI
 		Concurrency:      uint(p.ctx.GetSessionVars().HashJoinConcurrency),
 	}.Init(p.ctx, newStats, prop...)
 	return hashJoin
-}
-
-// PhysicalIndexJoin represents the plan of index look up join.
-type PhysicalIndexJoin struct {
-	basePhysicalJoin
-
-	innerTask task
-
-	// Ranges stores the IndexRanges when the inner plan is index scan.
-	Ranges []*ranger.Range
-	// KeyOff2IdxOff maps the offsets in join key to the offsets in the index.
-	KeyOff2IdxOff []int
-	// IdxColLens stores the length of each index column.
-	IdxColLens []int
-	// CompareFilters stores the filters for last column if those filters need to be evaluated during execution.
-	// e.g. select * from t where t.a = t1.a and t.b > t1.b and t.b < t1.b+10
-	//      If there's index(t.a, t.b). All the filters can be used to construct index range but t.b > t1.b and t.b < t1.b=10
-	//      need to be evaluated after we fetch the data of t1.
-	// This struct stores them and evaluate them to ranges.
-	CompareFilters *ColWithCmpFuncManager
 }
 
 // PhysicalMergeJoin represents merge join implementation of LogicalJoin.

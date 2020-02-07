@@ -247,47 +247,6 @@ func (p *basePhysicalAgg) ExplainNormalizedInfo() string {
 }
 
 // ExplainInfo implements Plan interface.
-func (p *PhysicalIndexJoin) ExplainInfo() string {
-	return p.explainInfo(false)
-}
-
-func (p *PhysicalIndexJoin) explainInfo(normalized bool) string {
-	sortedExplainExpressionList := expression.SortedExplainExpressionList
-	if normalized {
-		sortedExplainExpressionList = expression.SortedExplainNormalizedExpressionList
-	}
-
-	buffer := bytes.NewBufferString(p.JoinType.String())
-	fmt.Fprintf(buffer, ", inner:%s", p.Children()[p.InnerChildIdx].ExplainID())
-	if len(p.OuterJoinKeys) > 0 {
-		fmt.Fprintf(buffer, ", outer key:%s",
-			expression.ExplainColumnList(p.OuterJoinKeys))
-	}
-	if len(p.InnerJoinKeys) > 0 {
-		fmt.Fprintf(buffer, ", inner key:%s",
-			expression.ExplainColumnList(p.InnerJoinKeys))
-	}
-	if len(p.LeftConditions) > 0 {
-		fmt.Fprintf(buffer, ", left cond:%s",
-			sortedExplainExpressionList(p.LeftConditions))
-	}
-	if len(p.RightConditions) > 0 {
-		fmt.Fprintf(buffer, ", right cond:%s",
-			sortedExplainExpressionList(p.RightConditions))
-	}
-	if len(p.OtherConditions) > 0 {
-		fmt.Fprintf(buffer, ", other cond:%s",
-			sortedExplainExpressionList(p.OtherConditions))
-	}
-	return buffer.String()
-}
-
-// ExplainNormalizedInfo implements Plan interface.
-func (p *PhysicalIndexJoin) ExplainNormalizedInfo() string {
-	return p.explainInfo(true)
-}
-
-// ExplainInfo implements Plan interface.
 func (p *PhysicalHashJoin) ExplainInfo() string {
 	return p.explainInfo(false)
 }

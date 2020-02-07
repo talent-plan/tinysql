@@ -16,12 +16,9 @@ package executor
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/log"
-	"go.uber.org/zap/zapcore"
 	"math/rand"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/pingcap/tidb/expression"
@@ -177,14 +174,6 @@ func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 		}
 	}
 	return m
-}
-
-func buildMockDataSourceWithIndex(opt mockDataSourceParameters, index []int) *mockDataSource {
-	opt.orders = make([]bool, len(opt.schema.Columns))
-	for _, idx := range index {
-		opt.orders[idx] = true
-	}
-	return buildMockDataSource(opt)
 }
 
 type aggTestCase struct {
@@ -578,165 +567,5 @@ func BenchmarkBuildHashTableForList(b *testing.B) {
 	cas.rows = 10
 	b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
 		benchmarkBuildHashTableForList(b, cas)
-	})
-}
-
-type indexJoinTestCase struct {
-	outerRows       int
-	innerRows       int
-	concurrency     int
-	ctx             sessionctx.Context
-	outerJoinKeyIdx []int
-	innerJoinKeyIdx []int
-	innerIdx        []int
-	needOuterSort   bool
-}
-
-func (tc indexJoinTestCase) columns() []*expression.Column {
-	return []*expression.Column{
-		{Index: 0, RetType: types.NewFieldType(mysql.TypeLonglong)},
-		{Index: 1, RetType: types.NewFieldType(mysql.TypeDouble)},
-		{Index: 2, RetType: types.NewFieldType(mysql.TypeVarString)},
-	}
-}
-
-func defaultIndexJoinTestCase() *indexJoinTestCase {
-	ctx := mock.NewContext()
-	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
-	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
-	tc := &indexJoinTestCase{
-		outerRows:       100000,
-		innerRows:       variable.DefMaxChunkSize * 100,
-		concurrency:     4,
-		ctx:             ctx,
-		outerJoinKeyIdx: []int{0, 1},
-		innerJoinKeyIdx: []int{0, 1},
-		innerIdx:        []int{0, 1},
-	}
-	return tc
-}
-
-func (tc indexJoinTestCase) String() string {
-	return fmt.Sprintf("(outerRows:%v, innerRows:%v, concurency:%v, outerJoinKeyIdx: %v, innerJoinKeyIdx: %v, NeedOuterSort:%v)",
-		tc.outerRows, tc.innerRows, tc.concurrency, tc.outerJoinKeyIdx, tc.innerJoinKeyIdx, tc.needOuterSort)
-}
-func (tc indexJoinTestCase) getMockDataSourceOptByRows(rows int) mockDataSourceParameters {
-	return mockDataSourceParameters{
-		schema: expression.NewSchema(tc.columns()...),
-		rows:   rows,
-		ctx:    tc.ctx,
-		genDataFunc: func(row int, typ *types.FieldType) interface{} {
-			switch typ.Tp {
-			case mysql.TypeLong, mysql.TypeLonglong:
-				return int64(row)
-			case mysql.TypeDouble:
-				return float64(row)
-			case mysql.TypeVarString:
-				return rawData
-			default:
-				panic("not implement")
-			}
-		},
-	}
-}
-
-func prepare4IndexInnerHashJoin(tc *indexJoinTestCase, outerDS *mockDataSource, innerDS *mockDataSource) Executor {
-	outerCols, innerCols := tc.columns(), tc.columns()
-	joinSchema := expression.NewSchema(outerCols...)
-	joinSchema.Append(innerCols...)
-	leftTypes, rightTypes := retTypes(outerDS), retTypes(innerDS)
-	defaultValues := make([]types.Datum, len(innerCols))
-	colLens := make([]int, len(innerCols))
-	for i := range colLens {
-		colLens[i] = types.UnspecifiedLength
-	}
-	keyOff2IdxOff := make([]int, len(tc.outerJoinKeyIdx))
-	for i := range keyOff2IdxOff {
-		keyOff2IdxOff[i] = i
-	}
-	e := &IndexLookUpJoin{
-		baseExecutor: newBaseExecutor(tc.ctx, joinSchema, stringutil.StringerStr("IndexInnerHashJoin"), outerDS),
-		outerCtx: outerCtx{
-			rowTypes: leftTypes,
-			keyCols:  tc.outerJoinKeyIdx,
-		},
-		innerCtx: innerCtx{
-			readerBuilder: &dataReaderBuilder{Plan: &mockPhysicalIndexReader{e: innerDS}, executorBuilder: newExecutorBuilder(tc.ctx, nil)},
-			rowTypes:      rightTypes,
-			colLens:       colLens,
-			keyCols:       tc.innerJoinKeyIdx,
-		},
-		workerWg:      new(sync.WaitGroup),
-		joiner:        newJoiner(tc.ctx, 0, false, defaultValues, nil, leftTypes, rightTypes),
-		isOuterJoin:   false,
-		keyOff2IdxOff: keyOff2IdxOff,
-		lastColHelper: nil,
-	}
-	e.joinResult = newFirstChunk(e)
-	return e
-}
-
-type indexJoinType int8
-
-const (
-	indexInnerHashJoin indexJoinType = iota
-)
-
-func benchmarkIndexJoinExecWithCase(
-	b *testing.B,
-	tc *indexJoinTestCase,
-	outerDS *mockDataSource,
-	innerDS *mockDataSource,
-	execType indexJoinType,
-) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		var exec Executor
-		switch execType {
-		case indexInnerHashJoin:
-			exec = prepare4IndexInnerHashJoin(tc, outerDS, innerDS)
-		}
-
-		tmpCtx := context.Background()
-		chk := newFirstChunk(exec)
-		outerDS.prepareChunks()
-		innerDS.prepareChunks()
-
-		b.StartTimer()
-		if err := exec.Open(tmpCtx); err != nil {
-			b.Fatal(err)
-		}
-		for {
-			if err := exec.Next(tmpCtx, chk); err != nil {
-				b.Fatal(err)
-			}
-			if chk.NumRows() == 0 {
-				break
-			}
-		}
-
-		if err := exec.Close(); err != nil {
-			b.Fatal(err)
-		}
-		b.StopTimer()
-	}
-}
-
-func BenchmarkIndexJoinExec(b *testing.B) {
-	lvl := log.GetLevel()
-	log.SetLevel(zapcore.ErrorLevel)
-	defer log.SetLevel(lvl)
-
-	b.ReportAllocs()
-	tc := defaultIndexJoinTestCase()
-	outerOpt := tc.getMockDataSourceOptByRows(tc.outerRows)
-	innerOpt := tc.getMockDataSourceOptByRows(tc.innerRows)
-	outerDS := buildMockDataSourceWithIndex(outerOpt, tc.innerIdx)
-	innerDS := buildMockDataSourceWithIndex(innerOpt, tc.innerIdx)
-
-	tc.needOuterSort = false
-	b.Run(fmt.Sprintf("index inner hash join %v", tc), func(b *testing.B) {
-		benchmarkIndexJoinExecWithCase(b, tc, outerDS, innerDS, indexInnerHashJoin)
 	})
 }

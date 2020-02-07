@@ -55,8 +55,6 @@ const (
 	TypeHashRightJoin = "HashRightJoin"
 	// TypeMergeJoin is the type of merge join.
 	TypeMergeJoin = "MergeJoin"
-	// TypeIndexJoin is the type of index look up join.
-	TypeIndexJoin = "IndexJoin"
 	// TypeApply is the type of Apply.
 	TypeApply = "Apply"
 	// TypeMaxOneRow is the type of MaxOneRow.
@@ -379,14 +377,6 @@ func (p PhysicalTableReader) Init(ctx sessionctx.Context) *PhysicalTableReader {
 func (p PhysicalIndexReader) Init(ctx sessionctx.Context) *PhysicalIndexReader {
 	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexReader, &p)
 	p.SetSchema(nil)
-	return &p
-}
-
-// Init initializes PhysicalIndexJoin.
-func (p PhysicalIndexJoin) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalIndexJoin {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeIndexJoin, &p)
-	p.childrenReqProps = props
-	p.stats = stats
 	return &p
 }
 

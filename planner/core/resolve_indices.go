@@ -157,61 +157,6 @@ func (p *PhysicalMergeJoin) ResolveIndices() (err error) {
 }
 
 // ResolveIndices implements Plan interface.
-func (p *PhysicalIndexJoin) ResolveIndices() (err error) {
-	err = p.physicalSchemaProducer.ResolveIndices()
-	if err != nil {
-		return err
-	}
-	lSchema := p.children[0].Schema()
-	rSchema := p.children[1].Schema()
-	for i := range p.InnerJoinKeys {
-		newOuterKey, err := p.OuterJoinKeys[i].ResolveIndices(p.children[1-p.InnerChildIdx].Schema())
-		if err != nil {
-			return err
-		}
-		p.OuterJoinKeys[i] = newOuterKey.(*expression.Column)
-		newInnerKey, err := p.InnerJoinKeys[i].ResolveIndices(p.children[p.InnerChildIdx].Schema())
-		if err != nil {
-			return err
-		}
-		p.InnerJoinKeys[i] = newInnerKey.(*expression.Column)
-	}
-	for i, expr := range p.LeftConditions {
-		p.LeftConditions[i], err = expr.ResolveIndices(lSchema)
-		if err != nil {
-			return err
-		}
-	}
-	for i, expr := range p.RightConditions {
-		p.RightConditions[i], err = expr.ResolveIndices(rSchema)
-		if err != nil {
-			return err
-		}
-	}
-	mergedSchema := expression.MergeSchema(lSchema, rSchema)
-	for i, expr := range p.OtherConditions {
-		p.OtherConditions[i], err = expr.ResolveIndices(mergedSchema)
-		if err != nil {
-			return err
-		}
-	}
-	if p.CompareFilters != nil {
-		err = p.CompareFilters.resolveIndices(p.children[1-p.InnerChildIdx].Schema())
-		if err != nil {
-			return err
-		}
-		for i := range p.CompareFilters.affectedColSchema.Columns {
-			resolvedCol, err1 := p.CompareFilters.affectedColSchema.Columns[i].ResolveIndices(p.children[1-p.InnerChildIdx].Schema())
-			if err1 != nil {
-				return err1
-			}
-			p.CompareFilters.affectedColSchema.Columns[i] = resolvedCol.(*expression.Column)
-		}
-	}
-	return
-}
-
-// ResolveIndices implements Plan interface.
 func (p *PhysicalUnionScan) ResolveIndices() (err error) {
 	err = p.basePhysicalPlan.ResolveIndices()
 	if err != nil {

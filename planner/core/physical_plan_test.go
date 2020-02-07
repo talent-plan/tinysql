@@ -17,12 +17,10 @@ import (
 	"context"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/planner"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
@@ -428,70 +426,6 @@ func (s *testPlanSuite) TestRequestTypeSupportedOff(c *C) {
 	c.Assert(core.ToString(p), Equals, expect, Commentf("for %s", sql))
 }
 
-func (s *testPlanSuite) TestIndexJoinUnionScan(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-
-	var input []string
-	var output []struct {
-		SQL  string
-		Best string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		comment := Commentf("case:%v sql:%s", i, tt)
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil, comment)
-		err = se.NewTxn(context.Background())
-		c.Assert(err, IsNil)
-		// Make txn not read only.
-		txn, err := se.Txn(true)
-		c.Assert(err, IsNil)
-		txn.Set(kv.Key("AAA"), []byte("BBB"))
-		c.Assert(se.StmtCommit(), IsNil)
-		p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
-		c.Assert(err, IsNil, comment)
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Best = core.ToString(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Best, Commentf("for %s", tt))
-	}
-}
-
-func (s *testPlanSuite) TestIndexLookupCartesianJoin(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-	sql := "select /*+ TIDB_INLJ(t1, t2) */ * from t t1 join t t2"
-	stmt, err := s.ParseOneStmt(sql, "", "")
-	c.Assert(err, IsNil)
-	p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
-	c.Assert(err, IsNil)
-	c.Assert(core.ToString(p), Equals, "LeftHashJoin{TableReader(Table(t))->TableReader(Table(t))}")
-	warnings := se.GetSessionVars().StmtCtx.GetWarnings()
-	lastWarn := warnings[len(warnings)-1]
-	err = core.ErrInternal.GenWithStack("TIDB_INLJ hint is inapplicable without column equal ON condition")
-	c.Assert(terror.ErrorEqual(err, lastWarn.Err), IsTrue)
-}
-
 func (s *testPlanSuite) TestSemiJoinToInner(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()
@@ -830,45 +764,5 @@ func testDAGPlanBuilderSplitAvg(c *C, root core.PhysicalPlan) {
 	}
 	for _, son := range childs {
 		testDAGPlanBuilderSplitAvg(c, son)
-	}
-}
-
-func (s *testPlanSuite) TestIndexJoinHint(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	ctx := context.Background()
-	_, err = se.Execute(ctx, "use test")
-	c.Assert(err, IsNil)
-	_, err = se.Execute(ctx, `drop table if exists test.t1, test.t2;`)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(ctx, `create table test.t1(a bigint, b bigint, index idx_a(a), index idx_b(b));`)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(ctx, `create table test.t2(a bigint, b bigint, index idx_a(a), index idx_b(b));`)
-	c.Assert(err, IsNil)
-	var input []string
-	var output []struct {
-		SQL  string
-		Plan string
-	}
-	is := domain.GetDomain(se).InfoSchema()
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		comment := Commentf("case:%v sql: %s", i, tt)
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil, comment)
-		p, _, err := planner.Optimize(ctx, se, stmt, is)
-		c.Assert(err, IsNil, comment)
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Plan = core.ToString(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Plan, comment)
 	}
 }

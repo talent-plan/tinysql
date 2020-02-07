@@ -10,11 +10,11 @@
           "  ├─TableReader_15 2.00 root data:TableScan_14",
           "  │ └─TableScan_14 2.00 cop table:t, range:[-inf,+inf], keep order:false",
           "  └─StreamAgg_20 1.00 root funcs:count(1)->Column#16",
-          "    └─IndexJoin_34 2.00 root inner join, inner:TableReader_33, outer key:test.t.a, inner key:test.t.a",
-          "      ├─IndexReader_27 2.00 root index:IndexScan_26",
-          "      │ └─IndexScan_26 2.00 cop table:s, index:b, c, d, range: decided by [eq(test.t.b, 1) in(test.t.c, 1, 2) eq(test.t.d, test.t.a)], keep order:false",
-          "      └─TableReader_33 1.00 root data:TableScan_32",
-          "        └─TableScan_32 1.00 cop table:t1, range: decided by [test.t.a], keep order:false"
+          "    └─HashLeftJoin_29 2.00 root inner join, equal:[eq(test.t.a, test.t.a)]",
+          "      ├─IndexReader_24 2.00 root index:IndexScan_23",
+          "      │ └─IndexScan_23 2.00 cop table:s, index:b, c, d, range: decided by [eq(test.t.b, 1) in(test.t.c, 1, 2) eq(test.t.d, test.t.a)], keep order:false",
+          "      └─TableReader_26 2.00 root data:TableScan_25",
+          "        └─TableScan_25 2.00 cop table:t1, range:[-inf,+inf], keep order:false"
         ]
       },
       {

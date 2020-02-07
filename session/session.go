@@ -1095,7 +1095,6 @@ var builtinGlobalVariable = []string{
 
 	/* TiDB specific global variables: */
 	variable.TiDBSkipUTF8Check,
-	variable.TiDBIndexJoinBatchSize,
 	variable.TiDBIndexLookupSize,
 	variable.TiDBIndexLookupConcurrency,
 	variable.TiDBIndexLookupJoinConcurrency,
