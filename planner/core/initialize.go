@@ -25,16 +25,12 @@ const (
 	TypeProj = "Projection"
 	// TypeAgg is the type of Aggregation.
 	TypeAgg = "Aggregation"
-	// TypeStreamAgg is the type of StreamAgg.
-	TypeStreamAgg = "StreamAgg"
 	// TypeHashAgg is the type of HashAgg.
 	TypeHashAgg = "HashAgg"
 	// TypeShow is the type of show.
 	TypeShow = "Show"
 	// TypeJoin is the type of Join.
 	TypeJoin = "Join"
-	// TypeUnion is the type of Union.
-	TypeUnion = "Union"
 	// TypeTableScan is the type of TableScan.
 	TypeTableScan = "TableScan"
 	// TypeMemTableScan is the type of TableScan.
@@ -325,14 +321,6 @@ func (base basePhysicalAgg) Init(ctx sessionctx.Context, stats *property.StatsIn
 func (base basePhysicalAgg) initForHash(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalHashAgg {
 	p := &PhysicalHashAgg{base}
 	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeHashAgg, p)
-	p.childrenReqProps = props
-	p.stats = stats
-	return p
-}
-
-func (base basePhysicalAgg) initForStream(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalStreamAgg {
-	p := &PhysicalStreamAgg{base}
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeStreamAgg, p)
 	p.childrenReqProps = props
 	p.stats = stats
 	return p

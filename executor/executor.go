@@ -53,7 +53,6 @@ var (
 	_ Executor = &ShowDDLJobsExec{}
 	_ Executor = &ShowDDLJobQueriesExec{}
 	_ Executor = &SortExec{}
-	_ Executor = &StreamAggExec{}
 	_ Executor = &TableDualExec{}
 	_ Executor = &TableReaderExecutor{}
 	_ Executor = &TableScanExec{}

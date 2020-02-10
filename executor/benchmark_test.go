@@ -221,21 +221,6 @@ func buildHashAggExecutor(ctx sessionctx.Context, src Executor, schema *expressi
 	return exec
 }
 
-func buildStreamAggExecutor(ctx sessionctx.Context, src Executor, schema *expression.Schema,
-	aggFuncs []*aggregation.AggFuncDesc, groupItems []expression.Expression) Executor {
-	plan := new(core.PhysicalStreamAgg)
-	plan.AggFuncs = aggFuncs
-	plan.GroupByItems = groupItems
-	plan.SetSchema(schema)
-	plan.Init(ctx, nil)
-	plan.SetChildren(nil)
-	b := newExecutorBuilder(ctx, nil)
-	exec := b.build(plan)
-	streamAgg := exec.(*StreamAggExec)
-	streamAgg.children[0] = src
-	return exec
-}
-
 func buildAggExecutor(b *testing.B, testCase *aggTestCase, child Executor) Executor {
 	ctx := testCase.ctx
 	if err := ctx.GetSessionVars().SetSystemVar(variable.TiDBHashAggFinalConcurrency, fmt.Sprintf("%v", testCase.concurrency)); err != nil {
@@ -258,8 +243,6 @@ func buildAggExecutor(b *testing.B, testCase *aggTestCase, child Executor) Execu
 	switch testCase.execType {
 	case "hash":
 		aggExec = buildHashAggExecutor(testCase.ctx, child, schema, aggFuncs, groupBy)
-	case "stream":
-		aggExec = buildStreamAggExecutor(testCase.ctx, child, schema, aggFuncs, groupBy)
 	default:
 		b.Fatal("not implement")
 	}

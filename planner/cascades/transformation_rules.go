@@ -357,7 +357,6 @@ func (r *PushAggDownGather) OnTransform(old *memo.ExprIter) (newExprs []*memo.Gr
 		AggFuncs:     partialAggFuncs,
 		GroupByItems: partialGbyItems,
 	}.Init(agg.SCtx())
-	partialAgg.CopyAggHints(agg)
 
 	finalAggFuncs, finalGbyItems, partialSchema :=
 		plannercore.BuildFinalModeAggregation(partialAgg.SCtx(), partialAgg.AggFuncs, partialAgg.GroupByItems, aggSchema)
@@ -368,7 +367,6 @@ func (r *PushAggDownGather) OnTransform(old *memo.ExprIter) (newExprs []*memo.Gr
 		AggFuncs:     finalAggFuncs,
 		GroupByItems: finalGbyItems,
 	}.Init(agg.SCtx())
-	finalAgg.CopyAggHints(agg)
 
 	partialAggExpr := memo.NewGroupExpr(partialAgg)
 	partialAggExpr.SetChildren(childGroup)

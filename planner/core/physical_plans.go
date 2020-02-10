@@ -39,7 +39,6 @@ var (
 	_ PhysicalPlan = &PhysicalIndexReader{}
 	_ PhysicalPlan = &PhysicalIndexLookUpReader{}
 	_ PhysicalPlan = &PhysicalHashAgg{}
-	_ PhysicalPlan = &PhysicalStreamAgg{}
 	_ PhysicalPlan = &PhysicalApply{}
 	_ PhysicalPlan = &PhysicalHashJoin{}
 	_ PhysicalPlan = &PhysicalMergeJoin{}
@@ -96,7 +95,7 @@ func (p *PhysicalIndexReader) SetSchema(_ *expression.Schema) {
 	if p.indexPlan != nil {
 		p.IndexPlans = flattenPushDownPlan(p.indexPlan)
 		switch p.indexPlan.(type) {
-		case *PhysicalHashAgg, *PhysicalStreamAgg:
+		case *PhysicalHashAgg:
 			p.schema = p.indexPlan.Schema()
 		default:
 			is := p.IndexPlans[0].(*PhysicalIndexScan)
@@ -333,11 +332,6 @@ func NewPhysicalHashAgg(la *LogicalAggregation, newStats *property.StatsInfo, pr
 		AggFuncs:     la.AggFuncs,
 	}.initForHash(la.ctx, newStats, prop)
 	return agg
-}
-
-// PhysicalStreamAgg is stream operator of aggregate.
-type PhysicalStreamAgg struct {
-	basePhysicalAgg
 }
 
 // PhysicalSort is the physical operator of sort, which implements a memory sort.

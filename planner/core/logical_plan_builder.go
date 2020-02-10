@@ -57,16 +57,10 @@ const (
 	TiDBHashJoin = "tidb_hj"
 	// HintHJ is hint enforce hash join.
 	HintHJ = "hash_join"
-	// HintHashAgg is hint enforce hash aggregation.
-	HintHashAgg = "hash_agg"
-	// HintStreamAgg is hint enforce stream aggregation.
-	HintStreamAgg = "stream_agg"
 	// HintUseIndex is hint enforce using some indexes.
 	HintUseIndex = "use_index"
 	// HintIgnoreIndex is hint enforce ignoring some indexes.
 	HintIgnoreIndex = "ignore_index"
-	// HintAggToCop is hint enforce pushing aggregation to coprocessor.
-	HintAggToCop = "agg_to_cop"
 )
 
 const (
@@ -98,9 +92,6 @@ func (b *PlanBuilder) buildAggregation(ctx context.Context, p LogicalPlan, aggFu
 	b.optFlag = b.optFlag | flagEliminateProjection
 
 	plan4Agg := LogicalAggregation{AggFuncs: make([]*aggregation.AggFuncDesc, 0, len(aggFuncList))}.Init(b.ctx)
-	if hint := b.TableHints(); hint != nil {
-		plan4Agg.aggHints = hint.aggHints
-	}
 	schema4Agg := expression.NewSchema(make([]*expression.Column, 0, len(aggFuncList)+p.Schema().Len())...)
 	names := make(types.NameSlice, 0, len(aggFuncList)+p.Schema().Len())
 	// aggIdxMap maps the old index to new index after applying common aggregation functions elimination.
@@ -822,9 +813,6 @@ func (b *PlanBuilder) buildDistinct(child LogicalPlan, length int) (*LogicalAggr
 		AggFuncs:     make([]*aggregation.AggFuncDesc, 0, child.Schema().Len()),
 		GroupByItems: expression.Column2Exprs(child.Schema().Clone().Columns[:length]),
 	}.Init(b.ctx)
-	if hint := b.TableHints(); hint != nil {
-		plan4Agg.aggHints = hint.aggHints
-	}
 	plan4Agg.collectGroupByColumns()
 	for _, col := range child.Schema().Columns {
 		aggDesc, err := aggregation.NewAggFuncDesc(b.ctx, ast.AggFuncFirstRow, []expression.Expression{col}, false)
@@ -1776,7 +1764,6 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 	var (
 		sortMergeTables, INLJTables, INLHJTables, INLMJTables, hashJoinTables []hintTableInfo
 		indexHintList                                                         []indexHintInfo
-		aggHints                                                              aggHintInfo
 	)
 	for _, hint := range hints {
 		switch hint.HintName.L {
@@ -1790,12 +1777,6 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 			INLMJTables = append(INLMJTables, tableNames2HintTableInfo(b.ctx, hint.Tables)...)
 		case TiDBHashJoin, HintHJ:
 			hashJoinTables = append(hashJoinTables, tableNames2HintTableInfo(b.ctx, hint.Tables)...)
-		case HintHashAgg:
-			aggHints.preferAggType |= preferHashAgg
-		case HintStreamAgg:
-			aggHints.preferAggType |= preferStreamAgg
-		case HintAggToCop:
-			aggHints.preferAggToCop = true
 		case HintUseIndex:
 			if len(hint.Tables) != 0 {
 				dbName := hint.Tables[0].DBName
@@ -1838,7 +1819,6 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint) {
 		indexNestedLoopJoinTables: indexNestedLoopJoinTables{INLJTables, INLHJTables, INLMJTables},
 		hashJoinTables:            hashJoinTables,
 		indexHintList:             indexHintList,
-		aggHints:                  aggHints,
 	})
 }
 

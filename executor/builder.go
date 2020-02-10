@@ -108,8 +108,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildSelection(v)
 	case *plannercore.PhysicalHashAgg:
 		return b.buildHashAgg(v)
-	case *plannercore.PhysicalStreamAgg:
-		return b.buildStreamAgg(v)
 	case *plannercore.PhysicalProjection:
 		return b.buildProjection(v)
 	case *plannercore.PhysicalMemTable:
@@ -606,32 +604,6 @@ func (b *executorBuilder) buildHashAgg(v *plannercore.PhysicalHashAgg) Executor 
 				)
 			}
 		}
-		if e.defaultVal != nil {
-			value := aggDesc.GetDefaultValue()
-			e.defaultVal.AppendDatum(i, &value)
-		}
-	}
-	return e
-}
-
-func (b *executorBuilder) buildStreamAgg(v *plannercore.PhysicalStreamAgg) Executor {
-	src := b.build(v.Children()[0])
-	if b.err != nil {
-		return nil
-	}
-	e := &StreamAggExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), src),
-		groupChecker: newVecGroupChecker(b.ctx, v.GroupByItems),
-		aggFuncs:     make([]aggfuncs.AggFunc, 0, len(v.AggFuncs)),
-	}
-	if len(v.GroupByItems) != 0 || aggregation.IsAllFirstRow(v.AggFuncs) {
-		e.defaultVal = nil
-	} else {
-		e.defaultVal = chunk.NewChunkWithCapacity(retTypes(e), 1)
-	}
-	for i, aggDesc := range v.AggFuncs {
-		aggFunc := aggfuncs.Build(b.ctx, aggDesc, i)
-		e.aggFuncs = append(e.aggFuncs, aggFunc)
 		if e.defaultVal != nil {
 			value := aggDesc.GetDefaultValue()
 			e.defaultVal.AppendDatum(i, &value)

@@ -115,14 +115,14 @@
         "└─Apply_13 10.00 root CARTESIAN left outer semi join, other cond:eq(test.t.c, Column#13)",
         "  ├─TableReader_15 10.00 root data:TableScan_14",
         "  │ └─TableScan_14 10.00 cop table:t, range:[-inf,+inf], keep order:false",
-        "  └─StreamAgg_22 1.00 root funcs:count(1)->Column#13",
-        "    └─HashLeftJoin_23 1.00 root inner join, equal:[eq(test.t.a, test.t.a)]",
-        "      ├─TableReader_27 1.00 root data:Selection_26",
-        "      │ └─Selection_26 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
-        "      │   └─TableScan_25 10.00 cop table:s, range:[-inf,+inf], keep order:false",
-        "      └─TableReader_33 1.00 root data:Selection_32",
-        "        └─Selection_32 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
-        "          └─TableScan_31 10.00 cop table:t1, range:[-inf,+inf], keep order:false"
+        "  └─HashAgg_20 1.00 root funcs:count(1)->Column#13",
+        "    └─HashLeftJoin_21 1.00 root inner join, equal:[eq(test.t.a, test.t.a)]",
+        "      ├─TableReader_25 1.00 root data:Selection_24",
+        "      │ └─Selection_24 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
+        "      │   └─TableScan_23 10.00 cop table:s, range:[-inf,+inf], keep order:false",
+        "      └─TableReader_31 1.00 root data:Selection_30",
+        "        └─Selection_30 1.00 cop eq(test.t.a, test.t.a), not(isnull(test.t.a))",
+        "          └─TableScan_29 10.00 cop table:t1, range:[-inf,+inf], keep order:false"
       ]
     ]
   },

@@ -44,19 +44,6 @@ func (p *PhysicalHashAgg) ToPB(ctx sessionctx.Context) (*tipb.Executor, error) {
 }
 
 // ToPB implements PhysicalPlan ToPB interface.
-func (p *PhysicalStreamAgg) ToPB(ctx sessionctx.Context) (*tipb.Executor, error) {
-	sc := ctx.GetSessionVars().StmtCtx
-	client := ctx.GetClient()
-	aggExec := &tipb.Aggregation{
-		GroupBy: expression.ExpressionsToPBList(sc, p.GroupByItems, client),
-	}
-	for _, aggFunc := range p.AggFuncs {
-		aggExec.AggFunc = append(aggExec.AggFunc, aggregation.AggFuncToPBExpr(sc, client, aggFunc))
-	}
-	return &tipb.Executor{Tp: tipb.ExecType_TypeStreamAgg, Aggregation: aggExec}, nil
-}
-
-// ToPB implements PhysicalPlan ToPB interface.
 func (p *PhysicalSelection) ToPB(ctx sessionctx.Context) (*tipb.Executor, error) {
 	sc := ctx.GetSessionVars().StmtCtx
 	client := ctx.GetClient()

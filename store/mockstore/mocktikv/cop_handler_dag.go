@@ -133,8 +133,6 @@ func (h *rpcHandler) buildExec(ctx *dagContext, curr *tipb.Executor) (executor, 
 		currExec, err = h.buildSelection(ctx, curr)
 	case tipb.ExecType_TypeAggregation:
 		currExec, err = h.buildHashAgg(ctx, curr)
-	case tipb.ExecType_TypeStreamAgg:
-		currExec, err = h.buildStreamAgg(ctx, curr)
 	case tipb.ExecType_TypeTopN:
 		currExec, err = h.buildTopN(ctx, curr)
 	case tipb.ExecType_TypeLimit:
@@ -292,27 +290,6 @@ func (h *rpcHandler) buildHashAgg(ctx *dagContext, executor *tipb.Executor) (*ha
 		groupByExprs:      groupBys,
 		groups:            make(map[string]struct{}),
 		groupKeys:         make([][]byte, 0),
-		relatedColOffsets: relatedColOffsets,
-		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
-	}, nil
-}
-
-func (h *rpcHandler) buildStreamAgg(ctx *dagContext, executor *tipb.Executor) (*streamAggExec, error) {
-	aggs, groupBys, relatedColOffsets, err := h.getAggInfo(ctx, executor)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	aggCtxs := make([]*aggregation.AggEvaluateContext, 0, len(aggs))
-	for _, agg := range aggs {
-		aggCtxs = append(aggCtxs, agg.CreateContext(ctx.evalCtx.sc))
-	}
-
-	return &streamAggExec{
-		evalCtx:           ctx.evalCtx,
-		aggExprs:          aggs,
-		aggCtxs:           aggCtxs,
-		groupByExprs:      groupBys,
-		currGroupByValues: make([][]byte, 0),
 		relatedColOffsets: relatedColOffsets,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
 	}, nil

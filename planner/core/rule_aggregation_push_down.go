@@ -186,7 +186,7 @@ func (a *aggregationPushDownSolver) decompose(ctx sessionctx.Context, aggFunc *a
 // tryToPushDownAgg tries to push down an aggregate function into a join path. If all aggFuncs are first row, we won't
 // process it temporarily. If not, We will add additional group by columns and first row functions. We make a new aggregation operator.
 // If the pushed aggregation is grouped by unique key, it's no need to push it down.
-func (a *aggregationPushDownSolver) tryToPushDownAgg(aggFuncs []*aggregation.AggFuncDesc, gbyCols []*expression.Column, join *LogicalJoin, childIdx int, aggHints aggHintInfo) (_ LogicalPlan, err error) {
+func (a *aggregationPushDownSolver) tryToPushDownAgg(aggFuncs []*aggregation.AggFuncDesc, gbyCols []*expression.Column, join *LogicalJoin, childIdx int) (_ LogicalPlan, err error) {
 	child := join.children[childIdx]
 	if aggregation.IsAllFirstRow(aggFuncs) {
 		return child, nil
@@ -201,7 +201,7 @@ func (a *aggregationPushDownSolver) tryToPushDownAgg(aggFuncs []*aggregation.Agg
 			return child, nil
 		}
 	}
-	agg, err := a.makeNewAgg(join.ctx, aggFuncs, gbyCols, aggHints)
+	agg, err := a.makeNewAgg(join.ctx, aggFuncs, gbyCols)
 	if err != nil {
 		return nil, err
 	}
@@ -244,11 +244,10 @@ func (a *aggregationPushDownSolver) checkAnyCountAndSum(aggFuncs []*aggregation.
 	return false
 }
 
-func (a *aggregationPushDownSolver) makeNewAgg(ctx sessionctx.Context, aggFuncs []*aggregation.AggFuncDesc, gbyCols []*expression.Column, aggHints aggHintInfo) (*LogicalAggregation, error) {
+func (a *aggregationPushDownSolver) makeNewAgg(ctx sessionctx.Context, aggFuncs []*aggregation.AggFuncDesc, gbyCols []*expression.Column) (*LogicalAggregation, error) {
 	agg := LogicalAggregation{
 		GroupByItems: expression.Column2Exprs(gbyCols),
 		groupByCols:  gbyCols,
-		aggHints:     aggHints,
 	}.Init(ctx)
 	aggLen := len(aggFuncs) + len(gbyCols)
 	newAggFuncDescs := make([]*aggregation.AggFuncDesc, 0, aggLen)
@@ -300,7 +299,7 @@ func (a *aggregationPushDownSolver) aggPushDown(p LogicalPlan) (_ LogicalPlan, e
 					if rightInvalid {
 						rChild = join.children[1]
 					} else {
-						rChild, err = a.tryToPushDownAgg(rightAggFuncs, rightGbyCols, join, 1, agg.aggHints)
+						rChild, err = a.tryToPushDownAgg(rightAggFuncs, rightGbyCols, join, 1)
 						if err != nil {
 							return nil, err
 						}
@@ -308,7 +307,7 @@ func (a *aggregationPushDownSolver) aggPushDown(p LogicalPlan) (_ LogicalPlan, e
 					if leftInvalid {
 						lChild = join.children[0]
 					} else {
-						lChild, err = a.tryToPushDownAgg(leftAggFuncs, leftGbyCols, join, 0, agg.aggHints)
+						lChild, err = a.tryToPushDownAgg(leftAggFuncs, leftGbyCols, join, 0)
 						if err != nil {
 							return nil, err
 						}

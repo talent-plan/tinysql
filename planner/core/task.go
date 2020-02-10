@@ -297,9 +297,6 @@ func (p *PhysicalMergeJoin) attach2Task(tasks ...task) task {
 // Now it's only used for TableReader.
 func splitCopAvg2CountAndSum(p PhysicalPlan) {
 	var baseAgg *basePhysicalAgg
-	if agg, ok := p.(*PhysicalStreamAgg); ok {
-		baseAgg = &agg.basePhysicalAgg
-	}
 	if agg, ok := p.(*PhysicalHashAgg); ok {
 		baseAgg = &agg.basePhysicalAgg
 	}
@@ -720,15 +717,6 @@ func (p *basePhysicalAgg) newPartialAggregate() (partial, final PhysicalPlan) {
 	p.schema = partialSchema
 	partialAgg := p.self
 	// Create physical "final" aggregation.
-	if p.tp == TypeStreamAgg {
-		finalAgg := basePhysicalAgg{
-			AggFuncs:     finalAggFuncs,
-			GroupByItems: finalGbyItems,
-		}.initForStream(p.ctx, p.stats)
-		finalAgg.schema = finalSchema
-		return partialAgg, finalAgg
-	}
-
 	finalAgg := basePhysicalAgg{
 		AggFuncs:     finalAggFuncs,
 		GroupByItems: finalGbyItems,
@@ -777,56 +765,6 @@ func RemoveUnnecessaryFirstRow(
 		newAggFuncs = append(newAggFuncs, aggFunc)
 	}
 	return newAggFuncs
-}
-
-func (p *PhysicalStreamAgg) attach2Task(tasks ...task) task {
-	t := tasks[0].copy()
-	inputRows := t.count()
-	if cop, ok := t.(*copTask); ok {
-		// We should not push agg down across double read, since the data of second read is ordered by handle instead of index.
-		// The `extraHandleCol` is added if the double read needs to keep order. So we just use it to decided
-		// whether the following plan is double read with order reserved.
-		if cop.extraHandleCol == nil {
-			partialAgg, finalAgg := p.newPartialAggregate()
-			if partialAgg != nil {
-				if cop.tablePlan != nil {
-					cop.finishIndexPlan()
-					partialAgg.SetChildren(cop.tablePlan)
-					cop.tablePlan = partialAgg
-				} else {
-					partialAgg.SetChildren(cop.indexPlan)
-					cop.indexPlan = partialAgg
-				}
-				cop.addCost(p.GetCost(inputRows, false))
-			}
-			t = finishCopTask(p.ctx, cop)
-			inputRows = t.count()
-			attachPlan2Task(finalAgg, t)
-		} else {
-			t = finishCopTask(p.ctx, cop)
-			inputRows = t.count()
-			attachPlan2Task(p, t)
-		}
-	} else {
-		attachPlan2Task(p, t)
-	}
-	t.addCost(p.GetCost(inputRows, true))
-	return t
-}
-
-// GetCost computes cost of stream aggregation considering CPU/memory.
-func (p *PhysicalStreamAgg) GetCost(inputRows float64, isRoot bool) float64 {
-	aggFuncFactor := p.getAggFuncCostFactor()
-	var cpuCost float64
-	sessVars := p.ctx.GetSessionVars()
-	if isRoot {
-		cpuCost = inputRows * sessVars.CPUFactor * aggFuncFactor
-	} else {
-		cpuCost = inputRows * sessVars.CopCPUFactor * aggFuncFactor
-	}
-	rowsPerGroup := inputRows / p.statsInfo().RowCount
-	memoryCost := rowsPerGroup * distinctFactor * sessVars.MemoryFactor * float64(p.numDistinctFunc())
-	return cpuCost + memoryCost
 }
 
 // cpuCostDivisor computes the concurrency to which we would amortize CPU cost

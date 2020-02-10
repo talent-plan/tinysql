@@ -17,7 +17,6 @@ import (
 	"math"
 
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/util/set"
 )
@@ -406,106 +405,12 @@ func (p *baseLogicalPlan) exhaustPhysicalPlans(_ *property.PhysicalProperty) []P
 	panic("baseLogicalPlan.exhaustPhysicalPlans() should never be called.")
 }
 
-func (la *LogicalAggregation) canPushToCop() bool {
-	// At present, only Aggregation, Limit, TopN can be pushed to cop task, and Projection will be supported in the future.
-	// When we push task to coprocessor, finishCopTask will close the cop task and create a root task in the current implementation.
-	// Thus, we can't push two different tasks to coprocessor now, and can only push task to coprocessor when the child is Datasource.
-
-	// TODO: develop this function after supporting push several tasks to coprecessor and supporting Projection to coprocessor.
-	_, ok := la.children[0].(*DataSource)
-	return ok
-}
-
-func (la *LogicalAggregation) getEnforcedStreamAggs(prop *property.PhysicalProperty) []PhysicalPlan {
-	_, desc := prop.AllSameOrder()
-	enforcedAggs := make([]PhysicalPlan, 0, len(wholeTaskTypes))
-	childProp := &property.PhysicalProperty{
-		ExpectedCnt: math.Max(prop.ExpectedCnt*la.inputCount/la.stats.RowCount, prop.ExpectedCnt),
-		Enforced:    true,
-		Items:       property.ItemsFromCols(la.groupByCols, desc),
-	}
-
-	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
-	if !la.aggHints.preferAggToCop {
-		taskTypes = append(taskTypes, property.RootTaskType)
-	}
-	for _, taskTp := range taskTypes {
-		copiedChildProperty := new(property.PhysicalProperty)
-		*copiedChildProperty = *childProp // It's ok to not deep copy the "cols" field.
-		copiedChildProperty.TaskTp = taskTp
-
-		agg := basePhysicalAgg{
-			GroupByItems: la.GroupByItems,
-			AggFuncs:     la.AggFuncs,
-		}.initForStream(la.ctx, la.stats.ScaleByExpectCnt(prop.ExpectedCnt), copiedChildProperty)
-		agg.SetSchema(la.schema.Clone())
-		enforcedAggs = append(enforcedAggs, agg)
-	}
-	return enforcedAggs
-}
-
-func (la *LogicalAggregation) getStreamAggs(prop *property.PhysicalProperty) []PhysicalPlan {
-	all, desc := prop.AllSameOrder()
-	if !all {
-		return nil
-	}
-
-	for _, aggFunc := range la.AggFuncs {
-		if aggFunc.Mode == aggregation.FinalMode {
-			return nil
-		}
-	}
-	// group by a + b is not interested in any order.
-	if len(la.groupByCols) != len(la.GroupByItems) {
-		return nil
-	}
-
-	streamAggs := make([]PhysicalPlan, 0, len(la.possibleProperties)*(len(wholeTaskTypes)-1)+len(wholeTaskTypes))
-	childProp := &property.PhysicalProperty{
-		ExpectedCnt: math.Max(prop.ExpectedCnt*la.inputCount/la.stats.RowCount, prop.ExpectedCnt),
-	}
-
-	for _, possibleChildProperty := range la.possibleProperties {
-		childProp.Items = property.ItemsFromCols(possibleChildProperty[:len(la.groupByCols)], desc)
-		if !prop.IsPrefix(childProp) {
-			continue
-		}
-		// The table read of "CopDoubleReadTaskType" can't promises the sort
-		// property that the stream aggregation required, no need to consider.
-		taskTypes := []property.TaskType{property.CopSingleReadTaskType}
-		if !la.aggHints.preferAggToCop {
-			taskTypes = append(taskTypes, property.RootTaskType)
-		}
-		for _, taskTp := range taskTypes {
-			copiedChildProperty := new(property.PhysicalProperty)
-			*copiedChildProperty = *childProp // It's ok to not deep copy the "cols" field.
-			copiedChildProperty.TaskTp = taskTp
-
-			agg := basePhysicalAgg{
-				GroupByItems: la.GroupByItems,
-				AggFuncs:     la.AggFuncs,
-			}.initForStream(la.ctx, la.stats.ScaleByExpectCnt(prop.ExpectedCnt), copiedChildProperty)
-			agg.SetSchema(la.schema.Clone())
-			streamAggs = append(streamAggs, agg)
-		}
-	}
-	// If STREAM_AGG hint is existed, it should consider enforce stream aggregation,
-	// because we can't trust possibleChildProperty completely.
-	if (la.aggHints.preferAggType & preferStreamAgg) > 0 {
-		streamAggs = append(streamAggs, la.getEnforcedStreamAggs(prop)...)
-	}
-	return streamAggs
-}
-
 func (la *LogicalAggregation) getHashAggs(prop *property.PhysicalProperty) []PhysicalPlan {
 	if !prop.IsEmpty() {
 		return nil
 	}
 	hashAggs := make([]PhysicalPlan, 0, len(wholeTaskTypes))
-	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
-	if !la.aggHints.preferAggToCop {
-		taskTypes = append(taskTypes, property.RootTaskType)
-	}
+	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType, property.RootTaskType}
 	for _, taskTp := range taskTypes {
 		agg := NewPhysicalHashAgg(la, la.stats.ScaleByExpectCnt(prop.ExpectedCnt), &property.PhysicalProperty{ExpectedCnt: math.MaxFloat64, TaskTp: taskTp})
 		agg.SetSchema(la.schema.Clone())
@@ -514,53 +419,8 @@ func (la *LogicalAggregation) getHashAggs(prop *property.PhysicalProperty) []Phy
 	return hashAggs
 }
 
-// ResetHintIfConflicted resets the aggHints.preferAggType if they are conflicted,
-// and returns the two preferAggType hints.
-func (la *LogicalAggregation) ResetHintIfConflicted() (preferHash bool, preferStream bool) {
-	preferHash = (la.aggHints.preferAggType & preferHashAgg) > 0
-	preferStream = (la.aggHints.preferAggType & preferStreamAgg) > 0
-	if preferHash && preferStream {
-		errMsg := "Optimizer aggregation hints are conflicted"
-		warning := ErrInternal.GenWithStack(errMsg)
-		la.ctx.GetSessionVars().StmtCtx.AppendWarning(warning)
-		la.aggHints.preferAggType = 0
-		preferHash, preferStream = false, false
-	}
-	return
-}
-
 func (la *LogicalAggregation) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {
-	if la.aggHints.preferAggToCop {
-		if !la.canPushToCop() {
-			errMsg := "Optimizer Hint AGG_TO_COP is inapplicable"
-			warning := ErrInternal.GenWithStack(errMsg)
-			la.ctx.GetSessionVars().StmtCtx.AppendWarning(warning)
-			la.aggHints.preferAggToCop = false
-		}
-	}
-
-	preferHash, preferStream := la.ResetHintIfConflicted()
-
-	hashAggs := la.getHashAggs(prop)
-	if hashAggs != nil && preferHash {
-		return hashAggs
-	}
-
-	streamAggs := la.getStreamAggs(prop)
-	if streamAggs != nil && preferStream {
-		return streamAggs
-	}
-
-	if streamAggs == nil && preferStream {
-		errMsg := "Optimizer Hint STREAM_AGG is inapplicable"
-		warning := ErrInternal.GenWithStack(errMsg)
-		la.ctx.GetSessionVars().StmtCtx.AppendWarning(warning)
-	}
-
-	aggs := make([]PhysicalPlan, 0, len(hashAggs)+len(streamAggs))
-	aggs = append(aggs, hashAggs...)
-	aggs = append(aggs, streamAggs...)
-	return aggs
+	return la.getHashAggs(prop)
 }
 
 func (p *LogicalSelection) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {

@@ -47,7 +47,6 @@ type tableHintInfo struct {
 	sortMergeJoinTables []hintTableInfo
 	hashJoinTables      []hintTableInfo
 	indexHintList       []indexHintInfo
-	aggHints            aggHintInfo
 }
 
 type hintTableInfo struct {
@@ -60,11 +59,6 @@ type indexHintInfo struct {
 	dbName    model.CIStr
 	tblName   model.CIStr
 	indexHint *ast.IndexHint
-}
-
-type aggHintInfo struct {
-	preferAggType  uint
-	preferAggToCop bool
 }
 
 func tableNames2HintTableInfo(ctx sessionctx.Context, hintTables []ast.HintTable) []hintTableInfo {
