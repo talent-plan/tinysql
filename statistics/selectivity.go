@@ -122,26 +122,6 @@ func pseudoSelectivity(coll *HistColl, exprs []expression.Expression) float64 {
 	return minFactor
 }
 
-// isColEqCorCol checks if the expression is a eq function that one side is correlated column and another is column.
-// If so, it will return the column's reference. Otherwise return nil instead.
-func isColEqCorCol(filter expression.Expression) *expression.Column {
-	f, ok := filter.(*expression.ScalarFunction)
-	if !ok || f.FuncName.L != ast.EQ {
-		return nil
-	}
-	if c, ok := f.GetArgs()[0].(*expression.Column); ok {
-		if _, ok := f.GetArgs()[1].(*expression.CorrelatedColumn); ok {
-			return c
-		}
-	}
-	if c, ok := f.GetArgs()[1].(*expression.Column); ok {
-		if _, ok := f.GetArgs()[0].(*expression.CorrelatedColumn); ok {
-			return c
-		}
-	}
-	return nil
-}
-
 // Selectivity is a function calculate the selectivity of the expressions.
 // The definition of selectivity is (row count after filter / row count before filter).
 // And exprs must be CNF now, in other words, `exprs[0] and exprs[1] and ... and exprs[len - 1]` should be held when you call this.
@@ -161,27 +141,7 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 	sc := ctx.GetSessionVars().StmtCtx
 
 	remainedExprs := make([]expression.Expression, 0, len(exprs))
-
-	// Deal with the correlated column.
-	for _, expr := range exprs {
-		c := isColEqCorCol(expr)
-		if c == nil {
-			remainedExprs = append(remainedExprs, expr)
-			continue
-		}
-
-		if colHist := coll.Columns[c.UniqueID]; colHist == nil || colHist.IsInvalid(sc, coll.Pseudo) {
-			ret *= 1.0 / pseudoEqualRate
-			continue
-		}
-
-		colHist := coll.Columns[c.UniqueID]
-		if colHist.NDV > 0 {
-			ret *= 1 / float64(colHist.NDV)
-		} else {
-			ret *= 1.0 / pseudoEqualRate
-		}
-	}
+	remainedExprs = append(remainedExprs, exprs...)
 
 	extractedCols := make([]*expression.Column, 0, len(coll.Columns))
 	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, remainedExprs, nil)

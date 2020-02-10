@@ -832,38 +832,6 @@ func (b *executorBuilder) constructDAGReq(plans []plannercore.PhysicalPlan) (dag
 	return dagReq, err
 }
 
-func (b *executorBuilder) corColInDistPlan(plans []plannercore.PhysicalPlan) bool {
-	for _, p := range plans {
-		x, ok := p.(*plannercore.PhysicalSelection)
-		if !ok {
-			continue
-		}
-		for _, cond := range x.Conditions {
-			if len(expression.ExtractCorColumns(cond)) > 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// corColInAccess checks whether there's correlated column in access conditions.
-func (b *executorBuilder) corColInAccess(p plannercore.PhysicalPlan) bool {
-	var access []expression.Expression
-	switch x := p.(type) {
-	case *plannercore.PhysicalTableScan:
-		access = x.AccessCondition
-	case *plannercore.PhysicalIndexScan:
-		access = x.AccessCondition
-	}
-	for _, cond := range access {
-		if len(expression.ExtractCorColumns(cond)) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableReader) (*TableReaderExecutor, error) {
 	dagReq, err := b.constructDAGReq(v.TablePlans)
 	if err != nil {
@@ -876,16 +844,14 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		return nil, err
 	}
 	e := &TableReaderExecutor{
-		baseExecutor:   newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		dagPB:          dagReq,
-		startTS:        startTS,
-		table:          tbl,
-		keepOrder:      ts.KeepOrder,
-		desc:           ts.Desc,
-		columns:        ts.Columns,
-		corColInFilter: b.corColInDistPlan(v.TablePlans),
-		corColInAccess: b.corColInAccess(v.TablePlans[0]),
-		plans:          v.TablePlans,
+		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
+		dagPB:        dagReq,
+		startTS:      startTS,
+		table:        tbl,
+		keepOrder:    ts.KeepOrder,
+		desc:         ts.Desc,
+		columns:      ts.Columns,
+		plans:        v.TablePlans,
 	}
 
 	for i := range v.Schema().Columns {
@@ -932,8 +898,6 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		keepOrder:       is.KeepOrder,
 		desc:            is.Desc,
 		columns:         is.Columns,
-		corColInFilter:  b.corColInDistPlan(v.IndexPlans),
-		corColInAccess:  b.corColInAccess(v.IndexPlans[0]),
 		idxCols:         is.IdxCols,
 		colLens:         is.IdxColLens,
 		plans:           v.IndexPlans,
@@ -994,9 +958,6 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 		tableRequest:      tableReq,
 		columns:           ts.Columns,
 		dataReaderBuilder: &dataReaderBuilder{executorBuilder: b},
-		corColInIdxSide:   b.corColInDistPlan(v.IndexPlans),
-		corColInTblSide:   b.corColInDistPlan(v.TablePlans),
-		corColInAccess:    b.corColInAccess(v.IndexPlans[0]),
 		idxCols:           is.IdxCols,
 		colLens:           is.IdxColLens,
 		idxPlans:          v.IndexPlans,

@@ -838,19 +838,6 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 		er.ctxStackAppend(column, er.names[idx])
 		return
 	}
-	for i := len(er.b.outerSchemas) - 1; i >= 0; i-- {
-		outerSchema, outerName := er.b.outerSchemas[i], er.b.outerNames[i]
-		idx, err = expression.FindFieldName(outerName, v)
-		if idx >= 0 {
-			column := outerSchema.Columns[idx]
-			er.ctxStackAppend(&expression.CorrelatedColumn{Column: *column, Data: new(types.Datum)}, outerName[idx])
-			return
-		}
-		if err != nil {
-			er.err = ErrAmbiguous.GenWithStackByArgs(v.Name, clauseMsg[fieldList])
-			return
-		}
-	}
 	if join, ok := er.p.(*LogicalJoin); ok && join.redundantSchema != nil {
 		idx, err := expression.FindFieldName(join.redundantNames, v)
 		if err != nil {
@@ -873,7 +860,6 @@ func (er *expressionRewriter) evalDefaultExpr(v *ast.DefaultExpr) {
 	name := er.ctxNameStk[stkLen-1]
 	switch er.ctxStack[stkLen-1].(type) {
 	case *expression.Column:
-	case *expression.CorrelatedColumn:
 	default:
 		idx, err := expression.FindFieldName(er.names, v.Name)
 		if err != nil {

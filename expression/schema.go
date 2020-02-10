@@ -79,7 +79,7 @@ func ExprFromSchema(expr Expression, schema *Schema) bool {
 			}
 		}
 		return true
-	case *CorrelatedColumn, *Constant:
+	case *Constant:
 		return true
 	}
 	return false

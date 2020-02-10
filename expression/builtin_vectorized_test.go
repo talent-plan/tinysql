@@ -449,8 +449,6 @@ func (s *testEvaluatorSuite) TestVectorizedCheck(c *C) {
 	c.Assert(con.Vectorized(), IsTrue)
 	col := &Column{}
 	c.Assert(col.Vectorized(), IsTrue)
-	cor := CorrelatedColumn{Column: *col}
-	c.Assert(cor.Vectorized(), IsTrue)
 
 	vecF, _, _, _ := genMockRowDouble(types.ETInt, true)
 	sf := &ScalarFunction{Function: vecF}

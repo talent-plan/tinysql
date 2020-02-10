@@ -81,43 +81,11 @@ func FilterOutInPlace(input []Expression, filter func(Expression) bool) (remaine
 	return input, filteredOut
 }
 
-// ExtractDependentColumns extracts all dependent columns from a virtual column.
-func ExtractDependentColumns(expr Expression) []*Column {
-	// Pre-allocate a slice to reduce allocation, 8 doesn't have special meaning.
-	result := make([]*Column, 0, 8)
-	return extractDependentColumns(result, expr)
-}
-
-func extractDependentColumns(result []*Column, expr Expression) []*Column {
-	switch v := expr.(type) {
-	case *Column:
-		result = append(result, v)
-	case *ScalarFunction:
-		for _, arg := range v.GetArgs() {
-			result = extractDependentColumns(result, arg)
-		}
-	}
-	return result
-}
-
 // ExtractColumns extracts all columns from an expression.
 func ExtractColumns(expr Expression) []*Column {
 	// Pre-allocate a slice to reduce allocation, 8 doesn't have special meaning.
 	result := make([]*Column, 0, 8)
 	return extractColumns(result, expr, nil)
-}
-
-// ExtractCorColumns extracts correlated column from given expression.
-func ExtractCorColumns(expr Expression) (cols []*CorrelatedColumn) {
-	switch v := expr.(type) {
-	case *CorrelatedColumn:
-		return []*CorrelatedColumn{v}
-	case *ScalarFunction:
-		for _, arg := range v.GetArgs() {
-			cols = append(cols, ExtractCorColumns(arg)...)
-		}
-	}
-	return
 }
 
 // ExtractColumnsFromExpressions is a more efficient version of ExtractColumns for batch operation.
@@ -230,37 +198,6 @@ func ColumnSubstituteImpl(expr Expression, schema *Schema, newExprs []Expression
 		}
 	}
 	return false, expr
-}
-
-// SubstituteCorCol2Constant will substitute correlated column to constant value which it contains.
-// If the args of one scalar function are all constant, we will substitute it to constant.
-func SubstituteCorCol2Constant(expr Expression) (Expression, error) {
-	switch x := expr.(type) {
-	case *ScalarFunction:
-		allConstant := true
-		newArgs := make([]Expression, 0, len(x.GetArgs()))
-		for _, arg := range x.GetArgs() {
-			newArg, err := SubstituteCorCol2Constant(arg)
-			if err != nil {
-				return nil, err
-			}
-			_, ok := newArg.(*Constant)
-			newArgs = append(newArgs, newArg)
-			allConstant = allConstant && ok
-		}
-		if allConstant {
-			val, err := x.Eval(chunk.Row{})
-			if err != nil {
-				return nil, err
-			}
-			return &Constant{Value: val, RetType: x.GetType()}, nil
-		}
-		newSf := NewFunctionInternal(x.GetCtx(), x.FuncName.L, x.GetType(), newArgs...)
-		return newSf, nil
-	case *CorrelatedColumn:
-		return &Constant{Value: *x.Data, RetType: x.GetType()}, nil
-	}
-	return expr, nil
 }
 
 var oppositeOp = map[string]string{
@@ -526,22 +463,6 @@ func ParamMarkerExpression(ctx sessionctx.Context, v *driver.ParamMarkerExpr) (E
 	types.DefaultParamTypeForValue(v.GetValue(), tp)
 	value := &Constant{Value: v.Datum, RetType: tp}
 	return value, nil
-}
-
-// DisableParseJSONFlag4Expr disables ParseToJSONFlag for `expr` except Column.
-// We should not *PARSE* a string as JSON under some scenarios. ParseToJSONFlag
-// is 0 for JSON column yet(as well as JSON correlated column), so we can skip
-// it. Moreover, Column.RetType refers to the infoschema, if we modify it, data
-// race may happen if another goroutine read from the infoschema at the same
-// time.
-func DisableParseJSONFlag4Expr(expr Expression) {
-	if _, isColumn := expr.(*Column); isColumn {
-		return
-	}
-	if _, isCorCol := expr.(*CorrelatedColumn); isCorCol {
-		return
-	}
-	expr.GetType().Flag &= ^mysql.ParseToJSONFlag
 }
 
 // ConstructPositionExpr constructs PositionExpr with the given ParamMarkerExpr.

@@ -44,21 +44,8 @@ func (p *PhysicalIndexScan) explainInfo(normalized bool) string {
 			}
 		}
 	}
-	haveCorCol := false
-	for _, cond := range p.AccessCondition {
-		if len(expression.ExtractCorColumns(cond)) > 0 {
-			haveCorCol = true
-			break
-		}
-	}
 	if len(p.rangeInfo) > 0 {
 		fmt.Fprintf(buffer, ", range: decided by %v", p.rangeInfo)
-	} else if haveCorCol {
-		if normalized {
-			fmt.Fprintf(buffer, ", range: decided by %s", expression.SortedExplainNormalizedExpressionList(p.AccessCondition))
-		} else {
-			fmt.Fprintf(buffer, ", range: decided by %v", p.AccessCondition)
-		}
 	} else if len(p.Ranges) > 0 {
 		if normalized {
 			fmt.Fprint(buffer, ", range:[?,?]")
@@ -107,21 +94,8 @@ func (p *PhysicalTableScan) explainInfo(normalized bool) string {
 	if p.pkCol != nil {
 		fmt.Fprintf(buffer, ", pk col:%s", p.pkCol.ExplainInfo())
 	}
-	haveCorCol := false
-	for _, cond := range p.AccessCondition {
-		if len(expression.ExtractCorColumns(cond)) > 0 {
-			haveCorCol = true
-			break
-		}
-	}
 	if len(p.rangeDecidedBy) > 0 {
 		fmt.Fprintf(buffer, ", range: decided by %v", p.rangeDecidedBy)
-	} else if haveCorCol {
-		if normalized {
-			fmt.Fprintf(buffer, ", range: decided by %s", expression.SortedExplainNormalizedExpressionList(p.AccessCondition))
-		} else {
-			fmt.Fprintf(buffer, ", range: decided by %v", p.AccessCondition)
-		}
 	} else if len(p.Ranges) > 0 {
 		if normalized {
 			fmt.Fprint(buffer, ", range:[?,?]")

@@ -1043,8 +1043,6 @@ type havingAndOrderbyExprResolver struct {
 	aggMapper    map[*ast.AggregateFuncExpr]int
 	colMapper    map[*ast.ColumnNameExpr]int
 	gbyItems     []*ast.ByItem
-	outerSchemas []*expression.Schema
-	outerNames   [][]*types.FieldName
 	curClause    clauseCode
 }
 
@@ -1145,17 +1143,6 @@ func (a *havingAndOrderbyExprResolver) Leave(n ast.Node) (node ast.Node, ok bool
 			return node, false
 		}
 		if index == -1 {
-			// If we can't find it any where, it may be a correlated columns.
-			for _, names := range a.outerNames {
-				idx, err1 := expression.FindFieldName(names, v.Name)
-				if err1 != nil {
-					a.err = err1
-					return node, false
-				}
-				if idx >= 0 {
-					return n, true
-				}
-			}
 			a.err = ErrUnknownColumn.GenWithStackByArgs(v.Name.OrigColName(), clauseMsg[a.curClause])
 			return node, false
 		}
@@ -1177,8 +1164,6 @@ func (b *PlanBuilder) resolveHavingAndOrderBy(sel *ast.SelectStmt, p LogicalPlan
 		selectFields: sel.Fields.Fields,
 		aggMapper:    make(map[*ast.AggregateFuncExpr]int),
 		colMapper:    b.colMapper,
-		outerSchemas: b.outerSchemas,
-		outerNames:   b.outerNames,
 	}
 	if sel.GroupBy != nil {
 		extractor.gbyItems = sel.GroupBy.Items

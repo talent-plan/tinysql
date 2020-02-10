@@ -116,8 +116,6 @@ type LogicalPlan interface {
 	// exhaustPhysicalPlans generates all possible plans that can match the required property.
 	exhaustPhysicalPlans(*property.PhysicalProperty) []PhysicalPlan
 
-	extractCorrelatedCols() []*expression.CorrelatedColumn
-
 	// Get all the children.
 	Children() []LogicalPlan
 
@@ -241,14 +239,6 @@ func newBasePhysicalPlan(ctx sessionctx.Context, tp string, self PhysicalPlan) b
 		basePlan: newBasePlan(ctx, tp),
 		self:     self,
 	}
-}
-
-func (p *baseLogicalPlan) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := make([]*expression.CorrelatedColumn, 0, len(p.children))
-	for _, child := range p.children {
-		corCols = append(corCols, child.extractCorrelatedCols()...)
-	}
-	return corCols
 }
 
 // PruneColumns implements LogicalPlan interface.

@@ -103,7 +103,7 @@ func (p *LogicalProjection) pushDownTopN(topN *LogicalTopN) LogicalPlan {
 		// remove meaningless constant sort items.
 		for i := len(topN.ByItems) - 1; i >= 0; i-- {
 			switch topN.ByItems[i].Expr.(type) {
-			case *expression.Constant, *expression.CorrelatedColumn:
+			case *expression.Constant:
 				topN.ByItems = append(topN.ByItems[:i], topN.ByItems[i+1:]...)
 			}
 		}

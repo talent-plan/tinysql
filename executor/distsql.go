@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	plannercore "github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
@@ -164,21 +163,6 @@ func splitRanges(ranges []*ranger.Range, keepOrder bool, desc bool) ([]*ranger.R
 	return signedRanges, unsignedRanges
 }
 
-// rebuildIndexRanges will be called if there's correlated column in access conditions. We will rebuild the range
-// by substitute correlated column with the constant.
-func rebuildIndexRanges(ctx sessionctx.Context, is *plannercore.PhysicalIndexScan, idxCols []*expression.Column, colLens []int) (ranges []*ranger.Range, err error) {
-	access := make([]expression.Expression, 0, len(is.AccessCondition))
-	for _, cond := range is.AccessCondition {
-		newCond, err1 := expression.SubstituteCorCol2Constant(cond)
-		if err1 != nil {
-			return nil, err1
-		}
-		access = append(access, newCond)
-	}
-	ranges, _, err = ranger.DetachSimpleCondAndBuildRangeForIndex(ctx, access, idxCols, colLens)
-	return ranges, err
-}
-
 // IndexReaderExecutor sends dag request and reads index data from kv layer.
 type IndexReaderExecutor struct {
 	baseExecutor
@@ -203,11 +187,9 @@ type IndexReaderExecutor struct {
 	// outputColumns are only required by union scan.
 	outputColumns []*expression.Column
 
-	corColInFilter bool
-	corColInAccess bool
-	idxCols        []*expression.Column
-	colLens        []int
-	plans          []plannercore.PhysicalPlan
+	idxCols []*expression.Column
+	colLens []int
+	plans   []plannercore.PhysicalPlan
 }
 
 // Close clears all resources hold by current object.
@@ -226,12 +208,6 @@ func (e *IndexReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 // Open implements the Executor Open interface.
 func (e *IndexReaderExecutor) Open(ctx context.Context) error {
 	var err error
-	if e.corColInAccess {
-		e.ranges, err = rebuildIndexRanges(e.ctx, e.plans[0].(*plannercore.PhysicalIndexScan), e.idxCols, e.colLens)
-		if err != nil {
-			return err
-		}
-	}
 	kvRanges, err := distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, e.physicalTableID, e.index.ID, e.ranges)
 	if err != nil {
 		return err
@@ -241,13 +217,6 @@ func (e *IndexReaderExecutor) Open(ctx context.Context) error {
 
 func (e *IndexReaderExecutor) open(ctx context.Context, kvRanges []kv.KeyRange) error {
 	var err error
-	if e.corColInFilter {
-		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
-		if err != nil {
-			return err
-		}
-	}
-
 	e.kvRanges = kvRanges
 
 	var builder distsql.RequestBuilder
@@ -297,13 +266,10 @@ type IndexLookUpExecutor struct {
 	// checkIndexValue is used to check the consistency of the index data.
 	*checkIndexValue
 
-	corColInIdxSide bool
-	idxPlans        []plannercore.PhysicalPlan
-	corColInTblSide bool
-	tblPlans        []plannercore.PhysicalPlan
-	corColInAccess  bool
-	idxCols         []*expression.Column
-	colLens         []int
+	idxPlans []plannercore.PhysicalPlan
+	tblPlans []plannercore.PhysicalPlan
+	idxCols  []*expression.Column
+	colLens  []int
 	// PushedLimit is used to skip the preceding and tailing handles when Limit is sunk into IndexLookUpReader.
 	PushedLimit *plannercore.PushedDownLimit
 }
@@ -316,12 +282,6 @@ type checkIndexValue struct {
 // Open implements the Executor Open interface.
 func (e *IndexLookUpExecutor) Open(ctx context.Context) error {
 	var err error
-	if e.corColInAccess {
-		e.ranges, err = rebuildIndexRanges(e.ctx, e.idxPlans[0].(*plannercore.PhysicalIndexScan), e.idxCols, e.colLens)
-		if err != nil {
-			return err
-		}
-	}
 	e.kvRanges, err = distsql.IndexRangesToKVRanges(e.ctx.GetSessionVars().StmtCtx, getPhysicalTableID(e.table), e.index.ID, e.ranges)
 	if err != nil {
 		return err
@@ -333,21 +293,6 @@ func (e *IndexLookUpExecutor) Open(ctx context.Context) error {
 func (e *IndexLookUpExecutor) open(ctx context.Context) error {
 	e.finished = make(chan struct{})
 	e.resultCh = make(chan *lookupTableTask, atomic.LoadInt32(&LookupTableTaskChannelSize))
-
-	var err error
-	if e.corColInIdxSide {
-		e.dagPB.Executors, err = constructDistExec(e.ctx, e.idxPlans)
-		if err != nil {
-			return err
-		}
-	}
-
-	if e.corColInTblSide {
-		e.tableRequest.Executors, err = constructDistExec(e.ctx, e.tblPlans)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -442,13 +387,12 @@ func (e *IndexLookUpExecutor) startTableWorker(ctx context.Context, workCh <-cha
 
 func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, handles []int64) (Executor, error) {
 	tableReaderExec := &TableReaderExecutor{
-		baseExecutor:   newBaseExecutor(e.ctx, e.schema, stringutil.MemoizeStr(func() string { return e.id.String() + "_tableReader" })),
-		table:          e.table,
-		dagPB:          e.tableRequest,
-		startTS:        e.startTS,
-		columns:        e.columns,
-		corColInFilter: e.corColInTblSide,
-		plans:          e.tblPlans,
+		baseExecutor: newBaseExecutor(e.ctx, e.schema, stringutil.MemoizeStr(func() string { return e.id.String() + "_tableReader" })),
+		table:        e.table,
+		dagPB:        e.tableRequest,
+		startTS:      e.startTS,
+		columns:      e.columns,
+		plans:        e.tblPlans,
 	}
 	tableReader, err := e.dataReaderBuilder.buildTableReaderFromHandles(ctx, tableReaderExec, handles)
 	if err != nil {

@@ -47,14 +47,14 @@ type AccessPath struct {
 	IsDNFCond bool
 }
 
-// SplitCorColAccessCondFromFilters move the necessary filter in the form of index_col = corrlated_col to access conditions.
-func (path *AccessPath) SplitCorColAccessCondFromFilters(eqOrInCount int) (access, remained []expression.Expression) {
+// SplitAccessCondFromFilters move the necessary filter in the form of index_col = constant to access conditions.
+func (path *AccessPath) SplitAccessCondFromFilters(eqOrInCount int) (access, remained []expression.Expression) {
 	access = make([]expression.Expression, len(path.IdxCols)-eqOrInCount)
 	used := make([]bool, len(path.TableFilters))
 	for i := eqOrInCount; i < len(path.IdxCols); i++ {
 		matched := false
 		for j, filter := range path.TableFilters {
-			if used[j] || !isColEqCorColOrConstant(filter, path.IdxCols[i]) {
+			if used[j] || !isColEqConstant(filter, path.IdxCols[i]) {
 				continue
 			}
 			matched = true
@@ -77,9 +77,9 @@ func (path *AccessPath) SplitCorColAccessCondFromFilters(eqOrInCount int) (acces
 	return access, remained
 }
 
-// isColEqCorColOrConstant checks if the expression is a eq function that one side is constant or correlated column
+// isColEqConstant checks if the expression is a eq function that one side is constant or correlated column
 // and another is column.
-func isColEqCorColOrConstant(filter expression.Expression, col *expression.Column) bool {
+func isColEqConstant(filter expression.Expression, col *expression.Column) bool {
 	f, ok := filter.(*expression.ScalarFunction)
 	if !ok || f.FuncName.L != ast.EQ {
 		return false
@@ -90,19 +90,9 @@ func isColEqCorColOrConstant(filter expression.Expression, col *expression.Colum
 				return true
 			}
 		}
-		if _, ok := f.GetArgs()[1].(*expression.CorrelatedColumn); ok {
-			if col.Equal(nil, c) {
-				return true
-			}
-		}
 	}
 	if c, ok := f.GetArgs()[1].(*expression.Column); ok {
 		if _, ok := f.GetArgs()[0].(*expression.Constant); ok {
-			if col.Equal(nil, c) {
-				return true
-			}
-		}
-		if _, ok := f.GetArgs()[0].(*expression.CorrelatedColumn); ok {
 			if col.Equal(nil, c) {
 				return true
 			}

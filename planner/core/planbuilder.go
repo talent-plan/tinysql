@@ -177,10 +177,8 @@ const (
 // PlanBuilder builds Plan from an ast.Node.
 // It just builds the ast node straightforwardly.
 type PlanBuilder struct {
-	ctx          sessionctx.Context
-	is           infoschema.InfoSchema
-	outerSchemas []*expression.Schema
-	outerNames   [][]*types.FieldName
+	ctx sessionctx.Context
+	is  infoschema.InfoSchema
 	// colMapper stores the column that must be pre-resolved.
 	colMapper map[*ast.ColumnNameExpr]int
 

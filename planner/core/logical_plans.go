@@ -127,23 +127,6 @@ func (p *LogicalJoin) attachOnConds(onConds []expression.Expression) {
 	p.OtherConditions = append(other, p.OtherConditions...)
 }
 
-func (p *LogicalJoin) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := p.baseLogicalPlan.extractCorrelatedCols()
-	for _, fun := range p.EqualConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.LeftConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.RightConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	for _, fun := range p.OtherConditions {
-		corCols = append(corCols, expression.ExtractCorColumns(fun)...)
-	}
-	return corCols
-}
-
 // LogicalProjection represents a select fields plan.
 type LogicalProjection struct {
 	logicalSchemaProducer
@@ -162,14 +145,6 @@ type LogicalProjection struct {
 	// This can be removed after column pool being supported.
 	// Related issue: TiDB#8141(https://github.com/pingcap/tidb/issues/8141)
 	AvoidColumnEvaluator bool
-}
-
-func (p *LogicalProjection) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := p.baseLogicalPlan.extractCorrelatedCols()
-	for _, expr := range p.Exprs {
-		corCols = append(corCols, expression.ExtractCorColumns(expr)...)
-	}
-	return corCols
 }
 
 // LogicalAggregation represents an aggregate plan.
@@ -201,19 +176,6 @@ func (la *LogicalAggregation) GetGroupByCols() []*expression.Column {
 	return la.groupByCols
 }
 
-func (la *LogicalAggregation) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := la.baseLogicalPlan.extractCorrelatedCols()
-	for _, expr := range la.GroupByItems {
-		corCols = append(corCols, expression.ExtractCorColumns(expr)...)
-	}
-	for _, fun := range la.AggFuncs {
-		for _, arg := range fun.Args {
-			corCols = append(corCols, expression.ExtractCorColumns(arg)...)
-		}
-	}
-	return corCols
-}
-
 // LogicalSelection represents a where or having predicate.
 type LogicalSelection struct {
 	baseLogicalPlan
@@ -222,14 +184,6 @@ type LogicalSelection struct {
 	// but after we converted to CNF(Conjunctive normal form), it can be
 	// split into a list of AND conditions.
 	Conditions []expression.Expression
-}
-
-func (p *LogicalSelection) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := p.baseLogicalPlan.extractCorrelatedCols()
-	for _, cond := range p.Conditions {
-		corCols = append(corCols, expression.ExtractCorColumns(cond)...)
-	}
-	return corCols
 }
 
 // LogicalTableDual represents a dual table plan.
@@ -439,41 +393,6 @@ func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expres
 		return false, nil
 	}
 	path.AccessConds, path.TableFilters = ranger.DetachCondsForColumn(ds.ctx, conds, pkCol)
-	// If there's no access cond, we try to find that whether there's expression containing correlated column that
-	// can be used to access data.
-	corColInAccessConds := false
-	if len(path.AccessConds) == 0 {
-		for i, filter := range path.TableFilters {
-			eqFunc, ok := filter.(*expression.ScalarFunction)
-			if !ok || eqFunc.FuncName.L != ast.EQ {
-				continue
-			}
-			lCol, lOk := eqFunc.GetArgs()[0].(*expression.Column)
-			if lOk && lCol.Equal(ds.ctx, pkCol) {
-				_, rOk := eqFunc.GetArgs()[1].(*expression.CorrelatedColumn)
-				if rOk {
-					path.AccessConds = append(path.AccessConds, filter)
-					path.TableFilters = append(path.TableFilters[:i], path.TableFilters[i+1:]...)
-					corColInAccessConds = true
-					break
-				}
-			}
-			rCol, rOk := eqFunc.GetArgs()[1].(*expression.Column)
-			if rOk && rCol.Equal(ds.ctx, pkCol) {
-				_, lOk := eqFunc.GetArgs()[0].(*expression.CorrelatedColumn)
-				if lOk {
-					path.AccessConds = append(path.AccessConds, filter)
-					path.TableFilters = append(path.TableFilters[:i], path.TableFilters[i+1:]...)
-					corColInAccessConds = true
-					break
-				}
-			}
-		}
-	}
-	if corColInAccessConds {
-		path.CountAfterAccess = 1
-		return true, nil
-	}
 	path.Ranges, err = ranger.BuildTableRange(path.AccessConds, sc, pkCol.RetType)
 	if err != nil {
 		return false, err
@@ -536,7 +455,7 @@ func (ds *DataSource) fillIndexPath(path *util.AccessPath, conds []expression.Ex
 func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath) bool {
 	sc := ds.ctx.GetSessionVars().StmtCtx
 	if path.EqOrInCondCount == len(path.AccessConds) {
-		accesses, remained := path.SplitCorColAccessCondFromFilters(path.EqOrInCondCount)
+		accesses, remained := path.SplitAccessCondFromFilters(path.EqOrInCondCount)
 		path.AccessConds = append(path.AccessConds, accesses...)
 		path.TableFilters = remained
 		if len(accesses) > 0 && ds.statisticTable.Pseudo {
@@ -650,14 +569,6 @@ type LogicalSort struct {
 	baseLogicalPlan
 
 	ByItems []*ByItems
-}
-
-func (ls *LogicalSort) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := ls.baseLogicalPlan.extractCorrelatedCols()
-	for _, item := range ls.ByItems {
-		corCols = append(corCols, expression.ExtractCorColumns(item.Expr)...)
-	}
-	return corCols
 }
 
 // LogicalTopN represents a top-n plan.

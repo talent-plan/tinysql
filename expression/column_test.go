@@ -22,49 +22,6 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 )
 
-func (s *testEvaluatorSuite) TestColumn(c *C) {
-	col := &Column{RetType: types.NewFieldType(mysql.TypeLonglong), UniqueID: 1}
-
-	c.Assert(col.Equal(nil, col), IsTrue)
-	c.Assert(col.Equal(nil, &Column{}), IsFalse)
-	c.Assert(col.IsCorrelated(), IsFalse)
-	c.Assert(col.Equal(nil, col.Decorrelate(nil)), IsTrue)
-
-	intDatum := types.NewIntDatum(1)
-	corCol := &CorrelatedColumn{Column: *col, Data: &intDatum}
-	invalidCorCol := &CorrelatedColumn{Column: Column{}}
-	schema := NewSchema(&Column{UniqueID: 1})
-	c.Assert(corCol.Equal(nil, corCol), IsTrue)
-	c.Assert(corCol.Equal(nil, invalidCorCol), IsFalse)
-	c.Assert(corCol.IsCorrelated(), IsTrue)
-	c.Assert(corCol.ConstItem(), IsFalse)
-	c.Assert(corCol.Decorrelate(schema).Equal(nil, col), IsTrue)
-	c.Assert(invalidCorCol.Decorrelate(schema).Equal(nil, invalidCorCol), IsTrue)
-
-	intCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeLonglong)},
-		Data: &intDatum}
-	intVal, isNull, err := intCorCol.EvalInt(s.ctx, chunk.Row{})
-	c.Assert(intVal, Equals, int64(1))
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-
-	realDatum := types.NewFloat64Datum(1.2)
-	realCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeDouble)},
-		Data: &realDatum}
-	realVal, isNull, err := realCorCol.EvalReal(s.ctx, chunk.Row{})
-	c.Assert(realVal, Equals, float64(1.2))
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-
-	stringDatum := types.NewStringDatum("abc")
-	stringCorCol := &CorrelatedColumn{Column: Column{RetType: types.NewFieldType(mysql.TypeVarchar)},
-		Data: &stringDatum}
-	strVal, isNull, err := stringCorCol.EvalString(s.ctx, chunk.Row{})
-	c.Assert(strVal, Equals, "abc")
-	c.Assert(isNull, IsFalse)
-	c.Assert(err, IsNil)
-}
-
 func (s *testEvaluatorSuite) TestColumnHashCode(c *C) {
 	col1 := &Column{
 		UniqueID: 12,

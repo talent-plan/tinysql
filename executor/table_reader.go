@@ -48,31 +48,10 @@ type TableReaderExecutor struct {
 
 	keepOrder bool
 	desc      bool
-	// corColInFilter tells whether there's correlated column in filter.
-	corColInFilter bool
-	// corColInAccess tells whether there's correlated column in access conditions.
-	corColInAccess bool
 }
 
 // Open initialzes necessary variables for using this executor.
 func (e *TableReaderExecutor) Open(ctx context.Context) error {
-	var err error
-	if e.corColInFilter {
-		e.dagPB.Executors, err = constructDistExec(e.ctx, e.plans)
-		if err != nil {
-			return err
-		}
-	}
-	if e.corColInAccess {
-		ts := e.plans[0].(*plannercore.PhysicalTableScan)
-		access := ts.AccessCondition
-		pkTP := ts.Table.GetPkColInfo().FieldType
-		e.ranges, err = ranger.BuildTableRange(access, e.ctx.GetSessionVars().StmtCtx, &pkTP)
-		if err != nil {
-			return err
-		}
-	}
-
 	e.resultHandler = &tableResultHandler{}
 	firstPartRanges, secondPartRanges := splitRanges(e.ranges, e.keepOrder, e.desc)
 	firstResult, err := e.buildResp(ctx, firstPartRanges)

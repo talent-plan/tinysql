@@ -814,7 +814,7 @@ func (r *PushTopNDownProjection) OnTransform(old *memo.ExprIter) (newExprs []*me
 	// remove meaningless constant sort items.
 	for i := len(newTopN.ByItems) - 1; i >= 0; i-- {
 		switch newTopN.ByItems[i].Expr.(type) {
-		case *expression.Constant, *expression.CorrelatedColumn:
+		case *expression.Constant:
 			topN.ByItems = append(newTopN.ByItems[:i], newTopN.ByItems[i+1:]...)
 		}
 	}
