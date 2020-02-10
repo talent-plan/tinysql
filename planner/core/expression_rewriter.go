@@ -838,17 +838,6 @@ func (er *expressionRewriter) toColumn(v *ast.ColumnName) {
 		er.ctxStackAppend(column, er.names[idx])
 		return
 	}
-	if join, ok := er.p.(*LogicalJoin); ok && join.redundantSchema != nil {
-		idx, err := expression.FindFieldName(join.redundantNames, v)
-		if err != nil {
-			er.err = err
-			return
-		}
-		if idx >= 0 {
-			er.ctxStackAppend(join.redundantSchema.Columns[idx], join.redundantNames[idx])
-			return
-		}
-	}
 	if er.b.curClause == globalOrderByClause {
 		er.b.curClause = orderByClause
 	}

@@ -425,26 +425,6 @@ func (b *PlanBuilder) buildJoin(ctx context.Context, joinNode *ast.Join) (Logica
 		joinPlan.JoinType = InnerJoin
 	}
 
-	// Merge sub join's redundantSchema into this join plan. When handle query like
-	// select t2.a from (t1 join t2 using (a)) join t3 using (a);
-	// we can simply search in the top level join plan to find redundant column.
-	var (
-		lRedundantSchema, rRedundantSchema *expression.Schema
-		lRedundantNames, rRedundantNames   types.NameSlice
-	)
-	if left, ok := leftPlan.(*LogicalJoin); ok && left.redundantSchema != nil {
-		lRedundantSchema = left.redundantSchema
-		lRedundantNames = left.redundantNames
-	}
-	if right, ok := rightPlan.(*LogicalJoin); ok && right.redundantSchema != nil {
-		rRedundantSchema = right.redundantSchema
-		rRedundantNames = right.redundantNames
-	}
-	joinPlan.redundantSchema = expression.MergeSchema(lRedundantSchema, rRedundantSchema)
-	joinPlan.redundantNames = make([]*types.FieldName, len(lRedundantNames)+len(rRedundantNames))
-	copy(joinPlan.redundantNames, lRedundantNames)
-	copy(joinPlan.redundantNames[len(lRedundantNames):], rRedundantNames)
-
 	// Set preferred join algorithm if some join hints is specified by user.
 	joinPlan.setPreferredJoinType(b.TableHints())
 
@@ -591,8 +571,6 @@ func (b *PlanBuilder) coalesceCommonColumns(p *LogicalJoin, leftPlan, rightPlan 
 
 	p.SetSchema(expression.NewSchema(schemaCols...))
 	p.names = names
-	p.redundantSchema = expression.MergeSchema(p.redundantSchema, expression.NewSchema(rColumns[:commonLen]...))
-	p.redundantNames = append(p.redundantNames.Shallow(), rNames[:commonLen]...)
 	p.OtherConditions = append(conds, p.OtherConditions...)
 
 	return nil
@@ -723,22 +701,10 @@ func (b *PlanBuilder) buildProjectionField(ctx context.Context, p LogicalPlan, f
 	var origTblName, tblName, origColName, colName, dbName model.CIStr
 	innerNode := getInnerFromParenthesesAndUnaryPlus(field.Expr)
 	col, isCol := expr.(*expression.Column)
-	// Correlated column won't affect the final output names. So we can put it in any of the three logic block.
-	// Don't put it into the first block just for simplifying the codes.
 	if colNameField, ok := innerNode.(*ast.ColumnNameExpr); ok && isCol {
 		// Field is a column reference.
 		idx := p.Schema().ColumnIndex(col)
-		var name *types.FieldName
-		// The column maybe the one from join's redundant part.
-		// TODO: Fully support USING/NATURAL JOIN, refactor here.
-		if idx == -1 {
-			if join, ok := p.(*LogicalJoin); ok {
-				idx = join.redundantSchema.ColumnIndex(col)
-				name = join.redundantNames[idx]
-			}
-		} else {
-			name = p.OutputNames()[idx]
-		}
+		name := p.OutputNames()[idx]
 		colName, origColName, tblName, origTblName, dbName = b.buildProjectionFieldNameFromColumns(field, colNameField, name)
 	} else if field.AsName.L != "" {
 		// Field has alias.
