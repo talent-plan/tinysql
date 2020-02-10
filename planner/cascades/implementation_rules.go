@@ -396,13 +396,7 @@ type ImplHashJoinBuildLeft struct {
 
 // Match implements ImplementationRule Match interface.
 func (r *ImplHashJoinBuildLeft) Match(expr *memo.GroupExpr, prop *property.PhysicalProperty) (matched bool) {
-	join := expr.ExprNode.(*plannercore.LogicalJoin)
-	switch join.JoinType {
-	case plannercore.SemiJoin, plannercore.AntiSemiJoin, plannercore.LeftOuterSemiJoin, plannercore.AntiLeftOuterSemiJoin:
-		return false
-	default:
-		return prop.IsEmpty()
-	}
+	return prop.IsEmpty()
 }
 
 // OnImplement implements ImplementationRule OnImplement interface.

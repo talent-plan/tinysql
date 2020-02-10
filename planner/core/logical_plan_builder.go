@@ -198,7 +198,7 @@ func (b *PlanBuilder) buildResultSetNode(ctx context.Context, node ast.ResultSet
 func (p *LogicalJoin) pushDownConstExpr(expr expression.Expression, leftCond []expression.Expression,
 	rightCond []expression.Expression, filterCond bool) ([]expression.Expression, []expression.Expression) {
 	switch p.JoinType {
-	case LeftOuterJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
+	case LeftOuterJoin:
 		if filterCond {
 			leftCond = append(leftCond, expr)
 			// Append the expr to right join condition instead of `rightCond`, to make it able to be
@@ -214,13 +214,8 @@ func (p *LogicalJoin) pushDownConstExpr(expr expression.Expression, leftCond []e
 		} else {
 			leftCond = append(leftCond, expr)
 		}
-	case SemiJoin, InnerJoin:
+	case InnerJoin:
 		leftCond = append(leftCond, expr)
-		rightCond = append(rightCond, expr)
-	case AntiSemiJoin:
-		if filterCond {
-			leftCond = append(leftCond, expr)
-		}
 		rightCond = append(rightCond, expr)
 	}
 	return leftCond, rightCond

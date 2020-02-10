@@ -240,16 +240,7 @@ func (p *LogicalJoin) extractUsedCols(parentUsedCols []*expression.Column) (left
 func (p *LogicalJoin) mergeSchema() {
 	lChild := p.children[0]
 	rChild := p.children[1]
-	composedSchema := expression.MergeSchema(lChild.Schema(), rChild.Schema())
-	if p.JoinType == SemiJoin || p.JoinType == AntiSemiJoin {
-		p.schema = lChild.Schema().Clone()
-	} else if p.JoinType == LeftOuterSemiJoin || p.JoinType == AntiLeftOuterSemiJoin {
-		joinCol := p.schema.Columns[len(p.schema.Columns)-1]
-		p.schema = lChild.Schema().Clone()
-		p.schema.Append(joinCol)
-	} else {
-		p.schema = composedSchema
-	}
+	p.schema = expression.MergeSchema(lChild.Schema(), rChild.Schema())
 }
 
 // PruneColumns implements LogicalPlan interface.

@@ -195,7 +195,7 @@ func (e *HashJoinExec) wait4BuildSide() (finished bool, err error) {
 			return false, err
 		}
 	}
-	if e.rowContainer.Len() == 0 && (e.joinType == plannercore.InnerJoin || e.joinType == plannercore.SemiJoin) {
+	if e.rowContainer.Len() == 0 && e.joinType == plannercore.InnerJoin {
 		return true, nil
 	}
 	return false, nil
@@ -356,19 +356,18 @@ func (e *HashJoinExec) joinMatchedProbeSideRow2Chunk(workerID uint, probeKey uin
 		return false, joinResult
 	}
 	if len(buildSideRows) == 0 {
-		e.joiners[workerID].onMissMatch(false, probeSideRow, joinResult.chk)
+		e.joiners[workerID].onMissMatch(probeSideRow, joinResult.chk)
 		return true, joinResult
 	}
 	iter := chunk.NewIterator4Slice(buildSideRows)
-	hasMatch, hasNull := false, false
+	hasMatch := false
 	for iter.Begin(); iter.Current() != iter.End(); {
-		matched, isNull, err := e.joiners[workerID].tryToMatchInners(probeSideRow, iter, joinResult.chk)
+		matched, _, err := e.joiners[workerID].tryToMatchInners(probeSideRow, iter, joinResult.chk)
 		if err != nil {
 			joinResult.err = err
 			return false, joinResult
 		}
 		hasMatch = hasMatch || matched
-		hasNull = hasNull || isNull
 
 		if joinResult.chk.IsFull() {
 			e.joinResultCh <- joinResult
@@ -379,7 +378,7 @@ func (e *HashJoinExec) joinMatchedProbeSideRow2Chunk(workerID uint, probeKey uin
 		}
 	}
 	if !hasMatch {
-		e.joiners[workerID].onMissMatch(hasNull, probeSideRow, joinResult.chk)
+		e.joiners[workerID].onMissMatch(probeSideRow, joinResult.chk)
 	}
 	return true, joinResult
 }
@@ -417,7 +416,7 @@ func (e *HashJoinExec) join2Chunk(workerID uint, probeSideChk *chunk.Chunk, hCtx
 
 	for i := range selected {
 		if !selected[i] || hCtx.hasNull[i] { // process unmatched probe side rows
-			e.joiners[workerID].onMissMatch(false, probeSideChk.GetRow(i), joinResult.chk)
+			e.joiners[workerID].onMissMatch(probeSideChk.GetRow(i), joinResult.chk)
 		} else { // process matched probe side rows
 			probeKey, probeRow := hCtx.hashVals[i].Sum64(), probeSideChk.GetRow(i)
 			ok, joinResult = e.joinMatchedProbeSideRow2Chunk(workerID, probeKey, probeRow, hCtx, joinResult)

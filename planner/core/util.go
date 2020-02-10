@@ -136,14 +136,6 @@ func (s *baseSchemaProducer) setSchemaAndNames(schema *expression.Schema, names 
 
 func buildLogicalJoinSchema(joinType JoinType, join LogicalPlan) *expression.Schema {
 	leftSchema := join.Children()[0].Schema()
-	switch joinType {
-	case SemiJoin, AntiSemiJoin:
-		return leftSchema.Clone()
-	case LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
-		newSchema := leftSchema.Clone()
-		newSchema.Append(join.Schema().Columns[join.Schema().Len()-1])
-		return newSchema
-	}
 	newSchema := expression.MergeSchema(leftSchema, join.Children()[1].Schema())
 	if joinType == LeftOuterJoin {
 		resetNotNullFlag(newSchema, leftSchema.Len(), newSchema.Len())
@@ -155,14 +147,6 @@ func buildLogicalJoinSchema(joinType JoinType, join LogicalPlan) *expression.Sch
 
 // BuildPhysicalJoinSchema builds the schema of PhysicalJoin from it's children's schema.
 func BuildPhysicalJoinSchema(joinType JoinType, join PhysicalPlan) *expression.Schema {
-	switch joinType {
-	case SemiJoin, AntiSemiJoin:
-		return join.Children()[0].Schema().Clone()
-	case LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
-		newSchema := join.Children()[0].Schema().Clone()
-		newSchema.Append(join.Schema().Columns[join.Schema().Len()-1])
-		return newSchema
-	}
 	return expression.MergeSchema(join.Children()[0].Schema(), join.Children()[1].Schema())
 }
 

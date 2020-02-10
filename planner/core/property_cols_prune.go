@@ -155,7 +155,7 @@ func (p *LogicalJoin) PreparePossibleProperties(schema *expression.Schema, child
 	// TODO: We should consider properties propagation.
 	p.leftProperties = leftProperties
 	p.rightProperties = rightProperties
-	if p.JoinType == LeftOuterJoin || p.JoinType == LeftOuterSemiJoin {
+	if p.JoinType == LeftOuterJoin {
 		rightProperties = nil
 	} else if p.JoinType == RightOuterJoin {
 		leftProperties = nil

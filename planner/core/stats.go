@@ -357,25 +357,6 @@ func (p *LogicalJoin) DeriveStats(childStats []*property.StatsInfo, selfSchema *
 		rightSchema:   childSchema[1],
 	}
 	p.equalCondOutCnt = helper.estimate()
-	if p.JoinType == SemiJoin || p.JoinType == AntiSemiJoin {
-		p.stats = &property.StatsInfo{
-			RowCount:    leftProfile.RowCount * selectionFactor,
-			Cardinality: make([]float64, len(leftProfile.Cardinality)),
-		}
-		for i := range p.stats.Cardinality {
-			p.stats.Cardinality[i] = leftProfile.Cardinality[i] * selectionFactor
-		}
-		return p.stats, nil
-	}
-	if p.JoinType == LeftOuterSemiJoin || p.JoinType == AntiLeftOuterSemiJoin {
-		p.stats = &property.StatsInfo{
-			RowCount:    leftProfile.RowCount,
-			Cardinality: make([]float64, selfSchema.Len()),
-		}
-		copy(p.stats.Cardinality, leftProfile.Cardinality)
-		p.stats.Cardinality[len(p.stats.Cardinality)-1] = 2.0
-		return p.stats, nil
-	}
 	count := p.equalCondOutCnt
 	if p.JoinType == LeftOuterJoin {
 		count = math.Max(count, leftProfile.RowCount)

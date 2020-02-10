@@ -74,14 +74,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		idxs = idxs[:last]
 		id := "MergeJoin"
 		switch x.JoinType {
-		case SemiJoin:
-			id = "MergeSemiJoin"
-		case AntiSemiJoin:
-			id = "MergeAntiSemiJoin"
-		case LeftOuterSemiJoin:
-			id = "MergeLeftOuterSemiJoin"
-		case AntiLeftOuterSemiJoin:
-			id = "MergeAntiLeftOuterSemiJoin"
 		case LeftOuterJoin:
 			id = "MergeLeftOuterJoin"
 		case RightOuterJoin:

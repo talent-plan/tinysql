@@ -139,7 +139,7 @@ func (p *LogicalJoin) pushDownTopNToChild(topN *LogicalTopN, idx int) LogicalPla
 
 func (p *LogicalJoin) pushDownTopN(topN *LogicalTopN) LogicalPlan {
 	switch p.JoinType {
-	case LeftOuterJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
+	case LeftOuterJoin:
 		p.children[0] = p.pushDownTopNToChild(topN, 0)
 		p.children[1] = p.children[1].pushDownTopN(nil)
 	case RightOuterJoin:

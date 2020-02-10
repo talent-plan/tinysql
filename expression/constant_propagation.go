@@ -304,10 +304,6 @@ type propOuterJoinConstSolver struct {
 	filterConds []Expression
 	outerSchema *Schema
 	innerSchema *Schema
-	// nullSensitive indicates if this outer join is null sensitive, if true, we cannot generate
-	// additional `col is not null` condition from column equal conditions. Specifically, this value
-	// is true for LeftOuterSemiJoin and AntiLeftOuterSemiJoin.
-	nullSensitive bool
 }
 
 func (s *propOuterJoinConstSolver) setConds2ConstFalse(filterConds bool) {
@@ -481,17 +477,6 @@ func (s *propOuterJoinConstSolver) propagateColumnEQ() {
 			innerID := s.getColID(innerCol)
 			s.unionSet.Union(outerID, innerID)
 			visited[i] = true
-			// Generate `innerCol is not null` from `outerCol = innerCol`. Note that `outerCol is not null`
-			// does not hold since we are in outer join.
-			// For AntiLeftOuterSemiJoin, this does not work, for example:
-			// `select *, t1.a not in (select t2.b from t t2) from t t1` does not imply `t2.b is not null`.
-			// For LeftOuterSemiJoin, this does not work either, for example:
-			// `select *, t1.a in (select t2.b from t t2) from t t1`
-			// rows with t2.b is null would impact whether LeftOuterSemiJoin should output 0 or null if there
-			// is no row satisfying t2.b = t1.a
-			if s.nullSensitive {
-				continue
-			}
 			childCol := s.innerSchema.RetrieveColumn(innerCol)
 			if !mysql.HasNotNullFlag(childCol.RetType.Flag) {
 				notNullExpr := BuildNotNullExpr(s.ctx, childCol)
@@ -566,11 +551,10 @@ func propagateConstantDNF(ctx sessionctx.Context, conds []Expression) []Expressi
 // conditions based on this column equal condition and `outerCol` related
 // expressions in join conditions and filter conditions;
 func PropConstOverOuterJoin(ctx sessionctx.Context, joinConds, filterConds []Expression,
-	outerSchema, innerSchema *Schema, nullSensitive bool) ([]Expression, []Expression) {
+	outerSchema, innerSchema *Schema) ([]Expression, []Expression) {
 	solver := &propOuterJoinConstSolver{
-		outerSchema:   outerSchema,
-		innerSchema:   innerSchema,
-		nullSensitive: nullSensitive,
+		outerSchema: outerSchema,
+		innerSchema: innerSchema,
 	}
 	solver.colMapper = make(map[int64]int)
 	solver.ctx = ctx

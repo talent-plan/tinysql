@@ -250,7 +250,7 @@ func (p *LogicalJoin) getHashJoins(prop *property.PhysicalProperty) []PhysicalPl
 	}
 	joins := make([]PhysicalPlan, 0, 2)
 	switch p.JoinType {
-	case SemiJoin, AntiSemiJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin, LeftOuterJoin:
+	case LeftOuterJoin:
 		joins = append(joins, p.getHashJoin(prop, 1))
 	case RightOuterJoin:
 		joins = append(joins, p.getHashJoin(prop, 0))

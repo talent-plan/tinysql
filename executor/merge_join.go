@@ -59,7 +59,6 @@ type mergeJoinOuterTable struct {
 	iter     *chunk.Iterator4Chunk
 	row      chunk.Row
 	hasMatch bool
-	hasNull  bool
 }
 
 // mergeJoinInnerTable represents the inner table of merge join.
@@ -286,14 +285,13 @@ func (e *MergeJoinExec) joinToChunk(ctx context.Context, chk *chunk.Chunk) (hasM
 		}
 
 		if cmpResult < 0 {
-			e.joiner.onMissMatch(false, e.outerTable.row, chk)
+			e.joiner.onMissMatch(e.outerTable.row, chk)
 			if err != nil {
 				return false, err
 			}
 
 			e.outerTable.row = e.outerTable.iter.Next()
 			e.outerTable.hasMatch = false
-			e.outerTable.hasNull = false
 
 			if chk.IsFull() {
 				return true, nil
@@ -301,20 +299,18 @@ func (e *MergeJoinExec) joinToChunk(ctx context.Context, chk *chunk.Chunk) (hasM
 			continue
 		}
 
-		matched, isNull, err := e.joiner.tryToMatchInners(e.outerTable.row, e.innerIter4Row, chk)
+		matched, _, err := e.joiner.tryToMatchInners(e.outerTable.row, e.innerIter4Row, chk)
 		if err != nil {
 			return false, err
 		}
 		e.outerTable.hasMatch = e.outerTable.hasMatch || matched
-		e.outerTable.hasNull = e.outerTable.hasNull || isNull
 
 		if e.innerIter4Row.Current() == e.innerIter4Row.End() {
 			if !e.outerTable.hasMatch {
-				e.joiner.onMissMatch(e.outerTable.hasNull, e.outerTable.row, chk)
+				e.joiner.onMissMatch(e.outerTable.row, chk)
 			}
 			e.outerTable.row = e.outerTable.iter.Next()
 			e.outerTable.hasMatch = false
-			e.outerTable.hasNull = false
 			e.innerIter4Row.Begin()
 		}
 

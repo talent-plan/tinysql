@@ -164,22 +164,6 @@ func (p *PhysicalHashJoin) GetCost(lCnt, rCnt float64) float64 {
 		rightSchema:   p.children[1].Schema(),
 	}
 	numPairs := helper.estimate()
-	// For semi-join class, if `OtherConditions` is empty, we already know
-	// the join results after querying hash table, otherwise, we have to
-	// evaluate those resulted row pairs after querying hash table; if we
-	// find one pair satisfying the `OtherConditions`, we then know the
-	// join result for this given outer row, otherwise we have to iterate
-	// to the end of those pairs; since we have no idea about when we can
-	// terminate the iteration, we assume that we need to iterate half of
-	// those pairs in average.
-	if p.JoinType == SemiJoin || p.JoinType == AntiSemiJoin ||
-		p.JoinType == LeftOuterSemiJoin || p.JoinType == AntiLeftOuterSemiJoin {
-		if len(p.OtherConditions) > 0 {
-			numPairs *= 0.5
-		} else {
-			numPairs = 0
-		}
-	}
 	// Cost of querying hash table is cheap actually, so we just compute the cost of
 	// evaluating `OtherConditions` and joining row pairs.
 	probeCost := numPairs * sessVars.CPUFactor
@@ -229,14 +213,6 @@ func (p *PhysicalMergeJoin) GetCost(lCnt, rCnt float64) float64 {
 		rightSchema:   p.children[1].Schema(),
 	}
 	numPairs := helper.estimate()
-	if p.JoinType == SemiJoin || p.JoinType == AntiSemiJoin ||
-		p.JoinType == LeftOuterSemiJoin || p.JoinType == AntiLeftOuterSemiJoin {
-		if len(p.OtherConditions) > 0 {
-			numPairs *= 0.5
-		} else {
-			numPairs = 0
-		}
-	}
 	sessVars := p.ctx.GetSessionVars()
 	probeCost := numPairs * sessVars.CPUFactor
 	// Cost of evaluating outer filters.

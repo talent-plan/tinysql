@@ -117,8 +117,6 @@ func (p *LogicalProjection) BuildKeyInfo(selfSchema *expression.Schema, childSch
 func (p *LogicalJoin) BuildKeyInfo(selfSchema *expression.Schema, childSchema []*expression.Schema) {
 	p.logicalSchemaProducer.BuildKeyInfo(selfSchema, childSchema)
 	switch p.JoinType {
-	case SemiJoin, LeftOuterSemiJoin, AntiSemiJoin, AntiLeftOuterSemiJoin:
-		selfSchema.Keys = childSchema[0].Clone().Keys
 	case InnerJoin, LeftOuterJoin, RightOuterJoin:
 		// If there is no equal conditions, then cartesian product can't be prevented and unique key information will destroy.
 		if len(p.EqualConditions) == 0 {
