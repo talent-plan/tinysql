@@ -133,15 +133,6 @@ func (s *session) getMembufCap() int {
 	return kv.DefaultTxnMembufCap
 }
 
-func (s *session) cleanRetryInfo() {
-	if s.sessionVars.RetryInfo.Retrying {
-		return
-	}
-
-	retryInfo := s.sessionVars.RetryInfo
-	retryInfo.Clean()
-}
-
 func (s *session) Status() uint16 {
 	return s.sessionVars.Status
 }
@@ -245,40 +236,15 @@ func (s *session) doCommit(ctx context.Context) error {
 	return s.txn.Commit(sessionctx.SetCommitCtx(ctx, s))
 }
 
-func (s *session) doCommitWithRetry(ctx context.Context) error {
+func (s *session) commitTxn(ctx context.Context) error {
 	defer func() {
 		s.txn.changeToInvalid()
-		s.cleanRetryInfo()
 	}()
 	if !s.txn.Valid() {
 		// If the transaction is invalid, maybe it has already been rolled back by the client.
 		return nil
 	}
-	txnSize := s.txn.Size()
 	err := s.doCommit(ctx)
-	if err != nil {
-		commitRetryLimit := s.sessionVars.RetryLimit
-		if !s.sessionVars.TxnCtx.CouldRetry {
-			commitRetryLimit = 0
-		}
-		if s.isTxnRetryableError(err) && commitRetryLimit > 0 {
-			logutil.Logger(ctx).Warn("sql",
-				zap.Error(err),
-				zap.String("txn", s.txn.GoString()))
-			// Transactions will retry 2 ~ commitRetryLimit times.
-			// We make larger transactions retry less times to prevent cluster resource outage.
-			txnSizeRate := float64(txnSize) / float64(kv.TxnTotalSizeLimit)
-			maxRetryCount := commitRetryLimit - int64(float64(commitRetryLimit-1)*txnSizeRate)
-			err = s.retry(ctx, uint(maxRetryCount))
-		} else {
-			logutil.Logger(ctx).Warn("can not retry txn",
-				zap.Error(err),
-				zap.Bool("InRestrictedSQL", s.sessionVars.InRestrictedSQL),
-				zap.Int64("tidb_retry_limit", s.sessionVars.RetryLimit),
-				zap.Bool("tidb_disable_txn_auto_retry", s.sessionVars.DisableTxnAutoRetry))
-		}
-
-	}
 
 	if isoLevelOneShot := &s.sessionVars.TxnIsolationLevelOneShot; isoLevelOneShot.State != 0 {
 		switch isoLevelOneShot.State {
@@ -300,7 +266,7 @@ func (s *session) doCommitWithRetry(ctx context.Context) error {
 }
 
 func (s *session) CommitTxn(ctx context.Context) error {
-	err := s.doCommitWithRetry(ctx)
+	err := s.commitTxn(ctx)
 
 	failpoint.Inject("keepHistory", func(val failpoint.Value) {
 		if val.(bool) {
@@ -316,7 +282,6 @@ func (s *session) RollbackTxn(ctx context.Context) {
 	if s.txn.Valid() {
 		terror.Log(s.txn.Rollback())
 	}
-	s.cleanRetryInfo()
 	s.txn.changeToInvalid()
 	s.sessionVars.TxnCtx.Cleanup()
 	s.sessionVars.SetStatusFlag(mysql.ServerStatusInTrans, false)
@@ -348,17 +313,8 @@ func (s *session) String() string {
 	return string(b)
 }
 
-const sqlLogMaxLen = 1024
-
 // SchemaChangedWithoutRetry is used for testing.
 var SchemaChangedWithoutRetry uint32
-
-func (s *session) isTxnRetryableError(err error) bool {
-	if atomic.LoadUint32(&SchemaChangedWithoutRetry) == 1 {
-		return kv.IsTxnRetryableError(err)
-	}
-	return kv.IsTxnRetryableError(err) || domain.ErrInfoSchemaChanged.Equal(err)
-}
 
 func (s *session) checkTxnAborted(stmt sqlexec.Statement) error {
 	if s.txn.doNotCommit == nil {
@@ -373,110 +329,6 @@ func (s *session) checkTxnAborted(stmt sqlexec.Statement) error {
 		return nil
 	}
 	return errors.New("current transaction is aborted, commands ignored until end of transaction block:" + s.txn.doNotCommit.Error())
-}
-
-func (s *session) retry(ctx context.Context, maxCnt uint) (err error) {
-	var retryCnt uint
-	defer func() {
-		s.sessionVars.RetryInfo.Retrying = false
-		// retryCnt only increments on retryable error, so +1 here.
-
-		s.sessionVars.SetStatusFlag(mysql.ServerStatusInTrans, false)
-		if err != nil {
-			s.RollbackTxn(ctx)
-		}
-		s.txn.changeToInvalid()
-	}()
-
-	connID := s.sessionVars.ConnectionID
-	s.sessionVars.RetryInfo.Retrying = true
-	if s.sessionVars.TxnCtx.ForUpdate {
-		err = ErrForUpdateCantRetry.GenWithStackByArgs(connID)
-		return err
-	}
-
-	nh := GetHistory(s)
-	var schemaVersion int64
-	sessVars := s.GetSessionVars()
-	orgStartTS := sessVars.TxnCtx.StartTS
-	for {
-		s.PrepareTxnCtx(ctx)
-		s.sessionVars.RetryInfo.ResetOffset()
-		for i, sr := range nh.history {
-			st := sr.st
-			s.sessionVars.StmtCtx = sr.stmtCtx
-			s.sessionVars.StmtCtx.ResetForRetry()
-			schemaVersion, err = st.RebuildPlan(ctx)
-			if err != nil {
-				return err
-			}
-
-			if retryCnt == 0 {
-				// We do not have to log the query every time.
-				// We print the queries at the first try only.
-				logutil.Logger(ctx).Warn("retrying",
-					zap.Int64("schemaVersion", schemaVersion),
-					zap.Uint("retryCnt", retryCnt),
-					zap.Int("queryNum", i),
-					zap.String("sql", sqlForLog(st.OriginText())))
-			} else {
-				logutil.Logger(ctx).Warn("retrying",
-					zap.Int64("schemaVersion", schemaVersion),
-					zap.Uint("retryCnt", retryCnt),
-					zap.Int("queryNum", i))
-			}
-			_, err = st.Exec(ctx)
-			if err != nil {
-				s.StmtRollback()
-				break
-			}
-			err = s.StmtCommit()
-			if err != nil {
-				return err
-			}
-		}
-		logutil.Logger(ctx).Warn("transaction association",
-			zap.Uint64("retrying txnStartTS", s.GetSessionVars().TxnCtx.StartTS),
-			zap.Uint64("original txnStartTS", orgStartTS))
-		if hook := ctx.Value("preCommitHook"); hook != nil {
-			// For testing purpose.
-			hook.(func())()
-		}
-		if err == nil {
-			err = s.doCommit(ctx)
-			if err == nil {
-				break
-			}
-		}
-		if !s.isTxnRetryableError(err) {
-			logutil.Logger(ctx).Warn("sql",
-				zap.Stringer("session", s),
-				zap.Error(err))
-
-			return err
-		}
-		retryCnt++
-		if retryCnt >= maxCnt {
-			logutil.Logger(ctx).Warn("sql",
-				zap.Uint("retry reached max count", retryCnt))
-
-			return err
-		}
-		logutil.Logger(ctx).Warn("sql",
-			zap.Error(err),
-			zap.String("txn", s.txn.GoString()))
-		kv.BackOff(retryCnt)
-		s.txn.changeToInvalid()
-		s.sessionVars.SetStatusFlag(mysql.ServerStatusInTrans, false)
-	}
-	return err
-}
-
-func sqlForLog(sql string) string {
-	if len(sql) > sqlLogMaxLen {
-		sql = sql[:sqlLogMaxLen] + fmt.Sprintf("(len:%d)", len(sql))
-	}
-	return executor.QueryReplacer.Replace(sql)
 }
 
 type sessionPool interface {
@@ -803,43 +655,11 @@ func (s *session) Txn(active bool) (kv.Transaction, error) {
 		if !s.sessionVars.IsAutocommit() {
 			s.sessionVars.SetStatusFlag(mysql.ServerStatusInTrans, true)
 		}
-		s.sessionVars.TxnCtx.CouldRetry = s.isTxnRetryable()
 		if s.sessionVars.GetReplicaRead().IsFollowerRead() {
 			s.txn.SetOption(kv.ReplicaRead, kv.ReplicaReadFollower)
 		}
 	}
 	return &s.txn, nil
-}
-
-// isTxnRetryable (if returns true) means the transaction could retry.
-// If the session is already in transaction, enable retry or internal SQL could retry.
-// If not, the transaction could always retry, because it should be auto committed transaction.
-// Anyway the retry limit is 0, the transaction could not retry.
-func (s *session) isTxnRetryable() bool {
-	sessVars := s.sessionVars
-
-	// If retry limit is 0, the transaction could not retry.
-	if sessVars.RetryLimit == 0 {
-		return false
-	}
-
-	// If the session is not InTxn, it is an auto-committed transaction.
-	// The auto-committed transaction could always retry.
-	if !sessVars.InTxn() {
-		return true
-	}
-
-	// The internal transaction could always retry.
-	if sessVars.InRestrictedSQL {
-		return true
-	}
-
-	// If the retry is enabled, the transaction could retry.
-	if !sessVars.DisableTxnAutoRetry {
-		return true
-	}
-
-	return false
 }
 
 func (s *session) NewTxn(ctx context.Context) error {
@@ -1124,9 +944,6 @@ var builtinGlobalVariable = []string{
 	variable.TiDBInitChunkSize,
 	variable.TiDBMaxChunkSize,
 	variable.TiDBEnableCascadesPlanner,
-	variable.TiDBRetryLimit,
-	variable.TiDBDisableTxnAutoRetry,
-	variable.TiDBEnableTablePartition,
 	variable.TiDBEnableVectorizedExpression,
 	variable.TiDBEnableNoopFuncs,
 	variable.TiDBMaxDeltaSchemaCount,

@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -229,25 +228,6 @@ func (s *testSessionSuite) TestGetSysVariables(c *C) {
 	c.Assert(terror.ErrorEqual(err, variable.ErrIncorrectScope), IsTrue, Commentf("err %v", err))
 	_, err = tk.Exec("select @@local.performance_schema_max_mutex_classes")
 	c.Assert(terror.ErrorEqual(err, variable.ErrIncorrectScope), IsTrue, Commentf("err %v", err))
-}
-
-func (s *testSessionSuite) TestReadOnlyNotInHistory(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table history (a int)")
-	tk.MustExec("insert history values (1), (2), (3)")
-	tk.MustExec("set @@autocommit = 0")
-	tk.MustExec("set tidb_disable_txn_auto_retry = 0")
-	tk.MustQuery("select * from history")
-	history := session.GetHistory(tk.Se)
-	c.Assert(history.Count(), Equals, 0)
-
-	tk.MustExec("insert history values (4)")
-	tk.MustExec("insert history values (5)")
-	c.Assert(history.Count(), Equals, 2)
-	tk.MustExec("commit")
-	tk.MustQuery("select * from history")
-	history = session.GetHistory(tk.Se)
-	c.Assert(history.Count(), Equals, 0)
 }
 
 func (s *testSessionSuite) TestString(c *C) {
@@ -597,58 +577,6 @@ func (s *testSchemaSerialSuite) TestLoadSchemaFailed(c *C) {
 	tk.MustExec("insert t values (100);")
 	// Make sure insert to table t2 transaction executes.
 	tk2.MustExec("commit")
-}
-
-func (s *testSchemaSerialSuite) TestSchemaCheckerSQL(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-
-	// create table
-	tk.MustExec(`create table t (id int, c int);`)
-	tk.MustExec(`create table t1 (id int, c int);`)
-	// insert data
-	tk.MustExec(`insert into t values(1, 1);`)
-
-	// The schema version is out of date in the first transaction, but the SQL can be retried.
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec(`begin;`)
-	tk1.MustExec(`alter table t add index idx(c);`)
-	tk.MustExec(`insert into t values(2, 2);`)
-	tk.MustExec(`commit;`)
-
-	// The schema version is out of date in the first transaction, and the SQL can't be retried.
-	atomic.StoreUint32(&session.SchemaChangedWithoutRetry, 1)
-	defer func() {
-		atomic.StoreUint32(&session.SchemaChangedWithoutRetry, 0)
-	}()
-	tk.MustExec(`begin;`)
-	tk1.MustExec(`alter table t modify column c bigint;`)
-	tk.MustExec(`insert into t values(3, 3);`)
-	_, err := tk.Exec(`commit;`)
-	c.Assert(terror.ErrorEqual(err, domain.ErrInfoSchemaChanged), IsTrue, Commentf("err %v", err))
-
-	// But the transaction related table IDs aren't in the updated table IDs.
-	tk.MustExec(`begin;`)
-	tk1.MustExec(`alter table t add index idx2(c);`)
-	tk.MustExec(`insert into t1 values(4, 4);`)
-	tk.MustExec(`commit;`)
-}
-
-func (s *testSchemaSuite) TestCommitWhenSchemaChanged(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk1 := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("create table t (a int, b int)")
-
-	tk1.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk1.MustExec("begin")
-	tk1.MustExec("insert into t values (1, 1)")
-
-	tk.MustExec("alter table t drop column b")
-
-	// When tk1 commit, it will find schema already changed.
-	tk1.MustExec("insert into t values (4, 4)")
-	_, err := tk1.Exec("commit")
-	c.Assert(terror.ErrorEqual(err, plannercore.ErrWrongValueCountOnRow), IsTrue, Commentf("err %v", err))
 }
 
 func (s *testSchemaSuite) TestTableReaderChunk(c *C) {

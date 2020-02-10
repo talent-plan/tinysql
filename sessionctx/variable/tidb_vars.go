@@ -53,19 +53,6 @@ const (
 	// tidb_general_log is used to log every query in the server in info level.
 	TiDBGeneralLog = "tidb_general_log"
 
-	// tidb_retry_limit is the maximum number of retries when committing a transaction.
-	TiDBRetryLimit = "tidb_retry_limit"
-
-	// tidb_disable_txn_auto_retry disables transaction auto retry.
-	TiDBDisableTxnAutoRetry = "tidb_disable_txn_auto_retry"
-
-	// tidb_enable_table_partition is used to control table partition feature.
-	// The valid value include auto/on/off:
-	// auto: enable table partition when that feature is implemented.
-	// on: always enable table partition.
-	// off: always disable table partition.
-	TiDBEnableTablePartition = "tidb_enable_table_partition"
-
 	// tidb_skip_isolation_level_check is used to control whether to return error when set unsupported transaction
 	// isolation level.
 	TiDBSkipIsolationLevelCheck = "tidb_skip_isolation_level_check"

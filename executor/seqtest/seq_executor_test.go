@@ -219,62 +219,6 @@ func (s *seqTestSuite) TestAdminShowNextID(c *C) {
 	r.Check(testkit.Rows("test tt id 31"))
 }
 
-func (s *seqTestSuite) TestNoHistoryWhenDisableRetry(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists history")
-	tk.MustExec("create table history (a int)")
-	tk.MustExec("set @@autocommit = 0")
-
-	// retry_limit = 0 will not add history.
-	tk.MustExec("set @@tidb_retry_limit = 0")
-	tk.MustExec("insert history values (1)")
-	c.Assert(session.GetHistory(tk.Se).Count(), Equals, 0)
-
-	// Disable auto_retry will add history for auto committed only
-	tk.MustExec("set @@autocommit = 1")
-	tk.MustExec("set @@tidb_retry_limit = 10")
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 1")
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/session/keepHistory", `return(true)`), IsNil)
-	tk.MustExec("insert history values (1)")
-	c.Assert(session.GetHistory(tk.Se).Count(), Equals, 1)
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/session/keepHistory"), IsNil)
-	tk.MustExec("begin")
-	tk.MustExec("insert history values (1)")
-	c.Assert(session.GetHistory(tk.Se).Count(), Equals, 0)
-	tk.MustExec("commit")
-
-	// Enable auto_retry will add history for both.
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/session/keepHistory", `return(true)`), IsNil)
-	tk.MustExec("insert history values (1)")
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/session/keepHistory"), IsNil)
-	c.Assert(session.GetHistory(tk.Se).Count(), Equals, 1)
-	tk.MustExec("begin")
-	tk.MustExec("insert history values (1)")
-	c.Assert(session.GetHistory(tk.Se).Count(), Equals, 2)
-	tk.MustExec("commit")
-}
-
-func (s *seqTestSuite) TestAutoIDInRetry(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (id int not null auto_increment primary key)")
-
-	tk.MustExec("set @@tidb_disable_txn_auto_retry = 0")
-	tk.MustExec("begin")
-	tk.MustExec("insert into t values ()")
-	tk.MustExec("insert into t values (),()")
-	tk.MustExec("insert into t values ()")
-
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/session/mockCommitRetryForAutoID", `return(true)`), IsNil)
-	tk.MustExec("commit")
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/session/mockCommitRetryForAutoID"), IsNil)
-
-	tk.MustExec("insert into t values ()")
-	tk.MustQuery(`select * from t`).Check(testkit.Rows("1", "2", "3", "4", "5"))
-}
-
 func (s *seqTestSuite) TestMaxDeltaSchemaCount(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

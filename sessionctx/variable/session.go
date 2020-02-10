@@ -34,46 +34,9 @@ import (
 
 // Error instances.
 var (
-	errCantGetValidID = terror.ClassVariable.New(mysql.ErrCantGetValidID, mysql.MySQLErrName[mysql.ErrCantGetValidID])
 	ErrCantSetToNull  = terror.ClassVariable.New(mysql.ErrCantSetToNull, mysql.MySQLErrName[mysql.ErrCantSetToNull])
 	ErrSnapshotTooOld = terror.ClassVariable.New(mysql.ErrSnapshotTooOld, mysql.MySQLErrName[mysql.ErrSnapshotTooOld])
 )
-
-// RetryInfo saves retry information.
-type RetryInfo struct {
-	Retrying         bool
-	currRetryOff     int
-	autoIncrementIDs []int64
-}
-
-// Clean does some clean work.
-func (r *RetryInfo) Clean() {
-	r.currRetryOff = 0
-	if len(r.autoIncrementIDs) > 0 {
-		r.autoIncrementIDs = r.autoIncrementIDs[:0]
-	}
-}
-
-// AddAutoIncrementID adds id to AutoIncrementIDs.
-func (r *RetryInfo) AddAutoIncrementID(id int64) {
-	r.autoIncrementIDs = append(r.autoIncrementIDs, id)
-}
-
-// ResetOffset resets the current retry offset.
-func (r *RetryInfo) ResetOffset() {
-	r.currRetryOff = 0
-}
-
-// GetCurrAutoIncrementID gets current AutoIncrementID.
-func (r *RetryInfo) GetCurrAutoIncrementID() (int64, error) {
-	if r.currRetryOff >= len(r.autoIncrementIDs) {
-		return 0, errCantGetValidID
-	}
-	id := r.autoIncrementIDs[r.currRetryOff]
-	r.currRetryOff++
-
-	return id, nil
-}
 
 // TransactionContext is used to store variables that has transaction scope.
 type TransactionContext struct {
@@ -88,8 +51,6 @@ type TransactionContext struct {
 
 	CreateTime     time.Time
 	StatementCount int
-	ForUpdate      bool
-	CouldRetry     bool
 }
 
 // UpdateDeltaForTable updates the delta info for some table.
@@ -166,8 +127,6 @@ func (ib *WriteStmtBufs) clean() {
 type SessionVars struct {
 	Concurrency
 	BatchSize
-	RetryLimit          int64
-	DisableTxnAutoRetry bool
 	// UsersLock is a lock for user defined variables.
 	UsersLock sync.RWMutex
 	// Users are user defined variables.
@@ -179,7 +138,6 @@ type SessionVars struct {
 	// SysErrorCount is the system variable "error_count", because it is on the hot path, so we extract it from the systems
 	SysErrorCount uint16
 
-	RetryInfo *RetryInfo
 	//  TxnCtx Should be reset on transaction finished.
 	TxnCtx *TransactionContext
 
@@ -285,9 +243,6 @@ type SessionVars struct {
 	// Table.alloc.
 	IDAllocator autoid.Allocator
 
-	// EnableTablePartition enables table partition feature.
-	EnableTablePartition string
-
 	// EnableCascadesPlanner enables the cascades planner.
 	EnableCascadesPlanner bool
 
@@ -387,13 +342,10 @@ func NewSessionVars() *SessionVars {
 		systems:                     make(map[string]string),
 		TxnCtx:                      &TransactionContext{},
 		KVVars:                      kv.NewVariables(),
-		RetryInfo:                   &RetryInfo{},
 		StrictSQLMode:               true,
 		Status:                      mysql.ServerStatusAutocommit,
 		StmtCtx:                     new(stmtctx.StatementContext),
 		AllowAggPushDown:            false,
-		RetryLimit:                  DefTiDBRetryLimit,
-		DisableTxnAutoRetry:         DefTiDBDisableTxnAutoRetry,
 		DDLReorgPriority:            kv.PriorityLow,
 		allowInSubqToJoinAndAgg:     DefOptInSubqToJoinAndAgg,
 		CorrelationThreshold:        DefOptCorrelationThreshold,
@@ -668,14 +620,8 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		s.InitChunkSize = tidbOptPositiveInt32(val, DefInitChunkSize)
 	case TiDBGeneralLog:
 		atomic.StoreUint32(&ProcessGeneralLog, uint32(tidbOptPositiveInt32(val, DefTiDBGeneralLog)))
-	case TiDBRetryLimit:
-		s.RetryLimit = tidbOptInt64(val, DefTiDBRetryLimit)
-	case TiDBDisableTxnAutoRetry:
-		s.DisableTxnAutoRetry = TiDBOptOn(val)
 	case TiDBEnableCascadesPlanner:
 		s.EnableCascadesPlanner = TiDBOptOn(val)
-	case TiDBEnableTablePartition:
-		s.EnableTablePartition = val
 	case TiDBDDLReorgPriority:
 		s.setDDLReorgPriority(val)
 	case TiDBEnableRadixJoin:

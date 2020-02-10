@@ -16,9 +16,6 @@ package ddl_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"math"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -51,8 +48,6 @@ var _ = Suite(&testDBSuite2{&testDBSuite{}})
 var _ = Suite(&testDBSuite3{&testDBSuite{}})
 var _ = Suite(&testDBSuite4{&testDBSuite{}})
 var _ = Suite(&testDBSuite5{&testDBSuite{}})
-
-const defaultBatchSize = 1024
 
 type testDBSuite struct {
 	cluster    *mocktikv.Cluster
@@ -180,173 +175,6 @@ func backgroundExec(s kv.Storage, sql string, done chan error) {
 	}
 	_, err = se.Execute(context.Background(), sql)
 	done <- errors.Trace(err)
-}
-
-func (s *testDBSuite2) TestAddUniqueIndexRollback(c *C) {
-	hasNullValsInKey := false
-	idxName := "c3_index"
-	addIdxSQL := "create unique index c3_index on t1 (c3)"
-	errMsg := "[kv:1062]Duplicate entry '' for key 'c3_index'"
-	testAddIndexRollback(c, s.store, s.lease, idxName, addIdxSQL, errMsg, hasNullValsInKey)
-}
-
-func batchInsert(tk *testkit.TestKit, tbl string, start, end int) {
-	dml := fmt.Sprintf("insert into %s values", tbl)
-	for i := start; i < end; i++ {
-		dml += fmt.Sprintf("(%d, %d, %d)", i, i, i)
-		if i != end-1 {
-			dml += ","
-		}
-	}
-	tk.MustExec(dml)
-}
-
-func testAddIndexRollback(c *C, store kv.Storage, lease time.Duration,
-	idxName, addIdxSQL, errMsg string, hasNullValsInKey bool) {
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("use test_db")
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (c1 int, c2 int, c3 int, unique key(c1))")
-	// defaultBatchSize is equal to ddl.defaultBatchSize
-	base := defaultBatchSize * 2
-	count := base
-	// add some rows
-	batchInsert(tk, "t1", 0, count)
-	// add some null rows
-	if hasNullValsInKey {
-		for i := count - 10; i < count; i++ {
-			tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, null)", i+10, i))
-		}
-	} else {
-		// add some duplicate rows
-		for i := count - 10; i < count; i++ {
-			tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
-		}
-	}
-
-	done := make(chan error, 1)
-	go backgroundExec(store, addIdxSQL, done)
-
-	times := 0
-	ticker := time.NewTicker(lease / 2)
-	defer ticker.Stop()
-LOOP:
-	for {
-		select {
-		case err := <-done:
-			c.Assert(err, NotNil)
-			c.Assert(err.Error(), Equals, errMsg, Commentf("err:%v", err))
-			break LOOP
-		case <-ticker.C:
-			if times >= 10 {
-				break
-			}
-			step := 5
-			// delete some rows, and add some data
-			for i := count; i < count+step; i++ {
-				n := rand.Intn(count)
-				tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", n))
-				tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
-			}
-			count += step
-			times++
-		}
-	}
-
-	ctx := tk.Se.(sessionctx.Context)
-	t := testGetTableByName(c, ctx, "test_db", "t1")
-	for _, tidx := range t.Indices() {
-		c.Assert(strings.EqualFold(tidx.Meta().Name.L, idxName), IsFalse)
-	}
-
-	// delete duplicated/null rows, then add index
-	for i := base - 10; i < base; i++ {
-		tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", i+10))
-	}
-	sessionExec(c, store, addIdxSQL)
-	tk.MustExec("drop table t1")
-}
-
-func (s *testDBSuite3) TestCancelAddIndex(c *C) {
-	idxName := "c3_index "
-	addIdxSQL := "create unique index c3_index on t1 (c3)"
-	testCancelAddIndex(c, s.store, s.dom.DDL(), s.lease, idxName, addIdxSQL, "")
-
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test_db")
-	tk.MustExec("drop table t1")
-}
-
-func testCancelAddIndex(c *C, store kv.Storage, d ddl.DDL, lease time.Duration, idxName, addIdxSQL, sqlModeSQL string) {
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("use test_db")
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (c1 int, c2 int unsigned, c3 int, unique key(c1))")
-	// defaultBatchSize is equal to ddl.defaultBatchSize
-	count := defaultBatchSize * 2
-	start := 0
-	// add some rows
-	if len(sqlModeSQL) != 0 {
-		// Insert some null values.
-		tk.MustExec(sqlModeSQL)
-		tk.MustExec("insert into t1 set c1 = 0")
-		tk.MustExec("insert into t1 set c2 = 1")
-		tk.MustExec("insert into t1 set c3 = 2")
-		start = 3
-	}
-	for i := start; i < count; i++ {
-		tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i, i, i))
-	}
-
-	hook := &ddl.TestDDLCallback{}
-	originBatchSize := tk.MustQuery("select @@global.tidb_ddl_reorg_batch_size")
-	// Set batch size to lower try to slow down add-index reorganization, This if for hook to cancel this ddl job.
-	tk.MustExec("set @@global.tidb_ddl_reorg_batch_size = 32")
-	defer tk.MustExec(fmt.Sprintf("set @@global.tidb_ddl_reorg_batch_size = %v", originBatchSize.Rows()[0][0]))
-	// let hook.OnJobUpdatedExported has chance to cancel the job.
-	// the hook.OnJobUpdatedExported is called when the job is updated, runReorgJob will wait ddl.ReorgWaitTimeout, then return the ddl.runDDLJob.
-	// After that ddl call d.hook.OnJobUpdated(job), so that we can canceled the job in this test case.
-	var checkErr error
-	ctx := tk.Se.(sessionctx.Context)
-	hook.OnJobUpdatedExported, _, checkErr = backgroundExecOnJobUpdatedExported(c, store, ctx, hook, idxName)
-	originalHook := d.GetHook()
-	d.(ddl.DDLForTest).SetHook(hook)
-	done := make(chan error, 1)
-	go backgroundExec(store, addIdxSQL, done)
-
-	times := 0
-	ticker := time.NewTicker(lease / 2)
-	defer ticker.Stop()
-LOOP:
-	for {
-		select {
-		case err := <-done:
-			c.Assert(checkErr, IsNil)
-			c.Assert(err, NotNil)
-			c.Assert(err.Error(), Equals, "[ddl:8214]Cancelled DDL job")
-			break LOOP
-		case <-ticker.C:
-			if times >= 10 {
-				break
-			}
-			step := 5
-			// delete some rows, and add some data
-			for i := count; i < count+step; i++ {
-				n := rand.Intn(count)
-				tk.MustExec(fmt.Sprintf("delete from t1 where c1 = %d", n))
-				tk.MustExec(fmt.Sprintf("insert into t1 values (%d, %d, %d)", i+10, i, i))
-			}
-			count += step
-			times++
-		}
-	}
-
-	t := testGetTableByName(c, ctx, "test_db", "t1")
-	for _, tidx := range t.Indices() {
-		c.Assert(strings.EqualFold(tidx.Meta().Name.L, idxName), IsFalse)
-	}
-
-	d.(ddl.DDLForTest).SetHook(originalHook)
 }
 
 // TestCancelAddIndex1 tests canceling ddl job when the add index worker is not started.
@@ -678,160 +506,6 @@ func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 
 }
 
-func (s *testDBSuite1) TestAddIndex1(c *C) {
-	testAddIndex(c, s.store, s.lease,
-		"create table test_add_index (c1 bigint, c2 bigint, c3 bigint, primary key(c1))", "")
-}
-
-func testAddIndex(c *C, store kv.Storage, lease time.Duration, createTableSQL, idxTp string) {
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("use test_db")
-	tk.MustExec("drop table if exists test_add_index")
-	tk.MustExec(createTableSQL)
-
-	done := make(chan error, 1)
-	start := -10
-	num := defaultBatchSize
-	// first add some rows
-	for i := start; i < num; i++ {
-		sql := fmt.Sprintf("insert into test_add_index values (%d, %d, %d)", i, i, i)
-		tk.MustExec(sql)
-	}
-
-	// Add some discrete rows.
-	maxBatch := 20
-	batchCnt := 100
-	otherKeys := make([]int, 0, batchCnt*maxBatch)
-	// Make sure there are no duplicate keys.
-	base := defaultBatchSize * 20
-	for i := 1; i < batchCnt; i++ {
-		n := base + i*defaultBatchSize + i
-		for j := 0; j < rand.Intn(maxBatch); j++ {
-			n += j
-			sql := fmt.Sprintf("insert into test_add_index values (%d, %d, %d)", n, n, n)
-			tk.MustExec(sql)
-			otherKeys = append(otherKeys, n)
-		}
-	}
-	// Encounter the value of math.MaxInt64 in middle of
-	v := math.MaxInt64 - defaultBatchSize/2
-	sql := fmt.Sprintf("insert into test_add_index values (%d, %d, %d)", v, v, v)
-	tk.MustExec(sql)
-	otherKeys = append(otherKeys, v)
-
-	addIdxSQL := fmt.Sprintf("alter table test_add_index add %s key c3_index(c3)", idxTp)
-	testddlutil.SessionExecInGoroutine(c, store, addIdxSQL, done)
-
-	deletedKeys := make(map[int]struct{})
-
-	ticker := time.NewTicker(lease / 2)
-	defer ticker.Stop()
-LOOP:
-	for {
-		select {
-		case err := <-done:
-			if err == nil {
-				break LOOP
-			}
-			c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
-		case <-ticker.C:
-			// When the server performance is particularly poor,
-			// the adding index operation can not be completed.
-			// So here is a limit to the number of rows inserted.
-			if num > defaultBatchSize*10 {
-				break
-			}
-			step := 5
-			// delete some rows, and add some data
-			for i := num; i < num+step; i++ {
-				n := rand.Intn(num)
-				deletedKeys[n] = struct{}{}
-				sql := fmt.Sprintf("delete from test_add_index where c1 = %d", n)
-				tk.MustExec(sql)
-				sql = fmt.Sprintf("insert into test_add_index values (%d, %d, %d)", i, i, i)
-				tk.MustExec(sql)
-			}
-			num += step
-		}
-	}
-
-	// get exists keys
-	keys := make([]int, 0, num)
-	for i := start; i < num; i++ {
-		if _, ok := deletedKeys[i]; ok {
-			continue
-		}
-		keys = append(keys, i)
-	}
-	keys = append(keys, otherKeys...)
-
-	// test index key
-	expectedRows := make([][]interface{}, 0, len(keys))
-	for _, key := range keys {
-		expectedRows = append(expectedRows, []interface{}{key})
-	}
-	rows := tk.MustQuery(fmt.Sprintf("select c1 from test_add_index where c3 >= %d order by c1", start)).Rows()
-	matchRows(c, rows, expectedRows)
-
-	// TODO: Support explain in future.
-	// rows := s.mustQuery(c, "explain select c1 from test_add_index where c3 >= 100")
-
-	// ay := dumpRows(c, rows)
-	// c.Assert(strings.Contains(fmt.Sprintf("%v", ay), "c3_index"), IsTrue)
-
-	// get all row handles
-	ctx := tk.Se.(sessionctx.Context)
-	c.Assert(ctx.NewTxn(context.Background()), IsNil)
-	t := testGetTableByName(c, ctx, "test_db", "test_add_index")
-	handles := make(map[int64]struct{})
-	startKey := t.RecordKey(math.MinInt64)
-	err := t.IterRecords(ctx, startKey, t.Cols(),
-		func(h int64, data []types.Datum, cols []*table.Column) (bool, error) {
-			handles[h] = struct{}{}
-			return true, nil
-		})
-	c.Assert(err, IsNil)
-
-	// check in index
-	var nidx table.Index
-	idxName := "c3_index"
-	if len(idxTp) != 0 {
-		idxName = "primary"
-	}
-	for _, tidx := range t.Indices() {
-		if tidx.Meta().Name.L == idxName {
-			nidx = tidx
-			break
-		}
-	}
-	// Make sure there is index with name c3_index.
-	c.Assert(nidx, NotNil)
-	c.Assert(nidx.Meta().ID, Greater, int64(0))
-	txn, err := ctx.Txn(true)
-	c.Assert(err, IsNil)
-	txn.Rollback()
-
-	c.Assert(ctx.NewTxn(context.Background()), IsNil)
-
-	it, err := nidx.SeekFirst(txn)
-	c.Assert(err, IsNil)
-	defer it.Close()
-
-	for {
-		_, h, err := it.Next()
-		if terror.ErrorEqual(err, io.EOF) {
-			break
-		}
-
-		c.Assert(err, IsNil)
-		_, ok := handles[h]
-		c.Assert(ok, IsTrue)
-		delete(handles, h)
-	}
-	c.Assert(handles, HasLen, 0)
-	tk.MustExec("drop table test_add_index")
-}
-
 func (s *testDBSuite2) TestDropIndex(c *C) {
 	idxName := "c3_index"
 	createSQL := "create table test_drop_index (c1 int, c2 int, c3 int, unique key(c1), key c3_index(c3))"
@@ -939,17 +613,6 @@ func (s *testDBSuite1) TestAddColumnTooMany(c *C) {
 	s.tk.MustGetErrCode(alterSQL, mysql.ErrTooManyFields)
 }
 
-func sessionExec(c *C, s kv.Storage, sql string) {
-	se, err := session.CreateSession4Test(s)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test_db")
-	c.Assert(err, IsNil)
-	rs, err := se.Execute(context.Background(), sql)
-	c.Assert(err, IsNil, Commentf("err:%v", errors.ErrorStack(err)))
-	c.Assert(rs, IsNil)
-	se.Close()
-}
-
 // TestDropColumn is for inserting value with a to-be-dropped column when do drop column.
 // Column info from schema in build-insert-plan should be public only,
 // otherwise they will not be consist with Table.Col(), then the server will panic.
@@ -1042,22 +705,6 @@ func (s *testDBSuite4) TestChangeColumn(c *C) {
 
 func (s *testDBSuite) mustExec(c *C, query string) {
 	s.tk.MustExec(query)
-}
-
-func matchRows(c *C, rows [][]interface{}, expected [][]interface{}) {
-	c.Assert(len(rows), Equals, len(expected), Commentf("got %v, expected %v", rows, expected))
-	for i := range rows {
-		match(c, rows[i], expected[i]...)
-	}
-}
-
-func match(c *C, row []interface{}, expected ...interface{}) {
-	c.Assert(len(row), Equals, len(expected))
-	for i := range row {
-		got := fmt.Sprintf("%v", row[i])
-		need := fmt.Sprintf("%v", expected[i])
-		c.Assert(got, Equals, need)
-	}
 }
 
 func (s *testDBSuite1) TestCreateTable(c *C) {

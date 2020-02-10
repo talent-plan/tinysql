@@ -502,32 +502,6 @@ func (e *InsertValues) hasAutoIncrementColumn() (int, bool) {
 	return colIdx, colIdx != -1
 }
 
-func (e *InsertValues) lazyAdjustAutoIncrementDatumInRetry(ctx context.Context, rows [][]types.Datum, colIdx int) ([][]types.Datum, error) {
-	// Get the autoIncrement column.
-	col := e.Table.Cols()[colIdx]
-	// Consider the colIdx of autoIncrement in row are the same.
-	length := len(rows)
-	for i := 0; i < length; i++ {
-		autoDatum := rows[i][colIdx]
-
-		// autoID can be found in RetryInfo.
-		retryInfo := e.ctx.GetSessionVars().RetryInfo
-		if retryInfo.Retrying {
-			id, err := retryInfo.GetCurrAutoIncrementID()
-			if err != nil {
-				return nil, err
-			}
-			autoDatum.SetAutoID(id, col.Flag)
-
-			if autoDatum, err = col.HandleBadNull(autoDatum, e.ctx.GetSessionVars().StmtCtx); err != nil {
-				return nil, err
-			}
-			rows[i][colIdx] = autoDatum
-		}
-	}
-	return rows, nil
-}
-
 // lazyAdjustAutoIncrementDatum is quite similar to adjustAutoIncrementDatum
 // except it will cache auto increment datum previously for lazy batch allocation of autoID.
 func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows [][]types.Datum) ([][]types.Datum, error) {
@@ -539,11 +513,6 @@ func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows []
 	colIdx, ok := e.hasAutoIncrementColumn()
 	if !ok {
 		return rows, nil
-	}
-	// autoID can be found in RetryInfo.
-	retryInfo := e.ctx.GetSessionVars().RetryInfo
-	if retryInfo.Retrying {
-		return e.lazyAdjustAutoIncrementDatumInRetry(ctx, rows, colIdx)
 	}
 	// Get the autoIncrement column.
 	col := e.Table.Cols()[colIdx]
@@ -567,7 +536,6 @@ func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows []
 				return nil, err
 			}
 			e.ctx.GetSessionVars().StmtCtx.InsertID = uint64(recordID)
-			retryInfo.AddAutoIncrementID(recordID)
 			rows[i][colIdx] = autoDatum
 			continue
 		}
@@ -600,7 +568,6 @@ func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows []
 
 				id := int64(uint64(min) + uint64(j) + 1)
 				d.SetAutoID(id, col.Flag)
-				retryInfo.AddAutoIncrementID(id)
 
 				// The value of d is adjusted by auto ID, so we need to cast it again.
 				d, err := table.CastValue(e.ctx, d, col.ToInfo())
@@ -613,7 +580,6 @@ func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows []
 		}
 
 		autoDatum.SetAutoID(recordID, col.Flag)
-		retryInfo.AddAutoIncrementID(recordID)
 
 		// the value of d is adjusted by auto ID, so we need to cast it again.
 		autoDatum, err = table.CastValue(e.ctx, autoDatum, col.ToInfo())
@@ -626,16 +592,6 @@ func (e *InsertValues) lazyAdjustAutoIncrementDatum(ctx context.Context, rows []
 }
 
 func (e *InsertValues) adjustAutoIncrementDatum(ctx context.Context, d types.Datum, hasValue bool, c *table.Column) (types.Datum, error) {
-	retryInfo := e.ctx.GetSessionVars().RetryInfo
-	if retryInfo.Retrying {
-		id, err := retryInfo.GetCurrAutoIncrementID()
-		if err != nil {
-			return types.Datum{}, err
-		}
-		d.SetAutoID(id, c.Flag)
-		return d, nil
-	}
-
 	var err error
 	var recordID int64
 	if !hasValue {
@@ -654,7 +610,6 @@ func (e *InsertValues) adjustAutoIncrementDatum(ctx context.Context, d types.Dat
 			return types.Datum{}, err
 		}
 		e.ctx.GetSessionVars().StmtCtx.InsertID = uint64(recordID)
-		retryInfo.AddAutoIncrementID(recordID)
 		return d, nil
 	}
 
@@ -673,7 +628,6 @@ func (e *InsertValues) adjustAutoIncrementDatum(ctx context.Context, d types.Dat
 	}
 
 	d.SetAutoID(recordID, c.Flag)
-	retryInfo.AddAutoIncrementID(recordID)
 
 	// the value of d is adjusted by auto ID, so we need to cast it again.
 	casted, err := table.CastValue(e.ctx, d, c.ToInfo())

@@ -363,7 +363,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		}
 		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 	case TiDBSkipUTF8Check, TiDBOptAggPushDown, TiDBOptInSubqToJoinAndAgg,
-		TiDBDisableTxnAutoRetry,
 		TiDBEnableCascadesPlanner, TiDBEnableNoopFuncs,
 		TiDBScatterRegion, TiDBGeneralLog, TiDBConstraintCheckInPlace, TiDBEnableVectorizedExpression:
 		fallthrough
@@ -412,16 +411,6 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 		return checkUInt64SystemVar(name, value, 0, math.MaxUint64, vars)
 	case ThreadPoolSize:
 		return checkUInt64SystemVar(name, value, 1, 64, vars)
-	case TiDBEnableTablePartition:
-		switch {
-		case strings.EqualFold(value, "ON") || value == "1":
-			return "on", nil
-		case strings.EqualFold(value, "OFF") || value == "0":
-			return "off", nil
-		case strings.EqualFold(value, "AUTO"):
-			return "auto", nil
-		}
-		return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 	case TiDBDDLReorgBatchSize:
 		return checkUInt64SystemVar(name, value, uint64(MinDDLReorgBatchSize), uint64(MaxDDLReorgBatchSize), vars)
 	case TiDBDDLErrorCountLimit:
@@ -477,8 +466,7 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string) (string,
 			return value, ErrWrongValueForVar.GenWithStackByArgs(name, value)
 		}
 		return value, nil
-	case TiDBProjectionConcurrency,
-		TiDBRetryLimit:
+	case TiDBProjectionConcurrency:
 		_, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return value, ErrWrongValueForVar.GenWithStackByArgs(name)

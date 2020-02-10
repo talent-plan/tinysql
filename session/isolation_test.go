@@ -14,8 +14,6 @@
 package session_test
 
 import (
-	"time"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
@@ -50,16 +48,9 @@ func (s *testIsolationSuite) SetUpSuite(c *C) {
 	session.DisableStats4Test()
 	s.dom, err = session.BootstrapSession(s.store)
 	c.Assert(err, IsNil)
-
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set @@global.tidb_retry_limit = 0")
-	time.Sleep(3 * time.Second)
 }
 
 func (s *testIsolationSuite) TearDownSuite(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("set @@global.tidb_retry_limit = 10")
-
 	s.dom.Close()
 	s.store.Close()
 	testleak.AfterTest(c)()
