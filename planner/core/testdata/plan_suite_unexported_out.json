@@ -527,14 +527,6 @@
         "JoinType": "inner join"
       },
       {
-        "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Projection",
-        "JoinType": "inner join"
-      },
-      {
-        "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Sel([not(and(gt(test.t.c, 1), gt(test.t.c, 1)))])->Projection",
-        "JoinType": "left outer join"
-      },
-      {
         "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.c,test.t.c)->Projection",
         "JoinType": "inner join"
       }

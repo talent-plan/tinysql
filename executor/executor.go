@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/terror"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/table"
@@ -528,40 +526,6 @@ func (e *LimitExec) adjustRequiredRows(chk *chunk.Chunk) *chunk.Chunk {
 	}
 
 	return chk.SetRequiredRows(mathutil.Min(limitTotal, limitRequired), e.maxChunkSize)
-}
-
-func init() {
-	// While doing optimization in the plan package, we need to execute uncorrelated subquery,
-	// but the plan package cannot import the executor package because of the dependency cycle.
-	// So we assign a function implemented in the executor package to the plan package to avoid the dependency cycle.
-	plannercore.EvalSubquery = func(ctx context.Context, p plannercore.PhysicalPlan, is infoschema.InfoSchema, sctx sessionctx.Context) (rows [][]types.Datum, err error) {
-		e := &executorBuilder{is: is, ctx: sctx}
-		exec := e.build(p)
-		if e.err != nil {
-			return rows, e.err
-		}
-		err = exec.Open(ctx)
-		defer terror.Call(exec.Close)
-		if err != nil {
-			return rows, err
-		}
-		chk := newFirstChunk(exec)
-		for {
-			err = Next(ctx, exec, chk)
-			if err != nil {
-				return rows, err
-			}
-			if chk.NumRows() == 0 {
-				return rows, nil
-			}
-			iter := chunk.NewIterator4Chunk(chk)
-			for r := iter.Begin(); r != iter.End(); r = iter.Next() {
-				row := r.GetDatumRow(retTypes(exec))
-				rows = append(rows, row)
-			}
-			chk = chunk.Renew(chk, sctx.GetSessionVars().MaxChunkSize)
-		}
-	}
 }
 
 // TableDualExec represents a dual table executor.

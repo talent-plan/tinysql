@@ -46,12 +46,8 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 		f.caseExpr(x)
 	case *ColumnNameExpr:
 		x.SetFlag(FlagHasReference)
-	case *CompareSubqueryExpr:
-		x.SetFlag(x.L.GetFlag() | x.R.GetFlag())
 	case *DefaultExpr:
 		x.SetFlag(FlagHasDefault)
-	case *ExistsSubqueryExpr:
-		x.SetFlag(x.Sel.GetFlag())
 	case *FuncCallExpr:
 		f.funcCall(x)
 	case *FuncCastExpr:
@@ -72,8 +68,6 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 		x.SetFlag(FlagHasReference)
 	case *RowExpr:
 		f.row(x)
-	case *SubqueryExpr:
-		x.SetFlag(FlagHasSubquery)
 	case *UnaryOperationExpr:
 		x.SetFlag(x.V.GetFlag())
 	case *ValuesExpr:

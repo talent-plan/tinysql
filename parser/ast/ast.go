@@ -49,7 +49,6 @@ const (
 	FlagHasFunc
 	FlagHasReference
 	FlagHasAggregateFunc
-	FlagHasSubquery
 	FlagHasVariable
 	FlagHasDefault
 )

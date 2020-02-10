@@ -639,7 +639,6 @@ type CreateTableStmt struct {
 	Constraints []*Constraint
 	Options     []*TableOption
 	OnDuplicate OnDuplicateKeyHandlingType
-	Select      ResultSetNode
 }
 
 // Accept implements Node Accept interface.
@@ -674,13 +673,6 @@ func (n *CreateTableStmt) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Constraints[i] = node.(*Constraint)
-	}
-	if n.Select != nil {
-		node, ok := n.Select.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Select = node.(ResultSetNode)
 	}
 
 	return v.Leave(n)

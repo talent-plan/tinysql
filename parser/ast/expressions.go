@@ -30,9 +30,7 @@ var (
 	_ ExprNode = &BinaryOperationExpr{}
 	_ ExprNode = &CaseExpr{}
 	_ ExprNode = &ColumnNameExpr{}
-	_ ExprNode = &CompareSubqueryExpr{}
 	_ ExprNode = &DefaultExpr{}
-	_ ExprNode = &ExistsSubqueryExpr{}
 	_ ExprNode = &IsNullExpr{}
 	_ ExprNode = &IsTruthExpr{}
 	_ ExprNode = &ParenthesesExpr{}
@@ -41,7 +39,6 @@ var (
 	_ ExprNode = &PatternRegexpExpr{}
 	_ ExprNode = &PositionExpr{}
 	_ ExprNode = &RowExpr{}
-	_ ExprNode = &SubqueryExpr{}
 	_ ExprNode = &UnaryOperationExpr{}
 	_ ExprNode = &ValuesExpr{}
 	_ ExprNode = &VariableExpr{}
@@ -288,107 +285,6 @@ func (n *CaseExpr) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// SubqueryExpr represents a subquery.
-type SubqueryExpr struct {
-	exprNode
-	// Query is the query SelectNode.
-	Query      ResultSetNode
-	Evaluated  bool
-	Correlated bool
-	MultiRows  bool
-	Exists     bool
-}
-
-// Restore implements Node interface.
-func (n *SubqueryExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WritePlain("(")
-	if err := n.Query.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore SubqueryExpr.Query")
-	}
-	ctx.WritePlain(")")
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *SubqueryExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *SubqueryExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*SubqueryExpr)
-	node, ok := n.Query.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Query = node.(ResultSetNode)
-	return v.Leave(n)
-}
-
-// CompareSubqueryExpr is the expression for "expr cmp (select ...)".
-// See https://dev.mysql.com/doc/refman/5.7/en/comparisons-using-subqueries.html
-// See https://dev.mysql.com/doc/refman/5.7/en/any-in-some-subqueries.html
-// See https://dev.mysql.com/doc/refman/5.7/en/all-subqueries.html
-type CompareSubqueryExpr struct {
-	exprNode
-	// L is the left expression
-	L ExprNode
-	// Op is the comparison opcode.
-	Op opcode.Op
-	// R is the subquery for right expression, may be rewritten to other type of expression.
-	R ExprNode
-	// All is true, we should compare all records in subquery.
-	All bool
-}
-
-// Restore implements Node interface.
-func (n *CompareSubqueryExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.L.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore CompareSubqueryExpr.L")
-	}
-	if err := n.Op.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore CompareSubqueryExpr.Op")
-	}
-	if n.All {
-		ctx.WriteKeyWord("ALL ")
-	} else {
-		ctx.WriteKeyWord("ANY ")
-	}
-	if err := n.R.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore CompareSubqueryExpr.R")
-	}
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *CompareSubqueryExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *CompareSubqueryExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*CompareSubqueryExpr)
-	node, ok := n.L.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.L = node.(ExprNode)
-	node, ok = n.R.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.R = node.(ExprNode)
-	return v.Leave(n)
-}
-
 // ColumnName represents column name.
 type ColumnName struct {
 	node
@@ -527,49 +423,6 @@ func (n *DefaultExpr) Accept(v Visitor) (Node, bool) {
 		}
 		n.Name = node.(*ColumnName)
 	}
-	return v.Leave(n)
-}
-
-// ExistsSubqueryExpr is the expression for "exists (select ...)".
-// See https://dev.mysql.com/doc/refman/5.7/en/exists-and-not-exists-subqueries.html
-type ExistsSubqueryExpr struct {
-	exprNode
-	// Sel is the subquery, may be rewritten to other type of expression.
-	Sel ExprNode
-	// Not is true, the expression is "not exists".
-	Not bool
-}
-
-// Restore implements Node interface.
-func (n *ExistsSubqueryExpr) Restore(ctx *RestoreCtx) error {
-	if n.Not {
-		ctx.WriteKeyWord("NOT EXISTS ")
-	} else {
-		ctx.WriteKeyWord("EXISTS ")
-	}
-	if err := n.Sel.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore ExistsSubqueryExpr.Sel")
-	}
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *ExistsSubqueryExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *ExistsSubqueryExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ExistsSubqueryExpr)
-	node, ok := n.Sel.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Sel = node.(ExprNode)
 	return v.Leave(n)
 }
 

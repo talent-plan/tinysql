@@ -705,7 +705,6 @@ import (
 	Variable			"User or system variable"
 	SystemVariable			"System defined variable name"
 	UserVariable			"User defined variable name"
-	SubSelect			"Sub Select"
 	StringLiteral			"text literal"
 	ExpressionOpt			"Optional expression"
 	SignedLiteral			"Literal or NumLiteral with sign"
@@ -780,7 +779,6 @@ import (
 	ConstraintElem			"table constraint element"
 	ConstraintKeywordOpt		"Constraint Keyword or empty"
 	CreateTableOptionListOpt	"create table option list opt"
-	CreateTableSelectOpt	        "Select/Union statement in CREATE TABLE ... SELECT"
 	DatabaseOption			"CREATE Database specification"
 	DatabaseOptionList		"CREATE Database specification list"
 	DatabaseOptionListOpt		"CREATE Database specification list opt"
@@ -2511,7 +2509,7 @@ DatabaseOptionList:
  *******************************************************************/
 
 CreateTableStmt:
-	"CREATE" OptTemporary "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt DuplicateOpt AsOpt CreateTableSelectOpt
+	"CREATE" OptTemporary "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt DuplicateOpt AsOpt
 	{
 		stmt := $6.(*ast.CreateTableStmt)
 		stmt.Table = $5.(*ast.TableName)
@@ -2519,7 +2517,6 @@ CreateTableStmt:
 		stmt.IsTemporary = $2.(bool)
 		stmt.Options = $7.([]*ast.TableOption)
 		stmt.OnDuplicate = $8.(ast.OnDuplicateKeyHandlingType)
-		stmt.Select = $10.(*ast.CreateTableStmt).Select
 		$$ = stmt
 	}
 |	"CREATE" OptTemporary "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen
@@ -2596,23 +2593,6 @@ AsOpt:
 	{}
 |	"AS"
 	{}
-
-CreateTableSelectOpt:
-	/* empty */
-	{
-		$$ = &ast.CreateTableStmt{}
-	}
-|
-	SelectStmt
-	{
-		$$ = &ast.CreateTableStmt{Select: $1}
-	}
-|
-	SubSelect %prec createTableSelect
-	// TODO: We may need better solution as issue #320.
-	{
-		$$ = &ast.CreateTableStmt{Select: $1}
-	}
 
 LikeTableWithOrWithoutParen:
 	"LIKE" TableName
@@ -2843,13 +2823,7 @@ Expression:
 	}
 |	"NOT" Expression %prec not
 	{
-		expr, ok := $2.(*ast.ExistsSubqueryExpr)
-		if ok {
-			expr.Not = true
-			$$ = $2
-		} else {
-			$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
-		}
+		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
 	}
 |	"MATCH" '(' ColumnNameList ')' "AGAINST" '(' BitExpr FulltextSearchModifierOpt ')'
 	{
@@ -2964,12 +2938,6 @@ BoolPri:
 |	BoolPri CompareOp PredicateExpr %prec eq
 	{
 		$$ = &ast.BinaryOperationExpr{Op: $2.(opcode.Op), L: $1, R: $3}
-	}
-|	BoolPri CompareOp AnyOrAll SubSelect %prec eq
-	{
-		sq := $4.(*ast.SubqueryExpr)
-		sq.MultiRows = true
-		$$ = &ast.CompareSubqueryExpr{Op: $2.(opcode.Op), L: $1, R: sq, All: $3.(bool)}
 	}
 |	BoolPri CompareOp singleAtIdentifier assignmentEq PredicateExpr %prec assignmentEq
 	{
@@ -3087,12 +3055,6 @@ PredicateExpr:
 	BitExpr InOrNotOp '(' ExpressionList ')'
 	{
 		$$ = &ast.PatternInExpr{Expr: $1, Not: !$2.(bool), List: $4.([]ast.ExprNode)}
-	}
-|	BitExpr InOrNotOp SubSelect
-	{
-		sq := $3.(*ast.SubqueryExpr)
-		sq.MultiRows = true
-		$$ = &ast.PatternInExpr{Expr: $1, Not: !$2.(bool), Sel: sq}
 	}
 |	BitExpr BetweenOrNotOp BitExpr "AND" PredicateExpr
 	{
@@ -3876,7 +3838,6 @@ SimpleExpr:
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
 	}
-|	SubSelect
 |	'(' Expression ')' {
 		startOffset := parser.startOffset(&yyS[yypt-1])
 		endOffset := parser.endOffset(&yyS[yypt])
@@ -3893,12 +3854,6 @@ SimpleExpr:
 	{
 		values := append($3.([]ast.ExprNode), $5)
 		$$ = &ast.RowExpr{Values: values}
-	}
-|	"EXISTS" SubSelect
-	{
-		sq := $2.(*ast.SubqueryExpr)
-		sq.Exists = true
-		$$ = &ast.ExistsSubqueryExpr{Sel: sq}
 	}
 |	"BINARY" SimpleExpr %prec neg
 	{
@@ -5502,19 +5457,6 @@ SelectStmtGroup:
 	}
 |	GroupByClause
 
-// See https://dev.mysql.com/doc/refman/5.7/en/subqueries.html
-SubSelect:
-	'(' SelectStmt ')'
-	{
-		s := $2.(*ast.SelectStmt)
-		endOffset := parser.endOffset(&yyS[yypt])
-		parser.setLastSelectFieldText(s, endOffset)
-		src := parser.src
-		// See the implementation of yyParse function
-		s.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
-		$$ = &ast.SubqueryExpr{Query: s}
-	}
-
 // See https://dev.mysql.com/doc/refman/5.7/en/innodb-locking-reads.html
 SelectLockOpt:
 	/* empty */
@@ -6450,12 +6392,6 @@ Statement:
 |	SelectStmt
 |	SetStmt
 |	ShowStmt
-|	SubSelect
-	{
-		// `(select 1)`; is a valid select statement
-		// TODO: This is used to fix issue #320. There may be a better solution.
-		$$ = $1.(*ast.SubqueryExpr).Query.(ast.StmtNode)
-	}
 |	TruncateTableStmt
 |	UseStmt
 

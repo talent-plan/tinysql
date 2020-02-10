@@ -1018,10 +1018,6 @@ func (a *havingAndOrderbyExprResolver) Enter(n ast.Node) (node ast.Node, skipChi
 	case *ast.AggregateFuncExpr:
 		a.inAggFunc = true
 	case *driver.ParamMarkerExpr, *ast.ColumnNameExpr, *ast.ColumnName:
-	case *ast.SubqueryExpr, *ast.ExistsSubqueryExpr:
-		// Enter a new context, skip it.
-		// For example: select sum(c) + c + exists(select c from t) from t;
-		return n, true
 	default:
 		a.inExpr = true
 	}
@@ -1193,8 +1189,6 @@ type gbyResolver struct {
 func (g *gbyResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 	g.exprDepth++
 	switch n := inNode.(type) {
-	case *ast.SubqueryExpr, *ast.CompareSubqueryExpr, *ast.ExistsSubqueryExpr:
-		return inNode, true
 	case *driver.ParamMarkerExpr:
 		g.isParam = true
 		if g.exprDepth == 1 {
@@ -1589,8 +1583,6 @@ func (c *colResolverForOnlyFullGroupBy) Enter(node ast.Node) (ast.Node, bool) {
 			c.firstNonAggCol, c.firstNonAggColIdx = t.Name, c.exprIdx
 		}
 		return node, true
-	case *ast.SubqueryExpr:
-		return node, true
 	}
 	return node, false
 }
@@ -1613,7 +1605,7 @@ type colNameResolver struct {
 
 func (c *colNameResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 	switch inNode.(type) {
-	case *ast.ColumnNameExpr, *ast.SubqueryExpr, *ast.AggregateFuncExpr:
+	case *ast.ColumnNameExpr, *ast.AggregateFuncExpr:
 		return inNode, true
 	}
 	return inNode, false

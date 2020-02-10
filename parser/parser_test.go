@@ -456,11 +456,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"REPLACE INTO foo (a,b,) VALUES (42,314,)", false, ""},
 		{"REPLACE INTO foo () VALUES ()", true, "REPLACE INTO `foo` () VALUES ()"},
 		{"REPLACE INTO foo VALUE ()", true, "REPLACE INTO `foo` VALUES ()"},
-		// 40
-		{`SELECT stuff.id
-			FROM stuff
-			WHERE stuff.value >= ALL (SELECT stuff.value
-			FROM stuff)`, true, "SELECT `stuff`.`id` FROM `stuff` WHERE `stuff`.`value`>=ALL (SELECT `stuff`.`value` FROM `stuff`)"},
 		{"BEGIN", true, "START TRANSACTION"},
 		// 45
 		{"COMMIT", true, "COMMIT"},
@@ -550,14 +545,8 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// for dual
 		{"select 1 from dual", true, "SELECT 1"},
 		{"select 1 from dual limit 1", true, "SELECT 1 LIMIT 1"},
-		{"select 1 where exists (select 2)", false, ""},
-		{"select 1 from dual where not exists (select 2)", true, "SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 2)"},
 		{"select 1 as a from dual order by a", true, "SELECT 1 AS `a` ORDER BY `a`"},
-		{"select 1 as a from dual where 1 < any (select 2) order by a", true, "SELECT 1 AS `a` FROM DUAL WHERE 1<ANY (SELECT 2) ORDER BY `a`"},
 		{"select 1 order by 1", true, "SELECT 1 ORDER BY 1"},
-
-		// for https://github.com/pingcap/tidb/issues/320
-		{`(select 1);`, true, "SELECT 1"},
 
 		// for https://github.com/pingcap/tidb/issues/1050
 		{`SELECT /*!40001 SQL_NO_CACHE */ * FROM test WHERE 1 limit 0, 2000;`, true, "SELECT SQL_NO_CACHE * FROM `test` WHERE 1 LIMIT 0,2000"},
@@ -1614,13 +1603,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table if not exists a like (b)", false, ""},
 		{"create table a (t int) like b", false, ""},
 		{"create table a (t int) like (b)", false, ""},
-		// Create table with select statement
-		{"create table a select * from b", true, "CREATE TABLE `a`  AS SELECT * FROM `b`"},
-		{"create table a as select * from b", true, "CREATE TABLE `a`  AS SELECT * FROM `b`"},
-		{"create table a (m int, n datetime) as select * from b", true, "CREATE TABLE `a` (`m` INT,`n` DATETIME) AS SELECT * FROM `b`"},
-		{"create table a (unique(n)) as select n from b", true, "CREATE TABLE `a` (UNIQUE(`n`)) AS SELECT `n` FROM `b`"},
-		{"create table a replace as select n from b", true, "CREATE TABLE `a`  REPLACE AS SELECT `n` FROM `b`"},
-
 		// Create table with no option is valid for parser
 		{"create table a", true, "CREATE TABLE `a` "},
 
@@ -1925,10 +1907,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		// special table name
 		{"CREATE TABLE cdp_test.`test2-1` (id int(11) DEFAULT NULL,key(id));", true, "CREATE TABLE `cdp_test`.`test2-1` (`id` INT(11) DEFAULT NULL,INDEX(`id`))"},
 		{"CREATE TABLE miantiao (`扁豆焖面`       INT(11));", true, "CREATE TABLE `miantiao` (`扁豆焖面` INT(11))"},
-
-		// for create table select
-		{"CREATE TABLE bar (m INT)  SELECT n FROM foo;", true, "CREATE TABLE `bar` (`m` INT) AS SELECT `n` FROM `foo`"},
-		{"CREATE TABLE bar (m INT) REPLACE SELECT n FROM foo;", true, "CREATE TABLE `bar` (`m` INT) REPLACE AS SELECT `n` FROM `foo`"},
 
 		// for generated column definition
 		{"create table t (a timestamp, b timestamp as (a) not null on update current_timestamp);", false, ""},
@@ -2466,23 +2444,6 @@ func (s *testParserSuite) TestSideEffect(c *C) {
 
 	_, err = parser.ParseOneStmt("show tables;", "", "")
 	c.Assert(err, IsNil)
-}
-
-func (s *testParserSuite) TestNotExistsSubquery(c *C) {
-	table := []testCase{
-		{`select * from t1 where not exists (select * from t2 where t1.a = t2.a)`, true, ""},
-	}
-
-	parser := parser.New()
-	for _, tt := range table {
-		stmt, _, err := parser.Parse(tt.src, "", "")
-		c.Assert(err, IsNil)
-
-		sel := stmt[0].(*ast.SelectStmt)
-		exists, ok := sel.Where.(*ast.ExistsSubqueryExpr)
-		c.Assert(ok, IsTrue)
-		c.Assert(exists.Not, Equals, tt.ok)
-	}
 }
 
 // See https://github.com/pingcap/tidb/parser/issue/94

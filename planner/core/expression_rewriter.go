@@ -33,9 +33,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 )
 
-// EvalSubquery evaluates incorrelated subqueries once.
-var EvalSubquery func(ctx context.Context, p PhysicalPlan, is infoschema.InfoSchema, sctx sessionctx.Context) ([][]types.Datum, error)
-
 // evalAstExpr evaluates ast expression directly.
 func evalAstExpr(sctx sessionctx.Context, expr ast.ExprNode) (types.Datum, error) {
 	if val, ok := expr.(*driver.ValueExpr); ok {
@@ -333,8 +330,7 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		inNode = er.preprocess(inNode)
 	}
 	switch v := inNode.(type) {
-	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause,
-		*ast.SubqueryExpr, *ast.ExistsSubqueryExpr, *ast.CompareSubqueryExpr, *ast.ValuesExpr:
+	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause, *ast.ValuesExpr:
 	case *driver.ValueExpr:
 		value := &expression.Constant{Value: v.Datum, RetType: &v.Type}
 		er.ctxStackAppend(value, types.EmptyName)

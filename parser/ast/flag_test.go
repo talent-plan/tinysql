@@ -74,10 +74,6 @@ func (ts *testFlagSuite) TestFlag(c *C) {
 			ast.FlagConstant | ast.FlagHasReference,
 		},
 		{
-			"1 = ANY (select 1) OR exists (select 1)",
-			ast.FlagHasSubquery,
-		},
-		{
 			"1 in (1) or 1 is true or null is null or 'abc' like 'abc' or 'abc' rlike 'abc'",
 			ast.FlagConstant,
 		},
@@ -104,10 +100,6 @@ func (ts *testFlagSuite) TestFlag(c *C) {
 		{
 			"sum(a)",
 			ast.FlagHasAggregateFunc | ast.FlagHasReference,
-		},
-		{
-			"(select 1) as a",
-			ast.FlagHasSubquery,
 		},
 		{
 			"@auto_commit",

@@ -399,27 +399,6 @@ func (s *testRangerSuite) TestIndexRange(c *C) {
 		},
 		{
 			indexPos:    0,
-			exprStr:     "not (a not in (NULL, '1', '2', '3') and a > '2')",
-			accessConds: "[or(in(test.t.a, <nil>, 1, 2, 3), le(test.t.a, 2))]",
-			filterConds: "[]",
-			resultStr:   "[[-inf,\"2\"] [\"3\",\"3\"]]",
-		},
-		{
-			indexPos:    0,
-			exprStr:     "not (a not in (NULL) and a > '2')",
-			accessConds: "[or(eq(test.t.a, <nil>), le(test.t.a, 2))]",
-			filterConds: "[]",
-			resultStr:   "[[-inf,\"2\"]]",
-		},
-		{
-			indexPos:    0,
-			exprStr:     "not (a not in (NULL) or a > '2')",
-			accessConds: "[and(eq(test.t.a, <nil>), le(test.t.a, 2))]",
-			filterConds: "[]",
-			resultStr:   "[]",
-		},
-		{
-			indexPos:    0,
 			exprStr:     "(a > 'b' and a < 'bbb') or (a < 'cb' and a > 'a')",
 			accessConds: "[or(and(gt(test.t.a, b), lt(test.t.a, bbb)), and(lt(test.t.a, cb), gt(test.t.a, a)))]",
 			filterConds: "[]",
@@ -487,13 +466,6 @@ func (s *testRangerSuite) TestIndexRange(c *C) {
 			accessConds: "[or(lt(test.t.d, 你好), gt(test.t.d, 你好))]",
 			filterConds: "[or(lt(test.t.d, 你好), gt(test.t.d, 你好))]",
 			resultStr:   "[[-inf,\"你好\") (\"你好\",+inf]]",
-		},
-		{
-			indexPos:    2,
-			exprStr:     `not(d < "你好" || d > "你好")`,
-			accessConds: "[and(ge(test.t.d, 你好), le(test.t.d, 你好))]",
-			filterConds: "[and(ge(test.t.d, 你好), le(test.t.d, 你好))]",
-			resultStr:   "[[\"你好\",\"你好\"]]",
 		},
 	}
 
