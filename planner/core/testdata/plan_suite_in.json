@@ -104,8 +104,6 @@
       "select * from t t1 join t t2 on t1.a = t2.a order by t1.a",
       "select * from t t1 left outer join t t2 on t1.a = t2.a right outer join t t3 on t1.a = t3.a",
       "select * from t t1 join t t2 on t1.a = t2.a join t t3 on t1.a = t3.a and t1.b = 1 and t3.c = 1",
-      "select * from t where t.c in (select b from t s where s.a = t.a)",
-      "select t.c in (select b from t s where s.a = t.a) from t",
       // Test Single Merge Join.
       // Merge Join now enforce a sort.
       "select /*+ TIDB_SMJ(t1,t2)*/ * from t t1, t t2 where t1.a = t2.b",
@@ -145,10 +143,7 @@
       "select /*+ TIDB_INLJ(t1, t2) */ * from t t1 left outer join t t2 on t1.a = t2.b",
       // Test Index Join failed.
       "select /*+ TIDB_INLJ(t2) */ * from t t1 right outer join t t2 on t1.a = t2.b",
-      // Test Semi Join hint success.
-      "select /*+ TIDB_INLJ(t2) */ * from t t1 where t1.a in (select a from t t2)",
       // Test Semi Join hint fail.
-      "select /*+ TIDB_INLJ(t1) */ * from t t1 where t1.a in (select a from t t2)",
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t1.c=t2.c and t1.f=t2.f",
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t1.a = t2.a and t1.f=t2.f",
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t1.f=t2.f and t1.a=t2.a",
@@ -158,25 +153,6 @@
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t2.c > t1.d-10 and t2.c < t1.d+10",
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t1.b = t2.c and t2.c=1 and t2.d=2 and t2.e=4",
       "select /*+ TIDB_INLJ(t2) */ * from t t1 join t t2 where t2.c=1 and t2.d=1 and t2.e > 10 and t2.e < 20"
-    ]
-  },
-  {
-    "name": "TestDAGPlanBuilderSubquery",
-    "cases": [
-      // Test join key with cast.
-      "select * from t where exists (select s.a from t s having sum(s.a) = t.a )",
-      "select * from t where exists (select s.a from t s having sum(s.a) = t.a ) order by t.a",
-      // FIXME: Report error by resolver.
-      // "select * from t where exists (select s.a from t s having s.a = t.a ) order by t.a",
-      "select * from t where a in (select s.a from t s) order by t.a",
-      // Test Nested sub query.
-      "select * from t where exists (select s.a from t s where s.c in (select c from t as k where k.d = s.d) having sum(s.a) = t.a )",
-      // Test Semi Join + Order by.
-      "select * from t where a in (select a from t) order by b",
-      // Test Apply.
-      "select t.c in (select count(*) from t s, t t1 where s.a = t.a and s.a = t1.a) from t",
-      "select (select count(*) from t s, t t1 where s.a = t.a and s.a = t1.a) from t",
-      "select (select count(*) from t s, t t1 where s.a = t.a and s.a = t1.a) from t order by t.a"
     ]
   },
   {
@@ -230,8 +206,6 @@
     "cases": [
       // Test distinct.
       "select distinct b from t",
-      "select count(*) from (select * from t order by b) t group by b",
-      "select count(*), x from (select b as bbb, a + 1 as x from (select * from t order by b) t) t group by bbb",
       // Test agg + table.
       "select sum(a), avg(b + c) from t group by d",
       "select sum(distinct a), avg(b + c) from t group by d",
@@ -249,8 +223,6 @@
       "select sum(e) as k, avg(b + c) from t where c = 1 and b = 1 and e = 1 group by d order by k",
       // Test stream agg + order.
       "select sum(e) as k, avg(b + c) from t where c = 1 and b = 1 and e = 1 group by c order by k",
-      // Test agg can't push down.
-      "select (select count(1) k from t s where s.a = t.a having k != 0) from t",
       // Test stream agg with multi group by columns.
       "select sum(e+1) from t group by e,d,c order by c",
       "select sum(e+1) from t group by e,d,c order by c,e",
@@ -354,12 +326,6 @@
       "select /*+ TIDB_INLJ(test.t1) */ t1.a, t2.a, t3.a from t t1, t t2, t t3 where t1.a = t2.a and t2.a = t3.a;",
       "select /*+ TIDB_INLJ(t1) */ t1.b, t2.a from t t1, t t2 where t1.b = t2.a;",
       "select /*+ TIDB_INLJ(t2) */ t1.b, t2.a from t2 t1, t2 t2 where t1.b=t2.b and t2.c=-1;"
-    ]
-  },
-  {
-    "name": "TestSemiJoinToInner",
-    "cases": [
-      "select t1.a, (select count(t2.a) from t t2 where t2.g in (select t3.d from t t3 where t3.c = t1.a)) as agg_col from t t1;"
     ]
   }
 ]

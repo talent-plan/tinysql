@@ -35,10 +35,6 @@ const (
 	OperandProjection
 	// OperandSelection is the operand for LogicalSelection.
 	OperandSelection
-	// OperandApply is the operand for LogicalApply.
-	OperandApply
-	// OperandMaxOneRow is the operand for LogicalMaxOneRow.
-	OperandMaxOneRow
 	// OperandTableDual is the operand for LogicalTableDual.
 	OperandTableDual
 	// OperandDataSource is the operand for DataSource.
@@ -74,10 +70,6 @@ func GetOperand(p plannercore.LogicalPlan) Operand {
 		return OperandProjection
 	case *plannercore.LogicalSelection:
 		return OperandSelection
-	case *plannercore.LogicalApply:
-		return OperandApply
-	case *plannercore.LogicalMaxOneRow:
-		return OperandMaxOneRow
 	case *plannercore.LogicalTableDual:
 		return OperandTableDual
 	case *plannercore.DataSource:

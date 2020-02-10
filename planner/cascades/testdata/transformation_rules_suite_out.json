@@ -3,53 +3,6 @@
     "Name": "TestPredicatePushDown",
     "Cases": [
       {
-        "SQL": "select a, b from (select a, b from t as t1 order by a) as t2 where t2.b > 10",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.b]",
-          "    Projection_5 input:[Group#1], test.t.a, test.t.b",
-          "Group#1 Schema:[test.t.a,test.t.b]",
-          "    Sort_3 input:[Group#2], test.t.a:asc",
-          "Group#2 Schema:[test.t.a,test.t.b]",
-          "    Projection_2 input:[Group#3], test.t.a, test.t.b",
-          "Group#3 Schema:[test.t.a,test.t.b]",
-          "    TiKVSingleGather_7 input:[Group#4], table:t1",
-          "Group#4 Schema:[test.t.a,test.t.b]",
-          "    Selection_9 input:[Group#5], gt(test.t.b, 10)",
-          "Group#5 Schema:[test.t.a,test.t.b]",
-          "    TableScan_6 table:t1, pk col:test.t.a"
-        ]
-      },
-      {
-        "SQL": "select a, b from (select a, b from t as t1 order by a) as t2 where t2.a > 10",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.b]",
-          "    Projection_5 input:[Group#1], test.t.a, test.t.b",
-          "Group#1 Schema:[test.t.a,test.t.b]",
-          "    Sort_3 input:[Group#2], test.t.a:asc",
-          "Group#2 Schema:[test.t.a,test.t.b]",
-          "    Projection_2 input:[Group#3], test.t.a, test.t.b",
-          "Group#3 Schema:[test.t.a,test.t.b]",
-          "    TiKVSingleGather_7 input:[Group#4], table:t1",
-          "Group#4 Schema:[test.t.a,test.t.b]",
-          "    TableScan_10 table:t1, pk col:test.t.a, cond:[gt(test.t.a, 10)]"
-        ]
-      },
-      {
-        "SQL": "select a, b from (select a, b, a+b as a_b from t as t1) as t2 where a_b > 10 and b = 1",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.b]",
-          "    Projection_4 input:[Group#1], test.t.a, test.t.b",
-          "Group#1 Schema:[test.t.a,test.t.b,Column#13]",
-          "    Projection_2 input:[Group#2], test.t.a, test.t.b, plus(test.t.a, test.t.b)->Column#13",
-          "Group#2 Schema:[test.t.a,test.t.b]",
-          "    TiKVSingleGather_6 input:[Group#3], table:t1",
-          "Group#3 Schema:[test.t.a,test.t.b]",
-          "    Selection_8 input:[Group#4], eq(test.t.b, 1), gt(plus(test.t.a, test.t.b), 10)",
-          "Group#4 Schema:[test.t.a,test.t.b]",
-          "    TableScan_5 table:t1, pk col:test.t.a"
-        ]
-      },
-      {
         "SQL": "select a, max(b) from t group by a having a > 1",
         "Result": [
           "Group#0 Schema:[test.t.a,Column#13]",
@@ -126,26 +79,6 @@
           "    IndexScan_13 table:t, index:f, cond:[gt(test.t.f, 1)]",
           "Group#4 Schema:[test.t.a,test.t.f]",
           "    IndexScan_14 table:t, index:f, g, cond:[gt(test.t.f, 1)]"
-        ]
-      },
-      {
-        "SQL": "select a, f from (select a, f, g from t where f = 1) t1 where g > 1",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.f]",
-          "    Projection_5 input:[Group#1], test.t.a, test.t.f",
-          "Group#1 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    Projection_3 input:[Group#2], test.t.a, test.t.f, test.t.g",
-          "Group#2 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    TiKVSingleGather_7 input:[Group#3], table:t",
-          "    TiKVSingleGather_9 input:[Group#4], table:t, index:f_g",
-          "Group#3 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    Selection_14 input:[Group#5], gt(test.t.g, 1)",
-          "Group#5 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    Selection_10 input:[Group#6], eq(test.t.f, 1)",
-          "Group#6 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    TableScan_6 table:t, pk col:test.t.a",
-          "Group#4 Schema:[test.t.a,test.t.f,test.t.g]",
-          "    IndexScan_16 table:t, index:f, g, cond:[eq(test.t.f, 1) gt(test.t.g, 1)]"
         ]
       },
       {
@@ -282,56 +215,6 @@
           "    TiKVSingleGather_7 input:[Group#4], table:t",
           "Group#4 Schema:[test.t.a,test.t.b,test.t.c]",
           "    TableScan_6 table:t, pk col:test.t.a"
-        ]
-      },
-      {
-        "SQL": "select a, b, c from t t1 where t1.a in (select t2.a as a from t t2 where t2.b > t1.b order by t1.b limit 1)",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    Projection_9 input:[Group#1], test.t.a, test.t.b, test.t.c",
-          "Group#1 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    Apply_8 input:[Group#2,Group#3], semi join, equal:[eq(test.t.a, test.t.a)]",
-          "Group#2 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    TiKVSingleGather_11 input:[Group#4], table:t1",
-          "Group#4 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    TableScan_10 table:t1, pk col:test.t.a",
-          "Group#3 Schema:[test.t.a]",
-          "    Projection_5 input:[Group#5], test.t.a",
-          "Group#5 Schema:[test.t.a,test.t.b]",
-          "    TopN_15 input:[Group#6], , offset:0, count:1",
-          "Group#6 Schema:[test.t.a,test.t.b]",
-          "    Selection_4 input:[Group#7], gt(test.t.b, test.t.b)",
-          "Group#7 Schema:[test.t.a,test.t.b]",
-          "    TiKVSingleGather_13 input:[Group#8], table:t2",
-          "Group#8 Schema:[test.t.a,test.t.b]",
-          "    TableScan_12 table:t2, pk col:test.t.a"
-        ]
-      },
-      {
-        "SQL": "select a, b, c from t t1 where t1.a in (select a from (select t2.a as a, t1.b as b from t t2 where t2.b > t1.b) x order by b limit 1)",
-        "Result": [
-          "Group#0 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    Projection_11 input:[Group#1], test.t.a, test.t.b, test.t.c",
-          "Group#1 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    Apply_10 input:[Group#2,Group#3], semi join, equal:[eq(test.t.a, test.t.a)]",
-          "Group#2 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    TiKVSingleGather_13 input:[Group#4], table:t1",
-          "Group#4 Schema:[test.t.a,test.t.b,test.t.c]",
-          "    TableScan_12 table:t1, pk col:test.t.a",
-          "Group#3 Schema:[test.t.a]",
-          "    Projection_9 input:[Group#5], test.t.a",
-          "Group#5 Schema:[test.t.a,Column#25]",
-          "    Projection_6 input:[Group#6], test.t.a, Column#25",
-          "Group#6 Schema:[test.t.a,Column#25]",
-          "    Projection_5 input:[Group#7], test.t.a, test.t.b",
-          "Group#7 Schema:[test.t.a,test.t.b]",
-          "    TopN_18 input:[Group#8], test.t.b:asc, offset:0, count:1",
-          "Group#8 Schema:[test.t.a,test.t.b]",
-          "    Selection_4 input:[Group#9], gt(test.t.b, test.t.b)",
-          "Group#9 Schema:[test.t.a,test.t.b]",
-          "    TiKVSingleGather_15 input:[Group#10], table:t2",
-          "Group#10 Schema:[test.t.a,test.t.b]",
-          "    TableScan_14 table:t2, pk col:test.t.a"
         ]
       }
     ]

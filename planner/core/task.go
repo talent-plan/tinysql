@@ -142,35 +142,6 @@ func (p *basePhysicalPlan) attach2Task(tasks ...task) task {
 	return attachPlan2Task(p.self, t)
 }
 
-func (p *PhysicalApply) attach2Task(tasks ...task) task {
-	lTask := finishCopTask(p.ctx, tasks[0].copy())
-	rTask := finishCopTask(p.ctx, tasks[1].copy())
-	p.SetChildren(lTask.plan(), rTask.plan())
-	p.schema = BuildPhysicalJoinSchema(p.JoinType, p)
-	return &rootTask{
-		p:   p,
-		cst: p.GetCost(lTask.count(), rTask.count()) + lTask.cost(),
-	}
-}
-
-// GetCost computes the cost of apply operator.
-func (p *PhysicalApply) GetCost(lCount float64, rCount float64) float64 {
-	var cpuCost float64
-	sessVars := p.ctx.GetSessionVars()
-	if len(p.LeftConditions) > 0 {
-		cpuCost += lCount * sessVars.CPUFactor
-		lCount *= selectionFactor
-	}
-	if len(p.RightConditions) > 0 {
-		cpuCost += lCount * rCount * sessVars.CPUFactor
-		rCount *= selectionFactor
-	}
-	if len(p.EqualConditions)+len(p.OtherConditions) > 0 {
-		cpuCost += lCount * rCount * sessVars.CPUFactor
-	}
-	return cpuCost
-}
-
 // GetCost computes cost of hash join operator itself.
 func (p *PhysicalHashJoin) GetCost(lCnt, rCnt float64) float64 {
 	buildCnt, probeCnt := lCnt, rCnt

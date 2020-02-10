@@ -39,7 +39,6 @@ var (
 	_ PhysicalPlan = &PhysicalIndexReader{}
 	_ PhysicalPlan = &PhysicalIndexLookUpReader{}
 	_ PhysicalPlan = &PhysicalHashAgg{}
-	_ PhysicalPlan = &PhysicalApply{}
 	_ PhysicalPlan = &PhysicalHashJoin{}
 	_ PhysicalPlan = &PhysicalMergeJoin{}
 	_ PhysicalPlan = &PhysicalUnionScan{}
@@ -220,13 +219,6 @@ type PhysicalTopN struct {
 	ByItems []*ByItems
 	Offset  uint64
 	Count   uint64
-}
-
-// PhysicalApply represents apply plan, only used for subquery.
-type PhysicalApply struct {
-	PhysicalHashJoin
-
-	OuterSchema []*expression.CorrelatedColumn
 }
 
 type basePhysicalJoin struct {

@@ -114,10 +114,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildMemTable(v)
 	case *plannercore.PhysicalTableDual:
 		return b.buildTableDual(v)
-	case *plannercore.PhysicalApply:
-		return b.buildApply(v)
-	case *plannercore.PhysicalMaxOneRow:
-		return b.buildMaxOneRow(v)
 	case *plannercore.Analyze:
 		return b.buildAnalyze(v)
 	case *plannercore.PhysicalTableReader:
@@ -716,53 +712,6 @@ func (b *executorBuilder) buildTopN(v *plannercore.PhysicalTopN) Executor {
 		SortExec: sortExec,
 		limit:    &plannercore.PhysicalLimit{Count: v.Count, Offset: v.Offset},
 	}
-}
-
-func (b *executorBuilder) buildApply(v *plannercore.PhysicalApply) *NestedLoopApplyExec {
-	leftChild := b.build(v.Children()[0])
-	if b.err != nil {
-		return nil
-	}
-	rightChild := b.build(v.Children()[1])
-	if b.err != nil {
-		return nil
-	}
-	otherConditions := append(expression.ScalarFuncs2Exprs(v.EqualConditions), v.OtherConditions...)
-	defaultValues := v.DefaultValues
-	if defaultValues == nil {
-		defaultValues = make([]types.Datum, v.Children()[v.InnerChildIdx].Schema().Len())
-	}
-	tupleJoiner := newJoiner(b.ctx, v.JoinType, v.InnerChildIdx == 0,
-		defaultValues, otherConditions, retTypes(leftChild), retTypes(rightChild))
-	outerExec, innerExec := leftChild, rightChild
-	outerFilter, innerFilter := v.LeftConditions, v.RightConditions
-	if v.InnerChildIdx == 0 {
-		outerExec, innerExec = rightChild, leftChild
-		outerFilter, innerFilter = v.RightConditions, v.LeftConditions
-	}
-	e := &NestedLoopApplyExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), outerExec, innerExec),
-		innerExec:    innerExec,
-		outerExec:    outerExec,
-		outerFilter:  outerFilter,
-		innerFilter:  innerFilter,
-		outer:        v.JoinType != plannercore.InnerJoin,
-		joiner:       tupleJoiner,
-		outerSchema:  v.OuterSchema,
-	}
-	return e
-}
-
-func (b *executorBuilder) buildMaxOneRow(v *plannercore.PhysicalMaxOneRow) Executor {
-	childExec := b.build(v.Children()[0])
-	if b.err != nil {
-		return nil
-	}
-	base := newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), childExec)
-	base.initCap = 2
-	base.maxChunkSize = 2
-	e := &MaxOneRowExec{baseExecutor: base}
-	return e
 }
 
 func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {

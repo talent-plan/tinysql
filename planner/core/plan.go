@@ -118,9 +118,6 @@ type LogicalPlan interface {
 
 	extractCorrelatedCols() []*expression.CorrelatedColumn
 
-	// MaxOneRow means whether this operator only returns max one row.
-	MaxOneRow() bool
-
 	// Get all the children.
 	Children() []LogicalPlan
 
@@ -170,14 +167,9 @@ type PhysicalPlan interface {
 type baseLogicalPlan struct {
 	basePlan
 
-	taskMap   map[string]task
-	self      LogicalPlan
-	maxOneRow bool
-	children  []LogicalPlan
-}
-
-func (p *baseLogicalPlan) MaxOneRow() bool {
-	return p.maxOneRow
+	taskMap  map[string]task
+	self     LogicalPlan
+	children []LogicalPlan
 }
 
 // ExplainInfo implements Plan interface.
@@ -217,44 +209,13 @@ func (p *baseLogicalPlan) storeTask(prop *property.PhysicalProperty, task task) 
 	p.taskMap[string(key)] = task
 }
 
-// HasMaxOneRow returns if the LogicalPlan will output at most one row.
-func HasMaxOneRow(p LogicalPlan, childMaxOneRow []bool) bool {
-	if len(childMaxOneRow) == 0 {
-		// The reason why we use this check is that, this function
-		// is used both in planner/core and planner/cascades.
-		// In cascades planner, LogicalPlan may have no `children`.
-		return false
-	}
-	switch x := p.(type) {
-	case *LogicalLimit, *LogicalSort, *LogicalSelection,
-		*LogicalApply, *LogicalProjection, *LogicalAggregation:
-		return childMaxOneRow[0]
-	case *LogicalMaxOneRow:
-		return true
-	case *LogicalJoin:
-		switch x.JoinType {
-		case SemiJoin, AntiSemiJoin, LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
-			return childMaxOneRow[0]
-		default:
-			return childMaxOneRow[0] && childMaxOneRow[1]
-		}
-	}
-	return false
-}
-
 // BuildKeyInfo implements LogicalPlan BuildKeyInfo interface.
 func (p *baseLogicalPlan) BuildKeyInfo(selfSchema *expression.Schema, childSchema []*expression.Schema) {
-	childMaxOneRow := make([]bool, len(p.children))
-	for i := range p.children {
-		childMaxOneRow[i] = p.children[i].MaxOneRow()
-	}
-	p.maxOneRow = HasMaxOneRow(p.self, childMaxOneRow)
 }
 
 // BuildKeyInfo implements LogicalPlan BuildKeyInfo interface.
 func (p *logicalSchemaProducer) BuildKeyInfo(selfSchema *expression.Schema, childSchema []*expression.Schema) {
 	selfSchema.Keys = nil
-	p.baseLogicalPlan.BuildKeyInfo(selfSchema, childSchema)
 }
 
 func newBasePlan(ctx sessionctx.Context, tp string) basePlan {

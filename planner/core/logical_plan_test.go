@@ -74,7 +74,7 @@ func (s *testPlanSuite) TestPredicatePushDown(c *C) {
 		c.Assert(err, IsNil, comment)
 		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
 		c.Assert(err, IsNil)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagDecorrelate|flagPrunColumns, p.(LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns, p.(LogicalPlan))
 		c.Assert(err, IsNil)
 		s.testData.OnRecord(func() {
 			output[ith] = ToString(p)
@@ -101,7 +101,7 @@ func (s *testPlanSuite) TestJoinPredicatePushDown(c *C) {
 		c.Assert(err, IsNil, comment)
 		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
 		c.Assert(err, IsNil, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagDecorrelate|flagPrunColumns, p.(LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns, p.(LogicalPlan))
 		c.Assert(err, IsNil, comment)
 		proj, ok := p.(*LogicalProjection)
 		c.Assert(ok, IsTrue, comment)
@@ -140,7 +140,7 @@ func (s *testPlanSuite) TestOuterWherePredicatePushDown(c *C) {
 		c.Assert(err, IsNil, comment)
 		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
 		c.Assert(err, IsNil, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagDecorrelate|flagPrunColumns, p.(LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns, p.(LogicalPlan))
 		c.Assert(err, IsNil, comment)
 		proj, ok := p.(*LogicalProjection)
 		c.Assert(ok, IsTrue, comment)
@@ -204,35 +204,6 @@ func (s *testPlanSuite) TestSimplifyOuterJoin(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestAntiSemiJoinConstFalse(c *C) {
-	defer testleak.AfterTest(c)()
-	tests := []struct {
-		sql      string
-		best     string
-		joinType string
-	}{
-		{
-			sql:      "select a from t t1 where not exists (select a from t t2 where t1.a = t2.a and t2.b = 1 and t2.b = 2)",
-			best:     "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Projection",
-			joinType: "anti semi join",
-		},
-	}
-
-	ctx := context.Background()
-	for _, ca := range tests {
-		comment := Commentf("for %s", ca.sql)
-		stmt, err := s.ParseOneStmt(ca.sql, "", "")
-		c.Assert(err, IsNil, comment)
-		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
-		c.Assert(err, IsNil, comment)
-		p, err = logicalOptimize(context.TODO(), flagDecorrelate|flagPredicatePushDown|flagPrunColumns, p.(LogicalPlan))
-		c.Assert(err, IsNil, comment)
-		c.Assert(ToString(p), Equals, ca.best, comment)
-		join, _ := p.(LogicalPlan).Children()[0].(*LogicalJoin)
-		c.Assert(join.JoinType.String(), Equals, ca.joinType, comment)
-	}
-}
-
 func (s *testPlanSuite) TestDeriveNotNullConds(c *C) {
 	defer testleak.AfterTest(c)()
 	var (
@@ -252,7 +223,7 @@ func (s *testPlanSuite) TestDeriveNotNullConds(c *C) {
 		c.Assert(err, IsNil, comment)
 		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
 		c.Assert(err, IsNil, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns|flagDecorrelate, p.(LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns, p.(LogicalPlan))
 		c.Assert(err, IsNil, comment)
 		s.testData.OnRecord(func() {
 			output[i].Plan = ToString(p)
@@ -334,31 +305,6 @@ func (s *testPlanSuite) TestGroupByWhenNotExistCols(c *C) {
 		c.Assert(err, NotNil)
 		c.Assert(p, IsNil)
 		c.Assert(err, ErrorMatches, test.expectedErrMatch)
-	}
-}
-
-func (s *testPlanSuite) TestSubquery(c *C) {
-	defer testleak.AfterTest(c)()
-	var input, output []string
-	s.testData.GetTestCases(c, &input, &output)
-
-	ctx := context.Background()
-	for ith, ca := range input {
-		comment := Commentf("for %s", ca)
-		stmt, err := s.ParseOneStmt(ca, "", "")
-		c.Assert(err, IsNil, comment)
-
-		Preprocess(s.ctx, stmt, s.is)
-		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
-		c.Assert(err, IsNil)
-		if lp, ok := p.(LogicalPlan); ok {
-			p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagDecorrelate|flagPrunColumns, lp)
-			c.Assert(err, IsNil)
-		}
-		s.testData.OnRecord(func() {
-			output[ith] = ToString(p)
-		})
-		c.Assert(ToString(p), Equals, output[ith], Commentf("for %s %d", ca, ith))
 	}
 }
 
@@ -459,32 +405,6 @@ func (s *testPlanSuite) TestColumnPruning(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestProjectionEliminator(c *C) {
-	defer testleak.AfterTest(c)()
-	tests := []struct {
-		sql  string
-		best string
-	}{
-		{
-			sql:  "select 1+num from (select 1+a as num from t) t1;",
-			best: "DataScan(t)->Projection",
-		},
-	}
-
-	ctx := context.Background()
-	for ith, tt := range tests {
-		comment := Commentf("for %s", tt.sql)
-		stmt, err := s.ParseOneStmt(tt.sql, "", "")
-		c.Assert(err, IsNil, comment)
-
-		p, _, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
-		c.Assert(err, IsNil)
-		p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagPrunColumns|flagEliminateProjection, p.(LogicalPlan))
-		c.Assert(err, IsNil)
-		c.Assert(ToString(p), Equals, tt.best, Commentf("for %s %d", tt.sql, ith))
-	}
-}
-
 func (s *testPlanSuite) TestAllocID(c *C) {
 	ctx := MockContext()
 	pA := DataSource{}.Init(ctx)
@@ -533,14 +453,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 		},
 		{
 			sql: "select (1,2) in ((3,4),(5,6))",
-			err: nil,
-		},
-		{
-			sql: "select row(1,(2,3)) in (select a,b from t)",
-			err: expression.ErrOperandColumns,
-		},
-		{
-			sql: "select row(1,2) in (select a,b from t)",
 			err: nil,
 		},
 		{
@@ -770,8 +682,6 @@ func (s *testPlanSuite) TestNameResolver(c *C) {
 		{"select * from t as t1, t as t2 join t as t3 on t1.c1 = t2.a", "[planner:1054]Unknown column 't1.c1' in 'on clause'"},
 		{"select a from t group by a having a = 3", ""},
 		{"select a from t group by a having c2 = 3", "[planner:1054]Unknown column 'c2' in 'having clause'"},
-		{"select a from t where exists (select b)", ""},
-		{"select cnt from (select count(a) as cnt from t group by b) as t2 group by cnt", ""},
 		{"select a from t where t11.a < t.a", "[planner:1054]Unknown column 't11.a' in 'where clause'"},
 		{"select a from t having t11.c1 < t.a", "[planner:1054]Unknown column 't11.c1' in 'having clause'"},
 		{"select a from t where t.a < t.a order by t11.c1", "[planner:1054]Unknown column 't11.c1' in 'order clause'"},

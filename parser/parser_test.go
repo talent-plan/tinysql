@@ -2190,61 +2190,6 @@ func (s *testParserSuite) TestCommentErrMsg(c *C) {
 	s.RunErrMsgTest(c, table)
 }
 
-type subqueryChecker struct {
-	text string
-	c    *C
-}
-
-// Enter implements ast.Visitor interface.
-func (sc *subqueryChecker) Enter(inNode ast.Node) (outNode ast.Node, skipChildren bool) {
-	if expr, ok := inNode.(*ast.SubqueryExpr); ok {
-		sc.c.Assert(expr.Query.Text(), Equals, sc.text)
-		return inNode, true
-	}
-	return inNode, false
-}
-
-// Leave implements ast.Visitor interface.
-func (sc *subqueryChecker) Leave(inNode ast.Node) (node ast.Node, ok bool) {
-	return inNode, true
-}
-
-func (s *testParserSuite) TestSubquery(c *C) {
-	table := []testCase{
-		// for compare subquery
-		{"SELECT 1 > (select 1)", true, "SELECT 1>(SELECT 1)"},
-		{"SELECT 1 > ANY (select 1)", true, "SELECT 1>ANY (SELECT 1)"},
-		{"SELECT 1 > ALL (select 1)", true, "SELECT 1>ALL (SELECT 1)"},
-		{"SELECT 1 > SOME (select 1)", true, "SELECT 1>ANY (SELECT 1)"},
-
-		// for exists subquery
-		{"SELECT EXISTS select 1", false, ""},
-		{"SELECT EXISTS (select 1)", true, "SELECT EXISTS (SELECT 1)"},
-		{"SELECT + EXISTS (select 1)", true, "SELECT +EXISTS (SELECT 1)"},
-		{"SELECT - EXISTS (select 1)", true, "SELECT -EXISTS (SELECT 1)"},
-		{"SELECT NOT EXISTS (select 1)", true, "SELECT NOT EXISTS (SELECT 1)"},
-		{"SELECT + NOT EXISTS (select 1)", false, ""},
-		{"SELECT - NOT EXISTS (select 1)", false, ""},
-	}
-	s.RunTest(c, table)
-
-	tests := []struct {
-		input string
-		text  string
-	}{
-		{"SELECT 1 > (select 1)", "select 1"},
-	}
-	parser := parser.New()
-	for _, t := range tests {
-		stmt, err := parser.ParseOneStmt(t.input, "", "")
-		c.Assert(err, IsNil)
-		stmt.Accept(&subqueryChecker{
-			text: t.text,
-			c:    c,
-		})
-	}
-}
-
 func (s *testParserSuite) TestLikeEscape(c *C) {
 	table := []testCase{
 		// for like escape

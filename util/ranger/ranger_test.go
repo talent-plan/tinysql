@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
-	"github.com/pingcap/tidb/util/testutil"
 )
 
 func TestT(t *testing.T) {
@@ -45,18 +44,10 @@ var _ = Suite(&testRangerSuite{})
 
 type testRangerSuite struct {
 	*parser.Parser
-	testData testutil.TestData
 }
 
 func (s *testRangerSuite) SetUpSuite(c *C) {
 	s.Parser = parser.New()
-	var err error
-	s.testData, err = testutil.LoadTestSuiteData("testdata", "ranger_suite")
-	c.Assert(err, IsNil)
-}
-
-func (s *testRangerSuite) TearDownSuite(c *C) {
-	c.Assert(s.testData.GenerateOutputIfNeeded(), IsNil)
 }
 
 func newDomainStoreWithBootstrap(c *C) (*domain.Domain, kv.Storage, error) {
@@ -953,35 +944,5 @@ func (s *testRangerSuite) TestColumnRange(c *C) {
 		c.Assert(err, IsNil)
 		got := fmt.Sprintf("%v", result)
 		c.Assert(got, Equals, tt.resultStr, Commentf("different for expr %s, col: %v", tt.exprStr, col))
-	}
-}
-
-func (s *testRangerSuite) TestCompIndexInExprCorrCol(c *C) {
-	defer testleak.AfterTest(c)()
-	dom, store, err := newDomainStoreWithBootstrap(c)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	testKit.MustExec("use test")
-	testKit.MustExec("drop table if exists t")
-	testKit.MustExec("create table t(a int primary key, b int, c int, d int, e int, index idx(b,c,d))")
-	testKit.MustExec("insert into t values(1,1,1,1,2),(2,1,2,1,0)")
-	testKit.MustExec("analyze table t")
-
-	var input []string
-	var output []struct {
-		SQL    string
-		Result []string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Result = s.testData.ConvertRowsToStrings(testKit.MustQuery(tt).Rows())
-		})
-		testKit.MustQuery(tt).Check(testkit.Rows(output[i].Result...))
 	}
 }

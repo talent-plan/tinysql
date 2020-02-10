@@ -270,29 +270,6 @@ func (p *LogicalJoin) PruneColumns(parentUsedCols []*expression.Column) error {
 	return nil
 }
 
-// PruneColumns implements LogicalPlan interface.
-func (la *LogicalApply) PruneColumns(parentUsedCols []*expression.Column) error {
-	leftCols, rightCols := la.extractUsedCols(parentUsedCols)
-
-	err := la.children[1].PruneColumns(rightCols)
-	if err != nil {
-		return err
-	}
-
-	la.CorCols = extractCorColumnsBySchema(la.children[1], la.children[0].Schema())
-	for _, col := range la.CorCols {
-		leftCols = append(leftCols, &col.Column)
-	}
-
-	err = la.children[0].PruneColumns(leftCols)
-	if err != nil {
-		return err
-	}
-
-	la.mergeSchema()
-	return nil
-}
-
 func (*columnPruner) name() string {
 	return "column_prune"
 }

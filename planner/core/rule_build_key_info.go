@@ -16,7 +16,6 @@ package core
 import (
 	"context"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 )
@@ -67,48 +66,16 @@ func (la *LogicalAggregation) BuildKeyInfo(selfSchema *expression.Schema, childS
 			selfSchema.Keys = append(selfSchema.Keys, newKey)
 		}
 	}
-	if len(la.GroupByItems) == 0 {
-		la.maxOneRow = true
-	}
-}
-
-// If a condition is the form of (uniqueKey = constant) or (uniqueKey = Correlated column), it returns at most one row.
-// This function will check it.
-func (p *LogicalSelection) checkMaxOneRowCond(unique expression.Expression, constOrCorCol expression.Expression, childSchema *expression.Schema) bool {
-	col, ok := unique.(*expression.Column)
-	if !ok {
-		return false
-	}
-	if !childSchema.IsUniqueKey(col) {
-		return false
-	}
-	_, okCon := constOrCorCol.(*expression.Constant)
-	if okCon {
-		return true
-	}
-	_, okCorCol := constOrCorCol.(*expression.CorrelatedColumn)
-	return okCorCol
 }
 
 // BuildKeyInfo implements LogicalPlan BuildKeyInfo interface.
 func (p *LogicalSelection) BuildKeyInfo(selfSchema *expression.Schema, childSchema []*expression.Schema) {
 	p.baseLogicalPlan.BuildKeyInfo(selfSchema, childSchema)
-	for _, cond := range p.Conditions {
-		if sf, ok := cond.(*expression.ScalarFunction); ok && sf.FuncName.L == ast.EQ {
-			if p.checkMaxOneRowCond(sf.GetArgs()[0], sf.GetArgs()[1], childSchema[0]) || p.checkMaxOneRowCond(sf.GetArgs()[1], sf.GetArgs()[0], childSchema[0]) {
-				p.maxOneRow = true
-				break
-			}
-		}
-	}
 }
 
 // BuildKeyInfo implements LogicalPlan BuildKeyInfo interface.
 func (p *LogicalLimit) BuildKeyInfo(selfSchema *expression.Schema, childSchema []*expression.Schema) {
 	p.baseLogicalPlan.BuildKeyInfo(selfSchema, childSchema)
-	if p.Count == 1 {
-		p.maxOneRow = true
-	}
 }
 
 // A bijection exists between columns of a projection's schema and this projection's Exprs.

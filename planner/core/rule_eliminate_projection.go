@@ -128,8 +128,6 @@ func (pe *projectionEliminator) eliminate(p LogicalPlan, replace map[string]*exp
 	switch x := p.(type) {
 	case *LogicalJoin:
 		x.schema = buildLogicalJoinSchema(x.JoinType, x)
-	case *LogicalApply:
-		x.schema = buildLogicalJoinSchema(x.JoinType, x)
 	default:
 		for _, dst := range p.Schema().Columns {
 			resolveColumnAndReplace(dst, replace)
@@ -207,16 +205,6 @@ func (la *LogicalAggregation) replaceExprColumns(replace map[string]*expression.
 func (p *LogicalSelection) replaceExprColumns(replace map[string]*expression.Column) {
 	for _, expr := range p.Conditions {
 		ResolveExprAndReplace(expr, replace)
-	}
-}
-
-func (la *LogicalApply) replaceExprColumns(replace map[string]*expression.Column) {
-	la.LogicalJoin.replaceExprColumns(replace)
-	for _, coCol := range la.CorCols {
-		dst := replace[string(coCol.Column.HashCode(nil))]
-		if dst != nil {
-			coCol.Column = *dst
-		}
 	}
 }
 

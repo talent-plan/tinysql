@@ -23,8 +23,6 @@ func (s *testMemoSuite) TestGetOperand(c *C) {
 	c.Assert(GetOperand(&plannercore.LogicalAggregation{}), Equals, OperandAggregation)
 	c.Assert(GetOperand(&plannercore.LogicalProjection{}), Equals, OperandProjection)
 	c.Assert(GetOperand(&plannercore.LogicalSelection{}), Equals, OperandSelection)
-	c.Assert(GetOperand(&plannercore.LogicalApply{}), Equals, OperandApply)
-	c.Assert(GetOperand(&plannercore.LogicalMaxOneRow{}), Equals, OperandMaxOneRow)
 	c.Assert(GetOperand(&plannercore.LogicalTableDual{}), Equals, OperandTableDual)
 	c.Assert(GetOperand(&plannercore.DataSource{}), Equals, OperandDataSource)
 	c.Assert(GetOperand(&plannercore.LogicalUnionScan{}), Equals, OperandUnionScan)
@@ -37,24 +35,20 @@ func (s *testMemoSuite) TestOperandMatch(c *C) {
 	c.Assert(OperandAny.Match(OperandLimit), IsTrue)
 	c.Assert(OperandAny.Match(OperandSelection), IsTrue)
 	c.Assert(OperandAny.Match(OperandJoin), IsTrue)
-	c.Assert(OperandAny.Match(OperandMaxOneRow), IsTrue)
 	c.Assert(OperandAny.Match(OperandAny), IsTrue)
 
 	c.Assert(OperandLimit.Match(OperandAny), IsTrue)
 	c.Assert(OperandSelection.Match(OperandAny), IsTrue)
 	c.Assert(OperandJoin.Match(OperandAny), IsTrue)
-	c.Assert(OperandMaxOneRow.Match(OperandAny), IsTrue)
 	c.Assert(OperandAny.Match(OperandAny), IsTrue)
 
 	c.Assert(OperandLimit.Match(OperandLimit), IsTrue)
 	c.Assert(OperandSelection.Match(OperandSelection), IsTrue)
 	c.Assert(OperandJoin.Match(OperandJoin), IsTrue)
-	c.Assert(OperandMaxOneRow.Match(OperandMaxOneRow), IsTrue)
 	c.Assert(OperandAny.Match(OperandAny), IsTrue)
 
 	c.Assert(OperandLimit.Match(OperandSelection), IsFalse)
 	c.Assert(OperandLimit.Match(OperandJoin), IsFalse)
-	c.Assert(OperandLimit.Match(OperandMaxOneRow), IsFalse)
 }
 
 func (s *testMemoSuite) TestNewPattern(c *C) {

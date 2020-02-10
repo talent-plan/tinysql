@@ -111,12 +111,6 @@ func (is LogicalIndexScan) Init(ctx sessionctx.Context) *LogicalIndexScan {
 	return &is
 }
 
-// Init initializes LogicalApply.
-func (la LogicalApply) Init(ctx sessionctx.Context) *LogicalApply {
-	la.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeApply, &la)
-	return &la
-}
-
 // Init initializes LogicalSelection.
 func (p LogicalSelection) Init(ctx sessionctx.Context) *LogicalSelection {
 	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeSel, &p)
@@ -210,12 +204,6 @@ func (p LogicalTableDual) Init(ctx sessionctx.Context) *LogicalTableDual {
 func (p PhysicalTableDual) Init(ctx sessionctx.Context, stats *property.StatsInfo) *PhysicalTableDual {
 	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeDual, &p)
 	p.stats = stats
-	return &p
-}
-
-// Init initializes LogicalMaxOneRow.
-func (p LogicalMaxOneRow) Init(ctx sessionctx.Context) *LogicalMaxOneRow {
-	p.baseLogicalPlan = newBaseLogicalPlan(ctx, TypeMaxOneRow, &p)
 	return &p
 }
 
@@ -324,14 +312,6 @@ func (base basePhysicalAgg) initForHash(ctx sessionctx.Context, stats *property.
 	p.childrenReqProps = props
 	p.stats = stats
 	return p
-}
-
-// Init initializes PhysicalApply.
-func (p PhysicalApply) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalApply {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeApply, &p)
-	p.childrenReqProps = props
-	p.stats = stats
-	return &p
 }
 
 // Init initializes PhysicalUnionScan.

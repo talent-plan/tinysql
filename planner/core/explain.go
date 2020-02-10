@@ -396,11 +396,6 @@ func (p *LogicalSelection) ExplainInfo() string {
 }
 
 // ExplainInfo implements Plan interface.
-func (p *LogicalApply) ExplainInfo() string {
-	return p.LogicalJoin.ExplainInfo()
-}
-
-// ExplainInfo implements Plan interface.
 func (p *LogicalTableDual) ExplainInfo() string {
 	return fmt.Sprintf("rowcount:%d", p.RowCount)
 }

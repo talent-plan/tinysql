@@ -290,34 +290,6 @@ func (p *PhysicalTopN) ResolveIndices() (err error) {
 }
 
 // ResolveIndices implements Plan interface.
-func (p *PhysicalApply) ResolveIndices() (err error) {
-	err = p.PhysicalHashJoin.ResolveIndices()
-	if err != nil {
-		return err
-	}
-	for _, col := range p.OuterSchema {
-		newCol, err := col.Column.ResolveIndices(p.children[0].Schema())
-		if err != nil {
-			return err
-		}
-		col.Column = *newCol.(*expression.Column)
-	}
-	// Resolve index for equal conditions again, because apply is different from
-	// hash join on the fact that equal conditions are evaluated against the join result,
-	// so columns from equal conditions come from merged schema of children, instead of
-	// single child's schema.
-	joinedSchema := expression.MergeSchema(p.children[0].Schema(), p.children[1].Schema())
-	for i, cond := range p.PhysicalHashJoin.EqualConditions {
-		newSf, err := cond.ResolveIndices(joinedSchema)
-		if err != nil {
-			return err
-		}
-		p.PhysicalHashJoin.EqualConditions[i] = newSf.(*expression.ScalarFunction)
-	}
-	return
-}
-
-// ResolveIndices implements Plan interface.
 func (p *Insert) ResolveIndices() (err error) {
 	err = p.baseSchemaProducer.ResolveIndices()
 	if err != nil {

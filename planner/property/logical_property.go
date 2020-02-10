@@ -21,7 +21,6 @@ import (
 // or statistics of columns in schema for output of Group.
 // All group expressions in a group share same logical property.
 type LogicalProperty struct {
-	Stats     *StatsInfo
-	Schema    *expression.Schema
-	MaxOneRow bool
+	Stats  *StatsInfo
+	Schema *expression.Schema
 }

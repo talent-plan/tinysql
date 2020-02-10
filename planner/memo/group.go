@@ -225,11 +225,9 @@ func (g *Group) BuildKeyInfo() {
 
 	e := g.Equivalents.Front().Value.(*GroupExpr)
 	childSchema := make([]*expression.Schema, len(e.Children))
-	childMaxOneRow := make([]bool, len(e.Children))
 	for i := range e.Children {
 		e.Children[i].BuildKeyInfo()
 		childSchema[i] = e.Children[i].Prop.Schema
-		childMaxOneRow[i] = e.Children[i].Prop.MaxOneRow
 	}
 	if len(childSchema) == 1 {
 		// For UnaryPlan(such as Selection, Limit ...), we can set the child's unique key as its unique key.
@@ -237,5 +235,4 @@ func (g *Group) BuildKeyInfo() {
 		g.Prop.Schema.Keys = childSchema[0].Keys
 	}
 	e.ExprNode.BuildKeyInfo(g.Prop.Schema, childSchema)
-	g.Prop.MaxOneRow = e.ExprNode.MaxOneRow() || plannercore.HasMaxOneRow(e.ExprNode, childMaxOneRow)
 }

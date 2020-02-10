@@ -19,7 +19,6 @@ import (
 	"fmt"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
@@ -872,10 +871,6 @@ func (s *testSuiteP2) TestRow(c *C) {
 	result.Check(testkit.Rows())
 	result = tk.MustQuery("select * from t where row(1,2,3) > (3,2,1)")
 	result.Check(testkit.Rows())
-	result = tk.MustQuery("select * from t where (c, d) = (select * from t where (c,d) = (1,1))")
-	result.Check(testkit.Rows("1 1"))
-	result = tk.MustQuery("select * from t where (c, d) = (select * from t k where (t.c,t.d) = (c,d))")
-	result.Check(testkit.Rows("1 1", "1 3", "2 1", "2 3"))
 	result = tk.MustQuery("select (1, 2, 3) < (2, 3, 4)")
 	result.Check(testkit.Rows("1"))
 	result = tk.MustQuery("select (2, 3, 4) <= (2, 3, 3)")
@@ -894,15 +889,7 @@ func (s *testSuiteP2) TestRow(c *C) {
 	result.Check(testkit.Rows("1"))
 	result = tk.MustQuery("select row(1, 0) in (row(1, 1))")
 	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select row(1, 1) in (select 1, 1)")
-	result.Check(testkit.Rows("1"))
 	result = tk.MustQuery("select row(1, 1) > row(1, 0)")
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery("select row(1, 1) > (select 1, 0)")
-	result.Check(testkit.Rows("1"))
-	result = tk.MustQuery("select 1 > (select 1)")
-	result.Check(testkit.Rows("0"))
-	result = tk.MustQuery("select (select 1)")
 	result.Check(testkit.Rows("1"))
 }
 
@@ -921,13 +908,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	c.Check(fields[0].ColumnAsName.L, Equals, "1 + c")
 	c.Check(fields[1].Column.Name.L, Equals, "count(*)")
 	c.Check(fields[1].ColumnAsName.L, Equals, "count(*)")
-	rs.Close()
-	rs, err = tk.Exec("select (c) > all (select c from t) from t")
-	c.Check(err, IsNil)
-	fields = rs.Fields()
-	c.Check(len(fields), Equals, 1)
-	c.Check(fields[0].Column.Name.L, Equals, "(c) > all (select c from t)")
-	c.Check(fields[0].ColumnAsName.L, Equals, "(c) > all (select c from t)")
 	rs.Close()
 	tk.MustExec("begin")
 	tk.MustExec("insert t values(1,1)")
@@ -968,15 +948,6 @@ func (s *testSuiteP2) TestColumnName(c *C) {
 	c.Assert(fields[0].Column.Name.L, Equals, "if(1,c,c)")
 	// It's a compatibility issue. Should be empty instead.
 	c.Assert(fields[0].ColumnAsName.L, Equals, "if(1,c,c)")
-}
-
-func (s *testSuite) TestScanControlSelection(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int primary key, b int, c int, index idx_b(b))")
-	tk.MustExec("insert into t values (1, 1, 1), (2, 1, 1), (3, 1, 2), (4, 2, 3)")
-	tk.MustQuery("select (select count(1) k from t s where s.b = t1.c) from t t1").Sort().Check(testkit.Rows("0", "1", "3", "3"))
 }
 
 func (s *testSuite) TestSimpleDAG(c *C) {
@@ -1060,19 +1031,6 @@ func (s *testSuite) TestHandleTransfer(c *C) {
 	tk.MustExec("insert into t values(3, 3), (1, 1), (2, 2)")
 	// Second test double read.
 	tk.MustQuery("select * from t use index(idx) order by a").Check(testkit.Rows("1 1", "2 2", "3 3"))
-}
-
-func (s *testSuite) TestSubqueryInValues(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t (id int, name varchar(20))")
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (gid int)")
-
-	tk.MustExec("insert into t1 (gid) value (1)")
-	tk.MustExec("insert into t (id, name) value ((select gid from t1) ,'asd')")
-	tk.MustQuery("select * from t").Check(testkit.Rows("1 asd"))
 }
 
 func (s *testSuite) TestEnhancedRangeAccess(c *C) {
@@ -1194,41 +1152,6 @@ func (s *testSuite) TestLimit(c *C) {
 		"5 5",
 		"6 6",
 	))
-}
-
-func (s *testSuite3) TestMaxOneRow(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec(`use test`)
-	tk.MustExec(`drop table if exists t1`)
-	tk.MustExec(`drop table if exists t2`)
-	tk.MustExec(`create table t1(a double, b double);`)
-	tk.MustExec(`create table t2(a double, b double);`)
-	tk.MustExec(`insert into t1 values(1, 1), (2, 2), (3, 3);`)
-	tk.MustExec(`insert into t2 values(0, 0);`)
-	tk.MustExec(`set @@tidb_init_chunk_size=1;`)
-	rs, err := tk.Exec(`select (select t1.a from t1 where t1.a > t2.a) as a from t2;`)
-	c.Assert(err, IsNil)
-
-	err = rs.Next(context.TODO(), rs.NewChunk())
-	c.Assert(err.Error(), Equals, "subquery returns more than 1 row")
-
-	err = rs.Close()
-	c.Assert(err, IsNil)
-}
-
-func (s *testSuite3) TestTSOFail(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec(`use test`)
-	tk.MustExec(`drop table if exists t`)
-	tk.MustExec(`create table t(a int)`)
-
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/session/mockGetTSFail", "return"), IsNil)
-	ctx := failpoint.WithHook(context.Background(), func(ctx context.Context, fpname string) bool {
-		return fpname == "github.com/pingcap/tidb/session/mockGetTSFail"
-	})
-	_, err := tk.Se.Execute(ctx, `select * from t`)
-	c.Assert(err, NotNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/session/mockGetTSFail"), IsNil)
 }
 
 type testSuite2 struct {

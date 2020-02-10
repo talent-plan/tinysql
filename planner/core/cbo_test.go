@@ -230,34 +230,6 @@ func (s *testAnalyzeSuite) TestNullCount(c *C) {
 	}
 }
 
-func (s *testAnalyzeSuite) TestCorrelatedEstimation(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	tk := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	tk.MustExec("use test")
-	tk.MustExec("set sql_mode='STRICT_TRANS_TABLES'") // disable only full group by
-	tk.MustExec("create table t(a int, b int, c int, index idx(c,b,a))")
-	tk.MustExec("insert into t values(1,1,1), (2,2,2), (3,3,3), (4,4,4), (5,5,5), (6,6,6), (7,7,7), (8,8,8), (9,9,9),(10,10,10)")
-	tk.MustExec("analyze table t")
-	var (
-		input  []string
-		output [][]string
-	)
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		rs := tk.MustQuery(tt)
-		s.testData.OnRecord(func() {
-			output[i] = s.testData.ConvertRowsToStrings(rs.Rows())
-		})
-		rs.Check(testkit.Rows(output[i]...))
-	}
-}
-
 func newStoreWithBootstrap() (kv.Storage, *domain.Domain, error) {
 	store, err := mockstore.NewMockTikvStore()
 	if err != nil {

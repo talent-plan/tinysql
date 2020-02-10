@@ -414,39 +414,3 @@ func (h *fullJoinRowCountHelper) estimate() float64 {
 	count := h.leftProfile.RowCount * h.rightProfile.RowCount / math.Max(leftKeyCardinality, rightKeyCardinality)
 	return count
 }
-
-// DeriveStats implement LogicalPlan DeriveStats interface.
-func (la *LogicalApply) DeriveStats(childStats []*property.StatsInfo, selfSchema *expression.Schema, childSchema []*expression.Schema) (*property.StatsInfo, error) {
-	leftProfile := childStats[0]
-	la.stats = &property.StatsInfo{
-		RowCount:    leftProfile.RowCount,
-		Cardinality: make([]float64, selfSchema.Len()),
-	}
-	copy(la.stats.Cardinality, leftProfile.Cardinality)
-	if la.JoinType == LeftOuterSemiJoin || la.JoinType == AntiLeftOuterSemiJoin {
-		la.stats.Cardinality[len(la.stats.Cardinality)-1] = 2.0
-	} else {
-		for i := childSchema[0].Len(); i < selfSchema.Len(); i++ {
-			la.stats.Cardinality[i] = leftProfile.RowCount
-		}
-	}
-	return la.stats, nil
-}
-
-// Exists and MaxOneRow produce at most one row, so we set the RowCount of stats one.
-func getSingletonStats(len int) *property.StatsInfo {
-	ret := &property.StatsInfo{
-		RowCount:    1.0,
-		Cardinality: make([]float64, len),
-	}
-	for i := 0; i < len; i++ {
-		ret.Cardinality[i] = 1
-	}
-	return ret
-}
-
-// DeriveStats implement LogicalPlan DeriveStats interface.
-func (p *LogicalMaxOneRow) DeriveStats(childStats []*property.StatsInfo, selfSchema *expression.Schema, childSchema []*expression.Schema) (*property.StatsInfo, error) {
-	p.stats = getSingletonStats(selfSchema.Len())
-	return p.stats, nil
-}

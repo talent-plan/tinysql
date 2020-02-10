@@ -490,21 +490,6 @@ func (s *testSuite4) TestNotNullDefault(c *C) {
 	tk.MustExec("alter table  t2 change column a a int not null default null default 1;")
 }
 
-// TestIssue4067 Test issue https://github.com/pingcap/tidb/issues/4067
-func (s *testSuite7) TestIssue4067(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1(id int)")
-	tk.MustExec("create table t2(id int)")
-	tk.MustExec("insert into t1 values(123)")
-	tk.MustExec("insert into t2 values(123)")
-	tk.MustExec("delete from t1 where id not in (select id from t2)")
-	tk.MustQuery("select * from t1").Check(testkit.Rows("123"))
-	tk.MustExec("delete from t1 where id in (select id from t2)")
-	tk.MustQuery("select * from t1").Check(nil)
-}
-
 func (s *testSuite7) TestReplaceLog(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

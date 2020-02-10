@@ -36,8 +36,6 @@ var (
 	_ LogicalPlan = &LogicalAggregation{}
 	_ LogicalPlan = &LogicalProjection{}
 	_ LogicalPlan = &LogicalSelection{}
-	_ LogicalPlan = &LogicalApply{}
-	_ LogicalPlan = &LogicalMaxOneRow{}
 	_ LogicalPlan = &LogicalTableDual{}
 	_ LogicalPlan = &DataSource{}
 	_ LogicalPlan = &TiKVSingleGather{}
@@ -136,53 +134,6 @@ type LogicalJoin struct {
 
 	// equalCondOutCnt indicates the estimated count of joined rows after evaluating `EqualConditions`.
 	equalCondOutCnt float64
-}
-
-func (p *LogicalJoin) columnSubstitute(schema *expression.Schema, exprs []expression.Expression) {
-	for i, cond := range p.LeftConditions {
-		p.LeftConditions[i] = expression.ColumnSubstitute(cond, schema, exprs)
-	}
-
-	for i, cond := range p.RightConditions {
-		p.RightConditions[i] = expression.ColumnSubstitute(cond, schema, exprs)
-	}
-
-	for i, cond := range p.OtherConditions {
-		p.OtherConditions[i] = expression.ColumnSubstitute(cond, schema, exprs)
-	}
-
-	for i := len(p.EqualConditions) - 1; i >= 0; i-- {
-		newCond := expression.ColumnSubstitute(p.EqualConditions[i], schema, exprs).(*expression.ScalarFunction)
-
-		// If the columns used in the new filter all come from the left child,
-		// we can push this filter to it.
-		if expression.ExprFromSchema(newCond, p.children[0].Schema()) {
-			p.LeftConditions = append(p.LeftConditions, newCond)
-			p.EqualConditions = append(p.EqualConditions[:i], p.EqualConditions[i+1:]...)
-			continue
-		}
-
-		// If the columns used in the new filter all come from the right
-		// child, we can push this filter to it.
-		if expression.ExprFromSchema(newCond, p.children[1].Schema()) {
-			p.RightConditions = append(p.RightConditions, newCond)
-			p.EqualConditions = append(p.EqualConditions[:i], p.EqualConditions[i+1:]...)
-			continue
-		}
-
-		_, lhsIsCol := newCond.GetArgs()[0].(*expression.Column)
-		_, rhsIsCol := newCond.GetArgs()[1].(*expression.Column)
-
-		// If the columns used in the new filter are not all expression.Column,
-		// we can not use it as join's equal condition.
-		if !(lhsIsCol && rhsIsCol) {
-			p.OtherConditions = append(p.OtherConditions, newCond)
-			p.EqualConditions = append(p.EqualConditions[:i], p.EqualConditions[i+1:]...)
-			continue
-		}
-
-		p.EqualConditions[i] = newCond
-	}
 }
 
 func (p *LogicalJoin) attachOnConds(onConds []expression.Expression) {
@@ -296,28 +247,6 @@ func (p *LogicalSelection) extractCorrelatedCols() []*expression.CorrelatedColum
 		corCols = append(corCols, expression.ExtractCorColumns(cond)...)
 	}
 	return corCols
-}
-
-// LogicalApply gets one row from outer executor and gets one row from inner executor according to outer row.
-type LogicalApply struct {
-	LogicalJoin
-
-	CorCols []*expression.CorrelatedColumn
-}
-
-func (la *LogicalApply) extractCorrelatedCols() []*expression.CorrelatedColumn {
-	corCols := la.LogicalJoin.extractCorrelatedCols()
-	for i := len(corCols) - 1; i >= 0; i-- {
-		if la.children[0].Schema().Contains(&corCols[i].Column) {
-			corCols = append(corCols[:i], corCols[i+1:]...)
-		}
-	}
-	return corCols
-}
-
-// LogicalMaxOneRow checks if a query returns no more than one row.
-type LogicalMaxOneRow struct {
-	baseLogicalPlan
 }
 
 // LogicalTableDual represents a dual table plan.
@@ -768,35 +697,6 @@ type LogicalLimit struct {
 
 	Offset uint64
 	Count  uint64
-}
-
-// extractCorColumnsBySchema only extracts the correlated columns that match the specified schema.
-// e.g. If the correlated columns from plan are [t1.a, t2.a, t3.a] and specified schema is [t2.a, t2.b, t2.c],
-// only [t2.a] is returned.
-func extractCorColumnsBySchema(p LogicalPlan, schema *expression.Schema) []*expression.CorrelatedColumn {
-	corCols := p.extractCorrelatedCols()
-	resultCorCols := make([]*expression.CorrelatedColumn, schema.Len())
-	for _, corCol := range corCols {
-		idx := schema.ColumnIndex(&corCol.Column)
-		if idx != -1 {
-			if resultCorCols[idx] == nil {
-				resultCorCols[idx] = &expression.CorrelatedColumn{
-					Column: *schema.Columns[idx],
-					Data:   new(types.Datum),
-				}
-			}
-			corCol.Data = resultCorCols[idx].Data
-		}
-	}
-	// Shrink slice. e.g. [col1, nil, col2, nil] will be changed to [col1, col2].
-	length := 0
-	for _, col := range resultCorCols {
-		if col != nil {
-			resultCorCols[length] = col
-			length++
-		}
-	}
-	return resultCorCols[:length]
 }
 
 // ShowContents stores the contents for the `SHOW` statement.

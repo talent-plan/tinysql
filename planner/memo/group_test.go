@@ -182,7 +182,6 @@ func (s *testMemoSuite) TestBuildKeyInfo(c *C) {
 	c.Assert(ok, IsTrue)
 	group1 := Convert2Group(logic1)
 	group1.BuildKeyInfo()
-	c.Assert(group1.Prop.MaxOneRow, IsTrue)
 	c.Assert(len(group1.Prop.Schema.Keys), Equals, 1)
 
 	// case 2: group by column is key
@@ -194,7 +193,6 @@ func (s *testMemoSuite) TestBuildKeyInfo(c *C) {
 	c.Assert(ok, IsTrue)
 	group2 := Convert2Group(logic2)
 	group2.BuildKeyInfo()
-	c.Assert(group2.Prop.MaxOneRow, IsFalse)
 	c.Assert(len(group2.Prop.Schema.Keys), Equals, 1)
 
 	// case 3: build key info for new Group
@@ -211,5 +209,4 @@ func (s *testMemoSuite) TestBuildKeyInfo(c *C) {
 	newExpr2.SetChildren(group2)
 	newGroup2 := NewGroupWithSchema(newExpr2, group2.Prop.Schema)
 	newGroup2.BuildKeyInfo()
-	c.Assert(newGroup2.Prop.MaxOneRow, IsTrue)
 }

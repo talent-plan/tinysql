@@ -31,16 +31,9 @@
     ]
   },
   {
-    "name": "TestCorrelatedEstimation",
-    "cases": [
-      "explain select t.c in (select count(*) from t s , t t1 where s.a = t.a and s.a = t1.a) from t"
-    ]
-  },
-  {
     "name": "TestEmptyTable",
     "cases": [
       "select * from t where t.c1 <= 50",
-      "select * from t where c1 in (select c1 from t1)",
       "select * from t, t1 where t.c1 = t1.c1",
       "select * from t limit 0"
     ]

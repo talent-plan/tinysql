@@ -134,13 +134,6 @@ func (s *baseSchemaProducer) setSchemaAndNames(schema *expression.Schema, names 
 	s.names = names
 }
 
-// Schema implements the Plan.Schema interface.
-func (p *LogicalMaxOneRow) Schema() *expression.Schema {
-	s := p.Children()[0].Schema().Clone()
-	resetNotNullFlag(s, 0, s.Len())
-	return s
-}
-
 func buildLogicalJoinSchema(joinType JoinType, join LogicalPlan) *expression.Schema {
 	leftSchema := join.Children()[0].Schema()
 	switch joinType {

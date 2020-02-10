@@ -134,44 +134,6 @@ func (s *testPlanSuite) TestDAGPlanBuilderJoin(c *C) {
 	}
 }
 
-func (s *testPlanSuite) TestDAGPlanBuilderSubquery(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-	se.Execute(context.Background(), "set sql_mode='STRICT_TRANS_TABLES'") // disable only full group by
-	ctx := se.(sessionctx.Context)
-	sessionVars := ctx.GetSessionVars()
-	sessionVars.HashAggFinalConcurrency = 1
-	sessionVars.HashAggPartialConcurrency = 1
-	var input []string
-	var output []struct {
-		SQL  string
-		Best string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		comment := Commentf("for %s", tt)
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil, comment)
-
-		p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
-		c.Assert(err, IsNil)
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Best = core.ToString(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Best, Commentf("for %s", tt))
-	}
-}
-
 func (s *testPlanSuite) TestDAGPlanTopN(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()
@@ -424,37 +386,6 @@ func (s *testPlanSuite) TestRequestTypeSupportedOff(c *C) {
 	p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
 	c.Assert(err, IsNil)
 	c.Assert(core.ToString(p), Equals, expect, Commentf("for %s", sql))
-}
-
-func (s *testPlanSuite) TestSemiJoinToInner(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-	var input []string
-	var output []struct {
-		SQL  string
-		Best string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		stmt, err := s.ParseOneStmt(tt, "", "")
-		c.Assert(err, IsNil)
-		p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
-		c.Assert(err, IsNil)
-		s.testData.OnRecord(func() {
-			output[i].SQL = tt
-			output[i].Best = core.ToString(p)
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Best)
-	}
 }
 
 func (s *testPlanSuite) TestUnmatchedTableInHint(c *C) {

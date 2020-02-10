@@ -95,15 +95,6 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 			r := x.RightJoinKeys[i].String()
 			str += fmt.Sprintf("(%s,%s)", l, r)
 		}
-	case *LogicalApply, *PhysicalApply:
-		last := len(idxs) - 1
-		idx := idxs[last]
-		children := strs[idx:]
-		strs = strs[:idx]
-		idxs = idxs[:last]
-		str = "Apply{" + strings.Join(children, "->") + "}"
-	case *LogicalMaxOneRow, *PhysicalMaxOneRow:
-		str = "MaxOneRow"
 	case *LogicalLimit, *PhysicalLimit:
 		str = "Limit"
 	case *ShowDDL:

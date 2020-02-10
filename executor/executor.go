@@ -44,7 +44,6 @@ var (
 	_ Executor = &IndexLookUpExecutor{}
 	_ Executor = &IndexReaderExecutor{}
 	_ Executor = &LimitExec{}
-	_ Executor = &MaxOneRowExec{}
 	_ Executor = &MergeJoinExec{}
 	_ Executor = &ProjectionExec{}
 	_ Executor = &SelectionExec{}
@@ -786,56 +785,6 @@ func (e *TableScanExec) getRow(handle int64) ([]types.Datum, error) {
 func (e *TableScanExec) Open(ctx context.Context) error {
 	e.iter = nil
 	e.virtualTableChunkList = nil
-	return nil
-}
-
-// MaxOneRowExec checks if the number of rows that a query returns is at maximum one.
-// It's built from subquery expression.
-type MaxOneRowExec struct {
-	baseExecutor
-
-	evaluated bool
-}
-
-// Open implements the Executor Open interface.
-func (e *MaxOneRowExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-	e.evaluated = false
-	return nil
-}
-
-// Next implements the Executor Next interface.
-func (e *MaxOneRowExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.Reset()
-	if e.evaluated {
-		return nil
-	}
-	e.evaluated = true
-	err := Next(ctx, e.children[0], req)
-	if err != nil {
-		return err
-	}
-
-	if num := req.NumRows(); num == 0 {
-		for i := range e.schema.Columns {
-			req.AppendNull(i)
-		}
-		return nil
-	} else if num != 1 {
-		return errors.New("subquery returns more than 1 row")
-	}
-
-	childChunk := newFirstChunk(e.children[0])
-	err = Next(ctx, e.children[0], childChunk)
-	if err != nil {
-		return err
-	}
-	if childChunk.NumRows() != 0 {
-		return errors.New("subquery returns more than 1 row")
-	}
-
 	return nil
 }
 

@@ -379,27 +379,6 @@ func (lt *LogicalTopN) exhaustPhysicalPlans(prop *property.PhysicalProperty) []P
 	return nil
 }
 
-// GetHashJoin is public for cascades planner.
-func (la *LogicalApply) GetHashJoin(prop *property.PhysicalProperty) *PhysicalHashJoin {
-	return la.LogicalJoin.getHashJoin(prop, 1)
-}
-
-func (la *LogicalApply) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {
-	if !prop.AllColsFromSchema(la.children[0].Schema()) { // for convenient, we don't pass through any prop
-		return nil
-	}
-	join := la.GetHashJoin(prop)
-	apply := PhysicalApply{
-		PhysicalHashJoin: *join,
-		OuterSchema:      la.CorCols,
-	}.Init(la.ctx,
-		la.stats.ScaleByExpectCnt(prop.ExpectedCnt),
-		&property.PhysicalProperty{ExpectedCnt: math.MaxFloat64, Items: prop.Items},
-		&property.PhysicalProperty{ExpectedCnt: math.MaxFloat64})
-	apply.SetSchema(la.schema)
-	return []PhysicalPlan{apply}
-}
-
 // exhaustPhysicalPlans is only for implementing interface. DataSource and Dual generate task in `findBestTask` directly.
 func (p *baseLogicalPlan) exhaustPhysicalPlans(_ *property.PhysicalProperty) []PhysicalPlan {
 	panic("baseLogicalPlan.exhaustPhysicalPlans() should never be called.")
@@ -473,12 +452,4 @@ func (ls *LogicalSort) exhaustPhysicalPlans(prop *property.PhysicalProperty) []P
 		return ret
 	}
 	return nil
-}
-
-func (p *LogicalMaxOneRow) exhaustPhysicalPlans(prop *property.PhysicalProperty) []PhysicalPlan {
-	if !prop.IsEmpty() {
-		return nil
-	}
-	mor := PhysicalMaxOneRow{}.Init(p.ctx, p.stats, &property.PhysicalProperty{ExpectedCnt: 2})
-	return []PhysicalPlan{mor}
 }

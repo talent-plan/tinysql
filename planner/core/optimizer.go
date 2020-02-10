@@ -31,7 +31,6 @@ var OptimizeAstNode func(ctx context.Context, sctx sessionctx.Context, node ast.
 const (
 	flagPrunColumns uint64 = 1 << iota
 	flagBuildKeyInfo
-	flagDecorrelate
 	flagEliminateAgg
 	flagEliminateProjection
 	flagMaxMinEliminate
@@ -45,7 +44,6 @@ const (
 var optRuleList = []logicalOptRule{
 	&columnPruner{},
 	&buildKeySolver{},
-	&decorrelateSolver{},
 	&aggregationEliminator{},
 	&projectionEliminator{},
 	&maxMinEliminator{},
