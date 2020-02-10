@@ -2010,20 +2010,7 @@ func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, as
 		return nil, err
 	}
 
-	var columns []*table.Column
-	if b.inUpdateStmt {
-		// create table t(a int, b int).
-		// Imagine that, There are 2 TiDB instances in the cluster, name A, B. We add a column `c` to table t in the TiDB cluster.
-		// One of the TiDB, A, the column type in its infoschema is changed to public. And in the other TiDB, the column type is
-		// still StateWriteReorganization.
-		// TiDB A: insert into t values(1, 2, 3);
-		// TiDB B: update t set a = 2 where b = 2;
-		// If we use tbl.Cols() here, the update statement, will ignore the col `c`, and the data `3` will lost.
-		columns = tbl.WritableCols()
-	} else {
-		columns = tbl.Cols()
-	}
-
+	columns := tbl.Cols()
 	ds := DataSource{
 		DBName:              dbName,
 		TableAsName:         asName,

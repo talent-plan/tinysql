@@ -195,7 +195,6 @@ type PlanBuilder struct {
 	rewriterPool    []*expressionRewriter
 	rewriterCounter int
 
-	inUpdateStmt bool
 	// inStraightJoin represents whether the current "SELECT" statement has
 	// "STRAIGHT_JOIN" option.
 	inStraightJoin bool

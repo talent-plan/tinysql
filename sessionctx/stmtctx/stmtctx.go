@@ -48,7 +48,6 @@ type StatementContext struct {
 	// If IsDDLJobInQueue is true, it means the DDL job is in the queue of storage, and it can be handled by the DDL worker.
 	IsDDLJobInQueue        bool
 	InInsertStmt           bool
-	InUpdateStmt           bool
 	InDeleteStmt           bool
 	InSelectStmt           bool
 	InExplainStmt          bool
@@ -377,7 +376,7 @@ func (sc *StatementContext) PushDownFlags() uint64 {
 	var flags uint64
 	if sc.InInsertStmt {
 		flags |= model.FlagInInsertStmt
-	} else if sc.InUpdateStmt || sc.InDeleteStmt {
+	} else if sc.InDeleteStmt {
 		flags |= model.FlagInUpdateOrDeleteStmt
 	} else if sc.InSelectStmt {
 		flags |= model.FlagInSelectStmt

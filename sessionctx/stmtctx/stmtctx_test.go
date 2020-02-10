@@ -33,7 +33,6 @@ func (s *stmtctxSuit) TestStatementContextPushDownFLags(c *C) {
 		out uint64
 	}{
 		{&stmtctx.StatementContext{InInsertStmt: true}, 8},
-		{&stmtctx.StatementContext{InUpdateStmt: true}, 16},
 		{&stmtctx.StatementContext{InDeleteStmt: true}, 16},
 		{&stmtctx.StatementContext{InSelectStmt: true}, 32},
 		{&stmtctx.StatementContext{IgnoreTruncate: true}, 1},
