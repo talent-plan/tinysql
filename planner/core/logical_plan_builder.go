@@ -495,17 +495,6 @@ func (b *PlanBuilder) buildProjectionFieldNameFromExpressions(ctx context.Contex
 	}
 
 	innerExpr := getInnerFromParenthesesAndUnaryPlus(field.Expr)
-	funcCall, isFuncCall := innerExpr.(*ast.FuncCallExpr)
-	// When used to produce a result set column, NAME_CONST() causes the column to have the given name.
-	// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_name-const for details
-	if isFuncCall && funcCall.FnName.L == ast.NameConst {
-		if v, err := evalAstExpr(b.ctx, funcCall.Args[0]); err == nil {
-			if s, err := v.ToString(); err == nil {
-				return model.NewCIStr(s), nil
-			}
-		}
-		return model.NewCIStr(""), ErrWrongArguments.GenWithStackByArgs("NAME_CONST")
-	}
 	valueExpr, isValueExpr := innerExpr.(*driver.ValueExpr)
 
 	// Non-literal: Output as inputed, except that comments need to be removed.
@@ -1247,13 +1236,6 @@ func checkExprInGroupBy(
 			}
 		}
 	}
-	// Function `any_value` can be used in aggregation, even `ONLY_FULL_GROUP_BY` is set.
-	// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_any-value for details
-	if f, ok := expr.(*ast.FuncCallExpr); ok {
-		if f.FnName.L == ast.AnyValue {
-			return
-		}
-	}
 	colMap := make(map[*types.FieldName]struct{}, len(p.Schema().Columns))
 	allColFromExprNode(p, expr, colMap)
 	for col := range colMap {
@@ -1358,12 +1340,6 @@ func (c *colResolverForOnlyFullGroupBy) Enter(node ast.Node) (ast.Node, bool) {
 	case *ast.AggregateFuncExpr:
 		c.hasAggFuncOrAnyValue = true
 		return node, true
-	case *ast.FuncCallExpr:
-		// enable function `any_value` in aggregation even `ONLY_FULL_GROUP_BY` is set
-		if t.FnName.L == ast.AnyValue {
-			c.hasAggFuncOrAnyValue = true
-			return node, true
-		}
 	case *ast.ColumnNameExpr:
 		if c.firstNonAggCol == nil {
 			c.firstNonAggCol, c.firstNonAggColIdx = t.Name, c.exprIdx

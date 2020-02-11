@@ -448,19 +448,11 @@ func (s *testPlanSuite) TestValidate(c *C) {
 			err: expression.ErrOperandColumns,
 		},
 		{
-			sql: "select case(1,2) when(1,2) then true end",
-			err: expression.ErrOperandColumns,
-		},
-		{
 			sql: "select (1,2) in ((3,4),(5,6))",
 			err: nil,
 		},
 		{
 			sql: "select (1,2) in ((3,4),5)",
-			err: expression.ErrOperandColumns,
-		},
-		{
-			sql: "select (1,2) is true",
 			err: expression.ErrOperandColumns,
 		},
 		{

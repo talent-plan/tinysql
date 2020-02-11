@@ -53,19 +53,14 @@ func (c *conditionChecker) checkScalarFunction(scalar *expression.ScalarFunction
 				return scalar.FuncName.L != ast.NE || c.length == types.UnspecifiedLength
 			}
 		}
-	case ast.IsNull, ast.IsTruth, ast.IsFalsity:
+	case ast.IsNull:
 		return c.checkColumn(scalar.GetArgs()[0])
 	case ast.UnaryNot:
-		// TODO: support "not like" convert to access conditions.
-		if s, ok := scalar.GetArgs()[0].(*expression.ScalarFunction); ok {
-			if s.FuncName.L == ast.Like {
-				return false
-			}
-		} else {
-			// "not column" or "not constant" can't lead to a range.
-			return false
+		if _, ok := scalar.GetArgs()[0].(*expression.ScalarFunction); ok {
+			return c.check(scalar.GetArgs()[0])
 		}
-		return c.check(scalar.GetArgs()[0])
+		// "not column" or "not constant" can't lead to a range.
+		return false
 	case ast.In:
 		if !c.checkColumn(scalar.GetArgs()[0]) {
 			return false
@@ -76,57 +71,8 @@ func (c *conditionChecker) checkScalarFunction(scalar *expression.ScalarFunction
 			}
 		}
 		return true
-	case ast.Like:
-		return c.checkLikeFunc(scalar)
-	case ast.GetParam:
-		return true
 	}
 	return false
-}
-
-func (c *conditionChecker) checkLikeFunc(scalar *expression.ScalarFunction) bool {
-	if !c.checkColumn(scalar.GetArgs()[0]) {
-		return false
-	}
-	pattern, ok := scalar.GetArgs()[1].(*expression.Constant)
-	if !ok {
-		return false
-
-	}
-	if pattern.Value.IsNull() {
-		return false
-	}
-	patternStr, err := pattern.Value.ToString()
-	if err != nil {
-		return false
-	}
-	if len(patternStr) == 0 {
-		return true
-	}
-	escape := byte(scalar.GetArgs()[2].(*expression.Constant).Value.GetInt64())
-	for i := 0; i < len(patternStr); i++ {
-		if patternStr[i] == escape {
-			i++
-			if i < len(patternStr)-1 {
-				continue
-			}
-			break
-		}
-		if i == 0 && (patternStr[i] == '%' || patternStr[i] == '_') {
-			return false
-		}
-		if patternStr[i] == '%' {
-			if i != len(patternStr)-1 {
-				c.shouldReserve = true
-			}
-			break
-		}
-		if patternStr[i] == '_' {
-			c.shouldReserve = true
-			break
-		}
-	}
-	return true
 }
 
 func (c *conditionChecker) checkColumn(expr expression.Expression) bool {

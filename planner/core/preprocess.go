@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/ast"
@@ -136,32 +135,6 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 			p.tableAliasInJoin = p.tableAliasInJoin[:len(p.tableAliasInJoin)-1]
 		}
 	case *ast.FuncCallExpr:
-		// The arguments for builtin NAME_CONST should be constants
-		// See https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_name-const for details
-		if x.FnName.L == ast.NameConst {
-			if len(x.Args) != 2 {
-				p.err = expression.ErrIncorrectParameterCount.GenWithStackByArgs(x.FnName.L)
-			} else {
-				_, isValueExpr1 := x.Args[0].(*driver.ValueExpr)
-				isValueExpr2 := false
-				switch x.Args[1].(type) {
-				case *driver.ValueExpr, *ast.UnaryOperationExpr:
-					isValueExpr2 = true
-				}
-
-				if !isValueExpr1 || !isValueExpr2 {
-					p.err = ErrWrongArguments.GenWithStackByArgs("NAME_CONST")
-				}
-			}
-			break
-		}
-
-		// no need sleep when retry transaction and avoid unexpect sleep caused by retry.
-		if p.flag&inTxnRetry > 0 && x.FnName.L == ast.Sleep {
-			if len(x.Args) == 1 {
-				x.Args[0] = ast.NewValueExpr(0)
-			}
-		}
 	}
 
 	return in, p.err == nil
@@ -505,10 +478,6 @@ func checkColumn(colDef *ast.ColumnDef) error {
 		return ddl.ErrWrongColumnName.GenWithStackByArgs(cName)
 	}
 
-	if isInvalidDefaultValue(colDef) {
-		return types.ErrInvalidDefault.GenWithStackByArgs(colDef.Name.Name.O)
-	}
-
 	// Check column type.
 	tp := colDef.Tp
 	if tp == nil {
@@ -570,33 +539,6 @@ func checkColumn(colDef *ast.ColumnDef) error {
 		// TODO: Add more types.
 	}
 	return nil
-}
-
-// isDefaultValNowSymFunc checks whether default value is a NOW() builtin function.
-func isDefaultValNowSymFunc(expr ast.ExprNode) bool {
-	if funcCall, ok := expr.(*ast.FuncCallExpr); ok {
-		// Default value NOW() is transformed to CURRENT_TIMESTAMP() in parser.
-		if funcCall.FnName.L == ast.CurrentTimestamp {
-			return true
-		}
-	}
-	return false
-}
-
-func isInvalidDefaultValue(colDef *ast.ColumnDef) bool {
-	tp := colDef.Tp
-	// Check the last default value.
-	for i := len(colDef.Options) - 1; i >= 0; i-- {
-		columnOpt := colDef.Options[i]
-		if columnOpt.Tp == ast.ColumnOptionDefaultValue {
-			if !(tp.Tp == mysql.TypeTimestamp || tp.Tp == mysql.TypeDatetime) && isDefaultValNowSymFunc(columnOpt.Expr) {
-				return true
-			}
-			break
-		}
-	}
-
-	return false
 }
 
 // isIncorrectName checks if the identifier is incorrect.

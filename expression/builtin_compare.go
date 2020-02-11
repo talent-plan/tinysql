@@ -16,10 +16,8 @@ package expression
 import (
 	"math"
 
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/opcode"
-	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -100,193 +98,13 @@ func GetCmpFunction(lhs, rhs Expression) CompareFunc {
 	return nil
 }
 
-// tryToConvertConstantInt tries to convert a constant with other type to a int constant.
-// isExceptional indicates whether the 'int column [cmp] const' might be true/false.
-// If isExceptional is true, ExecptionalVal is returned. Or, CorrectVal is returned.
-// CorrectVal: The computed result. If the constant can be converted to int without exception, return the val. Else return 'con'(the input).
-// ExceptionalVal : It is used to get more information to check whether 'int column [cmp] const' is true/false
-// 					If the op == LT,LE,GT,GE and it gets an Overflow when converting, return inf/-inf.
-// 					If the op == EQ,NullEQ and the constant can never be equal to the int column, return ‘con’(the input, a non-int constant).
-func tryToConvertConstantInt(ctx sessionctx.Context, targetFieldType *types.FieldType, con *Constant) (_ *Constant, isExceptional bool) {
-	if con.GetType().EvalType() == types.ETInt {
-		return con, false
-	}
-	dt, err := con.Eval(chunk.Row{})
-	if err != nil {
-		return con, false
-	}
-	sc := ctx.GetSessionVars().StmtCtx
-
-	dt, err = dt.ConvertTo(sc, targetFieldType)
-	if err != nil {
-		if terror.ErrorEqual(err, types.ErrOverflow) {
-			return &Constant{
-				Value:   dt,
-				RetType: targetFieldType,
-			}, true
-		}
-		return con, false
-	}
-	return &Constant{
-		Value:   dt,
-		RetType: targetFieldType,
-	}, false
-}
-
-// RefineComparedConstant changes a non-integer constant argument to its ceiling or floor result by the given op.
-// isExceptional indicates whether the 'int column [cmp] const' might be true/false.
-// If isExceptional is true, ExecptionalVal is returned. Or, CorrectVal is returned.
-// CorrectVal: The computed result. If the constant can be converted to int without exception, return the val. Else return 'con'(the input).
-// ExceptionalVal : It is used to get more information to check whether 'int column [cmp] const' is true/false
-// 					If the op == LT,LE,GT,GE and it gets an Overflow when converting, return inf/-inf.
-// 					If the op == EQ,NullEQ and the constant can never be equal to the int column, return ‘con’(the input, a non-int constant).
-func RefineComparedConstant(ctx sessionctx.Context, targetFieldType types.FieldType, con *Constant, op opcode.Op) (_ *Constant, isExceptional bool) {
-	dt, err := con.Eval(chunk.Row{})
-	if err != nil {
-		return con, false
-	}
-	sc := ctx.GetSessionVars().StmtCtx
-
-	if targetFieldType.Tp == mysql.TypeBit {
-		targetFieldType = *types.NewFieldType(mysql.TypeLonglong)
-	}
-	var intDatum types.Datum
-	intDatum, err = dt.ConvertTo(sc, &targetFieldType)
-	if err != nil {
-		if terror.ErrorEqual(err, types.ErrOverflow) {
-			return &Constant{
-				Value:   intDatum,
-				RetType: &targetFieldType,
-			}, true
-		}
-		return con, false
-	}
-	c, err := intDatum.CompareDatum(sc, &con.Value)
-	if err != nil {
-		return con, false
-	}
-	if c == 0 {
-		return &Constant{
-			Value:   intDatum,
-			RetType: &targetFieldType,
-		}, false
-	}
-	switch op {
-	case opcode.LT, opcode.GE:
-		resultExpr := NewFunctionInternal(ctx, ast.Ceil, types.NewFieldType(mysql.TypeUnspecified), con)
-		if resultCon, ok := resultExpr.(*Constant); ok {
-			return tryToConvertConstantInt(ctx, &targetFieldType, resultCon)
-		}
-	case opcode.LE, opcode.GT:
-		resultExpr := NewFunctionInternal(ctx, ast.Floor, types.NewFieldType(mysql.TypeUnspecified), con)
-		if resultCon, ok := resultExpr.(*Constant); ok {
-			return tryToConvertConstantInt(ctx, &targetFieldType, resultCon)
-		}
-	case opcode.NullEQ, opcode.EQ:
-		switch con.GetType().EvalType() {
-		// An integer value equal or NULL-safe equal to a float value which contains
-		// non-zero decimal digits is definitely false.
-		// e.g.,
-		//   1. "integer  =  1.1" is definitely false.
-		//   2. "integer <=> 1.1" is definitely false.
-		case types.ETReal:
-			return con, true
-		case types.ETString:
-			// We try to convert the string constant to double.
-			// If the double result equals the int result, we can return the int result;
-			// otherwise, the compare function will be false.
-			var doubleDatum types.Datum
-			doubleDatum, err = dt.ConvertTo(sc, types.NewFieldType(mysql.TypeDouble))
-			if err != nil {
-				return con, false
-			}
-			if c, err = doubleDatum.CompareDatum(sc, &intDatum); err != nil {
-				return con, false
-			}
-			if c != 0 {
-				return con, true
-			}
-			return &Constant{
-				Value:   intDatum,
-				RetType: &targetFieldType,
-			}, false
-		}
-	}
-	return con, false
-}
-
-// refineArgs will rewrite the arguments if the compare expression is `int column <cmp> non-int constant` or
-// `non-int constant <cmp> int column`. E.g., `a < 1.1` will be rewritten to `a < 2`.
-func (c *compareFunctionClass) refineArgs(ctx sessionctx.Context, args []Expression) []Expression {
-	arg0Type, arg1Type := args[0].GetType(), args[1].GetType()
-	arg0IsInt := arg0Type.EvalType() == types.ETInt
-	arg1IsInt := arg1Type.EvalType() == types.ETInt
-	arg0, arg0IsCon := args[0].(*Constant)
-	arg1, arg1IsCon := args[1].(*Constant)
-	isExceptional, finalArg0, finalArg1 := false, args[0], args[1]
-	isPositiveInfinite, isNegativeInfinite := false, false
-	// int non-constant [cmp] non-int constant
-	if arg0IsInt && !arg0IsCon && !arg1IsInt && arg1IsCon {
-		arg1, isExceptional = RefineComparedConstant(ctx, *arg0Type, arg1, c.op)
-		finalArg1 = arg1
-		if isExceptional && arg1.GetType().EvalType() == types.ETInt {
-			// Judge it is inf or -inf
-			// For int:
-			//			inf:  01111111 & 1 == 1
-			//		   -inf:  10000000 & 1 == 0
-			// For uint:
-			//			inf:  11111111 & 1 == 1
-			//		   -inf:  00000000 & 0 == 0
-			if arg1.Value.GetInt64()&1 == 1 {
-				isPositiveInfinite = true
-			} else {
-				isNegativeInfinite = true
-			}
-		}
-	}
-	// non-int constant [cmp] int non-constant
-	if arg1IsInt && !arg1IsCon && !arg0IsInt && arg0IsCon {
-		arg0, isExceptional = RefineComparedConstant(ctx, *arg1Type, arg0, symmetricOp[c.op])
-		finalArg0 = arg0
-		if isExceptional && arg0.GetType().EvalType() == types.ETInt {
-			if arg0.Value.GetInt64()&1 == 1 {
-				isNegativeInfinite = true
-			} else {
-				isPositiveInfinite = true
-			}
-		}
-	}
-
-	if isExceptional && (c.op == opcode.EQ || c.op == opcode.NullEQ) {
-		// This will always be false.
-		return []Expression{Zero.Clone(), One.Clone()}
-	}
-	if isPositiveInfinite {
-		// If the op is opcode.LT, opcode.LE
-		// This will always be true.
-		// If the op is opcode.GT, opcode.GE
-		// This will always be false.
-		return []Expression{Zero.Clone(), One.Clone()}
-	}
-	if isNegativeInfinite {
-		// If the op is opcode.GT, opcode.GE
-		// This will always be true.
-		// If the op is opcode.LT, opcode.LE
-		// This will always be false.
-		return []Expression{One.Clone(), Zero.Clone()}
-	}
-
-	return []Expression{finalArg0, finalArg1}
-}
-
 // getFunction sets compare built-in function signatures for various types.
 func (c *compareFunctionClass) getFunction(ctx sessionctx.Context, rawArgs []Expression) (sig builtinFunc, err error) {
 	if err = c.verifyArgs(rawArgs); err != nil {
 		return nil, err
 	}
-	args := c.refineArgs(ctx, rawArgs)
-	cmpType := GetAccurateCmpType(args[0], args[1])
-	sig, err = c.generateCmpSigs(ctx, args, cmpType)
+	cmpType := GetAccurateCmpType(rawArgs[0], rawArgs[1])
+	sig, err = c.generateCmpSigs(ctx, rawArgs, cmpType)
 	return sig, err
 }
 

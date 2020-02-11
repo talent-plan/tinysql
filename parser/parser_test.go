@@ -1004,7 +1004,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 
 		{`SELECT RPAD('hi', 6, 'c');`, true, "SELECT RPAD('hi', 6, 'c')"},
 		{`SELECT BIT_LENGTH('hi');`, true, "SELECT BIT_LENGTH('hi')"},
-		{`SELECT CHAR(65);`, true, "SELECT CHAR_FUNC(65, NULL)"},
 		{`SELECT CHAR_LENGTH('abc');`, true, "SELECT CHAR_LENGTH('abc')"},
 		{`SELECT CHARACTER_LENGTH('abc');`, true, "SELECT CHARACTER_LENGTH('abc')"},
 		{`SELECT FIELD('ej', 'Hej', 'ej', 'Heja', 'hej', 'foo');`, true, "SELECT FIELD('ej', 'Hej', 'ej', 'Heja', 'hej', 'foo')"},
@@ -1023,7 +1022,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`SELECT FORMAT(), FORMAT(12332.2,2,'de_DE'), FORMAT(12332.123456, 4)`, true, "SELECT FORMAT(),FORMAT(12332.2, 2, 'de_DE'),FORMAT(12332.123456, 4)"},
 		{`SELECT FROM_BASE64('abc')`, true, "SELECT FROM_BASE64('abc')"},
 		{`SELECT TO_BASE64('abc')`, true, "SELECT TO_BASE64('abc')"},
-		{`SELECT INSERT(), INSERT('Quadratic', 3, 4, 'What'), INSTR('foobarbar', 'bar')`, true, "SELECT INSERT_FUNC(),INSERT_FUNC('Quadratic', 3, 4, 'What'),INSTR('foobarbar', 'bar')"},
 		{`SELECT LOAD_FILE('/tmp/picture')`, true, "SELECT LOAD_FILE('/tmp/picture')"},
 		{`SELECT LPAD('hi',4,'??')`, true, "SELECT LPAD('hi', 4, '??')"},
 		{`SELECT LEFT("foobar", 3)`, true, "SELECT LEFT('foobar', 3)"},
@@ -1231,44 +1229,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select count(all c1) from t;`, true, "SELECT COUNT(`c1`) FROM `t`"},
 		{`select count(distinct all c1) from t;`, false, ""},
 		{`select count(distinctrow all c1) from t;`, false, ""},
-
-		// for encryption and compression functions
-		{`select AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3'))`, true, "SELECT AES_ENCRYPT('text', UNHEX('F3229A0B371ED2D9441B830D21A390C3'))"},
-		{`select AES_DECRYPT(@crypt_str,@key_str)`, true, "SELECT AES_DECRYPT(@`crypt_str`, @`key_str`)"},
-		{`select AES_DECRYPT(@crypt_str,@key_str,@init_vector);`, true, "SELECT AES_DECRYPT(@`crypt_str`, @`key_str`, @`init_vector`)"},
-		{`SELECT COMPRESS('');`, true, "SELECT COMPRESS('')"},
-		{`SELECT DECODE(@crypt_str, @pass_str);`, true, "SELECT DECODE(@`crypt_str`, @`pass_str`)"},
-		{`SELECT DES_DECRYPT(@crypt_str), DES_DECRYPT(@crypt_str, @key_str);`, true, "SELECT DES_DECRYPT(@`crypt_str`),DES_DECRYPT(@`crypt_str`, @`key_str`)"},
-		{`SELECT DES_ENCRYPT(@str), DES_ENCRYPT(@key_num);`, true, "SELECT DES_ENCRYPT(@`str`),DES_ENCRYPT(@`key_num`)"},
-		{`SELECT ENCODE('cleartext', CONCAT('my_random_salt','my_secret_password'));`, true, "SELECT ENCODE('cleartext', CONCAT('my_random_salt', 'my_secret_password'))"},
-		{`SELECT ENCRYPT('hello'), ENCRYPT('hello', @salt);`, true, "SELECT ENCRYPT('hello'),ENCRYPT('hello', @`salt`)"},
-		{`SELECT MD5('testing');`, true, "SELECT MD5('testing')"},
-		{`SELECT OLD_PASSWORD(@str);`, true, "SELECT OLD_PASSWORD(@`str`)"},
-		{`SELECT PASSWORD(@str);`, true, "SELECT PASSWORD_FUNC(@`str`)"},
-		{`SELECT RANDOM_BYTES(@len);`, true, "SELECT RANDOM_BYTES(@`len`)"},
-		{`SELECT SHA1('abc');`, true, "SELECT SHA1('abc')"},
-		{`SELECT SHA('abc');`, true, "SELECT SHA('abc')"},
-		{`SELECT SHA2('abc', 224);`, true, "SELECT SHA2('abc', 224)"},
-		{`SELECT UNCOMPRESS('any string');`, true, "SELECT UNCOMPRESS('any string')"},
-		{`SELECT UNCOMPRESSED_LENGTH(@compressed_string);`, true, "SELECT UNCOMPRESSED_LENGTH(@`compressed_string`)"},
-		{`SELECT VALIDATE_PASSWORD_STRENGTH(@str);`, true, "SELECT VALIDATE_PASSWORD_STRENGTH(@`str`)"},
-
-		// For JSON functions.
-		{`SELECT JSON_EXTRACT();`, true, "SELECT JSON_EXTRACT()"},
-		{`SELECT JSON_UNQUOTE();`, true, "SELECT JSON_UNQUOTE()"},
-		{`SELECT JSON_TYPE('[123]');`, true, "SELECT JSON_TYPE('[123]')"},
-		{`SELECT JSON_TYPE();`, true, "SELECT JSON_TYPE()"},
-
-		// For two json grammar sugar.
-		{`SELECT a->'$.a' FROM t`, true, "SELECT JSON_EXTRACT(`a`, '$.a') FROM `t`"},
-		{`SELECT a->>'$.a' FROM t`, true, "SELECT JSON_UNQUOTE(JSON_EXTRACT(`a`, '$.a')) FROM `t`"},
-		{`SELECT '{}'->'$.a' FROM t`, false, ""},
-		{`SELECT '{}'->>'$.a' FROM t`, false, ""},
-		{`SELECT a->3 FROM t`, false, ""},
-		{`SELECT a->>3 FROM t`, false, ""},
-
-		// Test that quoted identifier can be a function name.
-		{"SELECT `uuid`()", true, "SELECT UUID()"},
 	}
 	s.RunTest(c, table)
 

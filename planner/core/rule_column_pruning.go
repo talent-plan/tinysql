@@ -44,24 +44,24 @@ func getUsedList(usedCols []*expression.Column, schema *expression.Schema) []boo
 // ExprsHasSideEffects checks if any of the expressions has side effects.
 func ExprsHasSideEffects(exprs []expression.Expression) bool {
 	for _, expr := range exprs {
-		if exprHasSetVarOrSleep(expr) {
+		if exprHasSetVar(expr) {
 			return true
 		}
 	}
 	return false
 }
 
-// exprHasSetVarOrSleep checks if the expression has SetVar function or Sleep function.
-func exprHasSetVarOrSleep(expr expression.Expression) bool {
+// exprHasSetVar checks if the expression has SetVar function.
+func exprHasSetVar(expr expression.Expression) bool {
 	scalaFunc, isScalaFunc := expr.(*expression.ScalarFunction)
 	if !isScalaFunc {
 		return false
 	}
-	if scalaFunc.FuncName.L == ast.SetVar || scalaFunc.FuncName.L == ast.Sleep {
+	if scalaFunc.FuncName.L == ast.SetVar {
 		return true
 	}
 	for _, arg := range scalaFunc.GetArgs() {
-		if exprHasSetVarOrSleep(arg) {
+		if exprHasSetVar(arg) {
 			return true
 		}
 	}
@@ -75,7 +75,7 @@ func (p *LogicalProjection) PruneColumns(parentUsedCols []*expression.Column) er
 	used := getUsedList(parentUsedCols, p.schema)
 
 	for i := len(used) - 1; i >= 0; i-- {
-		if !used[i] && !exprHasSetVarOrSleep(p.Exprs[i]) {
+		if !used[i] && !exprHasSetVar(p.Exprs[i]) {
 			p.schema.Columns = append(p.schema.Columns[:i], p.schema.Columns[i+1:]...)
 			p.Exprs = append(p.Exprs[:i], p.Exprs[i+1:]...)
 		}

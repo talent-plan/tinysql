@@ -115,7 +115,6 @@ var vecBuiltinCompareCases = map[string][]vecExprBenchCase{
 			},
 		},
 	},
-	ast.Date: {},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltinCompareEvalOneVec(c *C) {

@@ -215,37 +215,6 @@
     ]
   },
   {
-   "name": "TestRefine",
-    "cases": [
-      "select a from t where c is not null",
-      "select a from t where c >= 4",
-      "select a from t where c <= 4",
-      "select a from t where c = 4 and d = 5 and e = 6",
-      "select a from t where d = 4 and c = 5",
-      "select a from t where c = 4 and e < 5",
-      "select a from t where c = 4 and d <= 5 and d > 3",
-      "select a from t where d <= 5 and d > 3",
-      "select a from t where c between 1 and 2",
-      "select a from t where c not between 1 and 2",
-      "select a from t where c <= 5 and c >= 3 and d = 1",
-      "select a from t where c = 1 or c = 2 or c = 3",
-      "select b from t where c = 1 or c = 2 or c = 3 or c = 4 or c = 5",
-      "select a from t where c = 5",
-      "select a from t where c = 5 and b = 1",
-      "select a from t where c in (1)",
-      "select a from t where c in ('1')",
-      "select a from t where c = 1.0",
-      "select a from t where c in (1) and d > 3",
-      "select a from t where c in (1, 2, 3) and (d > 3 and d < 4 or d > 5 and d < 6)",
-      "select a from t where c in (1, 2, 3) and (d > 2 and d < 4 or d > 5 and d < 7)",
-      "select a from t where c in (1, 2, 3)",
-      "select a from t where c in (1, 2, 3) and d in (1,2) and e = 1",
-      "select a from t where d in (1, 2, 3)",
-      "select a from t use index(c_d_e) where c != 1",
-      "select a from t where c = 123456789098765432101234"
-    ]
-  },
-  {
     "name": "TestAggEliminator",
     "cases": [
       // Max to Limit + Sort-Desc.

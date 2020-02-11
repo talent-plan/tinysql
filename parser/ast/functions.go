@@ -32,298 +32,31 @@ var (
 
 // List scalar function names.
 const (
-	LogicAnd   = "and"
-	Cast       = "cast"
-	LeftShift  = "leftshift"
-	RightShift = "rightshift"
-	LogicOr    = "or"
-	GE         = "ge"
-	LE         = "le"
-	EQ         = "eq"
-	NE         = "ne"
-	LT         = "lt"
-	GT         = "gt"
-	Plus       = "plus"
-	Minus      = "minus"
-	And        = "bitand"
-	Or         = "bitor"
-	Mod        = "mod"
-	Xor        = "bitxor"
-	Div        = "div"
-	Mul        = "mul"
-	UnaryNot   = "not" // Avoid name conflict with Not in github/pingcap/check.
-	BitNeg     = "bitneg"
-	IntDiv     = "intdiv"
-	LogicXor   = "xor"
-	NullEQ     = "nulleq"
-	UnaryPlus  = "unaryplus"
-	UnaryMinus = "unaryminus"
-	In         = "in"
-	Like       = "like"
-	Case       = "case"
-	Regexp     = "regexp"
-	IsNull     = "isnull"
-	IsTruth    = "istrue"  // Avoid name conflict with IsTrue in github/pingcap/check.
-	IsFalsity  = "isfalse" // Avoid name conflict with IsFalse in github/pingcap/check.
-	RowFunc    = "row"
-	SetVar     = "setvar"
-	GetVar     = "getvar"
-	Values     = "values"
-	BitCount   = "bit_count"
-	GetParam   = "getparam"
-
-	// common functions
-	Coalesce = "coalesce"
-	Greatest = "greatest"
-	Least    = "least"
-	Interval = "interval"
-
-	// math functions
-	Abs      = "abs"
-	Acos     = "acos"
-	Asin     = "asin"
-	Atan     = "atan"
-	Atan2    = "atan2"
-	Ceil     = "ceil"
-	Ceiling  = "ceiling"
-	Conv     = "conv"
-	Cos      = "cos"
-	Cot      = "cot"
-	CRC32    = "crc32"
-	Degrees  = "degrees"
-	Exp      = "exp"
-	Floor    = "floor"
-	Ln       = "ln"
-	Log      = "log"
-	Log2     = "log2"
-	Log10    = "log10"
-	PI       = "pi"
-	Pow      = "pow"
-	Power    = "power"
-	Radians  = "radians"
-	Rand     = "rand"
-	Round    = "round"
-	Sign     = "sign"
-	Sin      = "sin"
-	Sqrt     = "sqrt"
-	Tan      = "tan"
-	Truncate = "truncate"
-
-	// time functions
-	AddDate          = "adddate"
-	AddTime          = "addtime"
-	ConvertTz        = "convert_tz"
-	Curdate          = "curdate"
-	CurrentDate      = "current_date"
-	CurrentTime      = "current_time"
-	CurrentTimestamp = "current_timestamp"
-	Curtime          = "curtime"
-	Date             = "date"
-	DateLiteral      = "'tidb`.(dateliteral"
-	DateAdd          = "date_add"
-	DateFormat       = "date_format"
-	DateSub          = "date_sub"
-	DateDiff         = "datediff"
-	Day              = "day"
-	DayName          = "dayname"
-	DayOfMonth       = "dayofmonth"
-	DayOfWeek        = "dayofweek"
-	DayOfYear        = "dayofyear"
-	Extract          = "extract"
-	FromDays         = "from_days"
-	FromUnixTime     = "from_unixtime"
-	GetFormat        = "get_format"
-	Hour             = "hour"
-	LocalTime        = "localtime"
-	LocalTimestamp   = "localtimestamp"
-	MakeDate         = "makedate"
-	MakeTime         = "maketime"
-	MicroSecond      = "microsecond"
-	Minute           = "minute"
-	Month            = "month"
-	MonthName        = "monthname"
-	Now              = "now"
-	PeriodAdd        = "period_add"
-	PeriodDiff       = "period_diff"
-	Quarter          = "quarter"
-	SecToTime        = "sec_to_time"
-	Second           = "second"
-	StrToDate        = "str_to_date"
-	SubDate          = "subdate"
-	SubTime          = "subtime"
-	Sysdate          = "sysdate"
-	Time             = "time"
-	TimeLiteral      = "'tidb`.(timeliteral"
-	TimeFormat       = "time_format"
-	TimeToSec        = "time_to_sec"
-	TimeDiff         = "timediff"
-	Timestamp        = "timestamp"
-	TimestampLiteral = "'tidb`.(timestampliteral"
-	TimestampAdd     = "timestampadd"
-	TimestampDiff    = "timestampdiff"
-	ToDays           = "to_days"
-	ToSeconds        = "to_seconds"
-	UnixTimestamp    = "unix_timestamp"
-	UTCDate          = "utc_date"
-	UTCTime          = "utc_time"
-	UTCTimestamp     = "utc_timestamp"
-	Week             = "week"
-	Weekday          = "weekday"
-	WeekOfYear       = "weekofyear"
-	Year             = "year"
-	YearWeek         = "yearweek"
-	LastDay          = "last_day"
-	TiDBParseTso     = "tidb_parse_tso"
-
-	// string functions
-	ASCII           = "ascii"
-	Bin             = "bin"
-	Concat          = "concat"
-	ConcatWS        = "concat_ws"
-	Convert         = "convert"
-	Elt             = "elt"
-	ExportSet       = "export_set"
-	Field           = "field"
-	Format          = "format"
-	FromBase64      = "from_base64"
-	InsertFunc      = "insert_func"
-	Instr           = "instr"
-	Lcase           = "lcase"
-	Left            = "left"
-	Length          = "length"
-	LoadFile        = "load_file"
-	Locate          = "locate"
-	Lower           = "lower"
-	Lpad            = "lpad"
-	LTrim           = "ltrim"
-	MakeSet         = "make_set"
-	Mid             = "mid"
-	Oct             = "oct"
-	OctetLength     = "octet_length"
-	Ord             = "ord"
-	Position        = "position"
-	Quote           = "quote"
-	Repeat          = "repeat"
-	Replace         = "replace"
-	Reverse         = "reverse"
-	Right           = "right"
-	RTrim           = "rtrim"
-	Space           = "space"
-	Strcmp          = "strcmp"
-	Substring       = "substring"
-	Substr          = "substr"
-	SubstringIndex  = "substring_index"
-	ToBase64        = "to_base64"
-	Trim            = "trim"
-	Upper           = "upper"
-	Ucase           = "ucase"
-	Hex             = "hex"
-	Unhex           = "unhex"
-	Rpad            = "rpad"
-	BitLength       = "bit_length"
-	CharFunc        = "char_func"
-	CharLength      = "char_length"
-	CharacterLength = "character_length"
-	FindInSet       = "find_in_set"
-
-	// information functions
-	Benchmark      = "benchmark"
-	Charset        = "charset"
-	Coercibility   = "coercibility"
-	Collation      = "collation"
-	ConnectionID   = "connection_id"
-	CurrentUser    = "current_user"
-	CurrentRole    = "current_role"
-	Database       = "database"
-	FoundRows      = "found_rows"
-	LastInsertId   = "last_insert_id"
-	RowCount       = "row_count"
-	Schema         = "schema"
-	SessionUser    = "session_user"
-	SystemUser     = "system_user"
-	User           = "user"
-	Version        = "version"
-	TiDBVersion    = "tidb_version"
-	TiDBIsDDLOwner = "tidb_is_ddl_owner"
-	TiDBDecodePlan = "tidb_decode_plan"
-
-	// control functions
-	If     = "if"
-	Ifnull = "ifnull"
-	Nullif = "nullif"
-
-	// miscellaneous functions
-	AnyValue        = "any_value"
-	DefaultFunc     = "default_func"
-	InetAton        = "inet_aton"
-	InetNtoa        = "inet_ntoa"
-	Inet6Aton       = "inet6_aton"
-	Inet6Ntoa       = "inet6_ntoa"
-	IsFreeLock      = "is_free_lock"
-	IsIPv4          = "is_ipv4"
-	IsIPv4Compat    = "is_ipv4_compat"
-	IsIPv4Mapped    = "is_ipv4_mapped"
-	IsIPv6          = "is_ipv6"
-	IsUsedLock      = "is_used_lock"
-	MasterPosWait   = "master_pos_wait"
-	NameConst       = "name_const"
-	ReleaseAllLocks = "release_all_locks"
-	Sleep           = "sleep"
-	UUID            = "uuid"
-	UUIDShort       = "uuid_short"
-	// get_lock() and release_lock() is parsed but do nothing.
-	// It is used for preventing error in Ruby's activerecord migrations.
-	GetLock     = "get_lock"
-	ReleaseLock = "release_lock"
-
-	// encryption and compression functions
-	AesDecrypt               = "aes_decrypt"
-	AesEncrypt               = "aes_encrypt"
-	Compress                 = "compress"
-	Decode                   = "decode"
-	DesDecrypt               = "des_decrypt"
-	DesEncrypt               = "des_encrypt"
-	Encode                   = "encode"
-	Encrypt                  = "encrypt"
-	MD5                      = "md5"
-	OldPassword              = "old_password"
-	PasswordFunc             = "password_func"
-	RandomBytes              = "random_bytes"
-	SHA1                     = "sha1"
-	SHA                      = "sha"
-	SHA2                     = "sha2"
-	Uncompress               = "uncompress"
-	UncompressedLength       = "uncompressed_length"
-	ValidatePasswordStrength = "validate_password_strength"
-
-	// json functions
-	JSONType          = "json_type"
-	JSONExtract       = "json_extract"
-	JSONUnquote       = "json_unquote"
-	JSONArray         = "json_array"
-	JSONObject        = "json_object"
-	JSONMerge         = "json_merge"
-	JSONSet           = "json_set"
-	JSONInsert        = "json_insert"
-	JSONReplace       = "json_replace"
-	JSONRemove        = "json_remove"
-	JSONContains      = "json_contains"
-	JSONContainsPath  = "json_contains_path"
-	JSONValid         = "json_valid"
-	JSONArrayAppend   = "json_array_append"
-	JSONArrayInsert   = "json_array_insert"
-	JSONMergePatch    = "json_merge_patch"
-	JSONMergePreserve = "json_merge_preserve"
-	JSONPretty        = "json_pretty"
-	JSONQuote         = "json_quote"
-	JSONSearch        = "json_search"
-	JSONStorageSize   = "json_storage_size"
-	JSONDepth         = "json_depth"
-	JSONKeys          = "json_keys"
-	JSONLength        = "json_length"
-
-	// TiDB internal function.
-	TiDBDecodeKey = "tidb_decode_key"
+	IsNull      = "isnull"
+	Length      = "length"
+	Strcmp      = "strcmp"
+	OctetLength = "octet_length"
+	If          = "if"
+	Ifnull      = "ifnull"
+	LogicAnd    = "and"
+	LogicOr     = "or"
+	GE          = "ge"
+	LE          = "le"
+	EQ          = "eq"
+	NE          = "ne"
+	LT          = "lt"
+	GT          = "gt"
+	Plus        = "plus"
+	Minus       = "minus"
+	Div         = "div"
+	Mul         = "mul"
+	UnaryNot    = "not"
+	UnaryMinus  = "unaryminus"
+	In          = "in"
+	RowFunc     = "row"
+	SetVar      = "setvar"
+	GetVar      = "getvar"
+	Values      = "values"
 )
 
 // FuncCallExpr is for function expression.
@@ -335,125 +68,16 @@ type FuncCallExpr struct {
 	Args []ExprNode
 }
 
-// Restore implements Node interface.
-func (n *FuncCallExpr) Restore(ctx *RestoreCtx) error {
-	var specialLiteral string
-	switch n.FnName.L {
-	case DateLiteral:
-		specialLiteral = "DATE "
-	case TimeLiteral:
-		specialLiteral = "TIME "
-	case TimestampLiteral:
-		specialLiteral = "TIMESTAMP "
-	}
-	if specialLiteral != "" {
-		ctx.WritePlain(specialLiteral)
-		if err := n.Args[0].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCastExpr.Expr")
-		}
-		return nil
-	}
-
-	ctx.WriteKeyWord(n.FnName.O)
-	ctx.WritePlain("(")
-	switch n.FnName.L {
-	case "convert":
-		if err := n.Args[0].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCastExpr.Expr")
-		}
-		ctx.WriteKeyWord(" USING ")
-		ctx.WriteKeyWord(n.Args[1].GetType().Charset)
-	case "adddate", "subdate", "date_add", "date_sub":
-		if err := n.Args[0].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[0]")
-		}
-		ctx.WritePlain(", ")
-		ctx.WriteKeyWord("INTERVAL ")
-		if err := n.Args[1].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[1]")
-		}
-		ctx.WritePlain(" ")
-		if err := n.Args[2].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[2]")
-		}
-	case "extract":
-		if err := n.Args[0].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[0]")
-		}
-		ctx.WriteKeyWord(" FROM ")
-		if err := n.Args[1].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[1]")
-		}
-	case "position":
-		if err := n.Args[0].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr")
-		}
-		ctx.WriteKeyWord(" IN ")
-		if err := n.Args[1].Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FuncCallExpr")
-		}
-	case "trim":
-		switch len(n.Args) {
-		case 3:
-			if err := n.Args[2].Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[2]")
-			}
-			ctx.WritePlain(" ")
-			fallthrough
-		case 2:
-			if n.Args[1].(ValueExpr).GetValue() != nil {
-				if err := n.Args[1].Restore(ctx); err != nil {
-					return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[1]")
-				}
-				ctx.WritePlain(" ")
-			}
-			ctx.WriteKeyWord("FROM ")
-			fallthrough
-		case 1:
-			if err := n.Args[0].Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args[0]")
-			}
-		}
-	default:
-		for i, argv := range n.Args {
-			if i != 0 {
-				ctx.WritePlain(", ")
-			}
-			if err := argv.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore FuncCallExpr.Args %d", i)
-			}
-		}
-	}
-	ctx.WritePlain(")")
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *FuncCallExpr) Format(w io.Writer) {
 	fmt.Fprintf(w, "%s(", n.FnName.L)
-	if !n.specialFormatArgs(w) {
-		for i, arg := range n.Args {
-			arg.Format(w)
-			if i != len(n.Args)-1 {
-				fmt.Fprint(w, ", ")
-			}
+	for i, arg := range n.Args {
+		arg.Format(w)
+		if i != len(n.Args)-1 {
+			fmt.Fprint(w, ", ")
 		}
 	}
 	fmt.Fprint(w, ")")
-}
-
-// specialFormatArgs formats argument list for some special functions.
-func (n *FuncCallExpr) specialFormatArgs(w io.Writer) bool {
-	switch n.FnName.L {
-	case DateAdd, DateSub, AddDate, SubDate:
-		n.Args[0].Format(w)
-		fmt.Fprint(w, ", INTERVAL ")
-		n.Args[1].Format(w)
-		fmt.Fprint(w, " ")
-		n.Args[2].Format(w)
-		return true
-	}
-	return false
 }
 
 // Accept implements Node interface.

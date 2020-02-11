@@ -362,46 +362,6 @@ func handleUnsignedIntCol(ft *types.FieldType, val types.Datum, op string) (type
 	return val, op, false
 }
 
-func (r *builder) buildFromIsTrue(expr *expression.ScalarFunction, isNot int) []point {
-	if isNot == 1 {
-		// NOT TRUE range is {[null null] [0, 0]}
-		startPoint1 := point{start: true}
-		endPoint1 := point{}
-		startPoint2 := point{start: true}
-		startPoint2.value.SetInt64(0)
-		endPoint2 := point{}
-		endPoint2.value.SetInt64(0)
-		return []point{startPoint1, endPoint1, startPoint2, endPoint2}
-	}
-	// TRUE range is {[-inf 0) (0 +inf]}
-	startPoint1 := point{value: types.MinNotNullDatum(), start: true}
-	endPoint1 := point{excl: true}
-	endPoint1.value.SetInt64(0)
-	startPoint2 := point{excl: true, start: true}
-	startPoint2.value.SetInt64(0)
-	endPoint2 := point{value: types.MaxValueDatum()}
-	return []point{startPoint1, endPoint1, startPoint2, endPoint2}
-}
-
-func (r *builder) buildFromIsFalse(expr *expression.ScalarFunction, isNot int) []point {
-	if isNot == 1 {
-		// NOT FALSE range is {[-inf, 0), (0, +inf], [null, null]}
-		startPoint1 := point{start: true}
-		endPoint1 := point{excl: true}
-		endPoint1.value.SetInt64(0)
-		startPoint2 := point{start: true, excl: true}
-		startPoint2.value.SetInt64(0)
-		endPoint2 := point{value: types.MaxValueDatum()}
-		return []point{startPoint1, endPoint1, startPoint2, endPoint2}
-	}
-	// FALSE range is {[0, 0]}
-	startPoint := point{start: true}
-	startPoint.value.SetInt64(0)
-	endPoint := point{}
-	endPoint.value.SetInt64(0)
-	return []point{startPoint, endPoint}
-}
-
 func (r *builder) buildFromIn(expr *expression.ScalarFunction) ([]point, bool) {
 	list := expr.GetArgs()[1:]
 	rangePoints := make([]point, 0, len(list)*2)
@@ -449,10 +409,6 @@ func (r *builder) buildFromIn(expr *expression.ScalarFunction) ([]point, bool) {
 
 func (r *builder) buildFromNot(expr *expression.ScalarFunction) []point {
 	switch n := expr.FuncName.L; n {
-	case ast.IsTruth:
-		return r.buildFromIsTrue(expr, 1)
-	case ast.IsFalsity:
-		return r.buildFromIsFalse(expr, 1)
 	case ast.In:
 		var (
 			isUnsignedIntCol bool
@@ -485,10 +441,6 @@ func (r *builder) buildFromNot(expr *expression.ScalarFunction) []point {
 		retRangePoints = append(retRangePoints, point{value: previousValue, start: true, excl: true})
 		retRangePoints = append(retRangePoints, point{value: types.MaxValueDatum()})
 		return retRangePoints
-	case ast.Like:
-		// Pattern not like is not supported.
-		r.err = ErrUnsupportedType.GenWithStack("NOT LIKE is not supported.")
-		return fullRange
 	case ast.IsNull:
 		startPoint := point{value: types.MinNotNullDatum(), start: true}
 		endPoint := point{value: types.MaxValueDatum()}
@@ -505,10 +457,6 @@ func (r *builder) buildFromScalarFunc(expr *expression.ScalarFunction) []point {
 		return r.intersection(r.build(expr.GetArgs()[0]), r.build(expr.GetArgs()[1]))
 	case ast.LogicOr:
 		return r.union(r.build(expr.GetArgs()[0]), r.build(expr.GetArgs()[1]))
-	case ast.IsTruth:
-		return r.buildFromIsTrue(expr, 0)
-	case ast.IsFalsity:
-		return r.buildFromIsFalse(expr, 0)
 	case ast.In:
 		retPoints, _ := r.buildFromIn(expr)
 		return retPoints

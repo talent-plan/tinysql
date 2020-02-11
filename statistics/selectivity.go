@@ -85,7 +85,7 @@ func pseudoSelectivity(coll *HistColl, exprs []expression.Expression) float64 {
 			continue
 		}
 		switch fun.FuncName.L {
-		case ast.EQ, ast.NullEQ, ast.In:
+		case ast.EQ, ast.In:
 			minFactor = math.Min(minFactor, 1.0/pseudoEqualRate)
 			col, ok := coll.Columns[colID]
 			if !ok {

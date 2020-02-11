@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/opcode"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -158,11 +157,6 @@ func ColumnSubstituteImpl(expr Expression, schema *Schema, newExprs []Expression
 		newExpr := newExprs[id]
 		return true, newExpr
 	case *ScalarFunction:
-		if v.FuncName.L == ast.Cast {
-			newFunc := v.Clone().(*ScalarFunction)
-			_, newFunc.GetArgs()[0] = ColumnSubstituteImpl(newFunc.GetArgs()[0], schema, newExprs)
-			return true, newFunc
-		}
 		// cowExprRef is a copy-on-write util, args array allocation happens only
 		// when expr in args is changed
 		refExprArr := cowExprRef{v.GetArgs(), nil}
@@ -190,17 +184,6 @@ var oppositeOp = map[string]string{
 	ast.NE:       ast.EQ,
 	ast.LogicOr:  ast.LogicAnd,
 	ast.LogicAnd: ast.LogicOr,
-}
-
-// a op b is equal to b symmetricOp a
-var symmetricOp = map[opcode.Op]opcode.Op{
-	opcode.LT:     opcode.GT,
-	opcode.GE:     opcode.LE,
-	opcode.GT:     opcode.LT,
-	opcode.LE:     opcode.GE,
-	opcode.EQ:     opcode.EQ,
-	opcode.NE:     opcode.NE,
-	opcode.NullEQ: opcode.NullEQ,
 }
 
 func pushNotAcrossArgs(ctx sessionctx.Context, exprs []Expression, not bool) ([]Expression, bool) {

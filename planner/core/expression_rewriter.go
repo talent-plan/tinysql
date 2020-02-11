@@ -213,7 +213,7 @@ func (er *expressionRewriter) constructBinaryOpFunction(l expression.Expression,
 		return nil, expression.ErrOperandColumns.GenWithStackByArgs(lLen)
 	}
 	switch op {
-	case ast.EQ, ast.NE, ast.NullEQ:
+	case ast.EQ, ast.NE:
 		funcs := make([]expression.Expression, lLen)
 		for i := 0; i < lLen; i++ {
 			var err error
@@ -310,9 +310,6 @@ func (er *expressionRewriter) Enter(inNode ast.Node) (ast.Node, bool) {
 		er.ctxStackAppend(expression.NewValuesFunc(er.sctx, col.Index, col.RetType), types.EmptyName)
 		return inNode, true
 	case *ast.FuncCallExpr:
-		if _, ok := expression.DisableFoldFunctions[v.FnName.L]; ok {
-			er.disableFoldCounter++
-		}
 	default:
 		er.asScalar = true
 	}
@@ -337,9 +334,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		er.rewriteVariable(v)
 	case *ast.FuncCallExpr:
 		er.funcCallToExpression(v)
-		if _, ok := expression.DisableFoldFunctions[v.FnName.L]; ok {
-			er.disableFoldCounter--
-		}
 	case *ast.ColumnName:
 		er.toColumn(v)
 	case *ast.UnaryOperationExpr:
@@ -348,8 +342,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		er.binaryOpToExpression(v)
 	case *ast.BetweenExpr:
 		er.betweenToExpression(v)
-	case *ast.CaseExpr:
-		er.caseToExpression(v)
 	case *ast.RowExpr:
 		er.rowToScalarFunc(v)
 	case *ast.PatternInExpr:
@@ -358,8 +350,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		}
 	case *ast.IsNullExpr:
 		er.isNullToExpression(v)
-	case *ast.IsTruthExpr:
-		er.isTrueToScalarFunc(v)
 	case *ast.DefaultExpr:
 		er.evalDefaultExpr(v)
 	// TODO: Perhaps we don't need to transcode these back to generic integers/strings
@@ -460,8 +450,6 @@ func (er *expressionRewriter) unaryOpToExpression(v *ast.UnaryOperationExpr) {
 		return
 	case opcode.Minus:
 		op = ast.UnaryMinus
-	case opcode.BitNeg:
-		op = ast.BitNeg
 	case opcode.Not:
 		op = ast.UnaryNot
 	default:
@@ -529,21 +517,6 @@ func (er *expressionRewriter) isNullToExpression(v *ast.IsNullExpr) {
 	er.ctxStackAppend(function, types.EmptyName)
 }
 
-func (er *expressionRewriter) isTrueToScalarFunc(v *ast.IsTruthExpr) {
-	stkLen := len(er.ctxStack)
-	op := ast.IsTruth
-	if v.True == 0 {
-		op = ast.IsFalsity
-	}
-	if expression.GetRowLen(er.ctxStack[stkLen-1]) != 1 {
-		er.err = expression.ErrOperandColumns.GenWithStackByArgs(1)
-		return
-	}
-	function := er.notToExpression(v.Not, op, &v.Type, er.ctxStack[stkLen-1])
-	er.ctxStackPop(1)
-	er.ctxStackAppend(function, types.EmptyName)
-}
-
 // inToExpression converts in expression to a scalar function. The argument lLen means the length of in list.
 // The argument not means if the expression is not in. The tp stands for the expression type, which is always bool.
 // a in (b, c, d) will be rewritten as `(a = b) or (a = c) or (a = d)`.
@@ -563,17 +536,6 @@ func (er *expressionRewriter) inToExpression(lLen int, not bool, tp *types.Field
 		er.ctxStackPop(lLen + 1)
 		er.ctxStackAppend(expression.Null.Clone(), types.EmptyName)
 		return
-	}
-	if leftEt == types.ETInt {
-		for i := 1; i < len(args); i++ {
-			if c, ok := args[i].(*expression.Constant); ok {
-				var isExceptional bool
-				args[i], isExceptional = expression.RefineComparedConstant(er.sctx, *leftFt, c, opcode.EQ)
-				if isExceptional {
-					args[i] = c
-				}
-			}
-		}
 	}
 	allSameType := true
 	for _, arg := range args[1:] {
@@ -606,57 +568,6 @@ func (er *expressionRewriter) inToExpression(lLen int, not bool, tp *types.Field
 		}
 	}
 	er.ctxStackPop(lLen + 1)
-	er.ctxStackAppend(function, types.EmptyName)
-}
-
-func (er *expressionRewriter) caseToExpression(v *ast.CaseExpr) {
-	stkLen := len(er.ctxStack)
-	argsLen := 2 * len(v.WhenClauses)
-	if v.ElseClause != nil {
-		argsLen++
-	}
-	er.err = expression.CheckArgsNotMultiColumnRow(er.ctxStack[stkLen-argsLen:]...)
-	if er.err != nil {
-		return
-	}
-
-	// value                          -> ctxStack[stkLen-argsLen-1]
-	// when clause(condition, result) -> ctxStack[stkLen-argsLen:stkLen-1];
-	// else clause                    -> ctxStack[stkLen-1]
-	var args []expression.Expression
-	if v.Value != nil {
-		// args:  eq scalar func(args: value, condition1), result1,
-		//        eq scalar func(args: value, condition2), result2,
-		//        ...
-		//        else clause
-		value := er.ctxStack[stkLen-argsLen-1]
-		args = make([]expression.Expression, 0, argsLen)
-		for i := stkLen - argsLen; i < stkLen-1; i += 2 {
-			arg, err := er.newFunction(ast.EQ, types.NewFieldType(mysql.TypeTiny), value, er.ctxStack[i])
-			if err != nil {
-				er.err = err
-				return
-			}
-			args = append(args, arg)
-			args = append(args, er.ctxStack[i+1])
-		}
-		if v.ElseClause != nil {
-			args = append(args, er.ctxStack[stkLen-1])
-		}
-		argsLen++ // for trimming the value element later
-	} else {
-		// args:  condition1, result1,
-		//        condition2, result2,
-		//        ...
-		//        else clause
-		args = er.ctxStack[stkLen-argsLen:]
-	}
-	function, err := er.newFunction(ast.Case, &v.Type, args...)
-	if err != nil {
-		er.err = err
-		return
-	}
-	er.ctxStackPop(argsLen)
 	er.ctxStackAppend(function, types.EmptyName)
 }
 
@@ -736,36 +647,6 @@ func (er *expressionRewriter) rewriteFuncCall(v *ast.FuncCallExpr) bool {
 		}
 
 		return false
-	case ast.Nullif:
-		if len(v.Args) != 2 {
-			er.err = expression.ErrIncorrectParameterCount.GenWithStackByArgs(v.FnName.O)
-			return true
-		}
-		stackLen := len(er.ctxStack)
-		param1 := er.ctxStack[stackLen-2]
-		param2 := er.ctxStack[stackLen-1]
-		// param1 = param2
-		funcCompare, err := er.constructBinaryOpFunction(param1, param2, ast.EQ)
-		if err != nil {
-			er.err = err
-			return true
-		}
-		// NULL
-		nullTp := types.NewFieldType(mysql.TypeNull)
-		nullTp.Flen, nullTp.Decimal = mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeNull)
-		paramNull := &expression.Constant{
-			Value:   types.NewDatum(nil),
-			RetType: nullTp,
-		}
-		// if(param1 = param2, NULL, param1)
-		funcIf, err := er.newFunction(ast.If, &v.Type, funcCompare, paramNull, param1)
-		if err != nil {
-			er.err = err
-			return true
-		}
-		er.ctxStackPop(len(v.Args))
-		er.ctxStackAppend(funcIf, types.EmptyName)
-		return true
 	default:
 		return false
 	}

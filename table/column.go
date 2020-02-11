@@ -18,7 +18,6 @@
 package table
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -226,17 +225,6 @@ func NewColDesc(col *Column) *ColDesc {
 	} else if mysql.HasMultipleKeyFlag(col.Flag) {
 		keyFlag = "MUL"
 	}
-	var defaultValue interface{}
-	if !mysql.HasNoDefaultValueFlag(col.Flag) {
-		defaultValue = col.GetDefaultValue()
-		if defaultValStr, ok := defaultValue.(string); ok {
-			if (col.Tp == mysql.TypeTimestamp || col.Tp == mysql.TypeDatetime) &&
-				strings.EqualFold(defaultValStr, ast.CurrentTimestamp) &&
-				col.Decimal > 0 {
-				defaultValue = fmt.Sprintf("%s(%d)", defaultValStr, col.Decimal)
-			}
-		}
-	}
 
 	extra := ""
 	if mysql.HasAutoIncrementFlag(col.Flag) {
@@ -248,16 +236,15 @@ func NewColDesc(col *Column) *ColDesc {
 	}
 
 	desc := &ColDesc{
-		Field:        name.O,
-		Type:         col.GetTypeDesc(),
-		Charset:      col.Charset,
-		Collation:    col.Collate,
-		Null:         nullFlag,
-		Key:          keyFlag,
-		DefaultValue: defaultValue,
-		Extra:        extra,
-		Privileges:   defaultPrivileges,
-		Comment:      col.Comment,
+		Field:      name.O,
+		Type:       col.GetTypeDesc(),
+		Charset:    col.Charset,
+		Collation:  col.Collate,
+		Null:       nullFlag,
+		Key:        keyFlag,
+		Extra:      extra,
+		Privileges: defaultPrivileges,
+		Comment:    col.Comment,
 	}
 	if !field_types.HasCharset(&col.ColumnInfo.FieldType) {
 		desc.Charset = nil

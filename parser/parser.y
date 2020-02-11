@@ -1011,7 +1011,6 @@ import (
 	StorageMedia		"{DISK|MEMORY|DEFAULT}"
 
 %type	<ident>
-	ODBCDateTimeType		"ODBC type keywords for date and time literals"
 	Identifier			"identifier or unreserved keyword"
 	NotKeywordToken			"Tokens not mysql keyword but treated specially"
 	UnReservedKeyword		"MySQL unreserved keywords"
@@ -3535,20 +3534,6 @@ ReplaceIntoStmt:
 
 /***********************************Replace Statements END************************************/
 
-ODBCDateTimeType:
-	"d"
-	{
-		$$ = ast.DateLiteral
-	}
-|	"t"
-	{
-		$$ = ast.TimeLiteral
-	}
-|	"ts"
-	{
-		$$ = ast.TimestampLiteral
-	}
-
 Literal:
 	"FALSE"
 	{
@@ -3817,10 +3802,6 @@ SimpleExpr:
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Plus, V: $2}
 	}
-|	SimpleExpr pipes SimpleExpr
-	{
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.Concat), Args: []ast.ExprNode{$1, $3}}
-	}
 |	not2 SimpleExpr %prec neg
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
@@ -3915,17 +3896,6 @@ SimpleExpr:
 |	"VALUES" '(' SimpleIdent ')' %prec lowerThanInsertValues
 	{
 		$$ = &ast.ValuesExpr{Column: $3.(*ast.ColumnNameExpr)}
-	}
-|	SimpleIdent jss stringLit
-	{
-	    expr := ast.NewValueExpr($3)
-	    $$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONExtract), Args: []ast.ExprNode{$1, expr}}
-	}
-|	SimpleIdent juss stringLit
-	{
-	    expr := ast.NewValueExpr($3)
-	    extract := &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONExtract), Args: []ast.ExprNode{$1, expr}}
-	    $$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONUnquote), Args: []ast.ExprNode{extract}}
 	}
 
 DistinctKwd:
@@ -4035,57 +4005,9 @@ FunctionCallKeyword:
 		}
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($1), Args: args}
 	}
-|	"CHAR" '(' ExpressionList ')'
-	{
-		nilVal := ast.NewValueExpr(nil)
-		args := $3.([]ast.ExprNode)
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr(ast.CharFunc),
-			Args: append(args, nilVal),
-		}
-	}
-|	"CHAR" '(' ExpressionList "USING" CharsetName ')'
-	{
-		charset1 := ast.NewValueExpr($5)
-		args := $3.([]ast.ExprNode)
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr(ast.CharFunc),
-			Args: append(args, charset1),
-		}
-	}
-|	"DATE"  stringLit
-	{
-		expr := ast.NewValueExpr($2)
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.DateLiteral), Args: []ast.ExprNode{expr}}
-	}
-|	"TIME"  stringLit
-	{
-		expr := ast.NewValueExpr($2)
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.TimeLiteral), Args: []ast.ExprNode{expr}}
-	}
-|	"TIMESTAMP"  stringLit
-	{
-		expr := ast.NewValueExpr($2)
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.TimestampLiteral), Args: []ast.ExprNode{expr}}
-	}
-|	"INSERT" '(' ExpressionListOpt ')'
-	{
-		$$ = &ast.FuncCallExpr{FnName:model.NewCIStr(ast.InsertFunc), Args: $3.([]ast.ExprNode)}
-	}
 |	"MOD" '(' BitExpr ',' BitExpr ')'
 	{
 		$$ = &ast.BinaryOperationExpr{Op: opcode.Mod, L: $3, R: $5}
-	}
-|	"PASSWORD" '(' ExpressionListOpt ')'
-	{
-		$$ = &ast.FuncCallExpr{FnName:model.NewCIStr(ast.PasswordFunc), Args: $3.([]ast.ExprNode)}
-	}
-|	'{' ODBCDateTimeType stringLit '}'
-	{
-		// This is ODBC syntax for date and time literals.
-		// See: https://dev.mysql.com/doc/refman/5.7/en/date-and-time-literals.html
-		expr := ast.NewValueExpr($3)
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($2), Args: []ast.ExprNode{expr}}
 	}
 
 FunctionCallNonKeyword:

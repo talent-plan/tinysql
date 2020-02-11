@@ -906,32 +906,6 @@ func BenchmarkRowBasedFilterAndVectorizedFilter(b *testing.B) {
 		}
 		combFunc(numCols)
 	}
-
-	// Add special case to prove when some calculations are added,
-	// the vectorizedFilter for int types will be more faster than rowBasedFilter.
-	funcName := ast.Least
-	testCase := vecExprBenchCase{retEvalType: types.ETInt, childrenTypes: []types.EvalType{types.ETInt, types.ETInt}}
-	expr, _, input, _ := genVecExprBenchCase(ctx, funcName, testCase)
-	it := chunk.NewIterator4Chunk(input)
-
-	b.Run("Vec-special case", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, _, err := vectorizedFilter(ctx, []Expression{expr}, it, selected, nulls)
-			if err != nil {
-				panic(err)
-			}
-		}
-	})
-	b.Run("Row-special case", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, _, err := rowBasedFilter(ctx, []Expression{expr}, it, selected, nulls)
-			if err != nil {
-				panic(err)
-			}
-		}
-	})
 }
 
 func (s *testEvaluatorSuite) TestVectorizedFilterConsiderNull(c *C) {

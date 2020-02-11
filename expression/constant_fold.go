@@ -14,7 +14,6 @@
 package expression
 
 import (
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -47,7 +46,7 @@ func foldConstant(expr Expression) Expression {
 			}
 		}
 		if !allConstArg {
-			if !hasNullArg || !sc.InNullRejectCheck || x.FuncName.L == ast.NullEQ {
+			if !hasNullArg || !sc.InNullRejectCheck {
 				return expr
 			}
 			constArgs := make([]Expression, len(args))
