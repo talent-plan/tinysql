@@ -33,17 +33,6 @@ type testSuiteJoin3 struct {
 	*baseTestSuite
 }
 
-func (s *testSuiteJoin1) TestJoinPanic(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("set sql_mode = 'ONLY_FULL_GROUP_BY'")
-	tk.MustExec("drop table if exists events")
-	tk.MustExec("create table events (clock int, source int)")
-	tk.MustQuery("SELECT * FROM events e JOIN (SELECT MAX(clock) AS clock FROM events e2 GROUP BY e2.source) e3 ON e3.clock=e.clock")
-	err := tk.ExecToErr("SELECT * FROM events e JOIN (SELECT clock FROM events e2 GROUP BY e2.source) e3 ON e3.clock=e.clock")
-	c.Check(err, NotNil)
-}
-
 func (s *testSuite2) TestJoin(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 

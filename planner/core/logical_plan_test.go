@@ -23,9 +23,7 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/sessionctx"
@@ -239,72 +237,6 @@ func (s *testPlanSuite) TestDeriveNotNullConds(c *C) {
 		})
 		c.Assert(leftConds, Equals, output[i].Left, comment)
 		c.Assert(rightConds, Equals, output[i].Right, comment)
-	}
-}
-
-func buildLogicPlan4GroupBy(s *testPlanSuite, c *C, sql string) (Plan, error) {
-	sqlMode := s.ctx.GetSessionVars().SQLMode
-	mockedTableInfo := MockSignedTable()
-	// mock the table info here for later use
-	// enable only full group by
-	s.ctx.GetSessionVars().SQLMode = sqlMode | mysql.ModeOnlyFullGroupBy
-	defer func() { s.ctx.GetSessionVars().SQLMode = sqlMode }() // restore it
-	comment := Commentf("for %s", sql)
-	stmt, err := s.ParseOneStmt(sql, "", "")
-	c.Assert(err, IsNil, comment)
-
-	stmt.(*ast.SelectStmt).From.TableRefs.Left.(*ast.TableSource).Source.(*ast.TableName).TableInfo = mockedTableInfo
-
-	p, _, err := BuildLogicalPlan(context.Background(), s.ctx, stmt, s.is)
-	return p, err
-}
-
-func (s *testPlanSuite) TestGroupByWhenNotExistCols(c *C) {
-	sqlTests := []struct {
-		sql              string
-		expectedErrMatch string
-	}{
-		{
-			sql:              "select a from t group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-		{
-			// has an as column alias
-			sql:              "select a as tempField from t group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-		{
-			// has as table alias
-			sql:              "select tempTable.a from t as tempTable group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.tempTable\\.a'.*",
-		},
-		{
-			// has a func call
-			sql:              "select length(a) from t  group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-		{
-			// has a func call with two cols
-			sql:              "select length(b + a) from t  group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-		{
-			// has a func call with two cols
-			sql:              "select length(a + b) from t  group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-		{
-			// has a func call with two cols
-			sql:              "select length(a + b) as tempField from t  group by b",
-			expectedErrMatch: ".*contains nonaggregated column 'test\\.t\\.a'.*",
-		},
-	}
-	for _, test := range sqlTests {
-		sql := test.sql
-		p, err := buildLogicPlan4GroupBy(s, c, sql)
-		c.Assert(err, NotNil)
-		c.Assert(p, IsNil)
-		c.Assert(err, ErrorMatches, test.expectedErrMatch)
 	}
 }
 
