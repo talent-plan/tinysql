@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/util/testleak"
 	"github.com/pingcap/tidb/util/testutil"
 )
@@ -386,96 +385,6 @@ func (s *testPlanSuite) TestRequestTypeSupportedOff(c *C) {
 	p, _, err := planner.Optimize(context.TODO(), se, stmt, s.is)
 	c.Assert(err, IsNil)
 	c.Assert(core.ToString(p), Equals, expect, Commentf("for %s", sql))
-}
-
-func (s *testPlanSuite) TestUnmatchedTableInHint(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-	var input []string
-	var output []struct {
-		SQL     string
-		Warning string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	for i, test := range input {
-		se.GetSessionVars().StmtCtx.SetWarnings(nil)
-		stmt, err := s.ParseOneStmt(test, "", "")
-		c.Assert(err, IsNil)
-		_, _, err = planner.Optimize(context.TODO(), se, stmt, s.is)
-		c.Assert(err, IsNil)
-		warnings := se.GetSessionVars().StmtCtx.GetWarnings()
-		s.testData.OnRecord(func() {
-			output[i].SQL = test
-			if len(warnings) > 0 {
-				output[i].Warning = warnings[0].Err.Error()
-			}
-		})
-		if output[i].Warning == "" {
-			c.Assert(len(warnings), Equals, 0)
-		} else {
-			c.Assert(len(warnings), Equals, 1)
-			c.Assert(warnings[0].Level, Equals, stmtctx.WarnLevelWarning)
-			c.Assert(warnings[0].Err.Error(), Equals, output[i].Warning)
-		}
-	}
-}
-
-func (s *testPlanSuite) TestJoinHints(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	se, err := session.CreateSession4Test(store)
-	c.Assert(err, IsNil)
-	_, err = se.Execute(context.Background(), "use test")
-	c.Assert(err, IsNil)
-
-	var input []string
-	var output []struct {
-		SQL     string
-		Best    string
-		Warning string
-	}
-	s.testData.GetTestCases(c, &input, &output)
-	ctx := context.Background()
-	for i, test := range input {
-		comment := Commentf("case:%v sql:%s", i, test)
-		stmt, err := s.ParseOneStmt(test, "", "")
-		c.Assert(err, IsNil, comment)
-
-		se.GetSessionVars().StmtCtx.SetWarnings(nil)
-		p, _, err := planner.Optimize(ctx, se, stmt, s.is)
-		c.Assert(err, IsNil)
-		warnings := se.GetSessionVars().StmtCtx.GetWarnings()
-
-		s.testData.OnRecord(func() {
-			output[i].SQL = test
-			output[i].Best = core.ToString(p)
-			if len(warnings) > 0 {
-				output[i].Warning = warnings[0].Err.Error()
-			}
-		})
-		c.Assert(core.ToString(p), Equals, output[i].Best)
-		if output[i].Warning == "" {
-			c.Assert(len(warnings), Equals, 0)
-		} else {
-			c.Assert(len(warnings), Equals, 1, Commentf("%v", warnings))
-			c.Assert(warnings[0].Level, Equals, stmtctx.WarnLevelWarning)
-			c.Assert(warnings[0].Err.Error(), Equals, output[i].Warning)
-		}
-	}
 }
 
 func (s *testPlanSuite) TestHintAlias(c *C) {

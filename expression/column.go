@@ -41,10 +41,6 @@ type Column struct {
 
 	hashcode []byte
 
-	// InOperand indicates whether this column is the inner operand of column equal condition converted
-	// from `[not] in (subq)`.
-	InOperand bool
-
 	OrigName string
 }
 

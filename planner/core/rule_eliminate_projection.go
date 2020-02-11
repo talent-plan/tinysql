@@ -57,9 +57,9 @@ func canProjectionBeEliminatedStrict(p *PhysicalProjection) bool {
 func resolveColumnAndReplace(origin *expression.Column, replace map[string]*expression.Column) {
 	dst := replace[string(origin.HashCode(nil))]
 	if dst != nil {
-		retType, inOperand := origin.RetType, origin.InOperand
+		retType := origin.RetType
 		*origin = *dst
-		origin.RetType, origin.InOperand = retType, inOperand
+		origin.RetType = retType
 	}
 }
 

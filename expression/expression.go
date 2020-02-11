@@ -132,21 +132,6 @@ func (e CNFExprs) Shallow() CNFExprs {
 	return cnf
 }
 
-func isColumnInOperand(c *Column) bool {
-	return c.InOperand
-}
-
-// IsEQCondFromIn checks if an expression is equal condition converted from `[not] in (subq)`.
-func IsEQCondFromIn(expr Expression) bool {
-	sf, ok := expr.(*ScalarFunction)
-	if !ok || sf.FuncName.L != ast.EQ {
-		return false
-	}
-	cols := make([]*Column, 0, 1)
-	cols = ExtractColumnsFromExpressions(cols, sf.GetArgs(), isColumnInOperand)
-	return len(cols) > 0
-}
-
 // EvalBool evaluates expression list to a boolean value. The first returned value
 // indicates bool result of the expression list, the second returned value indicates
 // whether the result of the expression list is null, it can only be true when the
@@ -159,16 +144,7 @@ func EvalBool(ctx sessionctx.Context, exprList CNFExprs, row chunk.Row) (bool, b
 			return false, false, err
 		}
 		if data.IsNull() {
-			// For queries like `select a in (select a from s where t.b = s.b) from t`,
-			// if result of `t.a = s.a` is null, we cannot return immediately until
-			// we have checked if `t.b = s.b` is null or false, because it means
-			// subquery is empty, and we should return false as the result of the whole
-			// exprList in that case, instead of null.
-			if !IsEQCondFromIn(expr) {
-				return false, false, nil
-			}
-			hasNull = true
-			continue
+			return false, false, nil
 		}
 
 		i, err := data.ToBool(ctx.GetSessionVars().StmtCtx)
@@ -269,10 +245,9 @@ func VecEvalBool(ctx sessionctx.Context, exprList CNFExprs, input *chunk.Chunk, 
 		}
 
 		j := 0
-		isEQCondFromIn := IsEQCondFromIn(expr)
 		for i := range sel {
 			if isZero[i] == -1 {
-				if eType != types.ETInt && !isEQCondFromIn {
+				if eType != types.ETInt {
 					continue
 				}
 				// In this case, we set this row to null and let it pass this filter.

@@ -256,12 +256,7 @@ func (p *LogicalJoin) ExtractOnCondition(
 							rightCond = append(rightCond, notNullExpr)
 						}
 					}
-					// For queries like `select a in (select a from s where s.b = t.b) from t`,
-					// if subquery is empty caused by `s.b = t.b`, the result should always be
-					// false even if t.a is null or s.a is null. To make this join "empty aware",
-					// we should differentiate `t.a = s.a` from other column equal conditions, so
-					// we put it into OtherConditions instead of EqualConditions of join.
-					if binop.FuncName.L == ast.EQ && !arg0.InOperand && !arg1.InOperand {
+					if binop.FuncName.L == ast.EQ {
 						cond := expression.NewFunctionInternal(ctx, ast.EQ, types.NewFieldType(mysql.TypeTiny), arg0, arg1)
 						eqCond = append(eqCond, cond.(*expression.ScalarFunction))
 						continue
