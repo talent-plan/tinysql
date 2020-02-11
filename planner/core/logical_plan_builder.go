@@ -401,7 +401,7 @@ func (b *PlanBuilder) buildJoin(ctx context.Context, joinNode *ast.Join) (Logica
 	handleMap2 := b.handleHelper.popMap()
 	b.handleHelper.mergeAndPush(handleMap1, handleMap2)
 
-	joinPlan := LogicalJoin{StraightJoin: joinNode.StraightJoin || b.inStraightJoin}.Init(b.ctx)
+	joinPlan := LogicalJoin{StraightJoin: b.inStraightJoin}.Init(b.ctx)
 	joinPlan.SetChildren(leftPlan, rightPlan)
 	joinPlan.SetSchema(expression.MergeSchema(leftPlan.Schema(), rightPlan.Schema()))
 	joinPlan.names = make([]*types.FieldName, leftPlan.Schema().Len()+rightPlan.Schema().Len())
@@ -428,24 +428,7 @@ func (b *PlanBuilder) buildJoin(ctx context.Context, joinNode *ast.Join) (Logica
 	// Set preferred join algorithm if some join hints is specified by user.
 	joinPlan.setPreferredJoinType(b.TableHints())
 
-	// "NATURAL JOIN" doesn't have "ON" or "USING" conditions.
-	//
-	// The "NATURAL [LEFT] JOIN" of two tables is defined to be semantically
-	// equivalent to an "INNER JOIN" or a "LEFT JOIN" with a "USING" clause
-	// that names all columns that exist in both tables.
-	//
-	// See https://dev.mysql.com/doc/refman/5.7/en/join.html for more detail.
-	if joinNode.NaturalJoin {
-		err = b.buildNaturalJoin(joinPlan, leftPlan, rightPlan, joinNode)
-		if err != nil {
-			return nil, err
-		}
-	} else if joinNode.Using != nil {
-		err = b.buildUsingClause(joinPlan, leftPlan, rightPlan, joinNode)
-		if err != nil {
-			return nil, err
-		}
-	} else if joinNode.On != nil {
+	if joinNode.On != nil {
 		b.curClause = onClause
 		onExpr, newPlan, err := b.rewrite(ctx, joinNode.On.Expr, joinPlan, nil, false)
 		if err != nil {
@@ -463,117 +446,6 @@ func (b *PlanBuilder) buildJoin(ctx context.Context, joinNode *ast.Join) (Logica
 	}
 
 	return joinPlan, nil
-}
-
-// buildUsingClause eliminate the redundant columns and ordering columns based
-// on the "USING" clause.
-//
-// According to the standard SQL, columns are ordered in the following way:
-// 1. coalesced common columns of "leftPlan" and "rightPlan", in the order they
-//    appears in "leftPlan".
-// 2. the rest columns in "leftPlan", in the order they appears in "leftPlan".
-// 3. the rest columns in "rightPlan", in the order they appears in "rightPlan".
-func (b *PlanBuilder) buildUsingClause(p *LogicalJoin, leftPlan, rightPlan LogicalPlan, join *ast.Join) error {
-	filter := make(map[string]bool, len(join.Using))
-	for _, col := range join.Using {
-		filter[col.Name.L] = true
-	}
-	return b.coalesceCommonColumns(p, leftPlan, rightPlan, join.Tp, filter)
-}
-
-// buildNaturalJoin builds natural join output schema. It finds out all the common columns
-// then using the same mechanism as buildUsingClause to eliminate redundant columns and build join conditions.
-// According to standard SQL, producing this display order:
-// 	All the common columns
-// 	Every column in the first (left) table that is not a common column
-// 	Every column in the second (right) table that is not a common column
-func (b *PlanBuilder) buildNaturalJoin(p *LogicalJoin, leftPlan, rightPlan LogicalPlan, join *ast.Join) error {
-	return b.coalesceCommonColumns(p, leftPlan, rightPlan, join.Tp, nil)
-}
-
-// coalesceCommonColumns is used by buildUsingClause and buildNaturalJoin. The filter is used by buildUsingClause.
-func (b *PlanBuilder) coalesceCommonColumns(p *LogicalJoin, leftPlan, rightPlan LogicalPlan, joinTp ast.JoinType, filter map[string]bool) error {
-	lsc := leftPlan.Schema().Clone()
-	rsc := rightPlan.Schema().Clone()
-	if joinTp == ast.LeftJoin {
-		resetNotNullFlag(rsc, 0, rsc.Len())
-	} else if joinTp == ast.RightJoin {
-		resetNotNullFlag(lsc, 0, lsc.Len())
-	}
-	lColumns, rColumns := lsc.Columns, rsc.Columns
-	lNames, rNames := leftPlan.OutputNames().Shallow(), rightPlan.OutputNames().Shallow()
-	if joinTp == ast.RightJoin {
-		lNames, rNames = rNames, lNames
-		lColumns, rColumns = rsc.Columns, lsc.Columns
-	}
-
-	// Find out all the common columns and put them ahead.
-	commonLen := 0
-	for i, lName := range lNames {
-		for j := commonLen; j < len(rNames); j++ {
-			if lName.ColName.L != rNames[j].ColName.L {
-				continue
-			}
-
-			if len(filter) > 0 {
-				if !filter[lName.ColName.L] {
-					break
-				}
-				// Mark this column exist.
-				filter[lName.ColName.L] = false
-			}
-
-			col := lColumns[i]
-			copy(lColumns[commonLen+1:i+1], lColumns[commonLen:i])
-			lColumns[commonLen] = col
-
-			name := lNames[i]
-			copy(lNames[commonLen+1:i+1], lNames[commonLen:i])
-			lNames[commonLen] = name
-
-			col = rColumns[j]
-			copy(rColumns[commonLen+1:j+1], rColumns[commonLen:j])
-			rColumns[commonLen] = col
-
-			name = rNames[j]
-			copy(rNames[commonLen+1:j+1], rNames[commonLen:j])
-			rNames[commonLen] = name
-
-			commonLen++
-			break
-		}
-	}
-
-	if len(filter) > 0 && len(filter) != commonLen {
-		for col, notExist := range filter {
-			if notExist {
-				return ErrUnknownColumn.GenWithStackByArgs(col, "from clause")
-			}
-		}
-	}
-
-	schemaCols := make([]*expression.Column, len(lColumns)+len(rColumns)-commonLen)
-	copy(schemaCols[:len(lColumns)], lColumns)
-	copy(schemaCols[len(lColumns):], rColumns[commonLen:])
-	names := make(types.NameSlice, len(schemaCols))
-	copy(names, lNames)
-	copy(names[len(lNames):], rNames[commonLen:])
-
-	conds := make([]expression.Expression, 0, commonLen)
-	for i := 0; i < commonLen; i++ {
-		lc, rc := lsc.Columns[i], rsc.Columns[i]
-		cond, err := expression.NewFunction(b.ctx, ast.EQ, types.NewFieldType(mysql.TypeTiny), lc, rc)
-		if err != nil {
-			return err
-		}
-		conds = append(conds, cond)
-	}
-
-	p.SetSchema(expression.NewSchema(schemaCols...))
-	p.names = names
-	p.OtherConditions = append(conds, p.OtherConditions...)
-
-	return nil
 }
 
 func (b *PlanBuilder) buildSelection(ctx context.Context, p LogicalPlan, where ast.ExprNode, AggMapper map[*ast.AggregateFuncExpr]int) (LogicalPlan, error) {

@@ -35,8 +35,7 @@
       "explain select * from t order by b limit 1",
       "explain format=\"dot\" select * from t order by a",
       "insert into t select * from t",
-      "select * from t t1, t t2 where 1 = 0",
-      "select * from t t1 join t t2 using(a)"
+      "select * from t t1, t t2 where 1 = 0"
     ]
   },
   {

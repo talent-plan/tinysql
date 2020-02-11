@@ -222,21 +222,6 @@ func (s *testSuite2) TestJoin(c *C) {
 	tk.MustQuery("select min(t2.b) from t1 right join t2 on t2.a=t1.a right join t3 on t2.a=t3.a left join t4 on t3.a=t4.a").Check(testkit.Rows("1"))
 }
 
-func (s *testSuiteJoin1) TestNaturalJoin(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t1, t2")
-	tk.MustExec("create table t1 (a int, b int)")
-	tk.MustExec("create table t2 (a int, c int)")
-	tk.MustExec("insert t1 values (1, 2), (10, 20)")
-	tk.MustExec("insert t2 values (1, 3), (100, 200)")
-
-	tk.MustQuery("select * from t1 natural join t2").Check(testkit.Rows("1 2 3"))
-	tk.MustQuery("select * from t1 natural left join t2 order by a").Check(testkit.Rows("1 2 3", "10 20 <nil>"))
-	tk.MustQuery("select * from t1 natural right join t2 order by a").Check(testkit.Rows("1 3 2", "100 200 <nil>"))
-}
-
 func (s *testSuiteJoin3) TestMultiJoin(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

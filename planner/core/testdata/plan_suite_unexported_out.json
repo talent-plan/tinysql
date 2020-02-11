@@ -34,8 +34,7 @@
       "*core.Explain",
       "*core.Explain",
       "TableReader(Table(t))->Insert",
-      "Dual->Projection",
-      "Join{DataScan(t1)->DataScan(t2)}->Projection"
+      "Dual->Projection"
     ]
   },
   {

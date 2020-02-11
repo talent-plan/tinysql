@@ -5013,35 +5013,10 @@ JoinTable:
 		on := &ast.OnCondition{Expr: $5}
 		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), Tp: ast.CrossJoin, On: on}
 	}
-|	TableRef CrossOpt TableRef "USING" '(' ColumnNameList ')'
-	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), Tp: ast.CrossJoin, Using: $6.([]*ast.ColumnName)}
-	}
 |	TableRef JoinType OuterOpt "JOIN" TableRef "ON" Expression
 	{
 		on := &ast.OnCondition{Expr: $7}
 		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $5.(ast.ResultSetNode), Tp: $2.(ast.JoinType), On: on}
-	}
-|	TableRef JoinType OuterOpt "JOIN" TableRef "USING" '(' ColumnNameList ')'
-	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $5.(ast.ResultSetNode), Tp: $2.(ast.JoinType), Using: $8.([]*ast.ColumnName)}
-	}
-|	TableRef "NATURAL" "JOIN" TableRef
-	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $4.(ast.ResultSetNode), NaturalJoin: true}
-	}
-|	TableRef "NATURAL" JoinType OuterOpt "JOIN" TableRef
-	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $6.(ast.ResultSetNode), Tp: $3.(ast.JoinType), NaturalJoin: true}
-	}
-|	TableRef "STRAIGHT_JOIN" TableRef
-	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), StraightJoin: true}
-	}
-|	TableRef "STRAIGHT_JOIN" TableRef "ON" Expression
-	{
-		on := &ast.OnCondition{Expr: $5}
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), StraightJoin: true, On: on}
 	}
 
 JoinType:
@@ -5060,7 +5035,6 @@ OuterOpt:
 
 CrossOpt:
 	"JOIN"
-|	"CROSS" "JOIN"
 |	"INNER" "JOIN"
 
 

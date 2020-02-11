@@ -48,31 +48,6 @@ func (s *testAnalyzeSuite) TearDownSuite(c *C) {
 	c.Assert(s.testData.GenerateOutputIfNeeded(), IsNil)
 }
 
-func (s *testAnalyzeSuite) TestStraightJoin(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	testKit.MustExec("use test")
-	for _, tblName := range []string{"t1", "t2", "t3", "t4"} {
-		testKit.MustExec(fmt.Sprintf("create table %s (a int)", tblName))
-		testKit.MustExec(fmt.Sprintf("analyze table %s", tblName))
-	}
-	var input []string
-	var output [][]string
-	s.testData.GetTestCases(c, &input, &output)
-	for i, tt := range input {
-		s.testData.OnRecord(func() {
-			output[i] = s.testData.ConvertRowsToStrings(testKit.MustQuery(tt).Rows())
-		})
-		testKit.MustQuery(tt).Check(testkit.Rows(output[i]...))
-	}
-}
-
 func (s *testAnalyzeSuite) TestTableDual(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()

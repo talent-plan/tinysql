@@ -37,52 +37,6 @@
     ]
   },
   {
-    "Name": "TestStraightJoin",
-    "Cases": [
-      [
-        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join",
-        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
-        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
-        "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
-        "│ │ │ └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
-        "│ │   └─TableScan_18 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│   └─TableScan_20 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "└─TableReader_23 10000.00 root data:TableScan_22",
-        "  └─TableScan_22 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
-      ],
-      [
-        "HashLeftJoin_10 10000000000000000.00 root CARTESIAN inner join",
-        "├─HashLeftJoin_12 1000000000000.00 root CARTESIAN inner join",
-        "│ ├─HashLeftJoin_14 100000000.00 root CARTESIAN inner join",
-        "│ │ ├─TableReader_17 10000.00 root data:TableScan_16",
-        "│ │ │ └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ │ └─TableReader_19 10000.00 root data:TableScan_18",
-        "│ │   └─TableScan_18 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│   └─TableScan_20 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "└─TableReader_23 10000.00 root data:TableScan_22",
-        "  └─TableScan_22 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
-      ],
-      [
-        "HashLeftJoin_11 1248750000000.00 root inner join, equal:[eq(test.t1.a, test.t4.a)]",
-        "├─HashLeftJoin_13 999000000000.00 root CARTESIAN inner join",
-        "│ ├─HashRightJoin_16 99900000.00 root CARTESIAN inner join",
-        "│ │ ├─TableReader_19 9990.00 root data:Selection_18",
-        "│ │ │ └─Selection_18 9990.00 cop not(isnull(test.t1.a))",
-        "│ │ │   └─TableScan_17 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ │ └─TableReader_21 10000.00 root data:TableScan_20",
-        "│ │   └─TableScan_20 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "│ └─TableReader_23 10000.00 root data:TableScan_22",
-        "│   └─TableScan_22 10000.00 cop table:t3, range:[-inf,+inf], keep order:false, stats:pseudo",
-        "└─TableReader_26 9990.00 root data:Selection_25",
-        "  └─Selection_25 9990.00 cop not(isnull(test.t4.a))",
-        "    └─TableScan_24 10000.00 cop table:t4, range:[-inf,+inf], keep order:false, stats:pseudo"
-      ]
-    ]
-  },
-  {
     "Name": "TestNullCount",
     "Cases": [
       [

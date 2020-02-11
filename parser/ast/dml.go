@@ -67,69 +67,6 @@ type Join struct {
 	Tp JoinType
 	// On represents join on condition.
 	On *OnCondition
-	// Using represents join using clause.
-	Using []*ColumnName
-	// NaturalJoin represents join is natural join.
-	NaturalJoin bool
-	// StraightJoin represents a straight join.
-	StraightJoin bool
-}
-
-// Restore implements Node interface.
-func (n *Join) Restore(ctx *RestoreCtx) error {
-	if ctx.JoinLevel != 0 {
-		ctx.WritePlain("(")
-		defer ctx.WritePlain(")")
-	}
-	ctx.JoinLevel++
-	if err := n.Left.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore Join.Left")
-	}
-	ctx.JoinLevel--
-	if n.Right == nil {
-		return nil
-	}
-	if n.NaturalJoin {
-		ctx.WriteKeyWord(" NATURAL")
-	}
-	switch n.Tp {
-	case LeftJoin:
-		ctx.WriteKeyWord(" LEFT")
-	case RightJoin:
-		ctx.WriteKeyWord(" RIGHT")
-	}
-	if n.StraightJoin {
-		ctx.WriteKeyWord(" STRAIGHT_JOIN ")
-	} else {
-		ctx.WriteKeyWord(" JOIN ")
-	}
-	ctx.JoinLevel++
-	if err := n.Right.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore Join.Right")
-	}
-	ctx.JoinLevel--
-
-	if n.On != nil {
-		ctx.WritePlain(" ")
-		if err := n.On.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore Join.On")
-		}
-	}
-	if len(n.Using) != 0 {
-		ctx.WriteKeyWord(" USING ")
-		ctx.WritePlain("(")
-		for i, v := range n.Using {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := v.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore Join.Using")
-			}
-		}
-		ctx.WritePlain(")")
-	}
-
-	return nil
 }
 
 // Accept implements Node Accept interface.
