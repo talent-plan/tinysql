@@ -36,14 +36,7 @@ import (
 	driver "github.com/pingcap/tidb/types/parser_driver"
 )
 
-type indexNestedLoopJoinTables struct {
-	inljTables  []hintTableInfo
-	inlhjTables []hintTableInfo
-	inlmjTables []hintTableInfo
-}
-
 type tableHintInfo struct {
-	indexNestedLoopJoinTables
 	sortMergeJoinTables []hintTableInfo
 	hashJoinTables      []hintTableInfo
 	indexHintList       []indexHintInfo
@@ -83,10 +76,6 @@ func (info *tableHintInfo) ifPreferMergeJoin(tableNames ...*hintTableInfo) bool 
 
 func (info *tableHintInfo) ifPreferHashJoin(tableNames ...*hintTableInfo) bool {
 	return info.matchTableName(tableNames, info.hashJoinTables)
-}
-
-func (info *tableHintInfo) ifPreferINLJ(tableNames ...*hintTableInfo) bool {
-	return info.matchTableName(tableNames, info.indexNestedLoopJoinTables.inljTables)
 }
 
 // matchTableName checks whether the hint hit the need.
