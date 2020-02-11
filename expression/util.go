@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/parser/opcode"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -455,35 +454,6 @@ func PopRowFirstArg(ctx sessionctx.Context, e Expression) (ret Expression, err e
 // DatumToConstant generates a Constant expression from a Datum.
 func DatumToConstant(d types.Datum, tp byte) *Constant {
 	return &Constant{Value: d, RetType: types.NewFieldType(tp)}
-}
-
-// ParamMarkerExpression generate a getparam function expression.
-func ParamMarkerExpression(ctx sessionctx.Context, v *driver.ParamMarkerExpr) (Expression, error) {
-	tp := types.NewFieldType(mysql.TypeUnspecified)
-	types.DefaultParamTypeForValue(v.GetValue(), tp)
-	value := &Constant{Value: v.Datum, RetType: tp}
-	return value, nil
-}
-
-// ConstructPositionExpr constructs PositionExpr with the given ParamMarkerExpr.
-func ConstructPositionExpr(p *driver.ParamMarkerExpr) *ast.PositionExpr {
-	return &ast.PositionExpr{P: p}
-}
-
-// PosFromPositionExpr generates a position value from PositionExpr.
-func PosFromPositionExpr(ctx sessionctx.Context, v *ast.PositionExpr) (int, bool, error) {
-	if v.P == nil {
-		return v.N, false, nil
-	}
-	value, err := ParamMarkerExpression(ctx, v.P.(*driver.ParamMarkerExpr))
-	if err != nil {
-		return 0, true, err
-	}
-	pos, isNull, err := GetIntFromConstant(ctx, value)
-	if err != nil || isNull {
-		return 0, true, err
-	}
-	return pos, false, nil
 }
 
 // GetStringFromConstant gets a string value from the Constant expression.

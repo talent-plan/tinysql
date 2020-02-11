@@ -82,10 +82,6 @@ func (ts *testFlagSuite) TestFlag(c *C) {
 			ast.FlagConstant,
 		},
 		{
-			"(1 + a) > ?",
-			ast.FlagHasReference | ast.FlagHasParamMarker,
-		},
-		{
 			"trim('abc ')",
 			ast.FlagHasFunc,
 		},

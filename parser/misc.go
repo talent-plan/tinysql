@@ -130,7 +130,6 @@ func init() {
 	initTokenByte('^', int('^'))
 	initTokenByte('~', int('~'))
 	initTokenByte('\\', int('\\'))
-	initTokenByte('?', paramMarker)
 	initTokenByte('=', eq)
 	initTokenByte('{', int('{'))
 	initTokenByte('}', int('}'))

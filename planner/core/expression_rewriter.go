@@ -15,7 +15,6 @@ package core
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -334,13 +333,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 	case *driver.ValueExpr:
 		value := &expression.Constant{Value: v.Datum, RetType: &v.Type}
 		er.ctxStackAppend(value, types.EmptyName)
-	case *driver.ParamMarkerExpr:
-		var value expression.Expression
-		value, er.err = expression.ParamMarkerExpression(er.sctx, v)
-		if er.err != nil {
-			return retNode, false
-		}
-		er.ctxStackAppend(value, types.EmptyName)
 	case *ast.VariableExpr:
 		er.rewriteVariable(v)
 	case *ast.FuncCallExpr:
@@ -364,8 +356,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		if v.Sel == nil {
 			er.inToExpression(len(v.List), v.Not, &v.Type)
 		}
-	case *ast.PositionExpr:
-		er.positionToScalarFunc(v)
 	case *ast.IsNullExpr:
 		er.isNullToExpression(v)
 	case *ast.IsTruthExpr:
@@ -537,30 +527,6 @@ func (er *expressionRewriter) isNullToExpression(v *ast.IsNullExpr) {
 	function := er.notToExpression(v.Not, ast.IsNull, &v.Type, er.ctxStack[stkLen-1])
 	er.ctxStackPop(1)
 	er.ctxStackAppend(function, types.EmptyName)
-}
-
-func (er *expressionRewriter) positionToScalarFunc(v *ast.PositionExpr) {
-	pos := v.N
-	str := strconv.Itoa(pos)
-	if v.P != nil {
-		stkLen := len(er.ctxStack)
-		val := er.ctxStack[stkLen-1]
-		intNum, isNull, err := expression.GetIntFromConstant(er.sctx, val)
-		str = "?"
-		if err == nil {
-			if isNull {
-				return
-			}
-			pos = intNum
-			er.ctxStackPop(1)
-		}
-		er.err = err
-	}
-	if er.err == nil && pos > 0 && pos <= er.schema.Len() {
-		er.ctxStackAppend(er.schema.Columns[pos-1], er.names[pos-1])
-	} else {
-		er.err = ErrUnknownColumn.GenWithStackByArgs(str, clauseMsg[er.b.curClause])
-	}
 }
 
 func (er *expressionRewriter) isTrueToScalarFunc(v *ast.IsTruthExpr) {

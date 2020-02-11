@@ -37,7 +37,6 @@ var (
 	_ ExprNode = &PatternInExpr{}
 	_ ExprNode = &PatternLikeExpr{}
 	_ ExprNode = &PatternRegexpExpr{}
-	_ ExprNode = &PositionExpr{}
 	_ ExprNode = &RowExpr{}
 	_ ExprNode = &UnaryOperationExpr{}
 	_ ExprNode = &ValuesExpr{}
@@ -61,9 +60,6 @@ type ValueExpr interface {
 
 // NewValueExpr creates a ValueExpr with value, and sets default field type.
 var NewValueExpr func(interface{}) ValueExpr
-
-// NewParamMarkerExpr creates a ParamMarkerExpr.
-var NewParamMarkerExpr func(offset int) ParamMarkerExpr
 
 // BetweenExpr is for "between and" or "not between and" expression.
 type BetweenExpr struct {
@@ -671,13 +667,6 @@ func (n *PatternLikeExpr) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// ParamMarkerExpr expression holds a place for another expression.
-// Used in parsing prepare statement.
-type ParamMarkerExpr interface {
-	ValueExpr
-	SetOrder(int)
-}
-
 // ParenthesesExpr is the parentheses expression.
 type ParenthesesExpr struct {
 	exprNode
@@ -715,47 +704,6 @@ func (n *ParenthesesExpr) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Expr = node.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
-// PositionExpr is the expression for order by and group by position.
-// MySQL use position expression started from 1, it looks a little confused inner.
-// maybe later we will use 0 at first.
-type PositionExpr struct {
-	exprNode
-	// N is the position, started from 1 now.
-	N int
-	// P is the parameterized position.
-	P ExprNode
-	// Refer is the result field the position refers to.
-	Refer *ResultField
-}
-
-// Restore implements Node interface.
-func (n *PositionExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WritePlainf("%d", n.N)
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *PositionExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *PositionExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*PositionExpr)
-	if n.P != nil {
-		node, ok := n.P.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.P = node.(ExprNode)
 	}
 	return v.Leave(n)
 }

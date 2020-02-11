@@ -682,7 +682,6 @@ import (
 	neq		"!="
 	neqSynonym	"<>"
 	nulleq		"<=>"
-	paramMarker	"?"
 	rsh		">>"
 
 %token not2
@@ -3660,15 +3659,7 @@ ByList:
 ByItem:
 	Expression Order
 	{
-		expr := $1
-		valueExpr, ok := expr.(ast.ValueExpr)
-		if ok {
-			position, isPosition := valueExpr.GetValue().(int64)
-			if isPosition {
-				expr = &ast.PositionExpr{N: int(position)}
-			}
-		}
-		$$ = &ast.ByItem{Expr: expr, Desc: $2.(bool)}
+		$$ = &ast.ByItem{Expr: $1, Desc: $2.(bool)}
 	}
 
 Order:
@@ -3808,10 +3799,6 @@ SimpleExpr:
 		$$ = $1
 	}
 |	Literal
-|	paramMarker
-	{
-		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
-	}
 |	Variable
 |	SumExpr
 |	'!' SimpleExpr %prec neg
@@ -5051,10 +5038,6 @@ LimitOption:
 	LengthNum
 	{
 		$$ = ast.NewValueExpr($1)
-	}
-|	paramMarker
-	{
-		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
 	}
 
 SelectStmtLimit:

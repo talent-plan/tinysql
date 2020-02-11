@@ -508,14 +508,6 @@ func (s *testPlanSuite) TestValidate(c *C) {
 			err: nil,
 		},
 		{
-			sql: "select a, b, c from t order by 0",
-			err: ErrUnknownColumn,
-		},
-		{
-			sql: "select a, b, c from t order by 4",
-			err: ErrUnknownColumn,
-		},
-		{
 			sql: "select a as c1, b as c1 from t order by c1",
 			err: ErrAmbiguous,
 		},

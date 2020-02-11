@@ -579,10 +579,6 @@ func (s *testSuiteP1) TestOrderBy(c *C) {
 	tk.MustQuery("select c1 as c2 from t order by c2").Check(testkit.Rows("1", "2"))
 	tk.MustQuery("select sum(c1) from t order by sum(c1)").Check(testkit.Rows("3"))
 	tk.MustQuery("select c1 as c2 from t order by c2 + 1").Check(testkit.Rows("2", "1"))
-
-	// Order by position.
-	tk.MustQuery("select * from t order by 1").Check(testkit.Rows("1 2 abc", "2 1 bcd"))
-	tk.MustQuery("select * from t order by 2").Check(testkit.Rows("2 1 bcd", "1 2 abc"))
 }
 
 func (s *testSuiteP1) TestSelectErrorRow(c *C) {

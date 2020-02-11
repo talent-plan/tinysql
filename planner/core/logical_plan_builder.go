@@ -684,31 +684,11 @@ func (by *ByItems) Clone() *ByItems {
 	return &ByItems{Expr: by.Expr.Clone(), Desc: by.Desc}
 }
 
-// itemTransformer transforms ParamMarkerExpr to PositionExpr in the context of ByItem
-type itemTransformer struct {
-}
-
-func (t *itemTransformer) Enter(inNode ast.Node) (ast.Node, bool) {
-	switch n := inNode.(type) {
-	case *driver.ParamMarkerExpr:
-		newNode := expression.ConstructPositionExpr(n)
-		return newNode, true
-	}
-	return inNode, false
-}
-
-func (t *itemTransformer) Leave(inNode ast.Node) (ast.Node, bool) {
-	return inNode, false
-}
-
 func (b *PlanBuilder) buildSort(ctx context.Context, p LogicalPlan, byItems []*ast.ByItem, aggMapper map[*ast.AggregateFuncExpr]int) (*LogicalSort, error) {
 	b.curClause = orderByClause
 	sort := LogicalSort{}.Init(b.ctx)
 	exprs := make([]*ByItems, 0, len(byItems))
-	transformer := &itemTransformer{}
 	for _, item := range byItems {
-		newExpr, _ := item.Expr.Accept(transformer)
-		item.Expr = newExpr.(ast.ExprNode)
 		it, np, err := b.rewriteWithPreprocess(ctx, item.Expr, p, aggMapper, true, nil)
 		if err != nil {
 			return nil, err
@@ -724,28 +704,11 @@ func (b *PlanBuilder) buildSort(ctx context.Context, p LogicalPlan, byItems []*a
 
 // getUintFromNode gets uint64 value from ast.Node.
 // For ordinary statement, node should be uint64 constant value.
-// For prepared statement, node is string. We should convert it to uint64.
 func getUintFromNode(ctx sessionctx.Context, n ast.Node) (uVal uint64, isNull bool, isExpectedType bool) {
 	var val interface{}
 	switch v := n.(type) {
 	case *driver.ValueExpr:
 		val = v.GetValue()
-	case *driver.ParamMarkerExpr:
-		if !v.InExecute {
-			return 0, false, true
-		}
-		param, err := expression.ParamMarkerExpression(ctx, v)
-		if err != nil {
-			return 0, false, false
-		}
-		str, isNull, err := expression.GetStringFromConstant(ctx, param)
-		if err != nil {
-			return 0, false, false
-		}
-		if isNull {
-			return 0, true, true
-		}
-		val = str
 	default:
 		return 0, false, false
 	}
@@ -889,7 +852,7 @@ func (a *havingAndOrderbyExprResolver) Enter(n ast.Node) (node ast.Node, skipChi
 	switch n.(type) {
 	case *ast.AggregateFuncExpr:
 		a.inAggFunc = true
-	case *driver.ParamMarkerExpr, *ast.ColumnNameExpr, *ast.ColumnName:
+	case *ast.ColumnNameExpr, *ast.ColumnName:
 	default:
 		a.inExpr = true
 	}
@@ -1047,30 +1010,19 @@ func (b *PlanBuilder) extractAggFuncs(fields []*ast.SelectField) ([]*ast.Aggrega
 
 // gbyResolver resolves group by items from select fields.
 type gbyResolver struct {
-	ctx     sessionctx.Context
-	fields  []*ast.SelectField
-	schema  *expression.Schema
-	names   []*types.FieldName
-	err     error
-	inExpr  bool
-	isParam bool
+	ctx    sessionctx.Context
+	fields []*ast.SelectField
+	schema *expression.Schema
+	names  []*types.FieldName
+	err    error
+	inExpr bool
 
 	exprDepth int // exprDepth is the depth of current expression in expression tree.
 }
 
 func (g *gbyResolver) Enter(inNode ast.Node) (ast.Node, bool) {
 	g.exprDepth++
-	switch n := inNode.(type) {
-	case *driver.ParamMarkerExpr:
-		g.isParam = true
-		if g.exprDepth == 1 {
-			_, isNull, isExpectedType := getUintFromNode(g.ctx, n)
-			// For constant uint expression in top level, it should be treated as position expression.
-			if !isNull && isExpectedType {
-				return expression.ConstructPositionExpr(n), true
-			}
-		}
-		return n, true
+	switch inNode.(type) {
 	case *driver.ValueExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.ColumnName:
 	default:
 		g.inExpr = true
@@ -1104,25 +1056,6 @@ func (g *gbyResolver) Leave(inNode ast.Node) (ast.Node, bool) {
 			g.err = err
 			return inNode, false
 		}
-	case *ast.PositionExpr:
-		pos, isNull, err := expression.PosFromPositionExpr(g.ctx, v)
-		if err != nil {
-			g.err = ErrUnknown.GenWithStackByArgs()
-		}
-		if err != nil || isNull {
-			return inNode, false
-		}
-		if pos < 1 || pos > len(g.fields) {
-			g.err = errors.Errorf("Unknown column '%d' in 'group statement'", pos)
-			return inNode, false
-		}
-		ret := g.fields[pos-1].Expr
-		ret.Accept(extractor)
-		if len(extractor.AggFuncs) != 0 {
-			g.err = ErrWrongGroupField.GenWithStackByArgs(g.fields[pos-1].Text())
-			return inNode, false
-		}
-		return ret, true
 	case *ast.ValuesExpr:
 		if v.Column == nil {
 			g.err = ErrUnknownColumn.GenWithStackByArgs("", "VALUES() function")
@@ -1517,9 +1450,7 @@ func (b *PlanBuilder) resolveGbyExprs(ctx context.Context, p LogicalPlan, gby *a
 		if resolver.err != nil {
 			return nil, nil, errors.Trace(resolver.err)
 		}
-		if !resolver.isParam {
-			item.Expr = retExpr.(ast.ExprNode)
-		}
+		item.Expr = retExpr.(ast.ExprNode)
 
 		itemExpr := retExpr.(ast.ExprNode)
 		expr, np, err := b.rewrite(ctx, itemExpr, p, nil, true)

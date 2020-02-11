@@ -40,7 +40,6 @@ import (
 
 func init() {
 	ast.NewValueExpr = newValueExpr
-	ast.NewParamMarkerExpr = newParamMarkerExpr
 	ast.NewDecimal = func(str string) (interface{}, error) {
 		n, err := strconv.ParseFloat(str, 64)
 		return n, err
@@ -56,8 +55,7 @@ func init() {
 }
 
 var (
-	_ ast.ParamMarkerExpr = &ParamMarkerExpr{}
-	_ ast.ValueExpr       = &ValueExpr{}
+	_ ast.ValueExpr = &ValueExpr{}
 )
 
 // ValueExpr is the simple value expression.
@@ -171,45 +169,4 @@ func (n *ValueExpr) Accept(v ast.Visitor) (ast.Node, bool) {
 	}
 	n = newNode.(*ValueExpr)
 	return v.Leave(n)
-}
-
-// ParamMarkerExpr expression holds a place for another expression.
-// Used in parsing prepare statement.
-type ParamMarkerExpr struct {
-	ValueExpr
-	Offset    int
-	Order     int
-	InExecute bool
-}
-
-// Restore implements Node interface.
-func (n *ParamMarkerExpr) Restore(ctx *format.RestoreCtx) error {
-	ctx.WritePlain("?")
-	return nil
-}
-
-func newParamMarkerExpr(offset int) ast.ParamMarkerExpr {
-	return &ParamMarkerExpr{
-		Offset: offset,
-	}
-}
-
-// Format the ExprNode into a Writer.
-func (n *ParamMarkerExpr) Format(w io.Writer) {
-	panic("Not implemented")
-}
-
-// Accept implements Node Accept interface.
-func (n *ParamMarkerExpr) Accept(v ast.Visitor) (ast.Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ParamMarkerExpr)
-	return v.Leave(n)
-}
-
-// SetOrder implements the ast.ParamMarkerExpr interface.
-func (n *ParamMarkerExpr) SetOrder(order int) {
-	n.Order = order
 }

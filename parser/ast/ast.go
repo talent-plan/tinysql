@@ -44,9 +44,8 @@ type Node interface {
 
 // Flags indicates whether an expression contains certain types of expression.
 const (
-	FlagConstant       uint64 = 0
-	FlagHasParamMarker uint64 = 1 << iota
-	FlagHasFunc
+	FlagConstant uint64 = 0
+	FlagHasFunc  uint64 = 1 << iota
 	FlagHasReference
 	FlagHasAggregateFunc
 	FlagHasVariable

@@ -112,13 +112,8 @@ func (s *testParserSuite) TestSimple(c *C) {
 		c.Assert(err, IsNil, Commentf("source %s", src))
 	}
 
-	// Testcase for prepared statement
-	src := "SELECT id+?, id+? from t;"
-	_, err := parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
-
 	// Testcase for -- Comment and unary -- operator
-	src = "CREATE TABLE foo (a SMALLINT UNSIGNED, b INT UNSIGNED); -- foo\nSelect --1 from foo;"
+	src := "CREATE TABLE foo (a SMALLINT UNSIGNED, b INT UNSIGNED); -- foo\nSelect --1 from foo;"
 	stmts, _, err := parser.Parse(src, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(stmts, HasLen, 2)
