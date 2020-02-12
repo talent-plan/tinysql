@@ -326,7 +326,7 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		inNode = er.preprocess(inNode)
 	}
 	switch v := inNode.(type) {
-	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause, *ast.ValuesExpr:
+	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.ValuesExpr:
 	case *driver.ValueExpr:
 		value := &expression.Constant{Value: v.Datum, RetType: &v.Type}
 		er.ctxStackAppend(value, types.EmptyName)
@@ -345,9 +345,7 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 	case *ast.RowExpr:
 		er.rowToScalarFunc(v)
 	case *ast.PatternInExpr:
-		if v.Sel == nil {
-			er.inToExpression(len(v.List), v.Not, &v.Type)
-		}
+		er.inToExpression(len(v.List), v.Not, &v.Type)
 	case *ast.IsNullExpr:
 		er.isNullToExpression(v)
 	case *ast.DefaultExpr:

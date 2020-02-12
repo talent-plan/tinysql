@@ -39,8 +39,6 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 		x.SetFlag(x.Expr.GetFlag() | x.Left.GetFlag() | x.Right.GetFlag())
 	case *BinaryOperationExpr:
 		x.SetFlag(x.L.GetFlag() | x.R.GetFlag())
-	case *CaseExpr:
-		f.caseExpr(x)
 	case *ColumnNameExpr:
 		x.SetFlag(FlagHasReference)
 	case *DefaultExpr:
@@ -51,16 +49,10 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 		x.SetFlag(FlagHasFunc | x.Expr.GetFlag())
 	case *IsNullExpr:
 		x.SetFlag(x.Expr.GetFlag())
-	case *IsTruthExpr:
-		x.SetFlag(x.Expr.GetFlag())
 	case *ParenthesesExpr:
 		x.SetFlag(x.Expr.GetFlag())
 	case *PatternInExpr:
 		f.patternIn(x)
-	case *PatternLikeExpr:
-		f.patternLike(x)
-	case *PatternRegexpExpr:
-		f.patternRegexp(x)
 	case *RowExpr:
 		f.row(x)
 	case *UnaryOperationExpr:
@@ -78,44 +70,10 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 	return in, true
 }
 
-func (f *flagSetter) caseExpr(x *CaseExpr) {
-	var flag uint64
-	if x.Value != nil {
-		flag |= x.Value.GetFlag()
-	}
-	for _, val := range x.WhenClauses {
-		flag |= val.Expr.GetFlag()
-		flag |= val.Result.GetFlag()
-	}
-	if x.ElseClause != nil {
-		flag |= x.ElseClause.GetFlag()
-	}
-	x.SetFlag(flag)
-}
-
 func (f *flagSetter) patternIn(x *PatternInExpr) {
 	flag := x.Expr.GetFlag()
 	for _, val := range x.List {
 		flag |= val.GetFlag()
-	}
-	if x.Sel != nil {
-		flag |= x.Sel.GetFlag()
-	}
-	x.SetFlag(flag)
-}
-
-func (f *flagSetter) patternLike(x *PatternLikeExpr) {
-	flag := x.Pattern.GetFlag()
-	if x.Expr != nil {
-		flag |= x.Expr.GetFlag()
-	}
-	x.SetFlag(flag)
-}
-
-func (f *flagSetter) patternRegexp(x *PatternRegexpExpr) {
-	flag := x.Pattern.GetFlag()
-	if x.Expr != nil {
-		flag |= x.Expr.GetFlag()
 	}
 	x.SetFlag(flag)
 }

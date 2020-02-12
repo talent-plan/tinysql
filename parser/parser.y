@@ -688,7 +688,6 @@ import (
 
 %type	<expr>
 	Expression			"expression"
-	MaxValueOrExpression		"maxvalue or expression"
 	BoolPri				"boolean primary expression"
 	ExprOrDefault			"expression or default"
 	PredicateExpr			"Predicate expression factor"
@@ -786,7 +785,6 @@ import (
 	EscapedTableRef 		"escaped table reference"
 	ExplainFormatType		"explain format type"
 	ExpressionList			"expression list"
-	MaxValueOrExpressionList	"maxvalue or expression list"
 	ExpressionListOpt		"expression list opt"
 	FuncDatetimePrecListOpt	        "Function datetime precision list opt"
 	FuncDatetimePrecList	        "Function datetime precision list"
@@ -891,12 +889,9 @@ import (
 	VariableAssignmentList	"set variable value list"
 	WhereClause		"WHERE clause"
 	WhereClauseOptional	"Optional WHERE clause"
-	WhenClause		"When clause"
-	WhenClauseList		"When clause list"
 	WithReadLockOpt		"With Read Lock opt"
 	WithValidation		"with validation"
 	WithValidationOpt	"optional with validation"
-	ElseOpt			"Optional else clause"
 	Type			"Types"
 
 	OptWild			"Optional Wildcard"
@@ -904,8 +899,6 @@ import (
 	BetweenOrNotOp		"Between predicate"
 	IsOrNotOp		"Is predicate"
 	InOrNotOp		"In predicate"
-	LikeOrNotOp		"Like predicate"
-	RegexpOrNotOp		"Regexp predicate"
 
 	NumericType		"Numeric types"
 	IntegerType		"Integer Types types"
@@ -958,7 +951,6 @@ import (
 	DefaultKwdOpt		"optional DEFAULT keyword"
 	DatabaseSym		"DATABASE or SCHEMA"
 	ExplainSym		"EXPLAIN or DESCRIBE or DESC"
-	RegexpSym		"REGEXP or RLIKE"
 	IntoOpt			"INTO or EmptyString"
 	ValueSym		"Value or Values"
 	Char			"{CHAR|CHARACTER}"
@@ -2364,30 +2356,12 @@ Expression:
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
 	}
-|	BoolPri IsOrNotOp trueKwd %prec is
-	{
-		$$ = &ast.IsTruthExpr{Expr:$1, Not: !$2.(bool), True: int64(1)}
-	}
-|	BoolPri IsOrNotOp falseKwd %prec is
-	{
-		$$ = &ast.IsTruthExpr{Expr:$1, Not: !$2.(bool), True: int64(0)}
-	}
 |	BoolPri IsOrNotOp "UNKNOWN" %prec is
 	{
 		/* https://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#operator_is */
 		$$ = &ast.IsNullExpr{Expr: $1, Not: !$2.(bool)}
 	}
 |	BoolPri
-
-MaxValueOrExpression:
-	"MAXVALUE"
-	{
-		$$ = &ast.MaxValueExpr{}
-	}
-|	Expression
-	{
-		$$ = $1
-	}
 
 logOr:
 	pipesAsOr
@@ -2405,17 +2379,6 @@ ExpressionList:
 	{
 		$$ = append($1.([]ast.ExprNode), $3)
 	}
-
-MaxValueOrExpressionList:
-	MaxValueOrExpression
-	{
-		$$ = []ast.ExprNode{$1}
-}
-|	MaxValueOrExpressionList ',' MaxValueOrExpression
-{
-		$$ = append($1.([]ast.ExprNode), $3)
-	}
-
 
 ExpressionListOpt:
 	{
@@ -2526,26 +2489,6 @@ InOrNotOp:
 		$$ = false
 	}
 
-LikeOrNotOp:
-	"LIKE"
-	{
-		$$ = true
-	}
-|	"NOT" "LIKE"
-	{
-		$$ = false
-	}
-
-RegexpOrNotOp:
-	RegexpSym
-	{
-		$$ = true
-	}
-|	"NOT" RegexpSym
-	{
-		$$ = false
-	}
-
 AnyOrAll:
 	"ANY"
 	{
@@ -2574,30 +2517,7 @@ PredicateExpr:
 			Not:	!$2.(bool),
 		}
 	}
-|	BitExpr LikeOrNotOp SimpleExpr LikeEscapeOpt
-	{
-		escape := $4.(string)
-		if len(escape) > 1 {
-			yylex.AppendError(ErrWrongArguments.GenWithStackByArgs("ESCAPE"))
-			return 1
-		} else if len(escape) == 0 {
-			escape = "\\"
-		}
-		$$ = &ast.PatternLikeExpr{
-			Expr:		$1,
-			Pattern:	$3,
-			Not: 		!$2.(bool),
-			Escape: 	escape[0],
-		}
-	}
-|	BitExpr RegexpOrNotOp SimpleExpr
-	{
-		$$ = &ast.PatternRegexpExpr{Expr: $1, Pattern: $3, Not: !$2.(bool)}
-	}
 |	BitExpr
-
-RegexpSym:
-"REGEXP" | "RLIKE"
 
 LikeEscapeOpt:
 	%prec empty
@@ -3347,17 +3267,6 @@ SimpleExpr:
  			FunctionType: ast.CastFunction,
  		}
  	}
-|	"CASE" ExpressionOpt WhenClauseList ElseOpt "END"
-	{
-		x := &ast.CaseExpr{WhenClauses: $3.([]*ast.WhenClause)}
-		if $2 != nil {
-			x.Value = $2
-		}
-		if $4 != nil {
-			x.ElseClause = $4.(ast.ExprNode)
-		}
-		$$ = x
-	}
 |	"CONVERT" '(' Expression ',' CastType ')'
 	{
 		// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_convert
@@ -3879,35 +3788,6 @@ ExpressionOpt:
 |	Expression
 	{
 		$$ = $1
-	}
-
-WhenClauseList:
-	WhenClause
-	{
-		$$ = []*ast.WhenClause{$1.(*ast.WhenClause)}
-	}
-|	WhenClauseList WhenClause
-	{
-		$$ = append($1.([]*ast.WhenClause), $2.(*ast.WhenClause))
-	}
-
-WhenClause:
-	"WHEN" Expression "THEN" Expression
-	{
-		$$ = &ast.WhenClause{
-			Expr: $2,
-			Result: $4,
-		}
-	}
-
-ElseOpt:
-	/* empty */
-	{
-		$$ = nil
-	}
-|	"ELSE" Expression
-	{
-		$$ = $2
 	}
 
 CastType:
@@ -5247,11 +5127,7 @@ ShowStmt:
 	{
 		stmt := $2.(*ast.ShowStmt)
 		if $3 != nil {
-			if x, ok := $3.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $3.(ast.ExprNode)
-			}
+			stmt.Where = $3.(ast.ExprNode)
 		}
 		$$ = stmt
 	}
@@ -5422,13 +5298,6 @@ ShowTargetFilterable:
 ShowLikeOrWhereOpt:
 	{
 		$$ = nil
-	}
-|	"LIKE" SimpleExpr
-	{
-		$$ = &ast.PatternLikeExpr{
-			Pattern: $2,
-			Escape: '\\',
-		}
 	}
 |	"WHERE" Expression
 	{

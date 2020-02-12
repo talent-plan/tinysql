@@ -33,7 +33,6 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 		expectedEnterCnt int
 		expectedLeaveCnt int
 	}{
-		{&ShowStmt{Table: &TableName{}, Column: &ColumnName{}, Pattern: &PatternLikeExpr{Expr: ce, Pattern: ce}, Where: ce}, 3, 3},
 		{&Assignment{Column: &ColumnName{}, Expr: ce}, 1, 1},
 		{&ByItem{Expr: ce}, 1, 1},
 		{&GroupByClause{Items: []*ByItem{{Expr: ce}, {Expr: ce}}}, 2, 2},

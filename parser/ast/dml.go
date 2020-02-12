@@ -755,7 +755,6 @@ type ShowStmt struct {
 
 	// GlobalScope is used by `show variables` and `show bindings`
 	GlobalScope bool
-	Pattern     *PatternLikeExpr
 	Where       ExprNode
 }
 
@@ -779,13 +778,6 @@ func (n *ShowStmt) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Column = node.(*ColumnName)
-	}
-	if n.Pattern != nil {
-		node, ok := n.Pattern.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Pattern = node.(*PatternLikeExpr)
 	}
 
 	switch n.Tp {

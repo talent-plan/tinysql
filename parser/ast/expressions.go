@@ -16,10 +16,8 @@ package ast
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 
-	"github.com/pingcap/errors"
 	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
@@ -28,22 +26,17 @@ import (
 var (
 	_ ExprNode = &BetweenExpr{}
 	_ ExprNode = &BinaryOperationExpr{}
-	_ ExprNode = &CaseExpr{}
 	_ ExprNode = &ColumnNameExpr{}
 	_ ExprNode = &DefaultExpr{}
 	_ ExprNode = &IsNullExpr{}
-	_ ExprNode = &IsTruthExpr{}
 	_ ExprNode = &ParenthesesExpr{}
 	_ ExprNode = &PatternInExpr{}
-	_ ExprNode = &PatternLikeExpr{}
-	_ ExprNode = &PatternRegexpExpr{}
 	_ ExprNode = &RowExpr{}
 	_ ExprNode = &UnaryOperationExpr{}
 	_ ExprNode = &ValuesExpr{}
 	_ ExprNode = &VariableExpr{}
 
 	_ Node = &ColumnName{}
-	_ Node = &WhenClause{}
 )
 
 // ValueExpr define a interface for ValueExpr.
@@ -158,128 +151,6 @@ func (n *BinaryOperationExpr) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// WhenClause is the when clause in Case expression for "when condition then result".
-type WhenClause struct {
-	node
-	// Expr is the condition expression in WhenClause.
-	Expr ExprNode
-	// Result is the result expression in WhenClause.
-	Result ExprNode
-}
-
-// Accept implements Node Accept interface.
-func (n *WhenClause) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-
-	n = newNode.(*WhenClause)
-	node, ok := n.Expr.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Expr = node.(ExprNode)
-
-	node, ok = n.Result.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Result = node.(ExprNode)
-	return v.Leave(n)
-}
-
-// CaseExpr is the case expression.
-type CaseExpr struct {
-	exprNode
-	// Value is the compare value expression.
-	Value ExprNode
-	// WhenClauses is the condition check expression.
-	WhenClauses []*WhenClause
-	// ElseClause is the else result expression.
-	ElseClause ExprNode
-}
-
-// Restore implements Node interface.
-func (n *CaseExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CASE")
-	if n.Value != nil {
-		ctx.WritePlain(" ")
-		if err := n.Value.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CaseExpr.Value")
-		}
-	}
-	for _, clause := range n.WhenClauses {
-		ctx.WritePlain(" ")
-		if err := clause.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CaseExpr.WhenClauses")
-		}
-	}
-	if n.ElseClause != nil {
-		ctx.WriteKeyWord(" ELSE ")
-		if err := n.ElseClause.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CaseExpr.ElseClause")
-		}
-	}
-	ctx.WriteKeyWord(" END")
-
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *CaseExpr) Format(w io.Writer) {
-	fmt.Fprint(w, "CASE")
-	// Because the presence of `case when` syntax, `Value` could be nil and we need check this.
-	if n.Value != nil {
-		fmt.Fprint(w, " ")
-		n.Value.Format(w)
-	}
-	for _, clause := range n.WhenClauses {
-		fmt.Fprint(w, " ")
-		fmt.Fprint(w, "WHEN ")
-		clause.Expr.Format(w)
-		fmt.Fprint(w, " THEN ")
-		clause.Result.Format(w)
-	}
-	if n.ElseClause != nil {
-		fmt.Fprint(w, " ELSE ")
-		n.ElseClause.Format(w)
-	}
-	fmt.Fprint(w, " END")
-}
-
-// Accept implements Node Accept interface.
-func (n *CaseExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-
-	n = newNode.(*CaseExpr)
-	if n.Value != nil {
-		node, ok := n.Value.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Value = node.(ExprNode)
-	}
-	for i, val := range n.WhenClauses {
-		node, ok := val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.WhenClauses[i] = node.(*WhenClause)
-	}
-	if n.ElseClause != nil {
-		node, ok := n.ElseClause.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.ElseClause = node.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
 // ColumnName represents column name.
 type ColumnName struct {
 	node
@@ -350,14 +221,6 @@ type ColumnNameExpr struct {
 	Refer *ResultField
 }
 
-// Restore implements Node interface.
-func (n *ColumnNameExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Name.Restore(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *ColumnNameExpr) Format(w io.Writer) {
 	name := strings.Replace(n.Name.String(), ".", "`.`", -1)
@@ -384,19 +247,6 @@ type DefaultExpr struct {
 	exprNode
 	// Name is the column name.
 	Name *ColumnName
-}
-
-// Restore implements Node interface.
-func (n *DefaultExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("DEFAULT")
-	if n.Name != nil {
-		ctx.WritePlain("(")
-		if err := n.Name.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore DefaultExpr.Name")
-		}
-		ctx.WritePlain(")")
-	}
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -430,8 +280,6 @@ type PatternInExpr struct {
 	List []ExprNode
 	// Not is true, the expression is "not in".
 	Not bool
-	// Sel is the subquery, may be rewritten to other type of expression.
-	Sel ExprNode
 }
 
 // Format the ExprNode into a Writer.
@@ -470,13 +318,6 @@ func (n *PatternInExpr) Accept(v Visitor) (Node, bool) {
 		}
 		n.List[i] = node.(ExprNode)
 	}
-	if n.Sel != nil {
-		node, ok = n.Sel.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Sel = node.(ExprNode)
-	}
 	return v.Leave(n)
 }
 
@@ -487,19 +328,6 @@ type IsNullExpr struct {
 	Expr ExprNode
 	// Not is true, the expression is "is not null".
 	Not bool
-}
-
-// Restore implements Node interface.
-func (n *IsNullExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	if n.Not {
-		ctx.WriteKeyWord(" IS NOT NULL")
-	} else {
-		ctx.WriteKeyWord(" IS NULL")
-	}
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -527,160 +355,11 @@ func (n *IsNullExpr) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// IsTruthExpr is the expression for true/false check.
-type IsTruthExpr struct {
-	exprNode
-	// Expr is the expression to be checked.
-	Expr ExprNode
-	// Not is true, the expression is "is not true/false".
-	Not bool
-	// True indicates checking true or false.
-	True int64
-}
-
-// Restore implements Node interface.
-func (n *IsTruthExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	if n.Not {
-		ctx.WriteKeyWord(" IS NOT")
-	} else {
-		ctx.WriteKeyWord(" IS")
-	}
-	if n.True > 0 {
-		ctx.WriteKeyWord(" TRUE")
-	} else {
-		ctx.WriteKeyWord(" FALSE")
-	}
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *IsTruthExpr) Format(w io.Writer) {
-	n.Expr.Format(w)
-	if n.Not {
-		fmt.Fprint(w, " IS NOT")
-	} else {
-		fmt.Fprint(w, " IS")
-	}
-	if n.True > 0 {
-		fmt.Fprint(w, " TRUE")
-	} else {
-		fmt.Fprint(w, " FALSE")
-	}
-}
-
-// Accept implements Node Accept interface.
-func (n *IsTruthExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*IsTruthExpr)
-	node, ok := n.Expr.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Expr = node.(ExprNode)
-	return v.Leave(n)
-}
-
-// PatternLikeExpr is the expression for like operator, e.g, expr like "%123%"
-type PatternLikeExpr struct {
-	exprNode
-	// Expr is the expression to be checked.
-	Expr ExprNode
-	// Pattern is the like expression.
-	Pattern ExprNode
-	// Not is true, the expression is "not like".
-	Not bool
-
-	Escape byte
-
-	PatChars []byte
-	PatTypes []byte
-}
-
-// Restore implements Node interface.
-func (n *PatternLikeExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore PatternLikeExpr.Expr")
-	}
-
-	if n.Not {
-		ctx.WriteKeyWord(" NOT LIKE ")
-	} else {
-		ctx.WriteKeyWord(" LIKE ")
-	}
-
-	if err := n.Pattern.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore PatternLikeExpr.Pattern")
-	}
-
-	escape := string(n.Escape)
-	if escape != "\\" {
-		ctx.WriteKeyWord(" ESCAPE ")
-		ctx.WriteString(escape)
-
-	}
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *PatternLikeExpr) Format(w io.Writer) {
-	n.Expr.Format(w)
-	if n.Not {
-		fmt.Fprint(w, " NOT LIKE ")
-	} else {
-		fmt.Fprint(w, " LIKE ")
-	}
-	n.Pattern.Format(w)
-	if n.Escape != '\\' {
-		fmt.Fprint(w, " ESCAPE ")
-		fmt.Fprintf(w, "'%c'", n.Escape)
-	}
-}
-
-// Accept implements Node Accept interface.
-func (n *PatternLikeExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*PatternLikeExpr)
-	if n.Expr != nil {
-		node, ok := n.Expr.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Expr = node.(ExprNode)
-	}
-	if n.Pattern != nil {
-		node, ok := n.Pattern.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Pattern = node.(ExprNode)
-	}
-	return v.Leave(n)
-}
-
 // ParenthesesExpr is the parentheses expression.
 type ParenthesesExpr struct {
 	exprNode
 	// Expr is the expression in parentheses.
 	Expr ExprNode
-}
-
-// Restore implements Node interface.
-func (n *ParenthesesExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WritePlain("(")
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred when restore ParenthesesExpr.Expr")
-	}
-	ctx.WritePlain(")")
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -707,94 +386,12 @@ func (n *ParenthesesExpr) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// PatternRegexpExpr is the pattern expression for pattern match.
-type PatternRegexpExpr struct {
-	exprNode
-	// Expr is the expression to be checked.
-	Expr ExprNode
-	// Pattern is the expression for pattern.
-	Pattern ExprNode
-	// Not is true, the expression is "not rlike",
-	Not bool
-
-	// Re is the compiled regexp.
-	Re *regexp.Regexp
-	// Sexpr is the string for Expr expression.
-	Sexpr *string
-}
-
-// Restore implements Node interface.
-func (n *PatternRegexpExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore PatternRegexpExpr.Expr")
-	}
-
-	if n.Not {
-		ctx.WriteKeyWord(" NOT REGEXP ")
-	} else {
-		ctx.WriteKeyWord(" REGEXP ")
-	}
-
-	if err := n.Pattern.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore PatternRegexpExpr.Pattern")
-	}
-
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *PatternRegexpExpr) Format(w io.Writer) {
-	n.Expr.Format(w)
-	if n.Not {
-		fmt.Fprint(w, " NOT REGEXP ")
-	} else {
-		fmt.Fprint(w, " REGEXP ")
-	}
-	n.Pattern.Format(w)
-}
-
-// Accept implements Node Accept interface.
-func (n *PatternRegexpExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*PatternRegexpExpr)
-	node, ok := n.Expr.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Expr = node.(ExprNode)
-	node, ok = n.Pattern.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Pattern = node.(ExprNode)
-	return v.Leave(n)
-}
-
 // RowExpr is the expression for row constructor.
 // See https://dev.mysql.com/doc/refman/5.7/en/row-subqueries.html
 type RowExpr struct {
 	exprNode
 
 	Values []ExprNode
-}
-
-// Restore implements Node interface.
-func (n *RowExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ROW")
-	ctx.WritePlain("(")
-	for i, v := range n.Values {
-		if i != 0 {
-			ctx.WritePlain(",")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred when restore RowExpr.Values[%v]", i)
-		}
-	}
-	ctx.WritePlain(")")
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -828,17 +425,6 @@ type UnaryOperationExpr struct {
 	V ExprNode
 }
 
-// Restore implements Node interface.
-func (n *UnaryOperationExpr) Restore(ctx *RestoreCtx) error {
-	if err := n.Op.Restore(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	if err := n.V.Restore(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *UnaryOperationExpr) Format(w io.Writer) {
 	n.Op.Format(w)
@@ -865,18 +451,6 @@ type ValuesExpr struct {
 	exprNode
 	// Column is column name.
 	Column *ColumnNameExpr
-}
-
-// Restore implements Node interface.
-func (n *ValuesExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("VALUES")
-	ctx.WritePlain("(")
-	if err := n.Column.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore ValuesExpr.Column")
-	}
-	ctx.WritePlain(")")
-
-	return nil
 }
 
 // Format the ExprNode into a Writer.
@@ -916,33 +490,6 @@ type VariableExpr struct {
 	Value ExprNode
 }
 
-// Restore implements Node interface.
-func (n *VariableExpr) Restore(ctx *RestoreCtx) error {
-	if n.IsSystem {
-		ctx.WritePlain("@@")
-		if n.ExplicitScope {
-			if n.IsGlobal {
-				ctx.WriteKeyWord("GLOBAL")
-			} else {
-				ctx.WriteKeyWord("SESSION")
-			}
-			ctx.WritePlain(".")
-		}
-	} else {
-		ctx.WritePlain("@")
-	}
-	ctx.WriteName(n.Name)
-
-	if n.Value != nil {
-		ctx.WritePlain(":=")
-		if err := n.Value.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore VariableExpr.Value")
-		}
-	}
-
-	return nil
-}
-
 // Format the ExprNode into a Writer.
 func (n *VariableExpr) Format(w io.Writer) {
 	panic("Not implemented")
@@ -964,30 +511,5 @@ func (n *VariableExpr) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Value = node.(ExprNode)
-	return v.Leave(n)
-}
-
-// MaxValueExpr is the expression for "maxvalue" used in partition.
-type MaxValueExpr struct {
-	exprNode
-}
-
-// Restore implements Node interface.
-func (n *MaxValueExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("MAXVALUE")
-	return nil
-}
-
-// Format the ExprNode into a Writer.
-func (n *MaxValueExpr) Format(w io.Writer) {
-	fmt.Fprint(w, "MAXVALUE")
-}
-
-// Accept implements Node Accept interface.
-func (n *MaxValueExpr) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
 	return v.Leave(n)
 }

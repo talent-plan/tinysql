@@ -1659,19 +1659,6 @@ func (s *testParserSuite) TestCommentErrMsg(c *C) {
 	s.RunErrMsgTest(c, table)
 }
 
-func (s *testParserSuite) TestLikeEscape(c *C) {
-	table := []testCase{
-		// for like escape
-		{`select "abc_" like "abc\\_" escape ''`, true, "SELECT 'abc_' LIKE 'abc\\_'"},
-		{`select "abc_" like "abc\\_" escape '\\'`, true, "SELECT 'abc_' LIKE 'abc\\_'"},
-		{`select "abc_" like "abc\\_" escape '||'`, false, ""},
-		{`select "abc" like "escape" escape '+'`, true, "SELECT 'abc' LIKE 'escape' ESCAPE '+'"},
-		{"select '''_' like '''_' escape ''''", true, "SELECT '''_' LIKE '''_' ESCAPE ''''"},
-	}
-
-	s.RunTest(c, table)
-}
-
 func (s *testParserSuite) TestSQLResult(c *C) {
 	table := []testCase{
 		{`select SQL_BIG_RESULT c1 from t group by c1`, true, "SELECT SQL_BIG_RESULT `c1` FROM `t` GROUP BY `c1`"},

@@ -778,15 +778,6 @@ func (b *PlanBuilder) buildShow(ctx context.Context, show *ast.ShowStmt) (Plan, 
 	var err error
 	var np LogicalPlan
 	np = p
-	if show.Pattern != nil {
-		show.Pattern.Expr = &ast.ColumnNameExpr{
-			Name: &ast.ColumnName{Name: p.OutputNames()[0].ColName},
-		}
-		np, err = b.buildSelection(ctx, np, show.Pattern, nil)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if show.Where != nil {
 		np, err = b.buildSelection(ctx, np, show.Where, nil)
 		if err != nil {
