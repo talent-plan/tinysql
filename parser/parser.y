@@ -795,7 +795,6 @@ import (
 	PluginNameList			"Plugin Name List"
 	TableRefsClause			"Table references clause"
 	FuncDatetimePrec		"Function datetime precision"
-	GetFormatSelector		"{DATE|DATETIME|TIME|TIMESTAMP}"
 	GlobalScope			"The scope of variable"
 	GroupByClause			"GROUP BY clause"
 	HavingClause			"HAVING clause"
@@ -876,12 +875,9 @@ import (
 	TableNameListOpt		"Table name list opt"
 	TableRef 			"table reference"
 	TableRefs 			"table references"
-	TimeUnit		"Time unit for 'DATE_ADD', 'DATE_SUB', 'ADDDATE', 'SUBDATE', 'EXTRACT'"
-	TimestampUnit		"Time unit for 'TIMESTAMPADD' and 'TIMESTAMPDIFF'"
 
 	TransactionChar		"Transaction characteristic"
 	TransactionChars	"Transaction characteristic list"
-	TrimDirection		"Trim string direction"
 	Values			"values"
 	ValuesList		"values list"
 	ValuesOpt		"values optional"
@@ -3110,28 +3106,6 @@ BitExpr:
 	{
 		$$ = &ast.BinaryOperationExpr{Op: opcode.Minus, L: $1, R: $3}
 	}
-|	BitExpr '+' "INTERVAL" Expression TimeUnit %prec '+'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr("DATE_ADD"),
-			Args: []ast.ExprNode{
-				$1,
-				$4,
-				&ast.TimeUnitExpr{Unit: $5.(ast.TimeUnitType)},
-			},
-		}
-	}
-|	BitExpr '-' "INTERVAL" Expression TimeUnit %prec '+'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr("DATE_SUB"),
-			Args: []ast.ExprNode{
-				$1,
-				$4,
-				&ast.TimeUnitExpr{Unit: $5.(ast.TimeUnitType)},
-			},
-		}
-	}
 |	BitExpr '*' BitExpr %prec '*'
 	{
 		$$ = &ast.BinaryOperationExpr{Op: opcode.Mul, L: $1, R: $3}
@@ -3237,52 +3211,6 @@ SimpleExpr:
 	{
 		values := append($3.([]ast.ExprNode), $5)
 		$$ = &ast.RowExpr{Values: values}
-	}
-|	"BINARY" SimpleExpr %prec neg
-	{
-		// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#operator_binary
-		x := types.NewFieldType(mysql.TypeString)
-		x.Charset = charset.CharsetBin
-		x.Collate = charset.CharsetBin
-		$$ = &ast.FuncCastExpr{
-			Expr: $2,
-			Tp: x,
-			FunctionType: ast.CastBinaryOperator,
-		}
-	}
-|	builtinCast '(' Expression "AS" CastType ')'
- 	{
- 		/* See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_cast */
- 		tp := $5.(*types.FieldType)
- 		defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimalForCast(tp.Tp)
- 		if tp.Flen == types.UnspecifiedLength {
- 			tp.Flen = defaultFlen
- 		}
- 		if tp.Decimal == types.UnspecifiedLength {
- 			tp.Decimal = defaultDecimal
- 		}
- 		$$ = &ast.FuncCastExpr{
- 			Expr: $3,
- 			Tp: tp,
- 			FunctionType: ast.CastFunction,
- 		}
- 	}
-|	"CONVERT" '(' Expression ',' CastType ')'
-	{
-		// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_convert
-		tp := $5.(*types.FieldType)
-		defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimalForCast(tp.Tp)
-		if tp.Flen == types.UnspecifiedLength {
-			tp.Flen = defaultFlen
-		}
-		if tp.Decimal == types.UnspecifiedLength {
-			tp.Decimal = defaultDecimal
-		}
-		$$ = &ast.FuncCastExpr{
-			Expr: $3,
-			Tp: tp,
-			FunctionType: ast.CastConvertFunction,
-		}
 	}
 |	"CONVERT" '(' Expression "USING" CharsetName ')'
 	{
@@ -3423,57 +3351,6 @@ FunctionCallNonKeyword:
 	{
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($1), Args: $3.([]ast.ExprNode)}
 	}
-|	FunctionNameDateArithMultiForms '(' Expression ',' Expression ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{
-				$3,
-				$5,
-				&ast.TimeUnitExpr{Unit: ast.TimeUnitDay},
-			},
-		}
-	}
-|	FunctionNameDateArithMultiForms '(' Expression ',' "INTERVAL" Expression TimeUnit ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{
-				$3,
-				$6,
-				&ast.TimeUnitExpr{Unit: $7.(ast.TimeUnitType)},
-			},
-		}
-	}
-|	FunctionNameDateArith '(' Expression ',' "INTERVAL" Expression TimeUnit ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{
-				$3,
-				$6,
-				&ast.TimeUnitExpr{Unit: $7.(ast.TimeUnitType)},
-			},
-		}
-	}
-|	builtinExtract '(' TimeUnit "FROM" Expression ')'
-	{
-		timeUnit := &ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{timeUnit, $5},
-		}
-	}
-|	"GET_FORMAT" '(' GetFormatSelector ','  Expression ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{
-				&ast.GetFormatSelectorExpr{Selector: $3.(ast.GetFormatSelectorType)},
-				$5,
-			},
-		}
-	}
 |	builtinPosition '(' BitExpr "IN" Expression ')'
 	{
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($1), Args: []ast.ExprNode{$3, $5}}
@@ -3506,20 +3383,6 @@ FunctionCallNonKeyword:
 			Args: []ast.ExprNode{$3, $5, $7},
 		}
 	}
-|	"TIMESTAMPADD" '(' TimestampUnit ',' Expression ',' Expression ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{&ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}, $5, $7},
-		}
-	}
-|	"TIMESTAMPDIFF" '(' TimestampUnit ',' Expression ',' Expression ')'
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{&ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}, $5, $7},
-		}
-	}
 |	builtinTrim '(' Expression ')'
 	{
 		$$ = &ast.FuncCallExpr{
@@ -3534,42 +3397,6 @@ FunctionCallNonKeyword:
 			Args: []ast.ExprNode{$5, $3},
 		}
 	}
-|	builtinTrim '(' TrimDirection "FROM" Expression ')'
-	{
-		nilVal := ast.NewValueExpr(nil)
-		direction := &ast.TrimDirectionExpr{Direction: $3.(ast.TrimDirectionType)}
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{$5, nilVal, direction},
-		}
-	}
-|	builtinTrim '(' TrimDirection Expression "FROM" Expression ')'
-	{
-		direction := &ast.TrimDirectionExpr{Direction: $3.(ast.TrimDirectionType)}
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-			Args: []ast.ExprNode{$6, $4, direction},
-		}
-	}
-
-GetFormatSelector:
-	"DATE"
-	{
-		$$ = ast.GetFormatSelectorDate
-	}
-| 	"DATETIME"
-	{
-		$$ = ast.GetFormatSelectorDatetime
-	}
-|	"TIME"
-	{
-		$$ = ast.GetFormatSelectorTime
-	}
-|	"TIMESTAMP"
-	{
-		$$ = ast.GetFormatSelectorDatetime
-	}
-
 
 FunctionNameDateArith:
 	builtinDateAdd
@@ -3579,21 +3406,6 @@ FunctionNameDateArith:
 FunctionNameDateArithMultiForms:
 	builtinAddDate
 |	builtinSubDate
-
-
-TrimDirection:
-	"BOTH"
-	{
-		$$ = ast.TrimBoth
-	}
-|	"LEADING"
-	{
-		$$ = ast.TrimLeading
-	}
-|	"TRAILING"
-	{
-		$$ = ast.TrimTrailing
-	}
 
 SumExpr:
 	"AVG" '(' BuggyDefaultFalseDistinctOpt Expression ')'
@@ -3659,126 +3471,6 @@ FuncDatetimePrec:
 	{
 		expr := ast.NewValueExpr($2)
 		$$ = expr
-	}
-
-TimeUnit:
-	TimestampUnit
-	{
-		$$ = $1
-	}
-|	"SECOND_MICROSECOND"
-	{
-		$$ = ast.TimeUnitSecondMicrosecond
-	}
-|	"MINUTE_MICROSECOND"
-	{
-		$$ = ast.TimeUnitMinuteMicrosecond
-	}
-|	"MINUTE_SECOND"
-	{
-		$$ = ast.TimeUnitMinuteSecond
-	}
-|	"HOUR_MICROSECOND"
-	{
-		$$ = ast.TimeUnitHourMicrosecond
-	}
-|	"HOUR_SECOND"
-	{
-		$$ = ast.TimeUnitHourSecond
-	}
-|	"HOUR_MINUTE"
-	{
-		$$ = ast.TimeUnitHourMinute
-	}
-|	"DAY_MICROSECOND"
-	{
-		$$ = ast.TimeUnitDayMicrosecond
-	}
-|	"DAY_SECOND"
-	{
-		$$ = ast.TimeUnitDaySecond
-	}
-|	"DAY_MINUTE"
-	{
-		$$ = ast.TimeUnitDayMinute
-	}
-|	"DAY_HOUR"
-	{
-		$$ = ast.TimeUnitDayHour
-	}
-|	"YEAR_MONTH"
-	{
-		$$ = ast.TimeUnitYearMonth
-	}
-
-TimestampUnit:
-	"MICROSECOND"
-	{
-		$$ = ast.TimeUnitMicrosecond
-	}
-|	"SECOND"
-	{
-		$$ = ast.TimeUnitSecond
-	}
-|	"MINUTE"
-	{
-		$$ = ast.TimeUnitMinute
-	}
-|	"HOUR"
-	{
-		$$ = ast.TimeUnitHour
-	}
-|	"DAY"
-	{
-		$$ = ast.TimeUnitDay
-	}
-|	"WEEK"
-	{
-		$$ = ast.TimeUnitWeek
-	}
-|	"MONTH"
-	{
-		$$ = ast.TimeUnitMonth
-	}
-|	"QUARTER"
-	{
-		$$ = ast.TimeUnitQuarter
-	}
-|	"YEAR"
-	{
-		$$ = ast.TimeUnitYear
-	}
-|	"SQL_TSI_SECOND"
-	{
-		$$ = ast.TimeUnitSecond
-	}
-|	"SQL_TSI_MINUTE"
-	{
-		$$ = ast.TimeUnitMinute
-	}
-|	"SQL_TSI_HOUR"
-	{
-		$$ = ast.TimeUnitHour
-	}
-|	"SQL_TSI_DAY"
-	{
-		$$ = ast.TimeUnitDay
-	}
-|	"SQL_TSI_WEEK"
-	{
-		$$ = ast.TimeUnitWeek
-	}
-|	"SQL_TSI_MONTH"
-	{
-		$$ = ast.TimeUnitMonth
-	}
-|	"SQL_TSI_QUARTER"
-	{
-		$$ = ast.TimeUnitQuarter
-	}
-|	"SQL_TSI_YEAR"
-	{
-		$$ = ast.TimeUnitYear
 	}
 
 ExpressionOpt:

@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
-	"math"
 )
 
 // AggFuncDesc describes an aggregation function signature, only used in planner.
@@ -93,9 +92,6 @@ func (a *AggFuncDesc) Split(ordinal []int) (partialAggDesc, finalAggDesc *AggFun
 			RetType: a.RetTp,
 		})
 		finalAggDesc.Args = args
-		if finalAggDesc.Name == ast.AggFuncGroupConcat {
-			finalAggDesc.Args = append(finalAggDesc.Args, a.Args[len(a.Args)-1]) // separator
-		}
 	}
 	return
 }
@@ -140,12 +136,8 @@ func (a *AggFuncDesc) EvalNullValueInOuterJoin(ctx sessionctx.Context, schema *e
 	case ast.AggFuncSum, ast.AggFuncMax, ast.AggFuncMin,
 		ast.AggFuncFirstRow:
 		return a.evalNullValueInOuterJoin4Sum(ctx, schema)
-	case ast.AggFuncAvg, ast.AggFuncGroupConcat:
+	case ast.AggFuncAvg:
 		return types.Datum{}, false
-	case ast.AggFuncBitAnd:
-		return a.evalNullValueInOuterJoin4BitAnd(ctx, schema)
-	case ast.AggFuncBitOr, ast.AggFuncBitXor:
-		return a.evalNullValueInOuterJoin4BitOr(ctx, schema)
 	default:
 		panic("unsupported agg function")
 	}
@@ -188,24 +180,6 @@ func (a *AggFuncDesc) evalNullValueInOuterJoin4Sum(ctx sessionctx.Context, schem
 	con, ok := result.(*expression.Constant)
 	if !ok || con.Value.IsNull() {
 		return types.Datum{}, ok
-	}
-	return con.Value, true
-}
-
-func (a *AggFuncDesc) evalNullValueInOuterJoin4BitAnd(ctx sessionctx.Context, schema *expression.Schema) (types.Datum, bool) {
-	result := expression.EvaluateExprWithNull(ctx, schema, a.Args[0])
-	con, ok := result.(*expression.Constant)
-	if !ok || con.Value.IsNull() {
-		return types.NewDatum(uint64(math.MaxUint64)), true
-	}
-	return con.Value, true
-}
-
-func (a *AggFuncDesc) evalNullValueInOuterJoin4BitOr(ctx sessionctx.Context, schema *expression.Schema) (types.Datum, bool) {
-	result := expression.EvaluateExprWithNull(ctx, schema, a.Args[0])
-	con, ok := result.(*expression.Constant)
-	if !ok || con.Value.IsNull() {
-		return types.NewDatum(0), true
 	}
 	return con.Value, true
 }

@@ -33,21 +33,13 @@ const (
 )
 
 var aggFuncFactor = map[string]float64{
-	ast.AggFuncCount:       1.0,
-	ast.AggFuncSum:         1.0,
-	ast.AggFuncAvg:         2.0,
-	ast.AggFuncFirstRow:    0.1,
-	ast.AggFuncMax:         1.0,
-	ast.AggFuncMin:         1.0,
-	ast.AggFuncGroupConcat: 1.0,
-	ast.AggFuncBitOr:       0.9,
-	ast.AggFuncBitXor:      0.9,
-	ast.AggFuncBitAnd:      0.9,
-	ast.AggFuncVarPop:      3.0,
-	ast.AggFuncVarSamp:     3.0,
-	ast.AggFuncStddevPop:   3.0,
-	ast.AggFuncStddevSamp:  3.0,
-	"default":              1.5,
+	ast.AggFuncCount:    1.0,
+	ast.AggFuncSum:      1.0,
+	ast.AggFuncAvg:      2.0,
+	ast.AggFuncFirstRow: 0.1,
+	ast.AggFuncMax:      1.0,
+	ast.AggFuncMin:      1.0,
+	"default":           1.5,
 }
 
 // wholeTaskTypes records all possible kinds of task that a plan can return. For Agg, TopN and Limit, we will try to get

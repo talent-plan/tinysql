@@ -45,8 +45,6 @@ func (f *flagSetter) Leave(in Node) (Node, bool) {
 		x.SetFlag(FlagHasDefault)
 	case *FuncCallExpr:
 		f.funcCall(x)
-	case *FuncCastExpr:
-		x.SetFlag(FlagHasFunc | x.Expr.GetFlag())
 	case *IsNullExpr:
 		x.SetFlag(x.Expr.GetFlag())
 	case *ParenthesesExpr:

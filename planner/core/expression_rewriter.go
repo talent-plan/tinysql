@@ -350,22 +350,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		er.isNullToExpression(v)
 	case *ast.DefaultExpr:
 		er.evalDefaultExpr(v)
-	// TODO: Perhaps we don't need to transcode these back to generic integers/strings
-	case *ast.TrimDirectionExpr:
-		er.ctxStackAppend(&expression.Constant{
-			Value:   types.NewIntDatum(int64(v.Direction)),
-			RetType: types.NewFieldType(mysql.TypeTiny),
-		}, types.EmptyName)
-	case *ast.TimeUnitExpr:
-		er.ctxStackAppend(&expression.Constant{
-			Value:   types.NewStringDatum(v.Unit.String()),
-			RetType: types.NewFieldType(mysql.TypeVarchar),
-		}, types.EmptyName)
-	case *ast.GetFormatSelectorExpr:
-		er.ctxStackAppend(&expression.Constant{
-			Value:   types.NewStringDatum(v.Selector.String()),
-			RetType: types.NewFieldType(mysql.TypeVarchar),
-		}, types.EmptyName)
 	default:
 		er.err = errors.Errorf("UnknownType: %T", v)
 		return retNode, false

@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"math"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -176,13 +175,11 @@ func (a *baseFuncDesc) typeInfer4MaxMin(ctx sessionctx.Context) {
 // +------+--------+--------+----------+------------+-----------+----------------------+--------+--------+-----------------+
 func (a *baseFuncDesc) GetDefaultValue() (v types.Datum) {
 	switch a.Name {
-	case ast.AggFuncCount, ast.AggFuncBitOr, ast.AggFuncBitXor:
+	case ast.AggFuncCount:
 		v = types.NewIntDatum(0)
 	case ast.AggFuncFirstRow, ast.AggFuncAvg, ast.AggFuncSum, ast.AggFuncMax,
-		ast.AggFuncMin, ast.AggFuncGroupConcat:
+		ast.AggFuncMin:
 		v = types.Datum{}
-	case ast.AggFuncBitAnd:
-		v = types.NewUintDatum(uint64(math.MaxUint64))
 	}
 	return
 }

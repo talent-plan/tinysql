@@ -35,8 +35,6 @@ func AggFuncToPBExpr(sc *stmtctx.StatementContext, client kv.Client, aggFunc *Ag
 		tp = tipb.ExprType_Count
 	case ast.AggFuncFirstRow:
 		tp = tipb.ExprType_First
-	case ast.AggFuncGroupConcat:
-		tp = tipb.ExprType_GroupConcat
 	case ast.AggFuncMax:
 		tp = tipb.ExprType_Max
 	case ast.AggFuncMin:
@@ -45,12 +43,6 @@ func AggFuncToPBExpr(sc *stmtctx.StatementContext, client kv.Client, aggFunc *Ag
 		tp = tipb.ExprType_Sum
 	case ast.AggFuncAvg:
 		tp = tipb.ExprType_Avg
-	case ast.AggFuncBitOr:
-		tp = tipb.ExprType_Agg_BitOr
-	case ast.AggFuncBitXor:
-		tp = tipb.ExprType_Agg_BitXor
-	case ast.AggFuncBitAnd:
-		tp = tipb.ExprType_Agg_BitAnd
 	}
 	if !client.IsRequestTypeSupported(kv.ReqTypeSelect, int64(tp)) {
 		return nil
@@ -75,8 +67,6 @@ func PBExprToAggFuncDesc(sc *stmtctx.StatementContext, aggFunc *tipb.Expr, field
 		name = ast.AggFuncCount
 	case tipb.ExprType_First:
 		name = ast.AggFuncFirstRow
-	case tipb.ExprType_GroupConcat:
-		name = ast.AggFuncGroupConcat
 	case tipb.ExprType_Max:
 		name = ast.AggFuncMax
 	case tipb.ExprType_Min:
@@ -85,12 +75,6 @@ func PBExprToAggFuncDesc(sc *stmtctx.StatementContext, aggFunc *tipb.Expr, field
 		name = ast.AggFuncSum
 	case tipb.ExprType_Avg:
 		name = ast.AggFuncAvg
-	case tipb.ExprType_Agg_BitOr:
-		name = ast.AggFuncBitOr
-	case tipb.ExprType_Agg_BitXor:
-		name = ast.AggFuncBitXor
-	case tipb.ExprType_Agg_BitAnd:
-		name = ast.AggFuncBitAnd
 	default:
 		return nil, errors.Errorf("unknown aggregation function type: %v", aggFunc.Tp)
 	}

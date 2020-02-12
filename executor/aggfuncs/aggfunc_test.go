@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
@@ -79,9 +78,6 @@ func (s *testSuite) testMergePartialResult(c *C, p aggTest) {
 	iter := chunk.NewIterator4Chunk(srcChk)
 
 	args := []expression.Expression{&expression.Column{RetType: p.dataType, Index: 0}}
-	if p.funcName == ast.AggFuncGroupConcat {
-		args = append(args, &expression.Constant{Value: types.NewStringDatum(" "), RetType: types.NewFieldType(mysql.TypeString)})
-	}
 	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args, false)
 	c.Assert(err, IsNil)
 	partialDesc, finalDesc := desc.Split([]int{0, 1})
@@ -173,9 +169,6 @@ func (s *testSuite) testAggFunc(c *C, p aggTest) {
 	srcChk.AppendDatum(0, &types.Datum{})
 
 	args := []expression.Expression{&expression.Column{RetType: p.dataType, Index: 0}}
-	if p.funcName == ast.AggFuncGroupConcat {
-		args = append(args, &expression.Constant{Value: types.NewStringDatum(" "), RetType: types.NewFieldType(mysql.TypeString)})
-	}
 	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args, false)
 	c.Assert(err, IsNil)
 	finalFunc := aggfuncs.Build(s.ctx, desc, 0)
