@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
@@ -55,8 +54,12 @@ var (
 )
 
 const (
-	maxRegionSampleSize = 1000
-	maxSketchSize       = 10000
+	defaultMaxSampleSize = 10000
+	maxRegionSampleSize  = 1000
+	maxSketchSize        = 10000
+	defaultCMSketchWidth = 2048
+	defaultCMSketchDepth = 5
+	defaultNumBuckets    = 256
 )
 
 // Next implements the Executor Next interface.
@@ -201,7 +204,6 @@ type AnalyzeIndexExec struct {
 	analyzePB       *tipb.AnalyzeReq
 	result          distsql.SelectResult
 	countNullRes    distsql.SelectResult
-	opts            map[ast.AnalyzeOptionType]uint64
 }
 
 // fetchAnalyzeResult builds and dispatches the `kv.Request` from given ranges, and stores the `SelectResult`
@@ -255,7 +257,7 @@ func (e *AnalyzeIndexExec) buildStatsFromResult(result distsql.SelectResult, nee
 	hist := &statistics.Histogram{}
 	var cms *statistics.CMSketch
 	if needCMS {
-		cms = statistics.NewCMSketch(int32(e.opts[ast.AnalyzeOptCMSketchDepth]), int32(e.opts[ast.AnalyzeOptCMSketchWidth]))
+		cms = statistics.NewCMSketch(int32(defaultCMSketchDepth), int32(defaultCMSketchWidth))
 	}
 	for {
 		data, err := result.NextRaw(context.TODO())
@@ -271,7 +273,7 @@ func (e *AnalyzeIndexExec) buildStatsFromResult(result distsql.SelectResult, nee
 			return nil, nil, err
 		}
 		respHist := statistics.HistogramFromProto(resp.Hist)
-		hist, err = statistics.MergeHistograms(e.ctx.GetSessionVars().StmtCtx, hist, respHist, int(e.opts[ast.AnalyzeOptNumBuckets]))
+		hist, err = statistics.MergeHistograms(e.ctx.GetSessionVars().StmtCtx, hist, respHist, defaultNumBuckets)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -346,7 +348,6 @@ type AnalyzeColumnsExec struct {
 	concurrency     int
 	analyzePB       *tipb.AnalyzeReq
 	resultHandler   *tableResultHandler
-	opts            map[ast.AnalyzeOptionType]uint64
 }
 
 func (e *AnalyzeColumnsExec) open(ranges []*ranger.Range) error {
@@ -404,8 +405,8 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		collectors[i] = &statistics.SampleCollector{
 			IsMerger:      true,
 			FMSketch:      statistics.NewFMSketch(maxSketchSize),
-			MaxSampleSize: int64(e.opts[ast.AnalyzeOptNumSamples]),
-			CMSketch:      statistics.NewCMSketch(int32(e.opts[ast.AnalyzeOptCMSketchDepth]), int32(e.opts[ast.AnalyzeOptCMSketchWidth])),
+			MaxSampleSize: int64(defaultMaxSampleSize),
+			CMSketch:      statistics.NewCMSketch(int32(defaultCMSketchDepth), int32(defaultCMSketchWidth)),
 		}
 	}
 	for {
@@ -424,7 +425,7 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		sc := e.ctx.GetSessionVars().StmtCtx
 		if e.pkInfo != nil {
 			respHist := statistics.HistogramFromProto(resp.PkHist)
-			pkHist, err = statistics.MergeHistograms(sc, pkHist, respHist, int(e.opts[ast.AnalyzeOptNumBuckets]))
+			pkHist, err = statistics.MergeHistograms(sc, pkHist, respHist, defaultNumBuckets)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -452,7 +453,7 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 				return nil, nil, err
 			}
 		}
-		hg, err := statistics.BuildColumn(e.ctx, int64(e.opts[ast.AnalyzeOptNumBuckets]), col.ID, collectors[i], &col.FieldType)
+		hg, err := statistics.BuildColumn(e.ctx, int64(defaultNumBuckets), col.ID, collectors[i], &col.FieldType)
 		if err != nil {
 			return nil, nil, err
 		}

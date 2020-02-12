@@ -1517,18 +1517,6 @@ func (s *testParserSuite) TestAnalyze(c *C) {
 		{"analyze table t1", true, "ANALYZE TABLE `t1`"},
 		{"analyze table t1.*", false, ""},
 		{"analyze table t,t1", true, "ANALYZE TABLE `t`,`t1`"},
-		{"analyze table t1 index", true, "ANALYZE TABLE `t1` INDEX"},
-		{"analyze table t1 index a", true, "ANALYZE TABLE `t1` INDEX `a`"},
-		{"analyze table t1 index a,b", true, "ANALYZE TABLE `t1` INDEX `a`,`b`"},
-		{"analyze table t with 4 buckets", true, "ANALYZE TABLE `t` WITH 4 BUCKETS"},
-		{"analyze table t with 4 topn", true, "ANALYZE TABLE `t` WITH 4 TOPN"},
-		{"analyze table t with 4 cmsketch width", true, "ANALYZE TABLE `t` WITH 4 CMSKETCH WIDTH"},
-		{"analyze table t with 4 cmsketch depth", true, "ANALYZE TABLE `t` WITH 4 CMSKETCH DEPTH"},
-		{"analyze table t with 4 samples", true, "ANALYZE TABLE `t` WITH 4 SAMPLES"},
-		{"analyze table t with 4 buckets, 4 topn, 4 cmsketch width, 4 cmsketch depth, 4 samples", true, "ANALYZE TABLE `t` WITH 4 BUCKETS, 4 TOPN, 4 CMSKETCH WIDTH, 4 CMSKETCH DEPTH, 4 SAMPLES"},
-		{"analyze table t index a with 4 buckets", true, "ANALYZE TABLE `t` INDEX `a` WITH 4 BUCKETS"},
-		{"analyze incremental table t index", true, "ANALYZE INCREMENTAL TABLE `t` INDEX"},
-		{"analyze incremental table t index idx", true, "ANALYZE INCREMENTAL TABLE `t` INDEX `idx`"},
 	}
 	s.RunTest(c, table)
 }

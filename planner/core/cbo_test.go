@@ -118,59 +118,6 @@ func (s *testAnalyzeSuite) TestEmptyTable(c *C) {
 	}
 }
 
-func (s *testAnalyzeSuite) TestAnalyze(c *C) {
-	defer testleak.AfterTest(c)()
-	store, dom, err := newStoreWithBootstrap()
-	c.Assert(err, IsNil)
-	testKit := testkit.NewTestKit(c, store)
-	defer func() {
-		dom.Close()
-		store.Close()
-	}()
-	testKit.MustExec("use test")
-	testKit.MustExec("drop table if exists t, t1, t2, t3")
-	testKit.MustExec("create table t (a int, b int)")
-	testKit.MustExec("create index a on t (a)")
-	testKit.MustExec("create index b on t (b)")
-	testKit.MustExec("insert into t (a,b) values (1,1),(1,2),(1,3),(1,4),(2,5),(2,6),(2,7),(2,8)")
-	testKit.MustExec("analyze table t")
-
-	testKit.MustExec("create table t1 (a int, b int)")
-	testKit.MustExec("create index a on t1 (a)")
-	testKit.MustExec("create index b on t1 (b)")
-	testKit.MustExec("insert into t1 (a,b) values (1,1),(1,2),(1,3),(1,4),(2,5),(2,6),(2,7),(2,8)")
-
-	testKit.MustExec("create table t2 (a int, b int)")
-	testKit.MustExec("create index a on t2 (a)")
-	testKit.MustExec("create index b on t2 (b)")
-	testKit.MustExec("insert into t2 (a,b) values (1,1),(1,2),(1,3),(1,4),(2,5),(2,6),(2,7),(2,8)")
-	testKit.MustExec("analyze table t2 index a")
-
-	testKit.MustExec("create table t3 (a int, b int)")
-	testKit.MustExec("create index a on t3 (a)")
-
-	var input, output []string
-	s.testData.GetTestCases(c, &input, &output)
-
-	for i, tt := range input {
-		ctx := testKit.Se.(sessionctx.Context)
-		stmts, err := session.Parse(ctx, tt)
-		c.Assert(err, IsNil)
-		c.Assert(stmts, HasLen, 1)
-		stmt := stmts[0]
-		is := domain.GetDomain(ctx).InfoSchema()
-		err = core.Preprocess(ctx, stmt, is)
-		c.Assert(err, IsNil)
-		p, _, err := planner.Optimize(context.TODO(), ctx, stmt, is)
-		c.Assert(err, IsNil)
-		planString := core.ToString(p)
-		s.testData.OnRecord(func() {
-			output[i] = planString
-		})
-		c.Assert(planString, Equals, output[i], Commentf("for %s", tt))
-	}
-}
-
 func (s *testAnalyzeSuite) TestNullCount(c *C) {
 	defer testleak.AfterTest(c)()
 	store, dom, err := newStoreWithBootstrap()

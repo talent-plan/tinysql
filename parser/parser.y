@@ -742,9 +742,6 @@ import (
 	AlterTableSpec			"Alter table specification"
 	AlterTableSpecList		"Alter table specification list"
 	AlterTableSpecListOpt		"Alter table specification list optional"
-	AnalyzeOption			"Analyze option"
-	AnalyzeOptionList		"Analyze option list"
-	AnalyzeOptionListOpt		"Optional analyze option list"
 	AnyOrAll			"Any or All for subquery"
 	Assignment			"assignment"
 	AssignmentList			"assignment list"
@@ -1384,59 +1381,10 @@ Symbol:
 /*******************************************************************************************/
 
 AnalyzeTableStmt:
-	"ANALYZE" "TABLE" TableNameList AnalyzeOptionListOpt
+	"ANALYZE" "TABLE" TableNameList
 	 {
-		$$ = &ast.AnalyzeTableStmt{TableNames: $3.([]*ast.TableName), AnalyzeOpts: $4.([]ast.AnalyzeOpt),}
+		$$ = &ast.AnalyzeTableStmt{TableNames: $3.([]*ast.TableName)}
 	 }
-|	"ANALYZE" "TABLE" TableName "INDEX" IndexNameList AnalyzeOptionListOpt
-	{
-		$$ = &ast.AnalyzeTableStmt{TableNames: []*ast.TableName{$3.(*ast.TableName)}, IndexNames: $5.([]model.CIStr), IndexFlag: true, AnalyzeOpts: $6.([]ast.AnalyzeOpt),}
-	}
-|	"ANALYZE" "INCREMENTAL" "TABLE" TableName "INDEX" IndexNameList AnalyzeOptionListOpt
-	{
-		$$ = &ast.AnalyzeTableStmt{TableNames: []*ast.TableName{$4.(*ast.TableName)}, IndexNames: $6.([]model.CIStr), IndexFlag: true, Incremental: true, AnalyzeOpts: $7.([]ast.AnalyzeOpt),}
-	}
-
-AnalyzeOptionListOpt:
-	{
-		$$ = []ast.AnalyzeOpt{}
-	}
-|	"WITH" AnalyzeOptionList
-	{
-		$$ = $2.([]ast.AnalyzeOpt)
-	}
-
-AnalyzeOptionList:
-	AnalyzeOption
-	{
-		$$ = []ast.AnalyzeOpt{$1.(ast.AnalyzeOpt)}
-	}
-|	AnalyzeOptionList ',' AnalyzeOption
-	{
-		$$ = append($1.([]ast.AnalyzeOpt), $3.(ast.AnalyzeOpt))
-	}
-
-AnalyzeOption:
-	NUM "BUCKETS"
-	{
-		$$ = ast.AnalyzeOpt{Type: ast.AnalyzeOptNumBuckets, Value: getUint64FromNUM($1)}
-	}
-|	NUM "TOPN"
-	{
-		$$ = ast.AnalyzeOpt{Type: ast.AnalyzeOptNumTopN, Value: getUint64FromNUM($1)}
-	}
-|	NUM "CMSKETCH" "DEPTH"
-	{
-		$$ = ast.AnalyzeOpt{Type: ast.AnalyzeOptCMSketchDepth, Value: getUint64FromNUM($1)}
-	}
-|	NUM "CMSKETCH" "WIDTH"
-	{
-		$$ = ast.AnalyzeOpt{Type: ast.AnalyzeOptCMSketchWidth, Value: getUint64FromNUM($1)}
-	}
-|	NUM "SAMPLES"
-	{
-		$$ = ast.AnalyzeOpt{Type: ast.AnalyzeOptNumSamples, Value: getUint64FromNUM($1)}
-	}
 
 /*******************************************************************************************/
 Assignment:

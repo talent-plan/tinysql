@@ -16,14 +16,12 @@ package core
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
@@ -511,12 +509,12 @@ func getColsInfo(tn *ast.TableName) (indicesInfo []*model.IndexInfo, colsInfo []
 	return
 }
 
-func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
-	p := &Analyze{Opts: opts}
+func (b *PlanBuilder) buildAnalyze(as *ast.AnalyzeTableStmt) (Plan, error) {
+	p := &Analyze{}
 	for _, tbl := range as.TableNames {
 		idxInfo, colInfo, pkInfo := getColsInfo(tbl)
 		for _, idx := range idxInfo {
-			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID, Incremental: as.Incremental}
+			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID}
 			p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{
 				IndexInfo:   idx,
 				analyzeInfo: info,
@@ -524,7 +522,7 @@ func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.A
 			})
 		}
 		if len(colInfo) > 0 || pkInfo != nil {
-			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID, Incremental: as.Incremental}
+			info := analyzeInfo{DBName: tbl.Schema.O, TableName: tbl.Name.O, PhysicalTableID: tbl.TableInfo.ID}
 			p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{
 				PKInfo:      pkInfo,
 				ColsInfo:    colInfo,
@@ -534,90 +532,6 @@ func (b *PlanBuilder) buildAnalyzeTable(as *ast.AnalyzeTableStmt, opts map[ast.A
 		}
 	}
 	return p, nil
-}
-
-func (b *PlanBuilder) buildAnalyzeIndex(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
-	p := &Analyze{Opts: opts}
-	tblInfo := as.TableNames[0].TableInfo
-	for _, idxName := range as.IndexNames {
-		if isPrimaryIndex(idxName) && tblInfo.PKIsHandle {
-			pkCol := tblInfo.GetPkColInfo()
-			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
-			p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
-			continue
-		}
-		idx := tblInfo.FindIndexByName(idxName.L)
-		if idx == nil || idx.State != model.StatePublic {
-			return nil, ErrAnalyzeMissIndex.GenWithStackByArgs(idxName.O, tblInfo.Name.O)
-		}
-		info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
-		p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
-	}
-	return p, nil
-}
-
-func (b *PlanBuilder) buildAnalyzeAllIndex(as *ast.AnalyzeTableStmt, opts map[ast.AnalyzeOptionType]uint64) (Plan, error) {
-	p := &Analyze{Opts: opts}
-	tblInfo := as.TableNames[0].TableInfo
-	for _, idx := range tblInfo.Indices {
-		if idx.State == model.StatePublic {
-			info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
-			p.IdxTasks = append(p.IdxTasks, AnalyzeIndexTask{IndexInfo: idx, analyzeInfo: info, TblInfo: tblInfo})
-		}
-	}
-	if tblInfo.PKIsHandle {
-		pkCol := tblInfo.GetPkColInfo()
-		info := analyzeInfo{DBName: as.TableNames[0].Schema.O, TableName: as.TableNames[0].Name.O, PhysicalTableID: tblInfo.ID, Incremental: as.Incremental}
-		p.ColTasks = append(p.ColTasks, AnalyzeColumnsTask{PKInfo: pkCol, analyzeInfo: info})
-	}
-	return p, nil
-}
-
-var cmSketchSizeLimit = kv.TxnEntrySizeLimit / binary.MaxVarintLen32
-
-var analyzeOptionLimit = map[ast.AnalyzeOptionType]uint64{
-	ast.AnalyzeOptNumBuckets:    1024,
-	ast.AnalyzeOptCMSketchWidth: uint64(cmSketchSizeLimit),
-	ast.AnalyzeOptCMSketchDepth: uint64(cmSketchSizeLimit),
-	ast.AnalyzeOptNumSamples:    100000,
-}
-
-var analyzeOptionDefault = map[ast.AnalyzeOptionType]uint64{
-	ast.AnalyzeOptNumBuckets:    256,
-	ast.AnalyzeOptCMSketchWidth: 2048,
-	ast.AnalyzeOptCMSketchDepth: 5,
-	ast.AnalyzeOptNumSamples:    10000,
-}
-
-func handleAnalyzeOptions(opts []ast.AnalyzeOpt) (map[ast.AnalyzeOptionType]uint64, error) {
-	optMap := make(map[ast.AnalyzeOptionType]uint64, len(analyzeOptionDefault))
-	for key, val := range analyzeOptionDefault {
-		optMap[key] = val
-	}
-	for _, opt := range opts {
-		if opt.Value == 0 || opt.Value > analyzeOptionLimit[opt.Type] {
-			return nil, errors.Errorf("value of analyze option %s should be positive and not larger than %d", ast.AnalyzeOptionString[opt.Type], analyzeOptionLimit[opt.Type])
-		}
-		optMap[opt.Type] = opt.Value
-	}
-	if optMap[ast.AnalyzeOptCMSketchWidth]*optMap[ast.AnalyzeOptCMSketchDepth] > uint64(cmSketchSizeLimit) {
-		return nil, errors.Errorf("cm sketch size(depth * width) should not larger than %d", cmSketchSizeLimit)
-	}
-	return optMap, nil
-}
-
-func (b *PlanBuilder) buildAnalyze(as *ast.AnalyzeTableStmt) (Plan, error) {
-	opts, err := handleAnalyzeOptions(as.AnalyzeOpts)
-	if err != nil {
-		return nil, err
-	}
-	if as.IndexFlag {
-		if len(as.IndexNames) == 0 {
-			return b.buildAnalyzeAllIndex(as, opts)
-		}
-		return b.buildAnalyzeIndex(as, opts)
-	}
-	return b.buildAnalyzeTable(as, opts)
 }
 
 func buildShowNextRowID() (*expression.Schema, types.NameSlice) {

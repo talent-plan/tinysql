@@ -728,7 +728,7 @@ func (b *executorBuilder) buildDelete(v *plannercore.Delete) Executor {
 	return deleteExec
 }
 
-func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeIndexTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
+func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeIndexTask) *analyzeTask {
 	sc := b.ctx.GetSessionVars().StmtCtx
 	e := &AnalyzeIndexExec{
 		ctx:             b.ctx,
@@ -739,20 +739,19 @@ func (b *executorBuilder) buildAnalyzeIndexPushdown(task plannercore.AnalyzeInde
 			Tp:    tipb.AnalyzeType_TypeIndex,
 			Flags: sc.PushDownFlags(),
 		},
-		opts: opts,
 	}
 	e.analyzePB.IdxReq = &tipb.AnalyzeIndexReq{
-		BucketSize: int64(opts[ast.AnalyzeOptNumBuckets]),
+		BucketSize: int64(defaultNumBuckets),
 		NumColumns: int32(len(task.IndexInfo.Columns)),
 	}
-	depth := int32(opts[ast.AnalyzeOptCMSketchDepth])
-	width := int32(opts[ast.AnalyzeOptCMSketchWidth])
+	depth := int32(defaultCMSketchDepth)
+	width := int32(defaultCMSketchWidth)
 	e.analyzePB.IdxReq.CmsketchDepth = &depth
 	e.analyzePB.IdxReq.CmsketchWidth = &width
 	return &analyzeTask{taskType: idxTask, idxExec: e}
 }
 
-func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeColumnsTask, opts map[ast.AnalyzeOptionType]uint64) *analyzeTask {
+func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeColumnsTask) *analyzeTask {
 	cols := task.ColsInfo
 	if task.PKInfo != nil {
 		cols = append([]*model.ColumnInfo{task.PKInfo}, cols...)
@@ -769,12 +768,11 @@ func (b *executorBuilder) buildAnalyzeColumnsPushdown(task plannercore.AnalyzeCo
 			Tp:    tipb.AnalyzeType_TypeColumn,
 			Flags: sc.PushDownFlags(),
 		},
-		opts: opts,
 	}
-	depth := int32(opts[ast.AnalyzeOptCMSketchDepth])
-	width := int32(opts[ast.AnalyzeOptCMSketchWidth])
+	depth := int32(defaultCMSketchDepth)
+	width := int32(defaultCMSketchWidth)
 	e.analyzePB.ColReq = &tipb.AnalyzeColumnsReq{
-		BucketSize:    int64(opts[ast.AnalyzeOptNumBuckets]),
+		BucketSize:    int64(defaultNumBuckets),
 		SampleSize:    maxRegionSampleSize,
 		SketchSize:    maxSketchSize,
 		ColumnsInfo:   model.ColumnsToProto(cols, task.PKInfo != nil),
@@ -792,13 +790,13 @@ func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
 		wg:           &sync.WaitGroup{},
 	}
 	for _, task := range v.ColTasks {
-		e.tasks = append(e.tasks, b.buildAnalyzeColumnsPushdown(task, v.Opts))
+		e.tasks = append(e.tasks, b.buildAnalyzeColumnsPushdown(task))
 		if b.err != nil {
 			return nil
 		}
 	}
 	for _, task := range v.IdxTasks {
-		e.tasks = append(e.tasks, b.buildAnalyzeIndexPushdown(task, v.Opts))
+		e.tasks = append(e.tasks, b.buildAnalyzeIndexPushdown(task))
 		if b.err != nil {
 			return nil
 		}
