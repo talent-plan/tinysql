@@ -149,25 +149,3 @@ func buildLogicalJoinSchema(joinType JoinType, join LogicalPlan) *expression.Sch
 func BuildPhysicalJoinSchema(joinType JoinType, join PhysicalPlan) *expression.Schema {
 	return expression.MergeSchema(join.Children()[0].Schema(), join.Children()[1].Schema())
 }
-
-// GetStatsInfo gets the statistics info from a physical plan tree.
-func GetStatsInfo(i interface{}) map[string]uint64 {
-	p := i.(Plan)
-	var physicalPlan PhysicalPlan
-	switch x := p.(type) {
-	case *Insert:
-		physicalPlan = x.SelectPlan
-	case *Delete:
-		physicalPlan = x.SelectPlan
-	case PhysicalPlan:
-		physicalPlan = x
-	}
-
-	if physicalPlan == nil {
-		return nil
-	}
-
-	statsInfos := make(map[string]uint64)
-	statsInfos = CollectPlanStatsVersion(physicalPlan, statsInfos)
-	return statsInfos
-}

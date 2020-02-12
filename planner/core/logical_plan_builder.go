@@ -1252,8 +1252,6 @@ func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p L
 	}
 
 	var oldLen int
-	// According to https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html,
-	// we can only process window functions after having clause, so `considerWindow` is false now.
 	p, oldLen, err = b.buildProjection(ctx, p, sel.Fields.Fields, totalMap)
 	if err != nil {
 		return nil, err
