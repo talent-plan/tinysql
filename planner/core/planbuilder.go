@@ -1073,15 +1073,6 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 }
 
 func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, error) {
-	switch v := node.(type) {
-	case *ast.AlterDatabaseStmt:
-		if v.AlterDefaultDatabase {
-			v.Name = b.ctx.GetSessionVars().CurrentDB
-		}
-		if v.Name == "" {
-			return nil, ErrNoDB
-		}
-	}
 	p := &DDL{Statement: node}
 	return p, nil
 }

@@ -479,13 +479,6 @@ func (s *testDBSuite3) TestAddAnonymousIndex(c *C) {
 	c.Assert(t.Indices()[1].Meta().Name.String(), Equals, "primary_3")
 }
 
-func (s *testDBSuite4) TestAlterLock(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use " + s.schemaName)
-	s.mustExec(c, "create table t_index_lock (c1 int, c2 int, C3 int)")
-	s.mustExec(c, "alter table t_index_lock add index (c1, c2), lock=none")
-}
-
 func (s *testDBSuite5) TestAddMultiColumnsIndex(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use " + s.schemaName)
@@ -780,28 +773,6 @@ func (s *testDBSuite5) TestCheckColumnDefaultValue(c *C) {
 	c.Assert(tblInfo.Meta().Columns[0].DefaultValue, Equals, "")
 }
 
-func (s *testDBSuite1) TestCharacterSetInColumns(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("create database varchar_test;")
-	defer s.tk.MustExec("drop database varchar_test;")
-	s.tk.MustExec("use varchar_test")
-	s.tk.MustExec("create table t (c1 int, s1 varchar(10), s2 text)")
-	s.tk.MustQuery("select count(*) from information_schema.columns where table_schema = 'varchar_test' and character_set_name != 'utf8mb4'").Check(testkit.Rows("0"))
-	s.tk.MustQuery("select count(*) from information_schema.columns where table_schema = 'varchar_test' and character_set_name = 'utf8mb4'").Check(testkit.Rows("2"))
-
-	s.tk.MustExec("create table t1(id int) charset=UTF8;")
-	s.tk.MustExec("create table t2(id int) charset=BINARY;")
-	s.tk.MustExec("create table t3(id int) charset=LATIN1;")
-	s.tk.MustExec("create table t4(id int) charset=ASCII;")
-	s.tk.MustExec("create table t5(id int) charset=UTF8MB4;")
-
-	s.tk.MustExec("create table t11(id int) charset=utf8;")
-	s.tk.MustExec("create table t12(id int) charset=binary;")
-	s.tk.MustExec("create table t13(id int) charset=latin1;")
-	s.tk.MustExec("create table t14(id int) charset=ascii;")
-	s.tk.MustExec("create table t15(id int) charset=utf8mb4;")
-}
-
 func (s *testDBSuite3) TestColumnModifyingDefinition(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test")
@@ -981,59 +952,6 @@ func (s *testDBSuite1) TestModifyColumnNullToNotNull(c *C) {
 	_, err = s.tk.Exec("insert into t1 values ();")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[table:1364]Field 'c2' doesn't have a default value")
-}
-
-func (s *testDBSuite2) TestTransactionOnAddDropColumn(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.mustExec(c, "use test_db")
-	s.mustExec(c, "drop table if exists t1")
-	s.mustExec(c, "create table t1 (a int, b int);")
-	s.mustExec(c, "create table t2 (a int, b int);")
-	s.mustExec(c, "insert into t2 values (2,0)")
-
-	transactions := [][]string{
-		{
-			"begin",
-			"insert into t1 set a=1, b=1",
-			"commit",
-		},
-		{
-			"begin",
-			"insert into t1 set a=2, b=2",
-			"commit",
-		},
-	}
-
-	originHook := s.dom.DDL().GetHook()
-	defer s.dom.DDL().(ddl.DDLForTest).SetHook(originHook)
-	hook := &ddl.TestDDLCallback{}
-	hook.OnJobRunBeforeExported = func(job *model.Job) {
-		switch job.SchemaState {
-		case model.StateWriteOnly, model.StateWriteReorganization, model.StateDeleteOnly, model.StateDeleteReorganization:
-		default:
-			return
-		}
-		// do transaction.
-		for _, transaction := range transactions {
-			for _, sql := range transaction {
-				s.mustExec(c, sql)
-			}
-		}
-	}
-	s.dom.DDL().(ddl.DDLForTest).SetHook(hook)
-	done := make(chan error, 1)
-	// test transaction on add column.
-	go backgroundExec(s.store, "alter table t1 add column c int not null after a", done)
-	err := <-done
-	c.Assert(err, IsNil)
-	s.tk.MustQuery("select a,b from t1 order by a").Check(testkit.Rows("1 1", "1 1", "1 1", "2 2", "2 2", "2 2"))
-	s.mustExec(c, "delete from t1")
-
-	// test transaction on drop column.
-	go backgroundExec(s.store, "alter table t1 drop column c", done)
-	err = <-done
-	c.Assert(err, IsNil)
-	s.tk.MustQuery("select a,b from t1 order by a").Check(testkit.Rows("1 1", "1 1", "1 1", "2 2", "2 2", "2 2"))
 }
 
 func (s *testDBSuite3) TestTransactionWithWriteOnlyColumn(c *C) {

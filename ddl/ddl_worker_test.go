@@ -184,43 +184,6 @@ func (s *testDDLSuite) TestIndexError(c *C) {
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionDropIndex, []interface{}{model.NewCIStr("c1_index")}, ctx, d)
 }
 
-func (s *testDDLSuite) TestColumnError(c *C) {
-	store := testCreateStore(c, "test_column_error")
-	defer store.Close()
-	d := newDDL(
-		context.Background(),
-		WithStore(store),
-		WithLease(testLease),
-	)
-	defer d.Stop()
-	ctx := testNewContext(d)
-
-	dbInfo := testSchemaInfo(c, d, "test")
-	tblInfo := testTableInfo(c, d, "t", 3)
-	testCreateSchema(c, ctx, d, dbInfo)
-	testCreateTable(c, ctx, d, dbInfo, tblInfo)
-	col := &model.ColumnInfo{
-		Name:         model.NewCIStr("c4"),
-		Offset:       len(tblInfo.Columns),
-		DefaultValue: 0,
-	}
-	col.ID = allocateColumnID(tblInfo)
-	col.FieldType = *types.NewFieldType(mysql.TypeLong)
-	pos := &ast.ColumnPosition{Tp: ast.ColumnPositionAfter, RelativeColumn: &ast.ColumnName{Name: model.NewCIStr("c5")}}
-
-	// for adding column
-	doDDLJobErr(c, -1, tblInfo.ID, model.ActionAddColumn, []interface{}{col, pos, 0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, -1, model.ActionAddColumn, []interface{}{col, pos, 0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddColumn, []interface{}{0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddColumn, []interface{}{col, pos, 0}, ctx, d)
-
-	// for dropping column
-	doDDLJobErr(c, -1, tblInfo.ID, model.ActionDropColumn, []interface{}{col, pos, 0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, -1, model.ActionDropColumn, []interface{}{col, pos, 0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionDropColumn, []interface{}{0}, ctx, d)
-	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionDropColumn, []interface{}{model.NewCIStr("c5")}, ctx, d)
-}
-
 func testCheckOwner(c *C, d *ddl, expectedVal bool) {
 	c.Assert(d.isOwner(), Equals, expectedVal)
 }
@@ -542,7 +505,7 @@ func (s *testDDLSuite) TestCancelJob(c *C) {
 	col, _, err := buildColumnAndConstraint(ctx, 2, newColumnDef, nil)
 	c.Assert(err, IsNil)
 
-	addColumnArgs := []interface{}{col, &ast.ColumnPosition{Tp: ast.ColumnPositionNone}, 0}
+	addColumnArgs := []interface{}{col, 0}
 	doDDLJobErrWithSchemaState(ctx, d, c, dbInfo.ID, tblInfo.ID, model.ActionAddColumn, addColumnArgs, &cancelState)
 	c.Check(errors.ErrorStack(checkErr), Equals, "")
 	s.checkAddColumn(c, d, dbInfo.ID, tblInfo.ID, addingColName, false)
@@ -617,7 +580,7 @@ func (s *testDDLSuite) TestCancelJob(c *C) {
 	// modify column
 	col.DefaultValue = "1"
 	updateTest(&tests[15])
-	modifyColumnArgs := []interface{}{col, col.Name, &ast.ColumnPosition{}, byte(0)}
+	modifyColumnArgs := []interface{}{col, col.Name, byte(0)}
 	doDDLJobErrWithSchemaState(ctx, d, c, dbInfo.ID, tblInfo.ID, test.act, modifyColumnArgs, &test.cancelState)
 	c.Check(checkErr, IsNil)
 	changedTable = testGetTable(c, d, dbInfo.ID, tblInfo.ID)

@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/admin"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
 )
@@ -83,80 +82,6 @@ func (s *testStateChangeSuiteBase) TearDownSuite(c *C) {
 	s.se.Close()
 	s.dom.Close()
 	s.store.Close()
-}
-
-// TestShowCreateTable tests the result of "show create table" when we are running "add index" or "add column".
-func (s *testStateChangeSuite) TestShowCreateTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t (id int)")
-	tk.MustExec("create table t2 (a int, b varchar(10)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
-	// tkInternal is used to execute additional sql (here show create table) in ddl change callback.
-	// Using same `tk` in different goroutines may lead to data race.
-	tkInternal := testkit.NewTestKit(c, s.store)
-	tkInternal.MustExec("use test")
-
-	var checkErr error
-	testCases := []struct {
-		sql         string
-		expectedRet string
-	}{
-		{"alter table t add index idx(id)",
-			"CREATE TABLE `t` (\n  `id` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"},
-		{"alter table t add index idx1(id)",
-			"CREATE TABLE `t` (\n  `id` int(11) DEFAULT NULL,\n  KEY `idx` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"},
-		{"alter table t add column c int",
-			"CREATE TABLE `t` (\n  `id` int(11) DEFAULT NULL,\n  KEY `idx` (`id`),\n  KEY `idx1` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"},
-		{"alter table t2 add column c varchar(1)",
-			"CREATE TABLE `t2` (\n  `a` int(11) DEFAULT NULL,\n  `b` varchar(10) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"},
-		{"alter table t2 add column d varchar(1)",
-			"CREATE TABLE `t2` (\n  `a` int(11) DEFAULT NULL,\n  `b` varchar(10) DEFAULT NULL,\n  `c` varchar(1) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"},
-	}
-	prevState := model.StateNone
-	callback := &ddl.TestDDLCallback{}
-	currTestCaseOffset := 0
-	callback.OnJobUpdatedExported = func(job *model.Job) {
-		if job.SchemaState == prevState || checkErr != nil {
-			return
-		}
-		if job.State == model.JobStateDone {
-			currTestCaseOffset++
-		}
-		if job.SchemaState != model.StatePublic {
-			var result sqlexec.RecordSet
-			tbl2 := testGetTableByName(c, tkInternal.Se, "test", "t2")
-			if job.TableID == tbl2.Meta().ID {
-				// Try to do not use mustQuery in hook func, cause assert fail in mustQuery will cause ddl job hung.
-				result, checkErr = tkInternal.Exec("show create table t2")
-				if checkErr != nil {
-					return
-				}
-			} else {
-				result, checkErr = tkInternal.Exec("show create table t")
-				if checkErr != nil {
-					return
-				}
-			}
-			req := result.NewChunk()
-			checkErr = result.Next(context.Background(), req)
-			if checkErr != nil {
-				return
-			}
-			got := req.GetRow(0).GetString(1)
-			expected := testCases[currTestCaseOffset].expectedRet
-			if got != expected {
-				checkErr = errors.Errorf("got %s, expected %s", got, expected)
-			}
-		}
-	}
-	d := s.dom.DDL()
-	originalCallback := d.GetHook()
-	defer d.(ddl.DDLForTest).SetHook(originalCallback)
-	d.(ddl.DDLForTest).SetHook(callback)
-	for _, tc := range testCases {
-		tk.MustExec(tc.sql)
-		c.Assert(checkErr, IsNil)
-	}
 }
 
 type sqlWithErr struct {
@@ -296,7 +221,7 @@ func (s *testStateChangeSuite) TestShowIndex(c *C) {
 }
 
 func (s *testStateChangeSuite) TestParallelAlterModifyColumn(c *C) {
-	sql := "ALTER TABLE t MODIFY COLUMN b int FIRST;"
+	sql := "ALTER TABLE t MODIFY COLUMN b int;"
 	f := func(c *C, err1, err2 error) {
 		c.Assert(err1, IsNil)
 		c.Assert(err2, IsNil)
@@ -318,7 +243,7 @@ func (s *testStateChangeSuite) TestParallelAddColumAndSetDefaultValue(c *C) {
 	c.Assert(err, IsNil)
 	defer s.se.Execute(context.Background(), "drop table tx")
 
-	sql1 := "alter table tx add column cx int after c1"
+	sql1 := "alter table tx add column cx int"
 	sql2 := "alter table tx alter c2 set default 'N'"
 
 	f := func(c *C, err1, err2 error) {
@@ -392,11 +317,7 @@ func (s *testStateChangeSuiteBase) testControlParallelExecSQL(c *C, sql1, sql2 s
 
 	_, err = s.se.Execute(context.Background(), "drop database if exists t_part")
 	c.Assert(err, IsNil)
-	s.se.Execute(context.Background(), `create table t_part (a int key)
-	 partition by range(a) (
-	 partition p0 values less than (10),
-	 partition p1 values less than (20)
-	 );`)
+	s.se.Execute(context.Background(), `create table t_part (a int key);`)
 
 	callback := &ddl.TestDDLCallback{}
 	times := 0
@@ -654,18 +575,4 @@ func (s *testStateChangeSuite) TestParallelDDLBeforeRunDDLJob(c *C) {
 
 	intercept = &ddl.TestInterceptor{}
 	d.(ddl.DDLForTest).SetInterceptoror(intercept)
-}
-
-func (s *testStateChangeSuite) TestParallelAlterSchemaCharsetAndCollate(c *C) {
-	sql := "ALTER SCHEMA test_db_state CHARSET utf8mb4 COLLATE utf8mb4_general_ci"
-	f := func(c *C, err1, err2 error) {
-		c.Assert(err1, IsNil)
-		c.Assert(err2, IsNil)
-	}
-	s.testControlParallelExecSQL(c, sql, sql, f)
-	sql = `SELECT default_character_set_name, default_collation_name
-			FROM information_schema.schemata
-			WHERE schema_name='test_db_state'`
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery(sql).Check(testkit.Rows("utf8mb4 utf8mb4_general_ci"))
 }

@@ -102,7 +102,7 @@ func convertNotStartAddIdxJob2RollbackJob(t *meta.Meta, job *model.Job, occuredE
 
 func rollingbackAddColumn(t *meta.Meta, job *model.Job) (ver int64, err error) {
 	job.State = model.JobStateRollingback
-	tblInfo, columnInfo, col, _, _, err := checkAddColumn(t, job)
+	tblInfo, columnInfo, col, _, err := checkAddColumn(t, job)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}

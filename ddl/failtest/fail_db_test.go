@@ -90,19 +90,6 @@ func (s *testFailDBSuite) TearDownSuite(c *C) {
 	s.store.Close()
 }
 
-// TestInitializeOffsetAndState tests the case that the column's offset and state don't be initialized in the file of ddl_api.go when
-// doing the operation of 'modify column'.
-func (s *testFailDBSuite) TestInitializeOffsetAndState(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t(a int, b int, c int)")
-	defer tk.MustExec("drop table t")
-
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/ddl/uninitializedOffsetAndState", `return(true)`), IsNil)
-	tk.MustExec("ALTER TABLE t MODIFY COLUMN b int FIRST;")
-	c.Assert(failpoint.Disable("github.com/pingcap/tidb/ddl/uninitializedOffsetAndState"), IsNil)
-}
-
 func (s *testFailDBSuite) TestUpdateHandleFailed(c *C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tidb/ddl/errorUpdateReorgHandle", `1*return`), IsNil)
 	defer func() {

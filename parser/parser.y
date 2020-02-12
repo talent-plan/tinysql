@@ -713,7 +713,6 @@ import (
 
 %type	<statement>
 	AdminStmt			"Check table statement or show ddl statement"
-	AlterDatabaseStmt		"Alter database statement"
 	AlterTableStmt			"Alter table statement"
 	AnalyzeTableStmt		"Analyze table statement"
 	BeginTransactionStmt		"BEGIN TRANSACTION statement"
@@ -731,7 +730,6 @@ import (
 	ExplainableStmt			"explainable statement"
 	InsertIntoStmt			"INSERT INTO statement"
 	SelectStmt			"SELECT statement"
-	RenameTableStmt         	"rename table statement"
 	ReplaceIntoStmt			"REPLACE INTO statement"
 	RollbackStmt			"ROLLBACK statement"
 	SetStmt				"Set variable statement"
@@ -742,7 +740,6 @@ import (
 
 %type   <item>
 	AdminShowSlow			"Admin Show Slow statement"
-	AlgorithmClause			"Alter table algorithm"
 	AlterTableSpec			"Alter table specification"
 	AlterTableSpecList		"Alter table specification list"
 	AlterTableSpecListOpt		"Alter table specification list optional"
@@ -777,7 +774,6 @@ import (
 	Constraint			"table constraint"
 	ConstraintElem			"table constraint element"
 	ConstraintKeywordOpt		"Constraint Keyword or empty"
-	CreateTableOptionListOpt	"create table option list opt"
 	DatabaseOption			"CREATE Database specification"
 	DatabaseOptionList		"CREATE Database specification list"
 	DatabaseOptionListOpt		"CREATE Database specification list opt"
@@ -817,7 +813,6 @@ import (
 	IndexHintType			"index hint type"
 	IndexInvisible			"index visible/invisible"
 	IndexKeyTypeOpt			"index key type"
-	IndexLockAndAlgorithmOpt	"index lock and algorithm"
 	IndexName			"index name"
 	IndexNameAndTypeOpt		"index name and index type"
 	IndexNameList			"index name list"
@@ -837,9 +832,7 @@ import (
 	LikeTableWithOrWithoutParen	"LIKE table_name or ( LIKE table_name )"
 	LimitClause			"LIMIT clause"
 	LimitOption			"Limit option could be integer or parameter marker."
-	LockClause         		"Alter table lock clause"
 	NumLiteral			"Num/Int/Float/Decimal Literal"
-	DuplicateOpt			"[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement or LOAD DATA statement"
 	OptFull				"Full or empty"
 	OptTemporary			"TEMPORARY or empty"
 	Order				"ORDER BY clause optional collation specification"
@@ -847,20 +840,10 @@ import (
 	ByItem				"BY item"
 	OrderByOptional			"Optional ORDER BY clause optional"
 	ByList				"BY list"
-	AlterOrderItem		"Alter Order item"
-	AlterOrderList		"Alter Order list"
 	QuickOptional			"QUICK or empty"
 	QueryBlockOpt			"Query block identifier optional"
-	PartDefOption			"COMMENT [=] xxx | TABLESPACE [=] tablespace_name | ENGINE [=] xxx"
-	ColumnPosition			"Column position [First|After ColumnName]"
 	PriorityOpt			"Statement priority option"
-	ReferDef			"Reference definition"
-	OnDelete			"ON DELETE clause"
-	OnUpdate			"ON UPDATE clause"
-	OnDeleteUpdateOpt		"optional ON DELETE and UPDATE clause"
 	OptGConcatSeparator		"optional GROUP_CONCAT SEPARATOR"
-	ReferOpt			"reference option"
-	RowFormat			"Row format option"
 	RowValue			"Row value"
 	SelectLockOpt			"FOR UPDATE or LOCK IN SHARE MODE,"
 	SelectStmtCalcFoundRows		"SELECT statement optional SQL_CALC_FOUND_ROWS"
@@ -885,7 +868,6 @@ import (
 	ShowProfileType			"Show profile type"
 	ShowProfileTypes		"Show profile types"
 	StatementList			"statement list"
-	StatsPersistentVal		"stats_persistent value"
 	StringName			"string literal or identifier"
 	StringList 			"string list"
 	Symbol				"Constraint Symbol"
@@ -900,12 +882,8 @@ import (
 	TableNameOptWild		"Table name with optional wildcard"
 	TableNameList			"Table name list"
 	TableNameListOpt		"Table name list opt"
-	TableOption			"create table option"
-	TableOptionList			"create table option list"
 	TableRef 			"table reference"
 	TableRefs 			"table references"
-	TableToTable 			"rename table to table"
-	TableToTableList 		"rename table to table by list"
 	TimeUnit		"Time unit for 'DATE_ADD', 'DATE_SUB', 'ADDDATE', 'SUBDATE', 'EXTRACT'"
 	TimestampUnit		"Time unit for 'TIMESTAMPADD' and 'TIMESTAMPDIFF'"
 
@@ -975,8 +953,6 @@ import (
 	EnforcedOrNot		"{ENFORCED|NOT ENFORCED}"
 	EnforcedOrNotOpt	"Optional {ENFORCED|NOT ENFORCED}"
 	EnforcedOrNotOrNotNullOpt	"{[ENFORCED|NOT ENFORCED|NOT NULL]}"
-	Match			"[MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]"
-	MatchOpt		"optional MATCH clause"
 
 %type	<ident>
 	AsOpt			"AS or EmptyString"
@@ -1112,53 +1088,12 @@ LocationLabelList:
 
 
 AlterTableSpec:
-	TableOptionList %prec higherThanComma
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp:	ast.AlterTableOption,
-			Options:$1.([]*ast.TableOption),
-		}
-	}
-|	"SET" "TIFLASH" "REPLICA" LengthNum LocationLabelList
-	{
-		tiflashReplicaSpec := &ast.TiFlashReplicaSpec{
-			Count: $4.(uint64),
-			Labels: $5.([]string),
-		}
-		$$ = &ast.AlterTableSpec{
-			Tp:	ast.AlterTableSetTiFlashReplica,
-			TiFlashReplica: tiflashReplicaSpec,
-		}
-	}
-|	"CONVERT" "TO" CharsetKw CharsetName OptCollate
-	{
-		op := &ast.AlterTableSpec{
-			Tp: ast.AlterTableOption,
-			Options:[]*ast.TableOption{{Tp: ast.TableOptionCharset, StrValue: $4.(string)}},
-		}
-		if $5 != "" {
-			op.Options = append(op.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: $5.(string)})
-		}
-		$$ = op
-	}
-|	"CONVERT" "TO" CharsetKw "DEFAULT" OptCollate
-	{
-		op := &ast.AlterTableSpec{
-			Tp: ast.AlterTableOption,
-			Options:[]*ast.TableOption{{Tp: ast.TableOptionCharset, Default: true}},
-		}
-		if $5 != "" {
-			op.Options = append(op.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: $5.(string)})
-		}
-		$$ = op
-	}
-|	"ADD" ColumnKeywordOpt IfNotExists ColumnDef ColumnPosition
+	"ADD" ColumnKeywordOpt IfNotExists ColumnDef
 	{
 		$$ = &ast.AlterTableSpec{
 			IfNotExists: 	$3.(bool),
 			Tp: 		ast.AlterTableAddColumns,
 			NewColumns:	[]*ast.ColumnDef{$4.(*ast.ColumnDef)},
-			Position:	$5.(*ast.ColumnPosition),
 		}
 	}
 |	"ADD" ColumnKeywordOpt IfNotExists '(' TableElementList ')'
@@ -1235,13 +1170,6 @@ AlterTableSpec:
 			Name: $5.(string),
 		}
 	}
-|	"ORDER" "BY" AlterOrderList %prec lowerThenOrder
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp: ast.AlterTableOrderByColumns,
-			OrderByList: $3.([]*ast.AlterOrderItem),
-		}
-	}
 |	"DISABLE" "KEYS"
 	{
 		$$ = &ast.AlterTableSpec{
@@ -1254,23 +1182,21 @@ AlterTableSpec:
 			Tp: ast.AlterTableEnableKeys,
 		}
 	}
-|	"MODIFY" ColumnKeywordOpt IfExists ColumnDef ColumnPosition
+|	"MODIFY" ColumnKeywordOpt IfExists ColumnDef
 	{
 		$$ = &ast.AlterTableSpec{
 			IfExists:	$3.(bool),
 			Tp:		ast.AlterTableModifyColumn,
 			NewColumns:	[]*ast.ColumnDef{$4.(*ast.ColumnDef)},
-			Position:	$5.(*ast.ColumnPosition),
 		}
 	}
-|	"CHANGE" ColumnKeywordOpt IfExists ColumnName ColumnDef ColumnPosition
+|	"CHANGE" ColumnKeywordOpt IfExists ColumnName ColumnDef
 	{
 		$$ = &ast.AlterTableSpec{
 			IfExists:	$3.(bool),
 			Tp:    		ast.AlterTableChangeColumn,
 			OldColumnName:	$4.(*ast.ColumnName),
 			NewColumns:	[]*ast.ColumnDef{$5.(*ast.ColumnDef)},
-			Position:	$6.(*ast.ColumnPosition),
 		}
 	}
 |	"ALTER" ColumnKeywordOpt ColumnName "SET" "DEFAULT" SignedLiteral
@@ -1315,48 +1241,12 @@ AlterTableSpec:
 			NewColumnName:    $5.(*ast.ColumnName),
 		}
 	}
-|	"RENAME" "TO" TableName
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp:    		ast.AlterTableRenameTable,
-			NewTable:      $3.(*ast.TableName),
-		}
-	}
-|	"RENAME" EqOpt TableName
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp:    		ast.AlterTableRenameTable,
-			NewTable:      $3.(*ast.TableName),
-		}
-	}
-|	"RENAME" "AS" TableName
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp:    		ast.AlterTableRenameTable,
-			NewTable:      $3.(*ast.TableName),
-		}
-	}
 |	"RENAME" KeyOrIndex Identifier "TO" Identifier
 	{
 		$$ = &ast.AlterTableSpec{
 			Tp:    	    ast.AlterTableRenameIndex,
 			FromKey:    model.NewCIStr($3),
 			ToKey:      model.NewCIStr($5),
-		}
-	}
-|	LockClause
-	{
-		$$ = &ast.AlterTableSpec{
-			Tp:    		ast.AlterTableLock,
-			LockType:   $1.(ast.LockType),
-		}
-	}
-|	AlgorithmClause
-	{
-		// Parse it and ignore it. Just for compatibility.
-		$$ = &ast.AlterTableSpec{
-			Tp:    		ast.AlterTableAlgorithm,
-			Algorithm:	$1.(ast.AlgorithmType),
 		}
 	}
 |	"FORCE"
@@ -1459,50 +1349,6 @@ WithValidation:
 		$$ = false
 	}
 
-AlgorithmClause:
-	"ALGORITHM" EqOpt "DEFAULT"
-	{
-		$$ = ast.AlgorithmTypeDefault
-	}
-| 	"ALGORITHM" EqOpt "COPY"
-	{
-		$$ = ast.AlgorithmTypeCopy
-	}
-| 	"ALGORITHM" EqOpt "INPLACE"
-	{
-		$$ = ast.AlgorithmTypeInplace
-	}
-|	"ALGORITHM" EqOpt "INSTANT"
-	{
-		$$ = ast.AlgorithmTypeInstant
-	}
-|	"ALGORITHM" EqOpt identifier
-	{
-		yylex.AppendError(ErrUnknownAlterAlgorithm.GenWithStackByArgs($1))
-		return 1
-	}
-
-LockClause:
-	"LOCK" EqOpt "DEFAULT"
-	{
-		$$ = ast.LockTypeDefault
-	}
-|	"LOCK" EqOpt Identifier
-	{
-		id := strings.ToUpper($3)
-
-		if id == "NONE" {
-			$$ = ast.LockTypeNone
-		} else if id == "SHARED" {
-			$$ = ast.LockTypeShared
-		} else if id == "EXCLUSIVE" {
-			$$ = ast.LockTypeExclusive
-		} else {
-			yylex.AppendError(ErrUnknownAlterLock.GenWithStackByArgs($3))
-			return 1
-		}
-	}
-
 KeyOrIndex: "KEY" | "INDEX"
 
 
@@ -1513,22 +1359,6 @@ KeyOrIndexOpt:
 ColumnKeywordOpt:
 	{}
 |	"COLUMN"
-
-ColumnPosition:
-	{
-		$$ = &ast.ColumnPosition{Tp: ast.ColumnPositionNone}
-	}
-|	"FIRST"
-	{
-		$$ = &ast.ColumnPosition{Tp: ast.ColumnPositionFirst}
-	}
-|	"AFTER" ColumnName
-	{
-		$$ = &ast.ColumnPosition{
-			Tp: ast.ColumnPositionAfter,
-			RelativeColumn: $2.(*ast.ColumnName),
-		}
-	}
 
 AlterTableSpecListOpt:
 	/* empty */
@@ -1567,41 +1397,6 @@ Symbol:
 	Identifier
 	{
 		$$ = $1
-	}
-
-/**************************************RenameTableStmt***************************************
- * See http://dev.mysql.com/doc/refman/5.7/en/rename-table.html
- *
- * TODO: refactor this when you are going to add full support for multiple schema changes.
- * Currently it is only useful for syncer which depends heavily on tidb parser to do some dirty work.
- *******************************************************************************************/
-RenameTableStmt:
-	"RENAME" "TABLE" TableToTableList
-	{
-		$$ = &ast.RenameTableStmt{
-			OldTable: $3.([]*ast.TableToTable)[0].OldTable,
-			NewTable: $3.([]*ast.TableToTable)[0].NewTable,
-			TableToTables: $3.([]*ast.TableToTable),
-		}
-	}
-
-TableToTableList:
-	TableToTable
-	{
-		$$ = []*ast.TableToTable{$1.(*ast.TableToTable)}
-	}
-|	TableToTableList ',' TableToTable
-	{
-		$$ = append($1.([]*ast.TableToTable), $3.(*ast.TableToTable))
-	}
-
-TableToTable:
-	TableName "TO" TableName
-	{
-		$$ = &ast.TableToTable{
-			OldTable: $1.(*ast.TableName),
-			NewTable: $3.(*ast.TableName),
-		}
 	}
 
 /*******************************************************************************************/
@@ -1932,13 +1727,6 @@ ColumnOption:
 			Stored: $6.(bool),
 		}
 	}
-|	ReferDef
-	{
-		$$ = &ast.ColumnOption{
-			Tp: ast.ColumnOptionReference,
-			Refer: $1.(*ast.ReferenceDef),
-		}
-	}
 |	"COLLATE" CollationName
 	{
 		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: $2.(string)}
@@ -2085,16 +1873,6 @@ ConstraintElem:
 		}
 		$$ = c
 	}
-|	"FOREIGN" "KEY" IfNotExists IndexName '(' IndexPartSpecificationList ')' ReferDef
-	{
-		$$ = &ast.Constraint{
-			IfNotExists:	$3.(bool),
-			Tp:		ast.ConstraintForeignKey,
-			Keys:		$6.([]*ast.IndexPartSpecification),
-			Name:		$4.(string),
-			Refer:		$8.(*ast.ReferenceDef),
-		}
-	}
 |	"CHECK" '(' Expression ')' EnforcedOrNotOpt
 	{
 		$$ = &ast.Constraint{
@@ -2103,102 +1881,6 @@ ConstraintElem:
 			Enforced:	$5.(bool),
 		}
 		yylex.AppendError(yylex.Errorf("The CHECK clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-
-Match:
-	"MATCH" "FULL"
-	{
-		$$ = ast.MatchFull
-	}
-|	"MATCH" "PARTIAL"
-	{
-		$$ = ast.MatchPartial
-	}
-|	"MATCH" "SIMPLE"
-	{
-		$$ = ast.MatchSimple
-	}
-
-MatchOpt:
-	{
-		$$ = ast.MatchNone
-	}
-|	Match
-	{
-		$$ = $1
-		yylex.AppendError(yylex.Errorf("The MATCH clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-
-ReferDef:
-	"REFERENCES" TableName IndexPartSpecificationListOpt MatchOpt OnDeleteUpdateOpt
-	{
-		onDeleteUpdate := $5.([2]interface{})
-		$$ = &ast.ReferenceDef{
-			Table: $2.(*ast.TableName),
-			IndexPartSpecifications: $3.([]*ast.IndexPartSpecification),
-			OnDelete: onDeleteUpdate[0].(*ast.OnDeleteOpt),
-			OnUpdate: onDeleteUpdate[1].(*ast.OnUpdateOpt),
-			Match: $4.(ast.MatchType),
-		}
-	}
-
-
-OnDelete:
-	"ON" "DELETE" ReferOpt
-	{
-		$$ = &ast.OnDeleteOpt{ReferOpt: $3.(ast.ReferOptionType)}
-	}
-
-OnUpdate:
-	"ON" "UPDATE" ReferOpt
-	{
-		$$ = &ast.OnUpdateOpt{ReferOpt: $3.(ast.ReferOptionType)}
-	}
-
-OnDeleteUpdateOpt:
-	{
-		$$ = [2]interface{}{&ast.OnDeleteOpt{}, &ast.OnUpdateOpt{}}
-	} %prec lowerThanOn
-|	OnDelete  %prec lowerThanOn
-	{
-		$$ = [2]interface{}{$1, &ast.OnUpdateOpt{}}
-	}
-|	OnUpdate %prec lowerThanOn
-	{
-		$$ = [2]interface{}{&ast.OnDeleteOpt{}, $1}
-	}
-|	OnDelete OnUpdate
-	{
-		$$ = [2]interface{}{$1, $2}
-	}
-|	OnUpdate OnDelete
-	{
-		$$ = [2]interface{}{$2, $1}
-	}
-
-ReferOpt:
-	"RESTRICT"
-	{
-		$$ = ast.ReferOptionRestrict
-	}
-|	"CASCADE"
-	{
-		$$ = ast.ReferOptionCascade
-	}
-|	"SET" "NULL"
-	{
-		$$ = ast.ReferOptionSetNull
-	}
-|	"NO" "ACTION"
-	{
-		$$ = ast.ReferOptionNoAction
-	}
-|	"SET" "DEFAULT"
-	{
-		$$ = ast.ReferOptionSetDefault
-		yylex.AppendError(yylex.Errorf("The SET DEFAULT clause is parsed but ignored by all storage engines."))
 		parser.lastErrorAsWarn()
 	}
 
@@ -2289,7 +1971,7 @@ NumLiteral:
  *     LOCK [=] {DEFAULT | NONE | SHARED | EXCLUSIVE}
  *******************************************************************************************/
 CreateIndexStmt:
-	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' IndexOptionList IndexLockAndAlgorithmOpt
+	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' IndexOptionList
 	{
 		var indexOption *ast.IndexOption
 		if $12 != nil {
@@ -2305,13 +1987,6 @@ CreateIndexStmt:
 				indexOption.Tp = $6.(model.IndexType)
 			}
 		}
-		var indexLockAndAlgorithm *ast.IndexLockAndAlgorithm
-		if $13 != nil {
-			indexLockAndAlgorithm = $13.(*ast.IndexLockAndAlgorithm)
-			if indexLockAndAlgorithm.LockTp == ast.LockTypeDefault && indexLockAndAlgorithm.AlgorithmTp == ast.AlgorithmTypeDefault {
-				indexLockAndAlgorithm = nil
-			}
-		}
 		$$ = &ast.CreateIndexStmt{
 			IfNotExists:   $4.(bool),
 			IndexName:     $5,
@@ -2319,7 +1994,6 @@ CreateIndexStmt:
 			IndexPartSpecifications: $10.([]*ast.IndexPartSpecification),
 			IndexOption:   indexOption,
 			KeyType:       $2.(ast.IndexKeyType),
-			LockAlg:       indexLockAndAlgorithm,
 		}
 	}
 
@@ -2353,39 +2027,6 @@ IndexPartSpecification:
 		$$ = &ast.IndexPartSpecification{Expr: $2}
 	}
 
-IndexLockAndAlgorithmOpt:
-	{
-		$$ = nil
-	}
-|	LockClause
-	{
-		$$ = &ast.IndexLockAndAlgorithm{
-			LockTp:		$1.(ast.LockType),
-			AlgorithmTp:	ast.AlgorithmTypeDefault,
-		}
-	}
-|	AlgorithmClause
-	{
-		$$ = &ast.IndexLockAndAlgorithm{
-			LockTp:		ast.LockTypeDefault,
-			AlgorithmTp:	$1.(ast.AlgorithmType),
-		}
-	}
-|	LockClause AlgorithmClause
-	{
-		$$ = &ast.IndexLockAndAlgorithm{
-			LockTp:		$1.(ast.LockType),
-			AlgorithmTp:	$2.(ast.AlgorithmType),
-		}
-	}
-|	AlgorithmClause LockClause
-	{
-		$$ = &ast.IndexLockAndAlgorithm{
-			LockTp:		$2.(ast.LockType),
-			AlgorithmTp:	$1.(ast.AlgorithmType),
-		}
-	}
-
 IndexKeyTypeOpt:
 	{
 		$$ = ast.IndexKeyTypeNone
@@ -2401,36 +2042,6 @@ IndexKeyTypeOpt:
 |	"FULLTEXT"
 	{
 		$$ = ast.IndexKeyTypeFullText
-	}
-
-/**************************************AlterDatabaseStmt***************************************
- * See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
- * 'ALTER DATABASE ... UPGRADE DATA DIRECTORY NAME' is not supported yet.
- *
- *  ALTER {DATABASE | SCHEMA} [db_name]
- *   alter_specification ...
- *
- *  alter_specification:
- *   [DEFAULT] CHARACTER SET [=] charset_name
- * | [DEFAULT] COLLATE [=] collation_name
- * | [DEFAULT] ENCRYPTION [=] {'Y' | 'N'}
- *******************************************************************************************/
- AlterDatabaseStmt:
-	"ALTER" DatabaseSym DBName DatabaseOptionList
-	{
-		$$ = &ast.AlterDatabaseStmt{
-			Name:			$3.(string),
-			AlterDefaultDatabase:	false,
-			Options:		$4.([]*ast.DatabaseOption),
-		}
-	}
-|	"ALTER" DatabaseSym DatabaseOptionList
-	{
-		$$ = &ast.AlterDatabaseStmt{
-			Name:			"",
-			AlterDefaultDatabase:	true,
-			Options:		$3.([]*ast.DatabaseOption),
-		}
 	}
 
 /*******************************************************************
@@ -2507,14 +2118,12 @@ DatabaseOptionList:
  *******************************************************************/
 
 CreateTableStmt:
-	"CREATE" OptTemporary "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt DuplicateOpt AsOpt
+	"CREATE" OptTemporary "TABLE" IfNotExists TableName TableElementListOpt AsOpt
 	{
 		stmt := $6.(*ast.CreateTableStmt)
 		stmt.Table = $5.(*ast.TableName)
 		stmt.IfNotExists = $4.(bool)
 		stmt.IsTemporary = $2.(bool)
-		stmt.Options = $7.([]*ast.TableOption)
-		stmt.OnDuplicate = $8.(ast.OnDuplicateKeyHandlingType)
 		$$ = stmt
 	}
 |	"CREATE" OptTemporary "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen
@@ -2531,61 +2140,6 @@ DefaultKwdOpt:
 	%prec lowerThanCharsetKwd
 	{}
 |	"DEFAULT"
-
-PartDefOption:
-	"COMMENT" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionComment, StrValue: $3}
-	}
-|	"ENGINE" EqOpt StringName
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionEngine, StrValue: $3.(string)}
-	}
-|	"STORAGE" "ENGINE" EqOpt StringName
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionEngine, StrValue: $4.(string)}
-	}
-|	"INSERT_METHOD" EqOpt StringName
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionInsertMethod, StrValue: $3.(string)}
-	}
-|	"DATA" "DIRECTORY" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionDataDirectory, StrValue: $4}
-	}
-|	"INDEX" "DIRECTORY" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionIndexDirectory, StrValue: $4}
-	}
-|	"MAX_ROWS" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionMaxRows, UintValue: $3.(uint64)}
-	}
-|	"MIN_ROWS" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionMinRows, UintValue: $3.(uint64)}
-	}
-|	"TABLESPACE" EqOpt Identifier
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionTablespace, StrValue: $3}
-	}
-|	"NODEGROUP" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionNodegroup, UintValue: $3.(uint64)}
-	}
-
-DuplicateOpt:
-	{
-		$$ = ast.OnDuplicateKeyHandlingError
-	}
-|   "IGNORE"
-	{
-		$$ = ast.OnDuplicateKeyHandlingIgnore
-	}
-|   "REPLACE"
-	{
-		$$ = ast.OnDuplicateKeyHandlingReplace
-	}
 
 AsOpt:
 	{}
@@ -2656,16 +2210,9 @@ DropDatabaseStmt:
  *      LOCK [=] {DEFAULT|NONE|SHARED|EXCLUSIVE}
  ******************************************************************/
 DropIndexStmt:
-	"DROP" "INDEX" IfExists Identifier "ON" TableName IndexLockAndAlgorithmOpt
+	"DROP" "INDEX" IfExists Identifier "ON" TableName
 	{
-		var indexLockAndAlgorithm *ast.IndexLockAndAlgorithm
-		if $7 != nil {
-			indexLockAndAlgorithm = $7.(*ast.IndexLockAndAlgorithm)
-			if indexLockAndAlgorithm.LockTp == ast.LockTypeDefault && indexLockAndAlgorithm.AlgorithmTp == ast.AlgorithmTypeDefault {
-				indexLockAndAlgorithm = nil
-			}
-		}
-		$$ = &ast.DropIndexStmt{IfExists: $3.(bool), IndexName: $4, Table: $6.(*ast.TableName), LockAlg: indexLockAndAlgorithm}
+		$$ = &ast.DropIndexStmt{IfExists: $3.(bool), IndexName: $4, Table: $6.(*ast.TableName)}
 	}
 
 DropTableStmt:
@@ -3607,22 +3154,6 @@ StringLiteral:
 			expr.SetProjectionOffset(len(strLit))
 		}
 		$$ = expr
-	}
-
-AlterOrderList:
-	AlterOrderItem
-	{
-		$$ = []*ast.AlterOrderItem{$1.(*ast.AlterOrderItem)}
-	}
-|	AlterOrderList ',' AlterOrderItem
-	{
-		$$ = append($1.([]*ast.AlterOrderItem), $3.(*ast.AlterOrderItem))
-	}
-
-AlterOrderItem:
-	ColumnName Order
-	{
-		$$ = &ast.AlterOrderItem{Column: $1.(*ast.ColumnName), Desc: $2.(bool)}
 	}
 
 OrderBy:
@@ -6251,7 +5782,6 @@ WithReadLockOpt:
 Statement:
 	EmptyStmt
 |	AdminStmt
-|	AlterDatabaseStmt
 |	AlterTableStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
@@ -6266,7 +5796,6 @@ Statement:
 |	DropTableStmt
 |	InsertIntoStmt
 |	RollbackStmt
-|	RenameTableStmt
 |	ReplaceIntoStmt
 |	SelectStmt
 |	SetStmt
@@ -6369,185 +5898,6 @@ TableElementListOpt:
 		}
 	}
 
-TableOption:
-	PartDefOption
-	{
-		$$ = $1
-	}
-|	DefaultKwdOpt CharsetKw EqOpt CharsetName
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionCharset, StrValue: $4.(string)}
-	}
-|	DefaultKwdOpt "COLLATE" EqOpt CollationName
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: $4.(string)}
-	}
-|	"AUTO_INCREMENT" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionAutoIncrement, UintValue: $3.(uint64)}
-	}
-|	"AVG_ROW_LENGTH" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionAvgRowLength, UintValue: $3.(uint64)}
-	}
-|	"CONNECTION" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionConnection, StrValue: $3}
-	}
-|	"CHECKSUM" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionCheckSum, UintValue: $3.(uint64)}
-	}
-|	"TABLE_CHECKSUM" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionTableCheckSum, UintValue: $3.(uint64)}
-	}
-|	"PASSWORD" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionPassword, StrValue: $3}
-	}
-|	"COMPRESSION" EqOpt stringLit
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionCompression, StrValue: $3}
-	}
-|	"KEY_BLOCK_SIZE" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionKeyBlockSize, UintValue: $3.(uint64)}
-	}
-|	"DELAY_KEY_WRITE" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionDelayKeyWrite, UintValue: $3.(uint64)}
-	}
-|	RowFormat
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionRowFormat, UintValue: $1.(uint64)}
-	}
-|	"STATS_PERSISTENT" EqOpt StatsPersistentVal
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionStatsPersistent}
-	}
-|	"STATS_AUTO_RECALC" EqOpt LengthNum
-	{
-		n := $3.(uint64)
-		if n != 0 && n != 1 {
-			yylex.AppendError(yylex.Errorf("The value of STATS_AUTO_RECALC must be one of [0|1|DEFAULT]."))
-			return 1
-		}
-		$$ = &ast.TableOption{Tp: ast.TableOptionStatsAutoRecalc, UintValue: n}
-		yylex.AppendError(yylex.Errorf("The STATS_AUTO_RECALC is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"STATS_AUTO_RECALC" EqOpt "DEFAULT"
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionStatsAutoRecalc, Default: true}
-		yylex.AppendError(yylex.Errorf("The STATS_AUTO_RECALC is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"STATS_SAMPLE_PAGES" EqOpt LengthNum
-	{
-		// Parse it but will ignore it.
-		// In MySQL, STATS_SAMPLE_PAGES=N(Where 0<N<=65535) or STAS_SAMPLE_PAGES=DEFAULT.
-		// Cause we don't support it, so we don't check range of the value.
-		$$ = &ast.TableOption{Tp: ast.TableOptionStatsSamplePages, UintValue: $3.(uint64)}
-		yylex.AppendError(yylex.Errorf("The STATS_SAMPLE_PAGES is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"STATS_SAMPLE_PAGES" EqOpt "DEFAULT"
-	{
-		// Parse it but will ignore it.
-		// In MySQL, default value of STATS_SAMPLE_PAGES is 0.
-		$$ = &ast.TableOption{Tp: ast.TableOptionStatsSamplePages, Default: true}
-		yylex.AppendError(yylex.Errorf("The STATS_SAMPLE_PAGES is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"SHARD_ROW_ID_BITS" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionShardRowID, UintValue: $3.(uint64)}
-	}
-|	"PRE_SPLIT_REGIONS" EqOpt LengthNum
-	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionPreSplitRegion, UintValue: $3.(uint64)}
-	}
-|	"PACK_KEYS" EqOpt StatsPersistentVal
-	{
-		// Parse it but will ignore it.
-		$$ = &ast.TableOption{Tp: ast.TableOptionPackKeys}
-	}
-|	"STORAGE" "MEMORY"
-	{
-		// Parse it but will ignore it.
-		$$ = &ast.TableOption{Tp: ast.TableOptionStorageMedia, StrValue: "MEMORY"}
-		yylex.AppendError(yylex.Errorf("The STORAGE clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"STORAGE" "DISK"
-	{
-		// Parse it but will ignore it.
-		$$ = &ast.TableOption{Tp: ast.TableOptionStorageMedia, StrValue: "DISK"}
-		yylex.AppendError(yylex.Errorf("The STORAGE clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"SECONDARY_ENGINE" EqOpt "NULL"
-	{
-		// Parse it but will ignore it
-		// See https://github.com/mysql/mysql-server/blob/8.0/sql/sql_yacc.yy#L5977-L5984
-		$$ = &ast.TableOption{Tp: ast.TableOptionSecondaryEngineNull}
-		yylex.AppendError(yylex.Errorf("The SECONDARY_ENGINE clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"SECONDARY_ENGINE" EqOpt StringName
-	{
-		// Parse it but will ignore it
-		// See https://github.com/mysql/mysql-server/blob/8.0/sql/sql_yacc.yy#L5977-L5984
-		$$ = &ast.TableOption{Tp: ast.TableOptionSecondaryEngine, StrValue: $3.(string)}
-		yylex.AppendError(yylex.Errorf("The SECONDARY_ENGINE clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"UNION" EqOpt '(' TableNameListOpt ')'
-	{
-		// Parse it but will ignore it
-		$$ = &ast.TableOption{
-			Tp: ast.TableOptionUnion,
-			TableNames: $4.([]*ast.TableName),
-		}
-		yylex.AppendError(yylex.Errorf("The UNION option is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-|	"ENCRYPTION" EqOpt stringLit
-	{
-		// Parse it but will ignore it
-		$$ = &ast.TableOption{Tp: ast.TableOptionEncryption, StrValue: $3}
-		yylex.AppendError(yylex.Errorf("The ENCRYPTION clause is parsed but ignored by all storage engines."))
-		parser.lastErrorAsWarn()
-	}
-
-StatsPersistentVal:
-	"DEFAULT"
-	{}
-|	LengthNum
-	{}
-
-CreateTableOptionListOpt:
-	/* empty */ %prec lowerThanCreateTableSelect
-	{
-		$$ = []*ast.TableOption{}
-	}
-|	TableOptionList %prec lowerThanComma
-
-TableOptionList:
-	TableOption
-	{
-		$$ = []*ast.TableOption{$1.(*ast.TableOption)}
-	}
-|	TableOptionList TableOption
-	{
-		$$ = append($1.([]*ast.TableOption), $2.(*ast.TableOption))
-	}
-|	TableOptionList ','  TableOption
-	{
-		$$ = append($1.([]*ast.TableOption), $3.(*ast.TableOption))
-	}
-
 OptTable:
 	{}
 |	"TABLE"
@@ -6556,64 +5906,6 @@ TruncateTableStmt:
 	"TRUNCATE" OptTable TableName
 	{
 		$$ = &ast.TruncateTableStmt{Table: $3.(*ast.TableName)}
-	}
-
-RowFormat:
-	 "ROW_FORMAT" EqOpt "DEFAULT"
-	{
-		$$ = ast.RowFormatDefault
-	}
-|	"ROW_FORMAT" EqOpt "DYNAMIC"
-	{
-		$$ = ast.RowFormatDynamic
-	}
-|	"ROW_FORMAT" EqOpt "FIXED"
-	{
-		$$ = ast.RowFormatFixed
-	}
-|	"ROW_FORMAT" EqOpt "COMPRESSED"
-	{
-		$$ = ast.RowFormatCompressed
-	}
-|	"ROW_FORMAT" EqOpt "REDUNDANT"
-	{
-		$$ = ast.RowFormatRedundant
-	}
-|	"ROW_FORMAT" EqOpt "COMPACT"
-	{
-		$$ = ast.RowFormatCompact
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_DEFAULT"
-	{
-		$$ = ast.TokuDBRowFormatDefault
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_FAST"
-	{
-		$$ = ast.TokuDBRowFormatFast
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_SMALL"
-	{
-		$$ = ast.TokuDBRowFormatSmall
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_ZLIB"
-	{
-		$$ = ast.TokuDBRowFormatZlib
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_QUICKLZ"
-	{
-		$$ = ast.TokuDBRowFormatQuickLZ
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_LZMA"
-	{
-		$$ = ast.TokuDBRowFormatLzma
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_SNAPPY"
-	{
-		$$ = ast.TokuDBRowFormatSnappy
-	}
-|	"ROW_FORMAT" EqOpt "TOKUDB_UNCOMPRESSED"
-	{
-		$$ = ast.TokuDBRowFormatUncompressed
 	}
 
 /*************************************Type Begin***************************************/

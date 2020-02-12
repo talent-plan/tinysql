@@ -82,64 +82,6 @@ func (d *ddl) CreateSchema(ctx sessionctx.Context, schema model.CIStr, charsetIn
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
 }
-func (d *ddl) AlterSchema(ctx sessionctx.Context, stmt *ast.AlterDatabaseStmt) (err error) {
-	// Resolve target charset and collation from options.
-	var toCharset, toCollate string
-	for _, val := range stmt.Options {
-		switch val.Tp {
-		case ast.DatabaseOptionCharset:
-			if toCharset == "" {
-				toCharset = val.Value
-			} else if toCharset != val.Value {
-				return ErrConflictingDeclarations.GenWithStackByArgs(toCharset, val.Value)
-			}
-		case ast.DatabaseOptionCollate:
-			info, err := charset.GetCollationByName(val.Value)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if toCharset == "" {
-				toCharset = info.CharsetName
-			} else if toCharset != info.CharsetName {
-				return ErrConflictingDeclarations.GenWithStackByArgs(toCharset, info.CharsetName)
-			}
-			toCollate = info.Name
-		}
-	}
-	if toCollate == "" {
-		if toCollate, err = charset.GetDefaultCollation(toCharset); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	// Check if need to change charset/collation.
-	dbName := model.NewCIStr(stmt.Name)
-	is := d.GetInfoSchemaWithInterceptor(ctx)
-	dbInfo, ok := is.SchemaByName(dbName)
-	if !ok {
-		return infoschema.ErrDatabaseNotExists.GenWithStackByArgs(dbName.O)
-	}
-	if dbInfo.Charset == toCharset && dbInfo.Collate == toCollate {
-		return nil
-	}
-
-	// Check the current TiDB limitations.
-	if err = modifiableCharsetAndCollation(toCharset, toCollate, dbInfo.Charset, dbInfo.Collate); err != nil {
-		return errors.Trace(err)
-	}
-
-	// Do the DDL job.
-	job := &model.Job{
-		SchemaID:   dbInfo.ID,
-		SchemaName: dbInfo.Name.L,
-		Type:       model.ActionModifySchemaCharsetAndCollate,
-		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{toCharset, toCollate},
-	}
-	err = d.doDDLJob(ctx, job)
-	err = d.callHookOnChanged(err)
-	return errors.Trace(err)
-}
 
 func (d *ddl) DropSchema(ctx sessionctx.Context, schema model.CIStr) (err error) {
 	is := d.GetInfoSchemaWithInterceptor(ctx)
@@ -962,44 +904,6 @@ func isIgnorableSpec(tp ast.AlterTableType) bool {
 	return tp == ast.AlterTableLock || tp == ast.AlterTableAlgorithm
 }
 
-// getCharsetAndCollateInTableOption will iterate the charset and collate in the options,
-// and returns the last charset and collate in options. If there is no charset in the options,
-// the returns charset will be "", the same as collate.
-func getCharsetAndCollateInTableOption(startIdx int, options []*ast.TableOption) (chs, coll string, err error) {
-	for i := startIdx; i < len(options); i++ {
-		opt := options[i]
-		// we set the charset to the last option. example: alter table t charset latin1 charset utf8 collate utf8_bin;
-		// the charset will be utf8, collate will be utf8_bin
-		switch opt.Tp {
-		case ast.TableOptionCharset:
-			info, err := charset.GetCharsetDesc(opt.StrValue)
-			if err != nil {
-				return "", "", err
-			}
-			if len(chs) == 0 {
-				chs = info.Name
-			} else if chs != info.Name {
-				return "", "", ErrConflictingDeclarations.GenWithStackByArgs(chs, info.Name)
-			}
-			if len(coll) == 0 {
-				coll = info.DefaultCollation
-			}
-		case ast.TableOptionCollate:
-			info, err := charset.GetCollationByName(opt.StrValue)
-			if err != nil {
-				return "", "", err
-			}
-			if len(chs) == 0 {
-				chs = info.CharsetName
-			} else if chs != info.CharsetName {
-				return "", "", ErrCollationCharsetMismatch.GenWithStackByArgs(info.Name, chs)
-			}
-			coll = info.Name
-		}
-	}
-	return
-}
-
 // resolveAlterTableSpec resolves alter table algorithm and removes ignore table spec in specs.
 // returns valied specs, and the occurred error.
 func resolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) ([]*ast.AlterTableSpec, error) {
@@ -1027,7 +931,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 	}
 
 	for _, spec := range validSpecs {
-		var handledCharsetOrCollate bool
 		switch spec.Tp {
 		case ast.AlterTableAddColumns:
 			if len(spec.NewColumns) != 1 {
@@ -1065,36 +968,6 @@ func (d *ddl) AlterTable(ctx sessionctx.Context, ident ast.Ident, specs []*ast.A
 		case ast.AlterTablePartition:
 			// Prevent silent succeed if user executes ALTER TABLE x PARTITION BY ...
 			err = errors.New("alter table partition is unsupported")
-		case ast.AlterTableOption:
-			for i, opt := range spec.Options {
-				switch opt.Tp {
-				case ast.TableOptionShardRowID:
-					if opt.UintValue > shardRowIDBitsMax {
-						opt.UintValue = shardRowIDBitsMax
-					}
-					err = d.ShardRowID(ctx, ident, opt.UintValue)
-				case ast.TableOptionComment:
-					spec.Comment = opt.StrValue
-					err = d.AlterTableComment(ctx, ident, spec)
-				case ast.TableOptionCharset, ast.TableOptionCollate:
-					// getCharsetAndCollateInTableOption will get the last charset and collate in the options,
-					// so it should be handled only once.
-					if handledCharsetOrCollate {
-						continue
-					}
-					var toCharset, toCollate string
-					toCharset, toCollate, err = getCharsetAndCollateInTableOption(i, spec.Options)
-					if err != nil {
-						return err
-					}
-					err = d.AlterTableCharsetAndCollate(ctx, ident, toCharset, toCollate)
-					handledCharsetOrCollate = true
-				}
-
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
 		default:
 			// Nothing to do now.
 		}
@@ -1220,7 +1093,7 @@ func (d *ddl) AddColumn(ctx sessionctx.Context, ti ast.Ident, spec *ast.AlterTab
 		SchemaName: schema.Name.L,
 		Type:       model.ActionAddColumn,
 		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{col, spec.Position, 0},
+		Args:       []interface{}{col, 0},
 	}
 
 	err = d.doDDLJob(ctx, job)
@@ -1569,7 +1442,7 @@ func (d *ddl) getModifiableColumnJob(ctx sessionctx.Context, ident ast.Ident, or
 		SchemaName: schema.Name.L,
 		Type:       model.ActionModifyColumn,
 		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{&newCol, originalColName, spec.Position, modifyColumnTp},
+		Args:       []interface{}{&newCol, originalColName, modifyColumnTp},
 	}
 	return job, nil
 }

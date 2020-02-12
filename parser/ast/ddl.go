@@ -14,8 +14,6 @@
 package ast
 
 import (
-	"github.com/pingcap/errors"
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 )
@@ -28,16 +26,13 @@ var (
 	_ DDLNode = &DropDatabaseStmt{}
 	_ DDLNode = &DropIndexStmt{}
 	_ DDLNode = &DropTableStmt{}
-	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
 
 	_ Node = &AlterTableSpec{}
 	_ Node = &ColumnDef{}
 	_ Node = &ColumnOption{}
-	_ Node = &ColumnPosition{}
 	_ Node = &Constraint{}
 	_ Node = &IndexPartSpecification{}
-	_ Node = &ReferenceDef{}
 )
 
 // CharsetOpt is used for parsing charset option from SQL.
@@ -63,27 +58,6 @@ type DatabaseOption struct {
 	Value string
 }
 
-// Restore implements Node interface.
-func (n *DatabaseOption) Restore(ctx *RestoreCtx) error {
-	switch n.Tp {
-	case DatabaseOptionCharset:
-		ctx.WriteKeyWord("CHARACTER SET")
-		ctx.WritePlain(" = ")
-		ctx.WritePlain(n.Value)
-	case DatabaseOptionCollate:
-		ctx.WriteKeyWord("COLLATE")
-		ctx.WritePlain(" = ")
-		ctx.WritePlain(n.Value)
-	case DatabaseOptionEncryption:
-		ctx.WriteKeyWord("ENCRYPTION")
-		ctx.WritePlain(" = ")
-		ctx.WriteString(n.Value)
-	default:
-		return errors.Errorf("invalid DatabaseOptionType: %d", n.Tp)
-	}
-	return nil
-}
-
 // CreateDatabaseStmt is a statement to create a database.
 // See https://dev.mysql.com/doc/refman/5.7/en/create-database.html
 type CreateDatabaseStmt struct {
@@ -92,23 +66,6 @@ type CreateDatabaseStmt struct {
 	IfNotExists bool
 	Name        string
 	Options     []*DatabaseOption
-}
-
-// Restore implements Node interface.
-func (n *CreateDatabaseStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE DATABASE ")
-	if n.IfNotExists {
-		ctx.WriteKeyWord("IF NOT EXISTS ")
-	}
-	ctx.WriteName(n.Name)
-	for i, option := range n.Options {
-		ctx.WritePlain(" ")
-		err := option.Restore(ctx)
-		if err != nil {
-			return errors.Annotatef(err, "An error occurred while splicing CreateDatabaseStmt DatabaseOption: [%v]", i)
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -121,43 +78,6 @@ func (n *CreateDatabaseStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// AlterDatabaseStmt is a statement to change the structure of a database.
-// See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
-type AlterDatabaseStmt struct {
-	ddlNode
-
-	Name                 string
-	AlterDefaultDatabase bool
-	Options              []*DatabaseOption
-}
-
-// Restore implements Node interface.
-func (n *AlterDatabaseStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ALTER DATABASE")
-	if !n.AlterDefaultDatabase {
-		ctx.WritePlain(" ")
-		ctx.WriteName(n.Name)
-	}
-	for i, option := range n.Options {
-		ctx.WritePlain(" ")
-		err := option.Restore(ctx)
-		if err != nil {
-			return errors.Annotatef(err, "An error occurred while splicing AlterDatabaseStmt DatabaseOption: [%v]", i)
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *AlterDatabaseStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*AlterDatabaseStmt)
-	return v.Leave(n)
-}
-
 // DropDatabaseStmt is a statement to drop a database and all tables in the database.
 // See https://dev.mysql.com/doc/refman/5.7/en/drop-database.html
 type DropDatabaseStmt struct {
@@ -165,16 +85,6 @@ type DropDatabaseStmt struct {
 
 	IfExists bool
 	Name     string
-}
-
-// Restore implements Node interface.
-func (n *DropDatabaseStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("DROP DATABASE ")
-	if n.IfExists {
-		ctx.WriteKeyWord("IF EXISTS ")
-	}
-	ctx.WriteName(n.Name)
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -216,141 +126,6 @@ func (n *IndexPartSpecification) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Column = node.(*ColumnName)
-	return v.Leave(n)
-}
-
-// MatchType is the type for reference match type.
-type MatchType int
-
-// match type
-const (
-	MatchNone MatchType = iota
-	MatchFull
-	MatchPartial
-	MatchSimple
-)
-
-// ReferenceDef is used for parsing foreign key reference option from SQL.
-// See http://dev.mysql.com/doc/refman/5.7/en/create-table-foreign-keys.html
-type ReferenceDef struct {
-	node
-
-	Table                   *TableName
-	IndexPartSpecifications []*IndexPartSpecification
-	OnDelete                *OnDeleteOpt
-	OnUpdate                *OnUpdateOpt
-	Match                   MatchType
-}
-
-// Accept implements Node Accept interface.
-func (n *ReferenceDef) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ReferenceDef)
-	node, ok := n.Table.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.Table = node.(*TableName)
-	for i, val := range n.IndexPartSpecifications {
-		node, ok = val.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.IndexPartSpecifications[i] = node.(*IndexPartSpecification)
-	}
-	onDelete, ok := n.OnDelete.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.OnDelete = onDelete.(*OnDeleteOpt)
-	onUpdate, ok := n.OnUpdate.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.OnUpdate = onUpdate.(*OnUpdateOpt)
-	return v.Leave(n)
-}
-
-// ReferOptionType is the type for refer options.
-type ReferOptionType int
-
-// Refer option types.
-const (
-	ReferOptionNoOption ReferOptionType = iota
-	ReferOptionRestrict
-	ReferOptionCascade
-	ReferOptionSetNull
-	ReferOptionNoAction
-	ReferOptionSetDefault
-)
-
-// String implements fmt.Stringer interface.
-func (r ReferOptionType) String() string {
-	switch r {
-	case ReferOptionRestrict:
-		return "RESTRICT"
-	case ReferOptionCascade:
-		return "CASCADE"
-	case ReferOptionSetNull:
-		return "SET NULL"
-	case ReferOptionNoAction:
-		return "NO ACTION"
-	case ReferOptionSetDefault:
-		return "SET DEFAULT"
-	}
-	return ""
-}
-
-// OnDeleteOpt is used for optional on delete clause.
-type OnDeleteOpt struct {
-	node
-	ReferOpt ReferOptionType
-}
-
-// Restore implements Node interface.
-func (n *OnDeleteOpt) Restore(ctx *RestoreCtx) error {
-	if n.ReferOpt != ReferOptionNoOption {
-		ctx.WriteKeyWord("ON DELETE ")
-		ctx.WriteKeyWord(n.ReferOpt.String())
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *OnDeleteOpt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*OnDeleteOpt)
-	return v.Leave(n)
-}
-
-// OnUpdateOpt is used for optional on update clause.
-type OnUpdateOpt struct {
-	node
-	ReferOpt ReferOptionType
-}
-
-// Restore implements Node interface.
-func (n *OnUpdateOpt) Restore(ctx *RestoreCtx) error {
-	if n.ReferOpt != ReferOptionNoOption {
-		ctx.WriteKeyWord("ON UPDATE ")
-		ctx.WriteKeyWord(n.ReferOpt.String())
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *OnUpdateOpt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*OnUpdateOpt)
 	return v.Leave(n)
 }
 
@@ -396,9 +171,7 @@ type ColumnOption struct {
 	// For ColumnOptionGenerated, it's the target expression.
 	Expr ExprNode
 	// Stored is only for ColumnOptionGenerated, default is false.
-	Stored bool
-	// Refer is used for foreign key.
-	Refer               *ReferenceDef
+	Stored              bool
 	StrValue            string
 	AutoRandomBitLength int
 	// Enforced is only for Check, default is true.
@@ -448,56 +221,6 @@ type IndexOption struct {
 	Visibility   IndexVisibility
 }
 
-// Restore implements Node interface.
-func (n *IndexOption) Restore(ctx *RestoreCtx) error {
-	hasPrevOption := false
-	if n.KeyBlockSize > 0 {
-		ctx.WriteKeyWord("KEY_BLOCK_SIZE")
-		ctx.WritePlainf("=%d", n.KeyBlockSize)
-		hasPrevOption = true
-	}
-
-	if n.Tp != model.IndexTypeInvalid {
-		if hasPrevOption {
-			ctx.WritePlain(" ")
-		}
-		ctx.WriteKeyWord("USING ")
-		ctx.WritePlain(n.Tp.String())
-		hasPrevOption = true
-	}
-
-	if len(n.ParserName.O) > 0 {
-		if hasPrevOption {
-			ctx.WritePlain(" ")
-		}
-		ctx.WriteKeyWord("WITH PARSER ")
-		ctx.WriteName(n.ParserName.O)
-		hasPrevOption = true
-	}
-
-	if n.Comment != "" {
-		if hasPrevOption {
-			ctx.WritePlain(" ")
-		}
-		ctx.WriteKeyWord("COMMENT ")
-		ctx.WriteString(n.Comment)
-		hasPrevOption = true
-	}
-
-	if n.Visibility != IndexVisibilityDefault {
-		if hasPrevOption {
-			ctx.WritePlain(" ")
-		}
-		switch n.Visibility {
-		case IndexVisibilityVisible:
-			ctx.WriteKeyWord("VISIBLE")
-		case IndexVisibilityInvisible:
-			ctx.WriteKeyWord("INVISIBLE")
-		}
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *IndexOption) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -538,8 +261,6 @@ type Constraint struct {
 
 	Keys []*IndexPartSpecification // Used for PRIMARY KEY, UNIQUE, ......
 
-	Refer *ReferenceDef // Used for foreign key.
-
 	Option *IndexOption // Index Options
 
 	Expr ExprNode // Used for Check
@@ -560,13 +281,6 @@ func (n *Constraint) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Keys[i] = node.(*IndexPartSpecification)
-	}
-	if n.Refer != nil {
-		node, ok := n.Refer.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Refer = node.(*ReferenceDef)
 	}
 	if n.Option != nil {
 		node, ok := n.Option.Accept(v)
@@ -637,8 +351,6 @@ type CreateTableStmt struct {
 	ReferTable  *TableName
 	Cols        []*ColumnDef
 	Constraints []*Constraint
-	Options     []*TableOption
-	OnDuplicate OnDuplicateKeyHandlingType
 }
 
 // Accept implements Node Accept interface.
@@ -689,33 +401,6 @@ type DropTableStmt struct {
 	IsTemporary bool // make sense ONLY if/when IsView == false
 }
 
-// Restore implements Node interface.
-func (n *DropTableStmt) Restore(ctx *RestoreCtx) error {
-	if n.IsView {
-		ctx.WriteKeyWord("DROP VIEW ")
-	} else {
-		if n.IsTemporary {
-			ctx.WriteKeyWord("DROP TEMPORARY TABLE ")
-		} else {
-			ctx.WriteKeyWord("DROP TABLE ")
-		}
-	}
-	if n.IfExists {
-		ctx.WriteKeyWord("IF EXISTS ")
-	}
-
-	for index, table := range n.Tables {
-		if index != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore DropTableStmt.Tables "+string(index))
-		}
-	}
-
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *DropTableStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -730,140 +415,6 @@ func (n *DropTableStmt) Accept(v Visitor) (Node, bool) {
 		}
 		n.Tables[i] = node.(*TableName)
 	}
-	return v.Leave(n)
-}
-
-// RenameTableStmt is a statement to rename a table.
-// See http://dev.mysql.com/doc/refman/5.7/en/rename-table.html
-type RenameTableStmt struct {
-	ddlNode
-
-	OldTable *TableName
-	NewTable *TableName
-
-	// TableToTables is only useful for syncer which depends heavily on tidb parser to do some dirty work for now.
-	// TODO: Refactor this when you are going to add full support for multiple schema changes.
-	TableToTables []*TableToTable
-}
-
-// Restore implements Node interface.
-func (n *RenameTableStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("RENAME TABLE ")
-	for index, table2table := range n.TableToTables {
-		if index != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := table2table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore RenameTableStmt.TableToTables")
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *RenameTableStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*RenameTableStmt)
-	node, ok := n.OldTable.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.OldTable = node.(*TableName)
-	node, ok = n.NewTable.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.NewTable = node.(*TableName)
-
-	for i, t := range n.TableToTables {
-		node, ok := t.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.TableToTables[i] = node.(*TableToTable)
-	}
-
-	return v.Leave(n)
-}
-
-// TableToTable represents renaming old table to new table used in RenameTableStmt.
-type TableToTable struct {
-	node
-	OldTable *TableName
-	NewTable *TableName
-}
-
-// Restore implements Node interface.
-func (n *TableToTable) Restore(ctx *RestoreCtx) error {
-	if err := n.OldTable.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore TableToTable.OldTable")
-	}
-	ctx.WriteKeyWord(" TO ")
-	if err := n.NewTable.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore TableToTable.NewTable")
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *TableToTable) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*TableToTable)
-	node, ok := n.OldTable.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.OldTable = node.(*TableName)
-	node, ok = n.NewTable.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.NewTable = node.(*TableName)
-	return v.Leave(n)
-}
-
-// IndexLockAndAlgorithm stores the algorithm option and the lock option.
-type IndexLockAndAlgorithm struct {
-	node
-
-	LockTp      LockType
-	AlgorithmTp AlgorithmType
-}
-
-// Restore implements Node interface.
-func (n *IndexLockAndAlgorithm) Restore(ctx *RestoreCtx) error {
-	hasPrevOption := false
-	if n.AlgorithmTp != AlgorithmTypeDefault {
-		ctx.WriteKeyWord("ALGORITHM")
-		ctx.WritePlain(" = ")
-		ctx.WriteKeyWord(n.AlgorithmTp.String())
-		hasPrevOption = true
-	}
-
-	if n.LockTp != LockTypeDefault {
-		if hasPrevOption {
-			ctx.WritePlain(" ")
-		}
-		ctx.WriteKeyWord("LOCK")
-		ctx.WritePlain(" = ")
-		ctx.WriteKeyWord(n.LockTp.String())
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *IndexLockAndAlgorithm) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*IndexLockAndAlgorithm)
 	return v.Leave(n)
 }
 
@@ -892,56 +443,6 @@ type CreateIndexStmt struct {
 	IndexPartSpecifications []*IndexPartSpecification
 	IndexOption             *IndexOption
 	KeyType                 IndexKeyType
-	LockAlg                 *IndexLockAndAlgorithm
-}
-
-// Restore implements Node interface.
-func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE ")
-	switch n.KeyType {
-	case IndexKeyTypeUnique:
-		ctx.WriteKeyWord("UNIQUE ")
-	case IndexKeyTypeSpatial:
-		ctx.WriteKeyWord("SPATIAL ")
-	case IndexKeyTypeFullText:
-		ctx.WriteKeyWord("FULLTEXT ")
-	}
-	ctx.WriteKeyWord("INDEX ")
-	if n.IfNotExists {
-		ctx.WriteKeyWord("IF NOT EXISTS ")
-	}
-	ctx.WriteName(n.IndexName)
-	ctx.WriteKeyWord(" ON ")
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.Table")
-	}
-
-	ctx.WritePlain(" (")
-	for i, indexColName := range n.IndexPartSpecifications {
-		if i != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := indexColName.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore CreateIndexStmt.IndexPartSpecifications: [%v]", i)
-		}
-	}
-	ctx.WritePlain(")")
-
-	if n.IndexOption.Tp != model.IndexTypeInvalid || n.IndexOption.KeyBlockSize > 0 || n.IndexOption.Comment != "" || len(n.IndexOption.ParserName.O) > 0 || n.IndexOption.Visibility != IndexVisibilityDefault {
-		ctx.WritePlain(" ")
-		if err := n.IndexOption.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.IndexOption")
-		}
-	}
-
-	if n.LockAlg != nil {
-		ctx.WritePlain(" ")
-		if err := n.LockAlg.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.LockAlg")
-		}
-	}
-
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -970,13 +471,6 @@ func (n *CreateIndexStmt) Accept(v Visitor) (Node, bool) {
 		}
 		n.IndexOption = node.(*IndexOption)
 	}
-	if n.LockAlg != nil {
-		node, ok := n.LockAlg.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.LockAlg = node.(*IndexLockAndAlgorithm)
-	}
 	return v.Leave(n)
 }
 
@@ -988,30 +482,6 @@ type DropIndexStmt struct {
 	IfExists  bool
 	IndexName string
 	Table     *TableName
-	LockAlg   *IndexLockAndAlgorithm
-}
-
-// Restore implements Node interface.
-func (n *DropIndexStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("DROP INDEX ")
-	if n.IfExists {
-		ctx.WriteKeyWord("IF EXISTS ")
-	}
-	ctx.WriteName(n.IndexName)
-	ctx.WriteKeyWord(" ON ")
-
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while add index")
-	}
-
-	if n.LockAlg != nil {
-		ctx.WritePlain(" ")
-		if err := n.LockAlg.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.LockAlg")
-		}
-	}
-
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -1026,184 +496,6 @@ func (n *DropIndexStmt) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Table = node.(*TableName)
-	if n.LockAlg != nil {
-		node, ok := n.LockAlg.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.LockAlg = node.(*IndexLockAndAlgorithm)
-	}
-	return v.Leave(n)
-}
-
-// CleanupTableLockStmt is a statement to cleanup table lock.
-type CleanupTableLockStmt struct {
-	ddlNode
-
-	Tables []*TableName
-}
-
-// Accept implements Node Accept interface.
-func (n *CleanupTableLockStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*CleanupTableLockStmt)
-	for i := range n.Tables {
-		node, ok := n.Tables[i].Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Tables[i] = node.(*TableName)
-	}
-	return v.Leave(n)
-}
-
-// Restore implements Node interface.
-func (n *CleanupTableLockStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ADMIN CLEANUP TABLE LOCK ")
-	for i, v := range n.Tables {
-		if i != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore CleanupTableLockStmt.Tables[%d]", i)
-		}
-	}
-	return nil
-}
-
-// TableOptionType is the type for TableOption
-type TableOptionType int
-
-// TableOption types.
-const (
-	TableOptionNone TableOptionType = iota
-	TableOptionEngine
-	TableOptionCharset
-	TableOptionCollate
-	TableOptionAutoIncrement
-	TableOptionComment
-	TableOptionAvgRowLength
-	TableOptionCheckSum
-	TableOptionCompression
-	TableOptionConnection
-	TableOptionPassword
-	TableOptionKeyBlockSize
-	TableOptionMaxRows
-	TableOptionMinRows
-	TableOptionDelayKeyWrite
-	TableOptionRowFormat
-	TableOptionStatsPersistent
-	TableOptionStatsAutoRecalc
-	TableOptionShardRowID
-	TableOptionPreSplitRegion
-	TableOptionPackKeys
-	TableOptionTablespace
-	TableOptionNodegroup
-	TableOptionDataDirectory
-	TableOptionIndexDirectory
-	TableOptionStorageMedia
-	TableOptionStatsSamplePages
-	TableOptionSecondaryEngine
-	TableOptionSecondaryEngineNull
-	TableOptionInsertMethod
-	TableOptionTableCheckSum
-	TableOptionUnion
-	TableOptionEncryption
-)
-
-// RowFormat types
-const (
-	RowFormatDefault uint64 = iota + 1
-	RowFormatDynamic
-	RowFormatFixed
-	RowFormatCompressed
-	RowFormatRedundant
-	RowFormatCompact
-	TokuDBRowFormatDefault
-	TokuDBRowFormatFast
-	TokuDBRowFormatSmall
-	TokuDBRowFormatZlib
-	TokuDBRowFormatQuickLZ
-	TokuDBRowFormatLzma
-	TokuDBRowFormatSnappy
-	TokuDBRowFormatUncompressed
-)
-
-// OnDuplicateKeyHandlingType is the option that handle unique key values in 'CREATE TABLE ... SELECT' or `LOAD DATA`.
-// See https://dev.mysql.com/doc/refman/5.7/en/create-table-select.html
-// See https://dev.mysql.com/doc/refman/5.7/en/load-data.html
-type OnDuplicateKeyHandlingType int
-
-// OnDuplicateKeyHandling types
-const (
-	OnDuplicateKeyHandlingError OnDuplicateKeyHandlingType = iota
-	OnDuplicateKeyHandlingIgnore
-	OnDuplicateKeyHandlingReplace
-)
-
-// TableOption is used for parsing table option from SQL.
-type TableOption struct {
-	Tp         TableOptionType
-	Default    bool
-	StrValue   string
-	UintValue  uint64
-	TableNames []*TableName
-}
-
-// ColumnPositionType is the type for ColumnPosition.
-type ColumnPositionType int
-
-// ColumnPosition Types
-const (
-	ColumnPositionNone ColumnPositionType = iota
-	ColumnPositionFirst
-	ColumnPositionAfter
-)
-
-// ColumnPosition represent the position of the newly added column
-type ColumnPosition struct {
-	node
-	// Tp is either ColumnPositionNone, ColumnPositionFirst or ColumnPositionAfter.
-	Tp ColumnPositionType
-	// RelativeColumn is the column the newly added column after if type is ColumnPositionAfter
-	RelativeColumn *ColumnName
-}
-
-// Restore implements Node interface.
-func (n *ColumnPosition) Restore(ctx *RestoreCtx) error {
-	switch n.Tp {
-	case ColumnPositionNone:
-		// do nothing
-	case ColumnPositionFirst:
-		ctx.WriteKeyWord("FIRST")
-	case ColumnPositionAfter:
-		ctx.WriteKeyWord("AFTER ")
-		if err := n.RelativeColumn.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ColumnPosition.RelativeColumn")
-		}
-	default:
-		return errors.Errorf("invalid ColumnPositionType: %d", n.Tp)
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *ColumnPosition) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*ColumnPosition)
-	if n.RelativeColumn != nil {
-		node, ok := n.RelativeColumn.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.RelativeColumn = node.(*ColumnName)
-	}
 	return v.Leave(n)
 }
 
@@ -1222,7 +514,6 @@ const (
 	AlterTableModifyColumn
 	AlterTableChangeColumn
 	AlterTableRenameColumn
-	AlterTableRenameTable
 	AlterTableAlterColumn
 	AlterTableLock
 	AlterTableAlgorithm
@@ -1243,64 +534,7 @@ const (
 	AlterTableIndexInvisible
 	// TODO: Add more actions
 	AlterTableOrderByColumns
-	// AlterTableSetTiFlashReplica uses to set the table TiFlash replica.
-	AlterTableSetTiFlashReplica
 )
-
-// LockType is the type for AlterTableSpec.
-// See https://dev.mysql.com/doc/refman/5.7/en/alter-table.html#alter-table-concurrency
-type LockType byte
-
-func (n LockType) String() string {
-	switch n {
-	case LockTypeNone:
-		return "NONE"
-	case LockTypeDefault:
-		return "DEFAULT"
-	case LockTypeShared:
-		return "SHARED"
-	case LockTypeExclusive:
-		return "EXCLUSIVE"
-	}
-	return ""
-}
-
-// Lock Types.
-const (
-	LockTypeNone LockType = iota + 1
-	LockTypeDefault
-	LockTypeShared
-	LockTypeExclusive
-)
-
-// AlgorithmType is the algorithm of the DDL operations.
-// See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html#alter-table-performance.
-type AlgorithmType byte
-
-// DDL algorithms.
-// For now, TiDB only supported inplace and instance algorithms. If the user specify `copy`,
-// will get an error.
-const (
-	AlgorithmTypeDefault AlgorithmType = iota
-	AlgorithmTypeCopy
-	AlgorithmTypeInplace
-	AlgorithmTypeInstant
-)
-
-func (a AlgorithmType) String() string {
-	switch a {
-	case AlgorithmTypeDefault:
-		return "DEFAULT"
-	case AlgorithmTypeCopy:
-		return "COPY"
-	case AlgorithmTypeInplace:
-		return "INPLACE"
-	case AlgorithmTypeInstant:
-		return "INSTANT"
-	default:
-		return "DEFAULT"
-	}
-}
 
 // AlterTableSpec represents alter table specification.
 type AlterTableSpec struct {
@@ -1319,46 +553,17 @@ type AlterTableSpec struct {
 	Tp             AlterTableType
 	Name           string
 	Constraint     *Constraint
-	Options        []*TableOption
-	OrderByList    []*AlterOrderItem
 	NewTable       *TableName
 	NewColumns     []*ColumnDef
 	NewConstraints []*Constraint
 	OldColumnName  *ColumnName
 	NewColumnName  *ColumnName
-	Position       *ColumnPosition
-	LockType       LockType
-	Algorithm      AlgorithmType
 	Comment        string
 	FromKey        model.CIStr
 	ToKey          model.CIStr
 	WithValidation bool
 	Num            uint64
 	Visibility     IndexVisibility
-	TiFlashReplica *TiFlashReplicaSpec
-}
-
-type TiFlashReplicaSpec struct {
-	Count  uint64
-	Labels []string
-}
-
-// AlterOrderItem represents an item in order by at alter table stmt.
-type AlterOrderItem struct {
-	node
-	Column *ColumnName
-	Desc   bool
-}
-
-// Restore implements Node interface.
-func (n *AlterOrderItem) Restore(ctx *RestoreCtx) error {
-	if err := n.Column.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterOrderItem.Column")
-	}
-	if n.Desc {
-		ctx.WriteKeyWord(" DESC")
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -1403,13 +608,6 @@ func (n *AlterTableSpec) Accept(v Visitor) (Node, bool) {
 		}
 		n.OldColumnName = node.(*ColumnName)
 	}
-	if n.Position != nil {
-		node, ok := n.Position.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Position = node.(*ColumnPosition)
-	}
 	return v.Leave(n)
 }
 
@@ -1420,25 +618,6 @@ type AlterTableStmt struct {
 
 	Table *TableName
 	Specs []*AlterTableSpec
-}
-
-// Restore implements Node interface.
-func (n *AlterTableStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ALTER TABLE ")
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterTableStmt.Table")
-	}
-	for i, spec := range n.Specs {
-		if i == 0 || spec.Tp == AlterTableImportTablespace || spec.Tp == AlterTableDiscardTablespace {
-			ctx.WritePlain(" ")
-		} else {
-			ctx.WritePlain(", ")
-		}
-		if err := spec.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore AlterTableStmt.Specs[%d]", i)
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -1469,15 +648,6 @@ type TruncateTableStmt struct {
 	ddlNode
 
 	Table *TableName
-}
-
-// Restore implements Node interface.
-func (n *TruncateTableStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("TRUNCATE TABLE ")
-	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore TruncateTableStmt.Table")
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.

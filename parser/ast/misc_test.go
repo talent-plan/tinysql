@@ -15,7 +15,6 @@ package ast_test
 
 import (
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/parser"
 	. "github.com/pingcap/tidb/parser/ast"
 )
 
@@ -42,31 +41,6 @@ func (visitor1) Enter(in Node) (Node, bool) {
 	return in, true
 }
 
-func (ts *testMiscSuite) TestDDLVisitorCover(c *C) {
-	sql := `
-create table t (c1 smallint unsigned, c2 int unsigned);
-alter table t add column a smallint unsigned after b;
-alter table t add column (a int, constraint check (a > 0));
-create index t_i on t (id);
-create database test character set utf8;
-drop database test;
-drop index t_i on t;
-drop table t;
-truncate t;
-create table t (
-jobAbbr char(4) not null,
-constraint foreign key (jobabbr) references ffxi_jobtype (jobabbr) on delete cascade on update cascade
-);
-`
-	parse := parser.New()
-	stmts, _, err := parse.Parse(sql, "", "")
-	c.Assert(err, IsNil)
-	for _, stmt := range stmts {
-		stmt.Accept(visitor{})
-		stmt.Accept(visitor1{})
-	}
-}
-
 func (ts *testMiscSuite) TestSensitiveStatement(c *C) {
 	negative := []StmtNode{
 		&AlterTableStmt{},
@@ -76,7 +50,6 @@ func (ts *testMiscSuite) TestSensitiveStatement(c *C) {
 		&DropDatabaseStmt{},
 		&DropIndexStmt{},
 		&DropTableStmt{},
-		&RenameTableStmt{},
 		&TruncateTableStmt{},
 	}
 	for _, stmt := range negative {

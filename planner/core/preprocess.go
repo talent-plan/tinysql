@@ -76,7 +76,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 	switch node := in.(type) {
 	case *ast.CreateTableStmt:
 		p.flag |= inCreateOrDropTable
-		p.resolveCreateTableStmt(node)
 		p.checkCreateTableGrammar(node)
 	case *ast.DropTableStmt:
 		p.flag |= inCreateOrDropTable
@@ -88,8 +87,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.checkAlterTableGrammar(node)
 	case *ast.CreateDatabaseStmt:
 		p.checkCreateDatabaseGrammar(node)
-	case *ast.AlterDatabaseStmt:
-		p.checkAlterDatabaseGrammar(node)
 	case *ast.DropDatabaseStmt:
 		p.checkDropDatabaseGrammar(node)
 	case *ast.ShowStmt:
@@ -174,33 +171,15 @@ func checkAutoIncrementOp(colDef *ast.ColumnDef, num int) (bool, error) {
 	return hasAutoIncrement, nil
 }
 
-func isConstraintKeyTp(constraints []*ast.Constraint, colDef *ast.ColumnDef) bool {
-	for _, c := range constraints {
-		// If the constraint as follows: primary key(c1, c2)
-		// we only support c1 column can be auto_increment.
-		if colDef.Name.Name.L != c.Keys[0].Column.Name.L {
-			continue
-		}
-		switch c.Tp {
-		case ast.ConstraintPrimaryKey, ast.ConstraintKey, ast.ConstraintIndex,
-			ast.ConstraintUniq, ast.ConstraintUniqIndex, ast.ConstraintUniqKey:
-			return true
-		}
-	}
-
-	return false
-}
-
 func (p *preprocessor) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 	var (
-		isKey            bool
 		count            int
 		autoIncrementCol *ast.ColumnDef
 	)
 
 	for _, colDef := range stmt.Cols {
 		var hasAutoIncrement bool
-		for i, op := range colDef.Options {
+		for i := range colDef.Options {
 			ok, err := checkAutoIncrementOp(colDef, i)
 			if err != nil {
 				p.err = err
@@ -208,10 +187,6 @@ func (p *preprocessor) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 			}
 			if ok {
 				hasAutoIncrement = true
-			}
-			switch op.Tp {
-			case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
-				isKey = true
 			}
 		}
 		if hasAutoIncrement {
@@ -223,16 +198,7 @@ func (p *preprocessor) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 	if count < 1 {
 		return
 	}
-	if !isKey {
-		isKey = isConstraintKeyTp(stmt.Constraints, autoIncrementCol)
-	}
-	autoIncrementMustBeKey := true
-	for _, opt := range stmt.Options {
-		if opt.Tp == ast.TableOptionEngine && strings.EqualFold(opt.StrValue, "MyISAM") {
-			autoIncrementMustBeKey = false
-		}
-	}
-	if (autoIncrementMustBeKey && !isKey) || count > 1 {
+	if count > 1 {
 		p.err = autoid.ErrWrongAutoKey.GenWithStackByArgs()
 	}
 
@@ -265,13 +231,6 @@ func (p *preprocessor) checkUnionSelectList(stmt *ast.UnionSelectList) {
 
 func (p *preprocessor) checkCreateDatabaseGrammar(stmt *ast.CreateDatabaseStmt) {
 	if isIncorrectName(stmt.Name) {
-		p.err = ddl.ErrWrongDBName.GenWithStackByArgs(stmt.Name)
-	}
-}
-
-func (p *preprocessor) checkAlterDatabaseGrammar(stmt *ast.AlterDatabaseStmt) {
-	// for 'ALTER DATABASE' statement, database name can be empty to alter default database.
-	if isIncorrectName(stmt.Name) && !stmt.AlterDefaultDatabase {
 		p.err = ddl.ErrWrongDBName.GenWithStackByArgs(stmt.Name)
 	}
 }
@@ -604,14 +563,6 @@ func (p *preprocessor) resolveShowStmt(node *ast.ShowStmt) {
 		}
 	} else if node.Table != nil && node.Table.Schema.L == "" {
 		node.Table.Schema = model.NewCIStr(node.DBName)
-	}
-}
-
-func (p *preprocessor) resolveCreateTableStmt(node *ast.CreateTableStmt) {
-	for _, val := range node.Constraints {
-		if val.Refer != nil && val.Refer.Table.Schema.String() == "" {
-			val.Refer.Table.Schema = node.Table.Schema
-		}
 	}
 }
 

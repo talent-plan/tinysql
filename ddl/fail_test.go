@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 )
@@ -65,7 +64,7 @@ func (s *testColumnChangeSuite) TestFailBeforeDecodeArgs(c *C) {
 	}
 	d.SetHook(tc)
 	defaultValue := int64(3)
-	job := testCreateColumn(c, ctx, d, s.dbInfo, tblInfo, "c3", &ast.ColumnPosition{Tp: ast.ColumnPositionNone}, defaultValue)
+	job := testCreateColumn(c, ctx, d, s.dbInfo, tblInfo, "c3", defaultValue)
 	// Make sure the schema state only appears once.
 	c.Assert(stateCnt, Equals, 1)
 	testCheckJobDone(c, d, job, true)

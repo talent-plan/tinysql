@@ -71,8 +71,6 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	defer func() { e.ctx.GetSessionVars().StmtCtx.IsDDLJobInQueue = false }()
 
 	switch x := e.stmt.(type) {
-	case *ast.AlterDatabaseStmt:
-		err = e.executeAlterDatabase(x)
 	case *ast.AlterTableStmt:
 		err = e.executeAlterTable(x)
 	case *ast.CreateIndexStmt:
@@ -129,11 +127,6 @@ func (e *DDLExec) executeCreateDatabase(s *ast.CreateDatabaseStmt) error {
 			err = nil
 		}
 	}
-	return err
-}
-
-func (e *DDLExec) executeAlterDatabase(s *ast.AlterDatabaseStmt) error {
-	err := domain.GetDomain(e.ctx).DDL().AlterSchema(e.ctx, s)
 	return err
 }
 

@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
@@ -89,23 +88,10 @@ func adjustColumnInfoInDropColumn(tblInfo *model.TableInfo, offset int) {
 	tblInfo.Columns = newCols
 }
 
-func createColumnInfo(tblInfo *model.TableInfo, colInfo *model.ColumnInfo, pos *ast.ColumnPosition) (*model.ColumnInfo, int, error) {
+func createColumnInfo(tblInfo *model.TableInfo, colInfo *model.ColumnInfo) (*model.ColumnInfo, int, error) {
 	// Check column name duplicate.
 	cols := tblInfo.Columns
 	position := len(cols)
-
-	// Get column position.
-	if pos.Tp == ast.ColumnPositionFirst {
-		position = 0
-	} else if pos.Tp == ast.ColumnPositionAfter {
-		c := model.FindColumnInfo(cols, pos.RelativeColumn.Name.L)
-		if c == nil {
-			return nil, 0, infoschema.ErrColumnNotExists.GenWithStackByArgs(pos.RelativeColumn, tblInfo.Name)
-		}
-
-		// Insert position is after the mentioned column.
-		position = c.Offset + 1
-	}
 	colInfo.ID = allocateColumnID(tblInfo)
 	colInfo.State = model.StateNone
 	// To support add column asynchronous, we should mark its offset as the last column.
@@ -122,19 +108,18 @@ func createColumnInfo(tblInfo *model.TableInfo, colInfo *model.ColumnInfo, pos *
 	return colInfo, position, nil
 }
 
-func checkAddColumn(t *meta.Meta, job *model.Job) (*model.TableInfo, *model.ColumnInfo, *model.ColumnInfo, *ast.ColumnPosition, int, error) {
+func checkAddColumn(t *meta.Meta, job *model.Job) (*model.TableInfo, *model.ColumnInfo, *model.ColumnInfo, int, error) {
 	schemaID := job.SchemaID
 	tblInfo, err := getTableInfoAndCancelFaultJob(t, job, schemaID)
 	if err != nil {
-		return nil, nil, nil, nil, 0, errors.Trace(err)
+		return nil, nil, nil, 0, errors.Trace(err)
 	}
 	col := &model.ColumnInfo{}
-	pos := &ast.ColumnPosition{}
 	offset := 0
-	err = job.DecodeArgs(col, pos, &offset)
+	err = job.DecodeArgs(col, &offset)
 	if err != nil {
 		job.State = model.JobStateCancelled
-		return nil, nil, nil, nil, 0, errors.Trace(err)
+		return nil, nil, nil, 0, errors.Trace(err)
 	}
 
 	columnInfo := model.FindColumnInfo(tblInfo.Columns, col.Name.L)
@@ -142,10 +127,10 @@ func checkAddColumn(t *meta.Meta, job *model.Job) (*model.TableInfo, *model.Colu
 		if columnInfo.State == model.StatePublic {
 			// We already have a column with the same column name.
 			job.State = model.JobStateCancelled
-			return nil, nil, nil, nil, 0, infoschema.ErrColumnExists.GenWithStackByArgs(col.Name)
+			return nil, nil, nil, 0, infoschema.ErrColumnExists.GenWithStackByArgs(col.Name)
 		}
 	}
-	return tblInfo, columnInfo, col, pos, offset, nil
+	return tblInfo, columnInfo, col, offset, nil
 }
 
 func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
@@ -164,12 +149,12 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 		}
 	})
 
-	tblInfo, columnInfo, col, pos, offset, err := checkAddColumn(t, job)
+	tblInfo, columnInfo, col, offset, err := checkAddColumn(t, job)
 	if err != nil {
 		return ver, errors.Trace(err)
 	}
 	if columnInfo == nil {
-		columnInfo, offset, err = createColumnInfo(tblInfo, col, pos)
+		columnInfo, offset, err = createColumnInfo(tblInfo, col)
 		if err != nil {
 			job.State = model.JobStateCancelled
 			return ver, errors.Trace(err)
@@ -177,7 +162,7 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 		logutil.BgLogger().Info("[ddl] run add column job", zap.String("job", job.String()), zap.Reflect("columnInfo", *columnInfo), zap.Int("offset", offset))
 		// Set offset arg to job.
 		if offset != 0 {
-			job.Args = []interface{}{columnInfo, pos, offset}
+			job.Args = []interface{}{columnInfo, offset}
 		}
 		if err = checkAddColumnTooManyColumns(len(tblInfo.Columns)); err != nil {
 			job.State = model.JobStateCancelled
@@ -323,19 +308,18 @@ func onSetDefaultValue(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 func (w *worker) onModifyColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	newCol := &model.ColumnInfo{}
 	oldColName := &model.CIStr{}
-	pos := &ast.ColumnPosition{}
 	var modifyColumnTp byte
-	err := job.DecodeArgs(newCol, oldColName, pos, &modifyColumnTp)
+	err := job.DecodeArgs(newCol, oldColName, &modifyColumnTp)
 	if err != nil {
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
 	}
 
-	return w.doModifyColumn(t, job, newCol, oldColName, pos, modifyColumnTp)
+	return w.doModifyColumn(t, job, newCol, oldColName, modifyColumnTp)
 }
 
 // doModifyColumn updates the column information and reorders all columns.
-func (w *worker) doModifyColumn(t *meta.Meta, job *model.Job, newCol *model.ColumnInfo, oldName *model.CIStr, pos *ast.ColumnPosition, modifyColumnTp byte) (ver int64, _ error) {
+func (w *worker) doModifyColumn(t *meta.Meta, job *model.Job, newCol *model.ColumnInfo, oldName *model.CIStr, modifyColumnTp byte) (ver int64, _ error) {
 	dbInfo, err := t.GetDatabase(job.SchemaID)
 	if err != nil {
 		return ver, errors.Trace(err)
@@ -399,28 +383,6 @@ func (w *worker) doModifyColumn(t *meta.Meta, job *model.Job, newCol *model.Colu
 	newCol.State = oldCol.State
 	// Calculate column's new position.
 	oldPos, newPos := oldCol.Offset, oldCol.Offset
-	if pos.Tp == ast.ColumnPositionAfter {
-		if oldName.L == pos.RelativeColumn.Name.L {
-			// `alter table tableName modify column b int after b` will return ver,ErrColumnNotExists.
-			// Modified the type definition of 'null' to 'not null' before this, so rollback the job when an error occurs.
-			job.State = model.JobStateRollingback
-			return ver, infoschema.ErrColumnNotExists.GenWithStackByArgs(oldName, tblInfo.Name)
-		}
-
-		relative := model.FindColumnInfo(tblInfo.Columns, pos.RelativeColumn.Name.L)
-		if relative == nil || relative.State != model.StatePublic {
-			job.State = model.JobStateRollingback
-			return ver, infoschema.ErrColumnNotExists.GenWithStackByArgs(pos.RelativeColumn, tblInfo.Name)
-		}
-
-		if relative.Offset < oldPos {
-			newPos = relative.Offset + 1
-		} else {
-			newPos = relative.Offset
-		}
-	} else if pos.Tp == ast.ColumnPositionFirst {
-		newPos = 0
-	}
 
 	columnChanged := make(map[string]*model.ColumnInfo)
 	columnChanged[oldName.L] = newCol

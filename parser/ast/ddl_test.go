@@ -25,9 +25,9 @@ type testDDLSuite struct {
 
 func (ts *testDDLSuite) TestDDLVisitorCover(c *C) {
 	ce := &checkExpr{}
-	constraint := &Constraint{Keys: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}
+	constraint := &Constraint{Keys: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Option: &IndexOption{}}
 
-	alterTableSpec := &AlterTableSpec{Constraint: constraint, Options: []*TableOption{{}}, NewTable: &TableName{}, NewColumns: []*ColumnDef{{Name: &ColumnName{}}}, OldColumnName: &ColumnName{}, Position: &ColumnPosition{RelativeColumn: &ColumnName{}}}
+	alterTableSpec := &AlterTableSpec{Constraint: constraint, NewTable: &TableName{}, NewColumns: []*ColumnDef{{Name: &ColumnName{}}}, OldColumnName: &ColumnName{}}
 
 	stmts := []struct {
 		node             Node
@@ -35,11 +35,9 @@ func (ts *testDDLSuite) TestDDLVisitorCover(c *C) {
 		expectedLeaveCnt int
 	}{
 		{&CreateDatabaseStmt{}, 0, 0},
-		{&AlterDatabaseStmt{}, 0, 0},
 		{&DropDatabaseStmt{}, 0, 0},
 		{&DropIndexStmt{Table: &TableName{}}, 0, 0},
 		{&DropTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
-		{&RenameTableStmt{OldTable: &TableName{}, NewTable: &TableName{}}, 0, 0},
 		{&TruncateTableStmt{Table: &TableName{}}, 0, 0},
 
 		// TODO: cover children
@@ -49,10 +47,7 @@ func (ts *testDDLSuite) TestDDLVisitorCover(c *C) {
 		{&AlterTableSpec{}, 0, 0},
 		{&ColumnDef{Name: &ColumnName{}, Options: []*ColumnOption{{Expr: ce}}}, 1, 1},
 		{&ColumnOption{Expr: ce}, 1, 1},
-		{&ColumnPosition{RelativeColumn: &ColumnName{}}, 0, 0},
-		{&Constraint{Keys: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}, 0, 0},
 		{&IndexPartSpecification{Column: &ColumnName{}}, 0, 0},
-		{&ReferenceDef{Table: &TableName{}, IndexPartSpecifications: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, OnDelete: &OnDeleteOpt{}, OnUpdate: &OnUpdateOpt{}}, 0, 0},
 		{&AlterTableSpec{NewConstraints: []*Constraint{constraint, constraint}}, 0, 0},
 		{&AlterTableSpec{NewConstraints: []*Constraint{constraint}, NewColumns: []*ColumnDef{{Name: &ColumnName{}}}}, 0, 0},
 	}

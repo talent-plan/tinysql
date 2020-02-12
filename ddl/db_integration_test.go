@@ -275,43 +275,6 @@ func (s *testIntegrationSuite1) TestTableDDLWithTimeType(c *C) {
 	s.tk.MustExec("drop table t")
 }
 
-func (s *testIntegrationSuite5) TestModifyingColumnOption(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("create database if not exists test")
-	tk.MustExec("use test")
-
-	errMsg := "[ddl:8200]" // unsupported modify column with references
-	assertErrCode := func(sql string, errCodeStr string) {
-		_, err := tk.Exec(sql)
-		c.Assert(err, NotNil)
-		c.Assert(err.Error()[:len(errCodeStr)], Equals, errCodeStr)
-	}
-
-	tk.MustExec("drop table if exists t1")
-	tk.MustExec("create table t1 (b char(1) default null) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_general_ci")
-	tk.MustExec("alter table t1 modify column b char(1) character set utf8mb4 collate utf8mb4_general_ci")
-
-	tk.MustExec("drop table t1")
-	tk.MustExec("create table t1 (b char(1) collate utf8mb4_general_ci)")
-	tk.MustExec("alter table t1 modify b char(1) character set utf8mb4 collate utf8mb4_general_ci")
-
-	tk.MustExec("drop table t1")
-	tk.MustExec("drop table if exists t2")
-	tk.MustExec("create table t1 (a int(11) default null)")
-	tk.MustExec("create table t2 (b char, c int)")
-	assertErrCode("alter table t2 modify column c int references t1(a)", errMsg)
-	_, err := tk.Exec("alter table t1 change a a varchar(16)")
-	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type varchar(16) not match origin int(11)")
-	_, err = tk.Exec("alter table t1 change a a varchar(10)")
-	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type varchar(10) not match origin int(11)")
-	_, err = tk.Exec("alter table t1 change a a datetime")
-	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type datetime not match origin int(11)")
-	_, err = tk.Exec("alter table t1 change a a int(11) unsigned")
-	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: can't change unsigned integer to signed or vice versa")
-	_, err = tk.Exec("alter table t2 change b b int(11) unsigned")
-	c.Assert(err.Error(), Equals, "[ddl:8200]Unsupported modify column: type int(11) not match origin char(1)")
-}
-
 func (s *testIntegrationSuite5) TestBackwardCompatibility(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("create database if not exists test_backward_compatibility")
@@ -465,57 +428,6 @@ func (s *testIntegrationSuite) getHistoryDDLJob(id int64) (*model.Job, error) {
 	})
 
 	return job, errors.Trace(err)
-}
-
-func (s *testIntegrationSuite3) TestChangeColumnPosition(c *C) {
-	s.tk = testkit.NewTestKit(c, s.store)
-	s.tk.MustExec("use test")
-
-	s.tk.MustExec("create table position (a int default 1, b int default 2)")
-	s.tk.MustExec("insert into position value ()")
-	s.tk.MustExec("insert into position values (3,4)")
-	s.tk.MustQuery("select * from position").Check(testkit.Rows("1 2", "3 4"))
-	s.tk.MustExec("alter table position modify column b int first")
-	s.tk.MustQuery("select * from position").Check(testkit.Rows("2 1", "4 3"))
-	s.tk.MustExec("insert into position value ()")
-	s.tk.MustQuery("select * from position").Check(testkit.Rows("2 1", "4 3", "<nil> 1"))
-
-	s.tk.MustExec("create table position1 (a int, b int, c double, d varchar(5))")
-	s.tk.MustExec(`insert into position1 value (1, 2, 3.14, 'TiDB')`)
-	s.tk.MustExec("alter table position1 modify column d varchar(5) after a")
-	s.tk.MustQuery("select * from position1").Check(testkit.Rows("1 TiDB 2 3.14"))
-	s.tk.MustExec("alter table position1 modify column a int after c")
-	s.tk.MustQuery("select * from position1").Check(testkit.Rows("TiDB 2 3.14 1"))
-	s.tk.MustExec("alter table position1 modify column c double first")
-	s.tk.MustQuery("select * from position1").Check(testkit.Rows("3.14 TiDB 2 1"))
-	s.tk.MustGetErrCode("alter table position1 modify column b int after b", mysql.ErrBadField)
-
-	s.tk.MustExec("create table position2 (a int, b int)")
-	s.tk.MustExec("alter table position2 add index t(a, b)")
-	s.tk.MustExec("alter table position2 modify column b int first")
-	s.tk.MustExec("insert into position2 value (3, 5)")
-	s.tk.MustQuery("select a from position2 where a = 3").Check(testkit.Rows())
-	s.tk.MustExec("alter table position2 change column b c int first")
-	s.tk.MustQuery("select * from position2 where c = 3").Check(testkit.Rows("3 5"))
-	s.tk.MustGetErrCode("alter table position2 change column c b int after c", mysql.ErrBadField)
-
-	s.tk.MustExec("create table position3 (a int default 2)")
-	s.tk.MustExec("alter table position3 modify column a int default 5 first")
-	s.tk.MustExec("insert into position3 value ()")
-	s.tk.MustQuery("select * from position3").Check(testkit.Rows("5"))
-
-	s.tk.MustExec("create table position4 (a int, b int)")
-	s.tk.MustExec("alter table position4 add index t(b)")
-	s.tk.MustExec("alter table position4 change column b c int first")
-	createSQL := s.tk.MustQuery("show create table position4").Rows()[0][1]
-	exceptedSQL := []string{
-		"CREATE TABLE `position4` (",
-		"  `c` int(11) DEFAULT NULL,",
-		"  `a` int(11) DEFAULT NULL,",
-		"  KEY `t` (`c`)",
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-	}
-	c.Assert(createSQL, Equals, strings.Join(exceptedSQL, "\n"))
 }
 
 func (s *testIntegrationSuite2) TestAddIndexAfterAddColumn(c *C) {
