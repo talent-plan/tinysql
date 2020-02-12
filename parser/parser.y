@@ -794,7 +794,6 @@ import (
 	FieldAsName			"Field alias name"
 	FieldAsNameOpt			"Field alias name opt"
 	FieldList			"field expression list"
-	FulltextSearchModifierOpt	"Fulltext modifier"
 	PluginNameList			"Plugin Name List"
 	TableRefsClause			"Table references clause"
 	FuncDatetimePrec		"Function datetime precision"
@@ -845,7 +844,6 @@ import (
 	PriorityOpt			"Statement priority option"
 	OptGConcatSeparator		"optional GROUP_CONCAT SEPARATOR"
 	RowValue			"Row value"
-	SelectLockOpt			"FOR UPDATE or LOCK IN SHARE MODE,"
 	SelectStmtCalcFoundRows		"SELECT statement optional SQL_CALC_FOUND_ROWS"
 	SelectStmtSQLBigResult		"SELECT statement optional SQL_BIG_RESULT"
 	SelectStmtSQLBufferResult	"SELECT statement optional SQL_BUFFER_RESULT"
@@ -863,10 +861,6 @@ import (
 	ShowDatabaseNameOpt		"Show tables/columns statement database name option"
 	ShowTableAliasOpt       	"Show table alias option"
 	ShowLikeOrWhereOpt		"Show like or where clause option"
-	ShowProfileArgsOpt		"Show profile args option"
-	ShowProfileTypesOpt		"Show profile types option"
-	ShowProfileType			"Show profile type"
-	ShowProfileTypes		"Show profile types"
 	StatementList			"statement list"
 	StringName			"string literal or identifier"
 	StringList 			"string list"
@@ -2370,14 +2364,6 @@ Expression:
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
 	}
-|	"MATCH" '(' ColumnNameList ')' "AGAINST" '(' BitExpr FulltextSearchModifierOpt ')'
-	{
-		$$ = &ast.MatchAgainst {
-			ColumnNames: $3.([]*ast.ColumnName),
-			Against: $7,
-			Modifier: ast.FulltextSearchModifier($8.(int)),
-		}
-	}
 |	BoolPri IsOrNotOp trueKwd %prec is
 	{
 		$$ = &ast.IsTruthExpr{Expr:$1, Not: !$2.(bool), True: int64(1)}
@@ -2401,28 +2387,6 @@ MaxValueOrExpression:
 |	Expression
 	{
 		$$ = $1
-	}
-
-FulltextSearchModifierOpt:
-	/* empty */
-	{
-		$$ = ast.FulltextSearchModifierNaturalLanguageMode
-	}
-|	"IN" "NATURAL" "LANGUAGE" "MODE"
-	{
-		$$ = ast.FulltextSearchModifierNaturalLanguageMode
-	}
-|	"IN" "NATURAL" "LANGUAGE" "MODE" "WITH" "QUERY" "EXPANSION"
-	{
-		$$ = ast.FulltextSearchModifierNaturalLanguageMode | ast.FulltextSearchModifierWithQueryExpansion
-	}
-| "IN" "BOOLEAN" "MODE"
-	{
-		$$ = ast.FulltextSearchModifierBooleanMode
-	}
-| "WITH" "QUERY" "EXPANSION"
-	{
-		$$ = ast.FulltextSearchModifierWithQueryExpansion
 	}
 
 logOr:
@@ -4216,20 +4180,17 @@ SelectStmtFromTable:
 	}
 
 SelectStmt:
-	SelectStmtBasic OrderByOptional SelectStmtLimit SelectLockOpt
+	SelectStmtBasic OrderByOptional SelectStmtLimit
 	{
 		st := $1.(*ast.SelectStmt)
-		st.LockTp = $4.(ast.SelectLockType)
 		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
 		if lastField.Expr != nil && lastField.AsName.O == "" {
 			src := parser.src
 			var lastEnd int
 			if $2 != nil {
-				lastEnd = yyS[yypt-2].offset-1
-			} else if $3 != nil {
 				lastEnd = yyS[yypt-1].offset-1
-			} else if $4 != ast.SelectLockNone {
-				lastEnd = yyS[yypt].offset-1
+			} else if $3 != nil {
+				lastEnd = yyS[yypt-0].offset-1
 			} else {
 				lastEnd = len(src)
 				if src[lastEnd-1] == ';' {
@@ -4246,7 +4207,7 @@ SelectStmt:
 		}
 		$$ = st
 	}
-|	SelectStmtFromDualTable OrderByOptional SelectStmtLimit SelectLockOpt
+|	SelectStmtFromDualTable OrderByOptional SelectStmtLimit
 	{
 		st := $1.(*ast.SelectStmt)
 		if $2 != nil {
@@ -4255,13 +4216,11 @@ SelectStmt:
 		if $3 != nil {
 			st.Limit = $3.(*ast.Limit)
 		}
-		st.LockTp = $4.(ast.SelectLockType)
 		$$ = st
 	}
-|	SelectStmtFromTable OrderByOptional SelectStmtLimit SelectLockOpt
+|	SelectStmtFromTable OrderByOptional SelectStmtLimit
 	{
 		st := $1.(*ast.SelectStmt)
-		st.LockTp = $4.(ast.SelectLockType)
 		if $2 != nil {
 			st.OrderBy = $2.(*ast.OrderByClause)
 		}
@@ -4867,25 +4826,6 @@ SelectStmtGroup:
 	}
 |	GroupByClause
 
-// See https://dev.mysql.com/doc/refman/5.7/en/innodb-locking-reads.html
-SelectLockOpt:
-	/* empty */
-	{
-		$$ = ast.SelectLockNone
-	}
-|	"FOR" "UPDATE"
-	{
-		$$ = ast.SelectLockForUpdate
-	}
-|	"FOR" "UPDATE" "NOWAIT"
-	{
-		$$ = ast.SelectLockForUpdateNoWait
-	}
-|	"LOCK" "IN" "SHARE" "MODE"
-	{
-		$$ = ast.SelectLockInShareMode
-	}
-
 /********************Set Statement*******************************/
 SetStmt:
 	"SET" VariableAssignmentList
@@ -5322,13 +5262,6 @@ ShowStmt:
 			Table:	$4.(*ast.TableName),
 		}
 	}
-|	"SHOW" "CREATE" "VIEW" TableName
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowCreateView,
-			Table:	$4.(*ast.TableName),
-		}
-	}
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
 	{
 		$$ = &ast.ShowStmt{
@@ -5337,223 +5270,12 @@ ShowStmt:
 			DBName:	$5.(string),
 		}
 	}
-|	"SHOW" "CREATE" "SEQUENCE" TableName
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowCreateSequence,
-			Table:	$4.(*ast.TableName),
-		}
-	}
-|	"SHOW" "TABLE" TableName "REGIONS" WhereClauseOptional
-	{
-
-		stmt := &ast.ShowStmt{
-			Tp:	ast.ShowRegions,
-			Table:	$3.(*ast.TableName),
-		}
-		if $5 != nil {
-			stmt.Where = $5.(ast.ExprNode)
-		}
-		$$ = stmt
-	}
-|	"SHOW" "TABLE" TableName "INDEX" Identifier "REGIONS" WhereClauseOptional
-	{
-		stmt := &ast.ShowStmt{
-			Tp:	ast.ShowRegions,
-			Table:	$3.(*ast.TableName),
-			IndexName: model.NewCIStr($5),
-		}
-		if $7 != nil {
-			stmt.Where = $7.(ast.ExprNode)
-		}
-		$$ = stmt
-	}
-|	"SHOW" "MASTER" "STATUS"
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowMasterStatus,
-		}
-	}
 |	"SHOW" OptFull "PROCESSLIST"
 	{
 		$$ = &ast.ShowStmt{
 			Tp: ast.ShowProcessList,
 			Full:	$2.(bool),
 		}
-	}
-|	"SHOW" "STATS_META" ShowLikeOrWhereOpt
-	{
-		stmt := &ast.ShowStmt{
-			Tp: ast.ShowStatsMeta,
-		}
-		if $3 != nil {
-			if x, ok := $3.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $3.(ast.ExprNode)
-			}
-		}
-		$$ = stmt
-	}
-|	"SHOW" "STATS_HISTOGRAMS" ShowLikeOrWhereOpt
-	{
-		stmt := &ast.ShowStmt{
-			Tp: ast.ShowStatsHistograms,
-		}
-		if $3 != nil {
-			if x, ok := $3.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $3.(ast.ExprNode)
-			}
-		}
-		$$ = stmt
-	}
-|	"SHOW" "STATS_BUCKETS" ShowLikeOrWhereOpt
-	{
-		stmt := &ast.ShowStmt{
-			Tp: ast.ShowStatsBuckets,
-		}
-		if $3 != nil {
-			if x, ok := $3.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $3.(ast.ExprNode)
-			}
-		}
-		$$ = stmt
-	}
-|	"SHOW" "STATS_HEALTHY" ShowLikeOrWhereOpt
-	{
-		stmt := &ast.ShowStmt{
-			Tp: ast.ShowStatsHealthy,
-		}
-		if $3 != nil {
-			if x, ok := $3.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $3.(ast.ExprNode)
-			}
-		}
-		$$ = stmt
-	}
-|	"SHOW" "PROFILES"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: ast.ShowProfiles,
-		}
-	}
-|	"SHOW" "PROFILE" ShowProfileTypesOpt ShowProfileArgsOpt SelectStmtLimit
-	{
-		v := &ast.ShowStmt{
-			Tp: ast.ShowProfile,
-		}
-		if $3 != nil {
-			v.ShowProfileTypes = $3.([]int)
-		}
-		if $4 != nil {
-			v.ShowProfileArgs = $4.(*int64)
-		}
-		if $5 != nil {
-			v.ShowProfileLimit = $5.(*ast.Limit)
-		}
-		$$ = v
-	}
-|	"SHOW" "PRIVILEGES"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: ast.ShowPrivileges,
-		}
-	}
-|	"SHOW" "ANALYZE" "STATUS" ShowLikeOrWhereOpt
-	{
-		stmt := &ast.ShowStmt{
-			Tp: ast.ShowAnalyzeStatus,
-		}
-		if $4 != nil {
-			if x, ok := $4.(*ast.PatternLikeExpr); ok && x.Expr == nil {
-				stmt.Pattern = x
-			} else {
-				stmt.Where = $4.(ast.ExprNode)
-			}
-		}
-		$$ = stmt
-	}
-|	"SHOW" "BUILTINS"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: ast.ShowBuiltins,
-		}
-	}
-
-ShowProfileTypesOpt:
-	{
-		$$ = nil
-	}
-|	ShowProfileTypes
-	{
-		$$ = $1
-	}
-
-
-ShowProfileTypes:
-	ShowProfileType
-	{
-		$$ = []int{$1.(int)}
-	}
-|	ShowProfileTypes ',' ShowProfileType
-	{
-		l := $1.([]int)
-		l = append(l, $3.(int))
-		$$ = l
-	}
-
-ShowProfileType:
-	"CPU"
-	{
-		$$ = ast.ProfileTypeCPU
-	}
-|	"MEMORY"
-	{
-		$$ = ast.ProfileTypeMemory
-	}
-|	"BLOCK" "IO"
-	{
-		$$ = ast.ProfileTypeBlockIo
-	}
-|	"CONTEXT" "SWITCHES"
-	{
-		$$ = ast.ProfileTypeContextSwitch
-	}
-|	"PAGE" "FAULTS"
-	{
-		$$ = ast.ProfileTypePageFaults
-	}
-|	"IPC"
-	{
-		$$ = ast.ProfileTypeIpc
-	}
-|	"SWAPS"
-	{
-		$$ = ast.ProfileTypeSwaps
-	}
-|	"SOURCE"
-	{
-		$$ = ast.ProfileTypeSource
-	}
-|	"ALL"
-	{
-		$$ = ast.ProfileTypeAll
-	}
-
-ShowProfileArgsOpt:
-	{
-		$$ = nil
-	}
-|	"FOR" "QUERY" NUM
-	{
-		v := $3.(int64)
-		$$ = &v
 	}
 
 ShowIndexKwd:

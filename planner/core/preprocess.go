@@ -91,10 +91,6 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.checkDropDatabaseGrammar(node)
 	case *ast.ShowStmt:
 		p.resolveShowStmt(node)
-	case *ast.UnionSelectList:
-		p.checkUnionSelectList(node)
-	case *ast.DeleteTableList:
-		return in, true
 	case *ast.Join:
 		p.checkNonUniqTableAlias(node)
 	default:
@@ -207,25 +203,6 @@ func (p *preprocessor) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 		mysql.TypeFloat, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
 	default:
 		p.err = errors.Errorf("Incorrect column specifier for column '%s'", autoIncrementCol.Name.Name.O)
-	}
-}
-
-// checkUnionSelectList checks union's selectList.
-// refer: https://dev.mysql.com/doc/refman/5.7/en/union.html
-// "To apply ORDER BY or LIMIT to an individual SELECT, place the clause inside the parentheses that enclose the SELECT."
-func (p *preprocessor) checkUnionSelectList(stmt *ast.UnionSelectList) {
-	for _, sel := range stmt.Selects[:len(stmt.Selects)-1] {
-		if sel.IsInBraces {
-			continue
-		}
-		if sel.Limit != nil {
-			p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "LIMIT")
-			return
-		}
-		if sel.OrderBy != nil {
-			p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "ORDER BY")
-			return
-		}
 	}
 }
 

@@ -52,7 +52,6 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 		{&InsertStmt{Table: tableRefsClause}, 1, 1},
 		{&SelectStmt{}, 0, 0},
 		{&FieldList{}, 0, 0},
-		{&UnionSelectList{}, 0, 0},
 	}
 
 	for _, v := range stmts {
@@ -62,10 +61,4 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 		c.Check(ce.leaveCnt, Equals, v.expectedLeaveCnt)
 		v.node.Accept(visitor1{})
 	}
-}
-
-func (ts *testDMLSuite) TestFulltextSearchModifier(c *C) {
-	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsBooleanMode(), IsFalse)
-	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsNaturalLanguageMode(), IsTrue)
-	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).WithQueryExpansion(), IsFalse)
 }

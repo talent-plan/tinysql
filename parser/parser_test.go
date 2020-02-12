@@ -536,14 +536,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{`/* 20180417 **/ show databases;`, true, "SHOW DATABASES"},
 		{`/** 20180417 */ show databases;`, true, "SHOW DATABASES"},
 		{`/** 20180417 ******/ show databases;`, true, "SHOW DATABASES"},
-
-		// for show table regions.
-		{"show table t1 regions", true, "SHOW TABLE `t1` REGIONS"},
-		{"show table t1 regions where a=1", true, "SHOW TABLE `t1` REGIONS WHERE `a`=1"},
-		{"show table t1", false, ""},
-		{"show table t1 index idx1 regions", true, "SHOW TABLE `t1` INDEX `idx1` REGIONS"},
-		{"show table t1 index idx1 regions where a=2", true, "SHOW TABLE `t1` INDEX `idx1` REGIONS WHERE `a`=2"},
-		{"show table t1 index idx1", false, ""},
 	}
 	s.RunTest(c, table)
 }
@@ -1229,21 +1221,6 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select count(distinctrow all c1) from t;`, false, ""},
 	}
 	s.RunTest(c, table)
-
-	// Test in REAL_AS_FLOAT SQL mode.
-	table2 := []testCase{
-		// for cast as float
-		{"select cast(1 as float);", true, "SELECT CAST(1 AS FLOAT)"},
-		{"select cast(1 as float(0));", true, "SELECT CAST(1 AS FLOAT)"},
-		{"select cast(1 as float(24));", true, "SELECT CAST(1 AS FLOAT)"},
-		{"select cast(1 as float(25));", true, "SELECT CAST(1 AS DOUBLE)"},
-		{"select cast(1 as float(53));", true, "SELECT CAST(1 AS DOUBLE)"},
-		{"select cast(1 as float(54));", false, ""},
-
-		// for cast as real
-		{"select cast(1 as real);", true, "SELECT CAST(1 AS FLOAT)"},
-	}
-	s.RunTestInRealAsFloatMode(c, table2)
 }
 
 func (s *testParserSuite) TestIdentifier(c *C) {

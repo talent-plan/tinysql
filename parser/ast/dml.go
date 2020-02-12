@@ -14,7 +14,6 @@
 package ast
 
 import (
-	"github.com/pingcap/errors"
 	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -39,7 +38,6 @@ var (
 	_ Node = &TableName{}
 	_ Node = &TableRefsClause{}
 	_ Node = &TableSource{}
-	_ Node = &UnionSelectList{}
 	_ Node = &WildCardField{}
 )
 
@@ -112,46 +110,6 @@ type TableName struct {
 	PartitionNames []model.CIStr
 }
 
-// Restore implements Node interface.
-func (n *TableName) restoreName(ctx *RestoreCtx) {
-	if n.Schema.String() != "" {
-		ctx.WriteName(n.Schema.String())
-		ctx.WritePlain(".")
-	}
-	ctx.WriteName(n.Name.String())
-}
-
-func (n *TableName) restorePartitions(ctx *RestoreCtx) {
-	if len(n.PartitionNames) > 0 {
-		ctx.WriteKeyWord(" PARTITION")
-		ctx.WritePlain("(")
-		for i, v := range n.PartitionNames {
-			if i != 0 {
-				ctx.WritePlain(", ")
-			}
-			ctx.WriteName(v.String())
-		}
-		ctx.WritePlain(")")
-	}
-}
-
-func (n *TableName) restoreIndexHints(ctx *RestoreCtx) error {
-	for _, value := range n.IndexHints {
-		ctx.WritePlain(" ")
-		if err := value.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while splicing IndexHints")
-		}
-	}
-
-	return nil
-}
-
-func (n *TableName) Restore(ctx *RestoreCtx) error {
-	n.restoreName(ctx)
-	n.restorePartitions(ctx)
-	return n.restoreIndexHints(ctx)
-}
-
 // IndexHintType is the type for index hint use, ignore or force.
 type IndexHintType int
 
@@ -180,47 +138,6 @@ type IndexHint struct {
 	HintScope  IndexHintScope
 }
 
-// IndexHint Restore (The const field uses switch to facilitate understanding)
-func (n *IndexHint) Restore(ctx *RestoreCtx) error {
-	indexHintType := ""
-	switch n.HintType {
-	case 1:
-		indexHintType = "USE INDEX"
-	case 2:
-		indexHintType = "IGNORE INDEX"
-	case 3:
-		indexHintType = "FORCE INDEX"
-	default: // Prevent accidents
-		return errors.New("IndexHintType has an error while matching")
-	}
-
-	indexHintScope := ""
-	switch n.HintScope {
-	case 1:
-		indexHintScope = ""
-	case 2:
-		indexHintScope = " FOR JOIN"
-	case 3:
-		indexHintScope = " FOR ORDER BY"
-	case 4:
-		indexHintScope = " FOR GROUP BY"
-	default: // Prevent accidents
-		return errors.New("IndexHintScope has an error while matching")
-	}
-	ctx.WriteKeyWord(indexHintType)
-	ctx.WriteKeyWord(indexHintScope)
-	ctx.WritePlain(" (")
-	for i, value := range n.IndexNames {
-		if i > 0 {
-			ctx.WritePlain(", ")
-		}
-		ctx.WriteName(value.O)
-	}
-	ctx.WritePlain(")")
-
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *TableName) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -231,58 +148,11 @@ func (n *TableName) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// DeleteTableList is the tablelist used in delete statement multi-table mode.
-type DeleteTableList struct {
-	node
-	Tables []*TableName
-}
-
-// Restore implements Node interface.
-func (n *DeleteTableList) Restore(ctx *RestoreCtx) error {
-	for i, t := range n.Tables {
-		if i != 0 {
-			ctx.WritePlain(",")
-		}
-		if err := t.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore DeleteTableList.Tables[%v]", i)
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *DeleteTableList) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*DeleteTableList)
-	if n != nil {
-		for i, t := range n.Tables {
-			node, ok := t.Accept(v)
-			if !ok {
-				return n, false
-			}
-			n.Tables[i] = node.(*TableName)
-		}
-	}
-	return v.Leave(n)
-}
-
 // OnCondition represents JOIN on condition.
 type OnCondition struct {
 	node
 
 	Expr ExprNode
-}
-
-// Restore implements Node interface.
-func (n *OnCondition) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ON ")
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore OnCondition.Expr")
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -312,52 +182,6 @@ type TableSource struct {
 	AsName model.CIStr
 }
 
-// Restore implements Node interface.
-func (n *TableSource) Restore(ctx *RestoreCtx) error {
-	needParen := false
-	switch n.Source.(type) {
-	case *SelectStmt:
-		needParen = true
-	}
-
-	if tn, tnCase := n.Source.(*TableName); tnCase {
-		if needParen {
-			ctx.WritePlain("(")
-		}
-
-		tn.restoreName(ctx)
-		tn.restorePartitions(ctx)
-
-		if asName := n.AsName.String(); asName != "" {
-			ctx.WriteKeyWord(" AS ")
-			ctx.WriteName(asName)
-		}
-		if err := tn.restoreIndexHints(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore TableSource.Source.(*TableName).IndexHints")
-		}
-
-		if needParen {
-			ctx.WritePlain(")")
-		}
-	} else {
-		if needParen {
-			ctx.WritePlain("(")
-		}
-		if err := n.Source.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore TableSource.Source")
-		}
-		if needParen {
-			ctx.WritePlain(")")
-		}
-		if asName := n.AsName.String(); asName != "" {
-			ctx.WriteKeyWord(" AS ")
-			ctx.WriteName(asName)
-		}
-	}
-
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *TableSource) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -371,32 +195,6 @@ func (n *TableSource) Accept(v Visitor) (Node, bool) {
 	}
 	n.Source = node.(ResultSetNode)
 	return v.Leave(n)
-}
-
-// SelectLockType is the lock type for SelectStmt.
-type SelectLockType int
-
-// Select lock types.
-const (
-	SelectLockNone SelectLockType = iota
-	SelectLockForUpdate
-	SelectLockInShareMode
-	SelectLockForUpdateNoWait
-)
-
-// String implements fmt.Stringer.
-func (slt SelectLockType) String() string {
-	switch slt {
-	case SelectLockNone:
-		return "none"
-	case SelectLockForUpdate:
-		return "for update"
-	case SelectLockInShareMode:
-		return "in share mode"
-	case SelectLockForUpdateNoWait:
-		return "for update nowait"
-	}
-	return "unsupported select lock type"
 }
 
 // WildCardField is a special type of select field content.
@@ -451,25 +249,6 @@ type SelectField struct {
 	Auxiliary bool
 }
 
-// Restore implements Node interface.
-func (n *SelectField) Restore(ctx *RestoreCtx) error {
-	if n.WildCard != nil {
-		if err := n.WildCard.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectField.WildCard")
-		}
-	}
-	if n.Expr != nil {
-		if err := n.Expr.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectField.Expr")
-		}
-	}
-	if asName := n.AsName.String(); asName != "" {
-		ctx.WriteKeyWord(" AS ")
-		ctx.WriteName(asName)
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *SelectField) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -492,19 +271,6 @@ type FieldList struct {
 	node
 
 	Fields []*SelectField
-}
-
-// Restore implements Node interface.
-func (n *FieldList) Restore(ctx *RestoreCtx) error {
-	for i, v := range n.Fields {
-		if i != 0 {
-			ctx.WritePlain(", ")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore FieldList.Fields[%d]", i)
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -531,14 +297,6 @@ type TableRefsClause struct {
 	TableRefs *Join
 }
 
-// Restore implements Node interface.
-func (n *TableRefsClause) Restore(ctx *RestoreCtx) error {
-	if err := n.TableRefs.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore TableRefsClause.TableRefs")
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *TableRefsClause) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -562,17 +320,6 @@ type ByItem struct {
 	Desc bool
 }
 
-// Restore implements Node interface.
-func (n *ByItem) Restore(ctx *RestoreCtx) error {
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore ByItem.Expr")
-	}
-	if n.Desc {
-		ctx.WriteKeyWord(" DESC")
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *ByItem) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -592,20 +339,6 @@ func (n *ByItem) Accept(v Visitor) (Node, bool) {
 type GroupByClause struct {
 	node
 	Items []*ByItem
-}
-
-// Restore implements Node interface.
-func (n *GroupByClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("GROUP BY ")
-	for i, v := range n.Items {
-		if i != 0 {
-			ctx.WritePlain(",")
-		}
-		if err := v.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore GroupByClause.Items[%d]", i)
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -631,15 +364,6 @@ type HavingClause struct {
 	Expr ExprNode
 }
 
-// Restore implements Node interface.
-func (n *HavingClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("HAVING ")
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore HavingClause.Expr")
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *HavingClause) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -660,20 +384,6 @@ type OrderByClause struct {
 	node
 	Items    []*ByItem
 	ForUnion bool
-}
-
-// Restore implements Node interface.
-func (n *OrderByClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("ORDER BY ")
-	for i, item := range n.Items {
-		if i != 0 {
-			ctx.WritePlain(",")
-		}
-		if err := item.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while restore OrderByClause.Items[%d]", i)
-		}
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -716,124 +426,10 @@ type SelectStmt struct {
 	OrderBy *OrderByClause
 	// Limit is the limit clause.
 	Limit *Limit
-	// LockTp is the lock type
-	LockTp SelectLockType
 	// TableHints represents the table level Optimizer Hint for join type
 	TableHints []*TableOptimizerHint
-	// IsAfterUnionDistinct indicates whether it's a stmt after "union distinct".
-	IsAfterUnionDistinct bool
 	// IsInBraces indicates whether it's a stmt in brace.
 	IsInBraces bool
-	// QueryBlockOffset indicates the order of this SelectStmt if counted from left to right in the sql text.
-	QueryBlockOffset int
-}
-
-// Restore implements Node interface.
-func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("SELECT ")
-
-	if n.SelectStmtOpts.Priority > 0 {
-		ctx.WriteKeyWord(mysql.Priority2Str[n.SelectStmtOpts.Priority])
-		ctx.WritePlain(" ")
-	}
-
-	if n.SelectStmtOpts.SQLSmallResult {
-		ctx.WriteKeyWord("SQL_SMALL_RESULT ")
-	}
-
-	if n.SelectStmtOpts.SQLBigResult {
-		ctx.WriteKeyWord("SQL_BIG_RESULT ")
-	}
-
-	if n.SelectStmtOpts.SQLBufferResult {
-		ctx.WriteKeyWord("SQL_BUFFER_RESULT ")
-	}
-
-	if !n.SelectStmtOpts.SQLCache {
-		ctx.WriteKeyWord("SQL_NO_CACHE ")
-	}
-
-	if n.TableHints != nil && len(n.TableHints) != 0 {
-		ctx.WritePlain("/*+ ")
-		for i, tableHint := range n.TableHints {
-			if err := tableHint.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SelectStmt.TableHints[%d]", i)
-			}
-		}
-		ctx.WritePlain("*/ ")
-	}
-
-	if n.Distinct {
-		ctx.WriteKeyWord("DISTINCT ")
-	}
-	if n.SelectStmtOpts.StraightJoin {
-		ctx.WriteKeyWord("STRAIGHT_JOIN ")
-	}
-	if n.Fields != nil {
-		for i, field := range n.Fields.Fields {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			if err := field.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while restore SelectStmt.Fields[%d]", i)
-			}
-		}
-	}
-
-	if n.From != nil {
-		ctx.WriteKeyWord(" FROM ")
-		if err := n.From.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.From")
-		}
-	}
-
-	if n.From == nil && n.Where != nil {
-		ctx.WriteKeyWord(" FROM DUAL")
-	}
-	if n.Where != nil {
-		ctx.WriteKeyWord(" WHERE ")
-		if err := n.Where.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.Where")
-		}
-	}
-
-	if n.GroupBy != nil {
-		ctx.WritePlain(" ")
-		if err := n.GroupBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.GroupBy")
-		}
-	}
-
-	if n.Having != nil {
-		ctx.WritePlain(" ")
-		if err := n.Having.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.Having")
-		}
-	}
-
-	if n.OrderBy != nil {
-		ctx.WritePlain(" ")
-		if err := n.OrderBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.OrderBy")
-		}
-	}
-
-	if n.Limit != nil {
-		ctx.WritePlain(" ")
-		if err := n.Limit.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore SelectStmt.Limit")
-		}
-	}
-
-	switch n.LockTp {
-	case SelectLockInShareMode:
-		ctx.WriteKeyWord(" LOCK ")
-		ctx.WriteKeyWord(n.LockTp.String())
-	case SelectLockForUpdate, SelectLockForUpdateNoWait:
-		ctx.WritePlain(" ")
-		ctx.WriteKeyWord(n.LockTp.String())
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -915,52 +511,6 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// UnionSelectList represents the select list in a union statement.
-type UnionSelectList struct {
-	node
-
-	Selects []*SelectStmt
-}
-
-// Restore implements Node interface.
-func (n *UnionSelectList) Restore(ctx *RestoreCtx) error {
-	for i, selectStmt := range n.Selects {
-		if i != 0 {
-			ctx.WriteKeyWord(" UNION ")
-			if !selectStmt.IsAfterUnionDistinct {
-				ctx.WriteKeyWord("ALL ")
-			}
-		}
-		if selectStmt.IsInBraces {
-			ctx.WritePlain("(")
-		}
-		if err := selectStmt.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionSelectList.SelectStmt")
-		}
-		if selectStmt.IsInBraces {
-			ctx.WritePlain(")")
-		}
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *UnionSelectList) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*UnionSelectList)
-	for i, sel := range n.Selects {
-		node, ok := sel.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.Selects[i] = node.(*SelectStmt)
-	}
-	return v.Leave(n)
-}
-
 // Assignment is the expression for assignment, like a = 1.
 type Assignment struct {
 	node
@@ -968,18 +518,6 @@ type Assignment struct {
 	Column *ColumnName
 	// Expr is the expression assigning to ColName.
 	Expr ExprNode
-}
-
-// Restore implements Node interface.
-func (n *Assignment) Restore(ctx *RestoreCtx) error {
-	if err := n.Column.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore Assignment.Column")
-	}
-	ctx.WritePlain("=")
-	if err := n.Expr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore Assignment.Expr")
-	}
-	return nil
 }
 
 // Accept implements Node Accept interface.
@@ -1129,21 +667,6 @@ type Limit struct {
 	Offset ExprNode
 }
 
-// Restore implements Node interface.
-func (n *Limit) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("LIMIT ")
-	if n.Offset != nil {
-		if err := n.Offset.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore Limit.Offset")
-		}
-		ctx.WritePlain(",")
-	}
-	if err := n.Count.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore Limit.Count")
-	}
-	return nil
-}
-
 // Accept implements Node Accept interface.
 func (n *Limit) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -1215,19 +738,6 @@ const (
 	ShowBuiltins
 )
 
-const (
-	ProfileTypeInvalid = iota
-	ProfileTypeCPU
-	ProfileTypeMemory
-	ProfileTypeBlockIo
-	ProfileTypeContextSwitch
-	ProfileTypePageFaults
-	ProfileTypeIpc
-	ProfileTypeSwaps
-	ProfileTypeSource
-	ProfileTypeAll
-)
-
 // ShowStmt is a statement to provide information about databases, tables, columns and so on.
 // See https://dev.mysql.com/doc/refman/5.7/en/show.html
 type ShowStmt struct {
@@ -1247,10 +757,6 @@ type ShowStmt struct {
 	GlobalScope bool
 	Pattern     *PatternLikeExpr
 	Where       ExprNode
-
-	ShowProfileTypes []int  // Used for `SHOW PROFILE` syntax
-	ShowProfileArgs  *int64 // Used for `SHOW PROFILE` syntax
-	ShowProfileLimit *Limit // Used for `SHOW PROFILE` syntax
 }
 
 // Accept implements Node Accept interface.
@@ -1298,39 +804,3 @@ func (n *ShowStmt) Accept(v Visitor) (Node, bool) {
 	}
 	return v.Leave(n)
 }
-
-type FulltextSearchModifier int
-
-const (
-	FulltextSearchModifierNaturalLanguageMode = 0
-	FulltextSearchModifierBooleanMode         = 1
-	FulltextSearchModifierModeMask            = 0xF
-	FulltextSearchModifierWithQueryExpansion  = 1 << 4
-)
-
-func (m FulltextSearchModifier) IsBooleanMode() bool {
-	return m&FulltextSearchModifierModeMask == FulltextSearchModifierBooleanMode
-}
-
-func (m FulltextSearchModifier) IsNaturalLanguageMode() bool {
-	return m&FulltextSearchModifierModeMask == FulltextSearchModifierNaturalLanguageMode
-}
-
-func (m FulltextSearchModifier) WithQueryExpansion() bool {
-	return m&FulltextSearchModifierWithQueryExpansion == FulltextSearchModifierWithQueryExpansion
-}
-
-type TimestampBound struct {
-	Mode      TimestampBoundMode
-	Timestamp ExprNode
-}
-
-type TimestampBoundMode int
-
-const (
-	TimestampBoundStrong TimestampBoundMode = iota
-	TimestampBoundMaxStaleness
-	TimestampBoundExactStaleness
-	TimestampBoundReadTimestamp
-	TimestampBoundMinReadTimestamp
-)
