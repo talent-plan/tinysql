@@ -106,7 +106,6 @@ func (s *testPlanBuilderSuite) TestRewriterPool(c *C) {
 	dirtyRewriter.aggrMap = make(map[*ast.AggregateFuncExpr]int)
 	dirtyRewriter.preprocess = func(ast.Node) ast.Node { return nil }
 	dirtyRewriter.insertPlan = &Insert{}
-	dirtyRewriter.disableFoldCounter = 1
 	dirtyRewriter.ctxStack = make([]expression.Expression, 2)
 	dirtyRewriter.ctxNameStk = make([]*types.FieldName, 2)
 	builder.rewriterCounter--
@@ -118,7 +117,6 @@ func (s *testPlanBuilderSuite) TestRewriterPool(c *C) {
 	c.Assert(cleanRewriter.aggrMap, IsNil)
 	c.Assert(cleanRewriter.preprocess, IsNil)
 	c.Assert(cleanRewriter.insertPlan, IsNil)
-	c.Assert(cleanRewriter.disableFoldCounter, Equals, 0)
 	c.Assert(len(cleanRewriter.ctxStack), Equals, 0)
 	builder.rewriterCounter--
 }

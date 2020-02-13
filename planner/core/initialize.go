@@ -59,8 +59,6 @@ const (
 	TypeDual = "TableDual"
 	// TypeInsert is the type of Insert
 	TypeInsert = "Insert"
-	// TypeUpdate is the type of Update.
-	TypeUpdate = "Update"
 	// TypeDelete is the type of Delete.
 	TypeDelete = "Delete"
 	// TypeIndexLookUp is the type of IndexLookUp.

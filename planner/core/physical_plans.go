@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/planner/property"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/ranger"
@@ -389,29 +388,6 @@ func (p *PhysicalTableDual) SetOutputNames(names types.NameSlice) {
 	p.names = names
 }
 
-// CollectPlanStatsVersion uses to collect the statistics version of the plan.
-func CollectPlanStatsVersion(plan PhysicalPlan, statsInfos map[string]uint64) map[string]uint64 {
-	for _, child := range plan.Children() {
-		statsInfos = CollectPlanStatsVersion(child, statsInfos)
-	}
-	switch copPlan := plan.(type) {
-	case *PhysicalTableReader:
-		statsInfos = CollectPlanStatsVersion(copPlan.tablePlan, statsInfos)
-	case *PhysicalIndexReader:
-		statsInfos = CollectPlanStatsVersion(copPlan.indexPlan, statsInfos)
-	case *PhysicalIndexLookUpReader:
-		// For index loop up, only the indexPlan is necessary,
-		// because they use the same stats and we do not set the stats info for tablePlan.
-		statsInfos = CollectPlanStatsVersion(copPlan.indexPlan, statsInfos)
-	case *PhysicalIndexScan:
-		statsInfos[copPlan.Table.Name.O] = copPlan.stats.StatsVersion
-	case *PhysicalTableScan:
-		statsInfos[copPlan.Table.Name.O] = copPlan.stats.StatsVersion
-	}
-
-	return statsInfos
-}
-
 // PhysicalShow represents a show plan.
 type PhysicalShow struct {
 	physicalSchemaProducer
@@ -424,15 +400,4 @@ type PhysicalShowDDLJobs struct {
 	physicalSchemaProducer
 
 	JobNumber int64
-}
-
-// BuildMergeJoinPlan builds a PhysicalMergeJoin from the given fields. Currently, it is only used for test purpose.
-func BuildMergeJoinPlan(ctx sessionctx.Context, joinType JoinType, leftKeys, rightKeys []*expression.Column) *PhysicalMergeJoin {
-	baseJoin := basePhysicalJoin{
-		JoinType:      joinType,
-		DefaultValues: []types.Datum{types.NewDatum(1), types.NewDatum(1)},
-		LeftJoinKeys:  leftKeys,
-		RightJoinKeys: rightKeys,
-	}
-	return PhysicalMergeJoin{basePhysicalJoin: baseJoin}.Init(ctx, nil)
 }
