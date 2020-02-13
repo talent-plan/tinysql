@@ -205,14 +205,6 @@ func (p PhysicalTableDual) Init(ctx sessionctx.Context, stats *property.StatsInf
 	return &p
 }
 
-// Init initializes PhysicalMaxOneRow.
-func (p PhysicalMaxOneRow) Init(ctx sessionctx.Context, stats *property.StatsInfo, props ...*property.PhysicalProperty) *PhysicalMaxOneRow {
-	p.basePhysicalPlan = newBasePhysicalPlan(ctx, TypeMaxOneRow, &p)
-	p.childrenReqProps = props
-	p.stats = stats
-	return &p
-}
-
 // Init initializes Delete.
 func (p Delete) Init(ctx sessionctx.Context) *Delete {
 	p.basePlan = newBasePlan(ctx, TypeDelete)

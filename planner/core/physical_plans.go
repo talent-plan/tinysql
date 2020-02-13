@@ -27,7 +27,6 @@ var (
 	_ PhysicalPlan = &PhysicalSelection{}
 	_ PhysicalPlan = &PhysicalProjection{}
 	_ PhysicalPlan = &PhysicalTopN{}
-	_ PhysicalPlan = &PhysicalMaxOneRow{}
 	_ PhysicalPlan = &PhysicalTableDual{}
 	_ PhysicalPlan = &PhysicalSort{}
 	_ PhysicalPlan = &NominalSort{}
@@ -339,11 +338,6 @@ type PhysicalSelection struct {
 	basePhysicalPlan
 
 	Conditions []expression.Expression
-}
-
-// PhysicalMaxOneRow is the physical operator of maxOneRow.
-type PhysicalMaxOneRow struct {
-	basePhysicalPlan
 }
 
 // PhysicalTableDual is the physical operator of dual.

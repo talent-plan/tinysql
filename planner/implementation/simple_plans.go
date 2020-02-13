@@ -144,39 +144,3 @@ func (impl *TiDBTopNImpl) CalcCost(outCount float64, children ...memo.Implementa
 func NewTiDBTopNImpl(topN *plannercore.PhysicalTopN) *TiDBTopNImpl {
 	return &TiDBTopNImpl{baseImpl{plan: topN}}
 }
-
-// UnionAllImpl is the implementation of PhysicalUnionAll.
-type UnionAllImpl struct {
-	baseImpl
-}
-
-// CalcCost implements Implementation CalcCost interface.
-func (impl *UnionAllImpl) CalcCost(outCount float64, children ...memo.Implementation) float64 {
-	var childMaxCost float64
-	for _, child := range children {
-		childCost := child.GetCost()
-		if childCost > childMaxCost {
-			childMaxCost = childCost
-		}
-	}
-	selfCost := float64(1+len(children)) * impl.plan.SCtx().GetSessionVars().ConcurrencyFactor
-	// Children of UnionAll are executed in parallel.
-	impl.cost = selfCost + childMaxCost
-	return impl.cost
-}
-
-// MaxOneRowImpl is the implementation of PhysicalApply.
-type MaxOneRowImpl struct {
-	baseImpl
-}
-
-// CalcCost implements Implementation CalcCost interface.
-func (impl *MaxOneRowImpl) CalcCost(outCount float64, children ...memo.Implementation) float64 {
-	impl.cost = children[0].GetCost()
-	return impl.cost
-}
-
-// NewMaxOneRowImpl creates a new MaxOneRowImpl.
-func NewMaxOneRowImpl(maxOneRow *plannercore.PhysicalMaxOneRow) *MaxOneRowImpl {
-	return &MaxOneRowImpl{baseImpl{plan: maxOneRow}}
-}
