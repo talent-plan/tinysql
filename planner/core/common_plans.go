@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 )
@@ -32,26 +31,6 @@ import (
 // ShowDDL is for showing DDL information.
 type ShowDDL struct {
 	baseSchemaProducer
-}
-
-// ShowDDLJobQueries is for showing DDL job queries sql.
-type ShowDDLJobQueries struct {
-	baseSchemaProducer
-
-	JobIDs []int64
-}
-
-// ShowNextRowID is for showing the next global row ID.
-type ShowNextRowID struct {
-	baseSchemaProducer
-	TableName *ast.TableName
-}
-
-// CancelDDLJobs represents a cancel DDL jobs plan.
-type CancelDDLJobs struct {
-	baseSchemaProducer
-
-	JobIDs []int64
 }
 
 // Set represents a plan for set stmt.
@@ -66,14 +45,6 @@ type Simple struct {
 	baseSchemaProducer
 
 	Statement ast.StmtNode
-}
-
-// InsertGeneratedColumns is for completing generated columns in Insert.
-// We resolve generation expressions in plan, and eval those in executor.
-type InsertGeneratedColumns struct {
-	Columns      []*ast.ColumnName
-	Exprs        []expression.Expression
-	OnDuplicates []*expression.Assignment
 }
 
 // Insert represents an insert plan.
@@ -111,7 +82,6 @@ type analyzeInfo struct {
 	DBName          string
 	TableName       string
 	PhysicalTableID int64
-	Incremental     bool
 }
 
 // AnalyzeColumnsTask is used for analyze columns.
@@ -135,14 +105,6 @@ type Analyze struct {
 
 	ColTasks []AnalyzeColumnsTask
 	IdxTasks []AnalyzeIndexTask
-}
-
-// SplitRegionStatus represents a split regions status plan.
-type SplitRegionStatus struct {
-	baseSchemaProducer
-
-	Table     table.Table
-	IndexInfo *model.IndexInfo
 }
 
 // DDL represents a DDL statement plan.
@@ -381,36 +343,4 @@ func (e *Explain) prepareTaskDot(p PhysicalPlan, taskTp string, buffer *bytes.Bu
 	for i := range pipelines {
 		buffer.WriteString(pipelines[i])
 	}
-}
-
-// IsPointGetWithPKOrUniqueKeyByAutoCommit returns true when meets following conditions:
-//  1. ctx is auto commit tagged
-//  2. session is not InTxn
-//  3. plan is point get by pk, or point get by unique index (no double read)
-func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bool, error) {
-	if !isAutoCommitTxn(ctx) {
-		return false, nil
-	}
-
-	// check plan
-	if proj, ok := p.(*PhysicalProjection); ok {
-		p = proj.Children()[0]
-	}
-
-	switch v := p.(type) {
-	case *PhysicalIndexReader:
-		indexScan := v.IndexPlans[0].(*PhysicalIndexScan)
-		return indexScan.IsPointGetByUniqueKey(ctx.GetSessionVars().StmtCtx), nil
-	case *PhysicalTableReader:
-		tableScan := v.TablePlans[0].(*PhysicalTableScan)
-		return len(tableScan.Ranges) == 1 && tableScan.Ranges[0].IsPoint(ctx.GetSessionVars().StmtCtx), nil
-	default:
-		return false, nil
-	}
-}
-
-// isAutoCommitTxn checks if session is in autocommit mode and not InTxn
-// used for fast plan like point get
-func isAutoCommitTxn(ctx sessionctx.Context) bool {
-	return ctx.GetSessionVars().IsAutocommit() && !ctx.GetSessionVars().InTxn()
 }

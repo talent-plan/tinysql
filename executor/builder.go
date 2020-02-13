@@ -78,16 +78,10 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 		return b.buildInsert(v)
 	case *plannercore.PhysicalLimit:
 		return b.buildLimit(v)
-	case *plannercore.CancelDDLJobs:
-		return b.buildCancelDDLJobs(v)
-	case *plannercore.ShowNextRowID:
-		return b.buildShowNextRowID(v)
 	case *plannercore.ShowDDL:
 		return b.buildShowDDL(v)
 	case *plannercore.PhysicalShowDDLJobs:
 		return b.buildShowDDLJobs(v)
-	case *plannercore.ShowDDLJobQueries:
-		return b.buildShowDDLJobQueries(v)
 	case *plannercore.PhysicalShow:
 		return b.buildShow(v)
 	case *plannercore.Simple:
@@ -132,32 +126,6 @@ func (b *executorBuilder) build(p plannercore.Plan) Executor {
 	}
 }
 
-func (b *executorBuilder) buildCancelDDLJobs(v *plannercore.CancelDDLJobs) Executor {
-	e := &CancelDDLJobsExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		jobIDs:       v.JobIDs,
-	}
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		b.err = err
-		return nil
-	}
-
-	e.errs, b.err = admin.CancelJobs(txn, e.jobIDs)
-	if b.err != nil {
-		return nil
-	}
-	return e
-}
-
-func (b *executorBuilder) buildShowNextRowID(v *plannercore.ShowNextRowID) Executor {
-	e := &ShowNextRowIDExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		tblName:      v.TableName,
-	}
-	return e
-}
-
 func (b *executorBuilder) buildShowDDL(v *plannercore.ShowDDL) Executor {
 	// We get DDLInfo here because for Executors that returns result set,
 	// next will be called after transaction has been committed.
@@ -196,14 +164,6 @@ func (b *executorBuilder) buildShowDDLJobs(v *plannercore.PhysicalShowDDLJobs) E
 		jobNumber:    v.JobNumber,
 		is:           b.is,
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-	}
-	return e
-}
-
-func (b *executorBuilder) buildShowDDLJobQueries(v *plannercore.ShowDDLJobQueries) Executor {
-	e := &ShowDDLJobQueriesExec{
-		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
-		jobIDs:       v.JobIDs,
 	}
 	return e
 }

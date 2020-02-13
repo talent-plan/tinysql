@@ -20,13 +20,11 @@ import (
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/table"
@@ -45,10 +43,8 @@ var (
 	_ Executor = &MergeJoinExec{}
 	_ Executor = &ProjectionExec{}
 	_ Executor = &SelectionExec{}
-	_ Executor = &ShowNextRowIDExec{}
 	_ Executor = &ShowDDLExec{}
 	_ Executor = &ShowDDLJobsExec{}
-	_ Executor = &ShowDDLJobQueriesExec{}
 	_ Executor = &SortExec{}
 	_ Executor = &TableDualExec{}
 	_ Executor = &TableReaderExecutor{}
@@ -165,71 +161,6 @@ func Next(ctx context.Context, e Executor, req *chunk.Chunk) error {
 	return e.Next(ctx, req)
 }
 
-// CancelDDLJobsExec represents a cancel DDL jobs executor.
-type CancelDDLJobsExec struct {
-	baseExecutor
-
-	cursor int
-	jobIDs []int64
-	errs   []error
-}
-
-// Next implements the Executor Next interface.
-func (e *CancelDDLJobsExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.GrowAndReset(e.maxChunkSize)
-	if e.cursor >= len(e.jobIDs) {
-		return nil
-	}
-	numCurBatch := mathutil.Min(req.Capacity(), len(e.jobIDs)-e.cursor)
-	for i := e.cursor; i < e.cursor+numCurBatch; i++ {
-		req.AppendString(0, fmt.Sprintf("%d", e.jobIDs[i]))
-		if e.errs[i] != nil {
-			req.AppendString(1, fmt.Sprintf("error: %v", e.errs[i]))
-		} else {
-			req.AppendString(1, "successful")
-		}
-	}
-	e.cursor += numCurBatch
-	return nil
-}
-
-// ShowNextRowIDExec represents a show the next row ID executor.
-type ShowNextRowIDExec struct {
-	baseExecutor
-	tblName *ast.TableName
-	done    bool
-}
-
-// Next implements the Executor Next interface.
-func (e *ShowNextRowIDExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.Reset()
-	if e.done {
-		return nil
-	}
-	is := domain.GetDomain(e.ctx).InfoSchema()
-	tbl, err := is.TableByName(e.tblName.Schema, e.tblName.Name)
-	if err != nil {
-		return err
-	}
-	colName := model.ExtraHandleName
-	for _, col := range tbl.Meta().Columns {
-		if mysql.HasAutoIncrementFlag(col.Flag) {
-			colName = col.Name
-			break
-		}
-	}
-	nextGlobalID, err := tbl.Allocator(e.ctx).NextGlobalAutoID(tbl.Meta().ID)
-	if err != nil {
-		return err
-	}
-	req.AppendString(0, e.tblName.Schema.O)
-	req.AppendString(1, e.tblName.Name.O)
-	req.AppendString(2, colName.O)
-	req.AppendInt64(3, nextGlobalID)
-	e.done = true
-	return nil
-}
-
 // ShowDDLExec represents a show DDL executor.
 type ShowDDLExec struct {
 	baseExecutor
@@ -274,157 +205,8 @@ func (e *ShowDDLExec) Next(ctx context.Context, req *chunk.Chunk) error {
 type ShowDDLJobsExec struct {
 	baseExecutor
 
-	cursor    int
-	jobs      []*model.Job
 	jobNumber int64
 	is        infoschema.InfoSchema
-}
-
-// ShowDDLJobQueriesExec represents a show DDL job queries executor.
-// The jobs id that is given by 'admin show ddl job queries' statement,
-// only be searched in the latest 10 history jobs
-type ShowDDLJobQueriesExec struct {
-	baseExecutor
-
-	cursor int
-	jobs   []*model.Job
-	jobIDs []int64
-}
-
-// Open implements the Executor Open interface.
-func (e *ShowDDLJobQueriesExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	jobs, err := admin.GetDDLJobs(txn)
-	if err != nil {
-		return err
-	}
-	historyJobs, err := admin.GetHistoryDDLJobs(txn, admin.DefNumHistoryJobs)
-	if err != nil {
-		return err
-	}
-
-	e.jobs = append(e.jobs, jobs...)
-	e.jobs = append(e.jobs, historyJobs...)
-
-	return nil
-}
-
-// Next implements the Executor Next interface.
-func (e *ShowDDLJobQueriesExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.GrowAndReset(e.maxChunkSize)
-	if e.cursor >= len(e.jobs) {
-		return nil
-	}
-	if len(e.jobIDs) >= len(e.jobs) {
-		return nil
-	}
-	numCurBatch := mathutil.Min(req.Capacity(), len(e.jobs)-e.cursor)
-	for _, id := range e.jobIDs {
-		for i := e.cursor; i < e.cursor+numCurBatch; i++ {
-			if id == e.jobs[i].ID {
-				req.AppendString(0, e.jobs[i].Query)
-			}
-		}
-	}
-	e.cursor += numCurBatch
-	return nil
-}
-
-// Open implements the Executor Open interface.
-func (e *ShowDDLJobsExec) Open(ctx context.Context) error {
-	if err := e.baseExecutor.Open(ctx); err != nil {
-		return err
-	}
-	txn, err := e.ctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	jobs, err := admin.GetDDLJobs(txn)
-	if err != nil {
-		return err
-	}
-	if e.jobNumber == 0 {
-		e.jobNumber = admin.DefNumHistoryJobs
-	}
-	historyJobs, err := admin.GetHistoryDDLJobs(txn, int(e.jobNumber))
-	if err != nil {
-		return err
-	}
-	e.jobs = append(e.jobs, jobs...)
-	e.jobs = append(e.jobs, historyJobs...)
-	e.cursor = 0
-	return nil
-}
-
-// Next implements the Executor Next interface.
-func (e *ShowDDLJobsExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	req.GrowAndReset(e.maxChunkSize)
-	if e.cursor >= len(e.jobs) {
-		return nil
-	}
-	numCurBatch := mathutil.Min(req.Capacity(), len(e.jobs)-e.cursor)
-	for i := e.cursor; i < e.cursor+numCurBatch; i++ {
-		req.AppendInt64(0, e.jobs[i].ID)
-		schemaName := e.jobs[i].SchemaName
-		tableName := ""
-		finishTS := uint64(0)
-		if e.jobs[i].BinlogInfo != nil {
-			finishTS = e.jobs[i].BinlogInfo.FinishedTS
-			if e.jobs[i].BinlogInfo.TableInfo != nil {
-				tableName = e.jobs[i].BinlogInfo.TableInfo.Name.L
-			}
-			if len(schemaName) == 0 && e.jobs[i].BinlogInfo.DBInfo != nil {
-				schemaName = e.jobs[i].BinlogInfo.DBInfo.Name.L
-			}
-		}
-		// For compatibility, the old version of DDL Job wasn't store the schema name and table name.
-		if len(schemaName) == 0 {
-			schemaName = getSchemaName(e.is, e.jobs[i].SchemaID)
-		}
-		if len(tableName) == 0 {
-			tableName = getTableName(e.is, e.jobs[i].TableID)
-		}
-		req.AppendString(1, schemaName)
-		req.AppendString(2, tableName)
-		req.AppendString(3, e.jobs[i].Type.String())
-		req.AppendString(4, e.jobs[i].SchemaState.String())
-		req.AppendInt64(5, e.jobs[i].SchemaID)
-		req.AppendInt64(6, e.jobs[i].TableID)
-		req.AppendInt64(7, e.jobs[i].RowCount)
-		req.AppendString(8, model.TSConvert2Time(e.jobs[i].StartTS).String())
-		req.AppendString(9, model.TSConvert2Time(finishTS).String())
-		req.AppendString(10, e.jobs[i].State.String())
-	}
-	e.cursor += numCurBatch
-	return nil
-}
-
-func getSchemaName(is infoschema.InfoSchema, id int64) string {
-	var schemaName string
-	DBInfo, ok := is.SchemaByID(id)
-	if ok {
-		schemaName = DBInfo.Name.O
-		return schemaName
-	}
-
-	return schemaName
-}
-
-func getTableName(is infoschema.InfoSchema, id int64) string {
-	var tableName string
-	table, ok := is.TableByID(id)
-	if ok {
-		tableName = table.Meta().Name.O
-		return tableName
-	}
-
-	return tableName
 }
 
 // LimitExec represents limit executor
