@@ -44,9 +44,7 @@ func (p *PhysicalIndexScan) explainInfo(normalized bool) string {
 			}
 		}
 	}
-	if len(p.rangeInfo) > 0 {
-		fmt.Fprintf(buffer, ", range: decided by %v", p.rangeInfo)
-	} else if len(p.Ranges) > 0 {
+	if len(p.Ranges) > 0 {
 		if normalized {
 			fmt.Fprint(buffer, ", range:[?,?]")
 		} else {
@@ -94,9 +92,7 @@ func (p *PhysicalTableScan) explainInfo(normalized bool) string {
 	if p.pkCol != nil {
 		fmt.Fprintf(buffer, ", pk col:%s", p.pkCol.ExplainInfo())
 	}
-	if len(p.rangeDecidedBy) > 0 {
-		fmt.Fprintf(buffer, ", range: decided by %v", p.rangeDecidedBy)
-	} else if len(p.Ranges) > 0 {
+	if len(p.Ranges) > 0 {
 		if normalized {
 			fmt.Fprint(buffer, ", range:[?,?]")
 		} else {

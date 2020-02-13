@@ -25,17 +25,13 @@ import (
 type ExplainExec struct {
 	baseExecutor
 
-	explain     *core.Explain
-	analyzeExec Executor
-	rows        [][]string
-	cursor      int
+	explain *core.Explain
+	rows    [][]string
+	cursor  int
 }
 
 // Open implements the Executor Open interface.
 func (e *ExplainExec) Open(ctx context.Context) error {
-	if e.analyzeExec != nil {
-		return e.analyzeExec.Open(ctx)
-	}
 	return nil
 }
 
@@ -71,21 +67,6 @@ func (e *ExplainExec) Next(ctx context.Context, req *chunk.Chunk) error {
 }
 
 func (e *ExplainExec) generateExplainInfo(ctx context.Context) ([][]string, error) {
-	if e.analyzeExec != nil {
-		chk := newFirstChunk(e.analyzeExec)
-		for {
-			err := Next(ctx, e.analyzeExec, chk)
-			if err != nil {
-				return nil, err
-			}
-			if chk.NumRows() == 0 {
-				break
-			}
-		}
-		if err := e.analyzeExec.Close(); err != nil {
-			return nil, err
-		}
-	}
 	if err := e.explain.RenderResult(); err != nil {
 		return nil, err
 	}

@@ -83,11 +83,11 @@ type EvaluatorSuite struct {
 
 // NewEvaluatorSuite creates an EvaluatorSuite to evaluate all the exprs.
 // avoidColumnEvaluator can be removed after column pool is supported.
-func NewEvaluatorSuite(exprs []Expression, avoidColumnEvaluator bool) *EvaluatorSuite {
+func NewEvaluatorSuite(exprs []Expression) *EvaluatorSuite {
 	e := &EvaluatorSuite{}
 
 	for i := 0; i < len(exprs); i++ {
-		if col, isCol := exprs[i].(*Column); isCol && !avoidColumnEvaluator {
+		if col, isCol := exprs[i].(*Column); isCol {
 			if e.columnEvaluator == nil {
 				e.columnEvaluator = &columnEvaluator{inputIdxToOutputIdxes: make(map[int][]int)}
 			}

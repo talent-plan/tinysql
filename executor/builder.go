@@ -580,10 +580,9 @@ func (b *executorBuilder) buildProjection(v *plannercore.PhysicalProjection) Exe
 		return nil
 	}
 	e := &ProjectionExec{
-		baseExecutor:     newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), childExec),
-		numWorkers:       b.ctx.GetSessionVars().ProjectionConcurrency,
-		evaluatorSuit:    expression.NewEvaluatorSuite(v.Exprs, v.AvoidColumnEvaluator),
-		calculateNoDelay: v.CalculateNoDelay,
+		baseExecutor:  newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), childExec),
+		numWorkers:    b.ctx.GetSessionVars().ProjectionConcurrency,
+		evaluatorSuit: expression.NewEvaluatorSuite(v.Exprs),
 	}
 
 	// If the calculation row count for this Projection operator is smaller

@@ -34,10 +34,6 @@ func canProjectionBeEliminatedLoose(p *LogicalProjection) bool {
 // canProjectionBeEliminatedStrict checks whether a projection can be
 // eliminated, returns true if the projection just copy its child's output.
 func canProjectionBeEliminatedStrict(p *PhysicalProjection) bool {
-	// If this projection is specially added for `DO`, we keep it.
-	if p.CalculateNoDelay {
-		return false
-	}
 	if p.Schema().Len() == 0 {
 		return true
 	}

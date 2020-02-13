@@ -54,8 +54,7 @@ type projectionOutput struct {
 type ProjectionExec struct {
 	baseExecutor
 
-	evaluatorSuit    *expression.EvaluatorSuite
-	calculateNoDelay bool
+	evaluatorSuit *expression.EvaluatorSuite
 
 	prepared    bool
 	finishCh    chan struct{}

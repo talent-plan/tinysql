@@ -109,12 +109,6 @@ func (p *PhysicalIndexReader) SetChildren(children ...PhysicalPlan) {
 	p.SetSchema(nil)
 }
 
-// PushedDownLimit is the limit operator pushed down into PhysicalIndexLookUpReader.
-type PushedDownLimit struct {
-	Offset uint64
-	Count  uint64
-}
-
 // PhysicalIndexLookUpReader is the index look up reader in tidb. It's used in case of double reading.
 type PhysicalIndexLookUpReader struct {
 	physicalSchemaProducer
@@ -150,13 +144,6 @@ type PhysicalIndexScan struct {
 	// will be different. The schema of index scan will decode all columns of index but the TiDB only need some of them.
 	dataSourceSchema *expression.Schema
 
-	rangeInfo string
-
-	// The index scan may be on a partition.
-	physicalTableID int64
-
-	GenExprs map[model.TableColumnID]expression.Expression
-
 	Desc      bool
 	KeepOrder bool
 	// DoubleRead means if the index executor will read kv two times.
@@ -189,10 +176,6 @@ type PhysicalTableScan struct {
 
 	TableAsName *model.CIStr
 
-	physicalTableID int64
-
-	rangeDecidedBy []*expression.Column
-
 	HandleIdx int
 
 	// KeepOrder is true, if sort data by scanning pkcol,
@@ -204,9 +187,7 @@ type PhysicalTableScan struct {
 type PhysicalProjection struct {
 	physicalSchemaProducer
 
-	Exprs                []expression.Expression
-	CalculateNoDelay     bool
-	AvoidColumnEvaluator bool
+	Exprs []expression.Expression
 }
 
 // PhysicalTopN is the physical operator of topN.

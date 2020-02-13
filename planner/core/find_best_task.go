@@ -468,10 +468,9 @@ func (ds *DataSource) convertToIndexScan(prop *property.PhysicalProperty, candid
 	if !candidate.isSingleScan {
 		// On this way, it's double read case.
 		ts := PhysicalTableScan{
-			Columns:         ds.Columns,
-			Table:           is.Table,
-			TableAsName:     ds.TableAsName,
-			physicalTableID: is.Table.ID,
+			Columns:     ds.Columns,
+			Table:       is.Table,
+			TableAsName: ds.TableAsName,
 		}.Init(ds.ctx)
 		ts.SetSchema(ds.schema.Clone())
 		cop.tablePlan = ts
@@ -612,7 +611,6 @@ func (s *LogicalTableScan) GetPhysicalScan(schema *expression.Schema, stats *pro
 		Columns:         ds.Columns,
 		TableAsName:     ds.TableAsName,
 		DBName:          ds.DBName,
-		physicalTableID: ds.tableInfo.ID,
 		Ranges:          s.Ranges,
 		AccessCondition: s.AccessConds,
 	}.Init(s.ctx)
@@ -635,7 +633,6 @@ func (s *LogicalIndexScan) GetPhysicalIndexScan(schema *expression.Schema, stats
 		AccessCondition:  s.AccessConds,
 		Ranges:           s.Ranges,
 		dataSourceSchema: ds.schema,
-		physicalTableID:  ds.tableInfo.ID,
 	}.Init(ds.ctx)
 	is.stats = stats
 	is.initSchema(s.Index, s.FullIdxCols, s.IsDoubleRead)
@@ -688,7 +685,6 @@ func (ds *DataSource) getOriginalPhysicalTableScan(prop *property.PhysicalProper
 		Columns:         ds.Columns,
 		TableAsName:     ds.TableAsName,
 		DBName:          ds.DBName,
-		physicalTableID: ds.tableInfo.ID,
 		Ranges:          path.Ranges,
 		AccessCondition: path.AccessConds,
 		filterCondition: path.TableFilters,
@@ -735,7 +731,6 @@ func (ds *DataSource) getOriginalPhysicalIndexScan(prop *property.PhysicalProper
 		AccessCondition:  path.AccessConds,
 		Ranges:           path.Ranges,
 		dataSourceSchema: ds.schema,
-		physicalTableID:  ds.tableInfo.ID,
 	}.Init(ds.ctx)
 	rowCount := path.CountAfterAccess
 	is.initSchema(idx, path.FullIdxCols, !isSingleScan)

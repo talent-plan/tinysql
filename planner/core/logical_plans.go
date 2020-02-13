@@ -125,19 +125,6 @@ type LogicalProjection struct {
 	logicalSchemaProducer
 
 	Exprs []expression.Expression
-
-	// CalculateNoDelay indicates this Projection is the root Plan and should be
-	// calculated without delay and will not return any result to client.
-	// Currently it is "true" only when the current sql query is a "DO" statement.
-	// See "https://dev.mysql.com/doc/refman/5.7/en/do.html" for more detail.
-	CalculateNoDelay bool
-
-	// AvoidColumnEvaluator is a temporary variable which is ONLY used to avoid
-	// building columnEvaluator for the expressions of Projection which is
-	// built by buildProjection4Union.
-	// This can be removed after column pool being supported.
-	// Related issue: TiDB#8141(https://github.com/pingcap/tidb/issues/8141)
-	AvoidColumnEvaluator bool
 }
 
 // LogicalAggregation represents an aggregate plan.

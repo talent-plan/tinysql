@@ -112,9 +112,7 @@ func (r *ImplProjection) OnImplement(expr *memo.GroupExpr, reqProp *property.Phy
 		return nil, nil
 	}
 	proj := plannercore.PhysicalProjection{
-		Exprs:                logicProj.Exprs,
-		CalculateNoDelay:     logicProj.CalculateNoDelay,
-		AvoidColumnEvaluator: logicProj.AvoidColumnEvaluator,
+		Exprs: logicProj.Exprs,
 	}.Init(logicProj.SCtx(), logicProp.Stats.ScaleByExpectCnt(reqProp.ExpectedCnt), childProp)
 	proj.SetSchema(logicProp.Schema)
 	return impl.NewProjectionImpl(proj), nil
