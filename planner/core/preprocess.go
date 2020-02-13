@@ -33,11 +33,6 @@ import (
 // PreprocessOpt presents optional parameters to `Preprocess` method.
 type PreprocessOpt func(*preprocessor)
 
-// InTxnRetry is a PreprocessOpt that indicates preprocess is executing under transaction retry.
-func InTxnRetry(p *preprocessor) {
-	p.flag |= inTxnRetry
-}
-
 // Preprocess resolves table names of the node, and checks some statements validation.
 func Preprocess(ctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema, preprocessOpt ...PreprocessOpt) error {
 	v := preprocessor{is: is, ctx: ctx, tableAliasInJoin: make([]map[string]interface{}, 0)}
@@ -51,10 +46,8 @@ func Preprocess(ctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema,
 type preprocessorFlag uint8
 
 const (
-	// inTxnRetry is set when visiting in transaction retry.
-	inTxnRetry preprocessorFlag = 1 << iota
 	// inCreateOrDropTable is set when visiting create/drop table statement.
-	inCreateOrDropTable
+	inCreateOrDropTable preprocessorFlag = 1 << iota
 	// parentIsJoin is set when visiting node's parent is join.
 	parentIsJoin
 )

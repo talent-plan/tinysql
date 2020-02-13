@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
-	"github.com/pingcap/tidb/planner"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
@@ -159,23 +158,6 @@ func (a *ExecStmt) OriginText() string {
 // IsReadOnly returns true if a statement is read only.
 func (a *ExecStmt) IsReadOnly() bool {
 	return ast.IsReadOnly(a.StmtNode)
-}
-
-// RebuildPlan rebuilds current execute statement plan.
-// It returns the current information schema version that 'a' is using.
-func (a *ExecStmt) RebuildPlan(ctx context.Context) (int64, error) {
-	is := infoschema.GetInfoSchema(a.Ctx)
-	a.InfoSchema = is
-	if err := plannercore.Preprocess(a.Ctx, a.StmtNode, is, plannercore.InTxnRetry); err != nil {
-		return 0, err
-	}
-	p, names, err := planner.Optimize(ctx, a.Ctx, a.StmtNode, is)
-	if err != nil {
-		return 0, err
-	}
-	a.OutputNames = names
-	a.Plan = p
-	return is.SchemaMetaVersion(), nil
 }
 
 // Exec builds an Executor from a plan. If the Executor doesn't return result,
