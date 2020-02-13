@@ -22,7 +22,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
@@ -98,30 +97,6 @@ func (s *testSuite3) TestCopClientSend(c *C) {
 	rs.Close()
 	keyword := "(*copIterator).work"
 	c.Check(checkGoroutineExists(keyword), IsFalse)
-}
-
-func (s *testSuite3) TestGetLackHandles(c *C) {
-	expectedHandles := []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-	handlesMap := make(map[int64]struct{})
-	for _, h := range expectedHandles {
-		handlesMap[h] = struct{}{}
-	}
-
-	// expected handles 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
-	// obtained handles 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
-	diffHandles := executor.GetLackHandles(expectedHandles, handlesMap)
-	c.Assert(diffHandles, HasLen, 0)
-	c.Assert(handlesMap, HasLen, 0)
-
-	// expected handles 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
-	// obtained handles 2, 3, 4, 6, 7, 8, 9
-	retHandles := []int64{2, 3, 4, 6, 7, 8, 9}
-	handlesMap = make(map[int64]struct{})
-	handlesMap[1] = struct{}{}
-	handlesMap[5] = struct{}{}
-	handlesMap[10] = struct{}{}
-	diffHandles = executor.GetLackHandles(expectedHandles, handlesMap)
-	c.Assert(retHandles, DeepEquals, diffHandles)
 }
 
 func (s *testSuite3) TestBigIntPK(c *C) {

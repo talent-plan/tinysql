@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/parser/terror"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
@@ -263,20 +262,10 @@ type IndexLookUpExecutor struct {
 	resultCh   chan *lookupTableTask
 	resultCurr *lookupTableTask
 
-	// checkIndexValue is used to check the consistency of the index data.
-	*checkIndexValue
-
 	idxPlans []plannercore.PhysicalPlan
 	tblPlans []plannercore.PhysicalPlan
 	idxCols  []*expression.Column
 	colLens  []int
-	// PushedLimit is used to skip the preceding and tailing handles when Limit is sunk into IndexLookUpReader.
-	PushedLimit *plannercore.PushedDownLimit
-}
-
-type checkIndexValue struct {
-	idxColTps  []*types.FieldType
-	idxTblCols []*table.Column
 }
 
 // Open implements the Executor Open interface.
@@ -322,24 +311,19 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		return err
 	}
 	tps := []*types.FieldType{types.NewFieldType(mysql.TypeLonglong)}
-	if e.checkIndexValue != nil {
-		tps = e.idxColTps
-	}
 	result, err := distsql.Select(ctx, e.ctx, kvReq, tps)
 	if err != nil {
 		return err
 	}
 	worker := &indexWorker{
-		idxLookup:       e,
-		workCh:          workCh,
-		finished:        e.finished,
-		resultCh:        e.resultCh,
-		keepOrder:       e.keepOrder,
-		batchSize:       initBatchSize,
-		checkIndexValue: e.checkIndexValue,
-		maxBatchSize:    e.ctx.GetSessionVars().IndexLookupSize,
-		maxChunkSize:    e.maxChunkSize,
-		PushedLimit:     e.PushedLimit,
+		idxLookup:    e,
+		workCh:       workCh,
+		finished:     e.finished,
+		resultCh:     e.resultCh,
+		keepOrder:    e.keepOrder,
+		batchSize:    initBatchSize,
+		maxBatchSize: e.ctx.GetSessionVars().IndexLookupSize,
+		maxChunkSize: e.maxChunkSize,
 	}
 	if worker.batchSize > worker.maxBatchSize {
 		worker.batchSize = worker.maxBatchSize
@@ -368,13 +352,12 @@ func (e *IndexLookUpExecutor) startTableWorker(ctx context.Context, workCh <-cha
 	e.tblWorkerWg.Add(lookupConcurrencyLimit)
 	for i := 0; i < lookupConcurrencyLimit; i++ {
 		worker := &tableWorker{
-			idxLookup:       e,
-			workCh:          workCh,
-			finished:        e.finished,
-			buildTblReader:  e.buildTableReader,
-			keepOrder:       e.keepOrder,
-			handleIdx:       e.handleIdx,
-			checkIndexValue: e.checkIndexValue,
+			idxLookup:      e,
+			workCh:         workCh,
+			finished:       e.finished,
+			buildTblReader: e.buildTableReader,
+			keepOrder:      e.keepOrder,
+			handleIdx:      e.handleIdx,
 		}
 		ctx1, cancel := context.WithCancel(ctx)
 		go func() {
@@ -474,11 +457,6 @@ type indexWorker struct {
 	batchSize    int
 	maxBatchSize int
 	maxChunkSize int
-
-	// checkIndexValue is used to check the consistency of the index data.
-	*checkIndexValue
-	// PushedLimit is used to skip the preceding and tailing handles when Limit is sunk into IndexLookUpReader.
-	PushedLimit *plannercore.PushedDownLimit
 }
 
 // fetchHandles fetches a batch of handles from index data and builds the index lookup tasks.
@@ -502,12 +480,7 @@ func (w *indexWorker) fetchHandles(ctx context.Context, result distsql.SelectRes
 			}
 		}
 	}()
-	var chk *chunk.Chunk
-	if w.checkIndexValue != nil {
-		chk = chunk.NewChunkWithCapacity(w.idxColTps, w.maxChunkSize)
-	} else {
-		chk = chunk.NewChunkWithCapacity([]*types.FieldType{types.NewFieldType(mysql.TypeLonglong)}, w.idxLookup.maxChunkSize)
-	}
+	chk := chunk.NewChunkWithCapacity([]*types.FieldType{types.NewFieldType(mysql.TypeLonglong)}, w.idxLookup.maxChunkSize)
 	for {
 		handles, retChunk, scannedKeys, err := w.extractTaskHandles(ctx, chk, result, count)
 		if err != nil {
@@ -538,19 +511,8 @@ func (w *indexWorker) extractTaskHandles(ctx context.Context, chk *chunk.Chunk, 
 	handles []int64, retChk *chunk.Chunk, scannedKeys uint64, err error) {
 	handleOffset := chk.NumCols() - 1
 	handles = make([]int64, 0, w.batchSize)
-	// PushedLimit would always be nil for CheckIndex or CheckTable, we add this check just for insurance.
-	checkLimit := (w.PushedLimit != nil) && (w.checkIndexValue == nil)
 	for len(handles) < w.batchSize {
 		requiredRows := w.batchSize - len(handles)
-		if checkLimit {
-			if w.PushedLimit.Offset+w.PushedLimit.Count <= scannedKeys+count {
-				return handles, nil, scannedKeys, nil
-			}
-			leftCnt := w.PushedLimit.Offset + w.PushedLimit.Count - scannedKeys - count
-			if uint64(requiredRows) > leftCnt {
-				requiredRows = int(leftCnt)
-			}
-		}
 		chk.SetRequiredRows(requiredRows, w.maxChunkSize)
 		err = errors.Trace(idxResult.Next(ctx, chk))
 		if err != nil {
@@ -561,24 +523,8 @@ func (w *indexWorker) extractTaskHandles(ctx context.Context, chk *chunk.Chunk, 
 		}
 		for i := 0; i < chk.NumRows(); i++ {
 			scannedKeys++
-			if checkLimit {
-				if (count + scannedKeys) <= w.PushedLimit.Offset {
-					// Skip the preceding Offset handles.
-					continue
-				}
-				if (count + scannedKeys) > (w.PushedLimit.Offset + w.PushedLimit.Count) {
-					// Skip the handles after Offset+Count.
-					return handles, nil, scannedKeys, nil
-				}
-			}
 			h := chk.GetRow(i).GetInt64(handleOffset)
 			handles = append(handles, h)
-		}
-		if w.checkIndexValue != nil {
-			if retChk == nil {
-				retChk = chunk.NewChunkWithCapacity(w.idxColTps, w.batchSize)
-			}
-			retChk.Append(chk, 0, chk.NumRows())
 		}
 	}
 	w.batchSize *= 2
@@ -596,19 +542,6 @@ func (w *indexWorker) buildTableTask(handles []int64, retChk *chunk.Chunk) *look
 		indexOrder = make(map[int64]int, len(handles))
 		for i, h := range handles {
 			indexOrder[h] = i
-		}
-	}
-
-	if w.checkIndexValue != nil {
-		// Save the index order.
-		indexOrder = make(map[int64]int, len(handles))
-		duplicatedIndexOrder = make(map[int64]int)
-		for i, h := range handles {
-			if _, ok := indexOrder[h]; ok {
-				duplicatedIndexOrder[h] = i
-			} else {
-				indexOrder[h] = i
-			}
 		}
 	}
 
@@ -631,9 +564,6 @@ type tableWorker struct {
 	buildTblReader func(ctx context.Context, handles []int64) (Executor, error)
 	keepOrder      bool
 	handleIdx      int
-
-	// checkIndexValue is used to check the consistency of the index data.
-	*checkIndexValue
 }
 
 // pickAndExecTask picks tasks from workCh, and execute them.
@@ -666,51 +596,6 @@ func (w *tableWorker) pickAndExecTask(ctx context.Context) {
 	}
 }
 
-func (w *tableWorker) compareData(ctx context.Context, task *lookupTableTask, tableReader Executor) error {
-	chk := newFirstChunk(tableReader)
-	tblInfo := w.idxLookup.table.Meta()
-	vals := make([]types.Datum, 0, len(w.idxTblCols))
-	for {
-		err := Next(ctx, tableReader, chk)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if chk.NumRows() == 0 {
-			for h := range task.indexOrder {
-				idxRow := task.idxRows.GetRow(task.indexOrder[h])
-				return errors.Errorf("handle %#v, index:%#v != record:%#v", h, idxRow.GetDatum(0, w.idxColTps[0]), nil)
-			}
-			break
-		}
-
-		iter := chunk.NewIterator4Chunk(chk)
-		for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-			handle := row.GetInt64(w.handleIdx)
-			offset, ok := task.indexOrder[handle]
-			if !ok {
-				offset = task.duplicatedIndexOrder[handle]
-			}
-			delete(task.indexOrder, handle)
-			idxRow := task.idxRows.GetRow(offset)
-			vals = vals[:0]
-			for i, col := range w.idxTblCols {
-				vals = append(vals, row.GetDatum(i, &col.FieldType))
-			}
-			vals = tables.TruncateIndexValuesIfNeeded(tblInfo, w.idxLookup.index, vals)
-			for i, val := range vals {
-				col := w.idxTblCols[i]
-				tp := &col.FieldType
-				ret := chunk.Compare(idxRow, i, &val)
-				if ret != 0 {
-					return errors.Errorf("col %s, handle %#v, index:%#v != record:%#v", col.Name, handle, idxRow.GetDatum(i, tp), val)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // executeTask executes the table look up tasks. We will construct a table reader and send request by handles.
 // Then we hold the returning rows and finish this task.
 func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) error {
@@ -720,10 +605,6 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 		return err
 	}
 	defer terror.Call(tableReader.Close)
-
-	if w.checkIndexValue != nil {
-		return w.compareData(ctx, task, tableReader)
-	}
 
 	handleCnt := len(task.handles)
 	task.rows = make([]chunk.Row, 0, handleCnt)
@@ -752,48 +633,5 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 		sort.Sort(task)
 	}
 
-	if handleCnt != len(task.rows) {
-		if len(w.idxLookup.tblPlans) == 1 {
-			obtainedHandlesMap := make(map[int64]struct{}, len(task.rows))
-			for _, row := range task.rows {
-				handle := row.GetInt64(w.handleIdx)
-				obtainedHandlesMap[handle] = struct{}{}
-			}
-
-			logutil.Logger(ctx).Error("inconsistent index handles", zap.String("index", w.idxLookup.index.Name.O),
-				zap.Int("index_cnt", handleCnt), zap.Int("table_cnt", len(task.rows)),
-				zap.Int64s("missing_handles", GetLackHandles(task.handles, obtainedHandlesMap)),
-				zap.Int64s("total_handles", task.handles))
-
-			// table scan in double read can never has conditions according to convertToIndexScan.
-			// if this table scan has no condition, the number of rows it returns must equal to the length of handles.
-			return errors.Errorf("inconsistent index %s handle count %d isn't equal to value count %d",
-				w.idxLookup.index.Name.O, handleCnt, len(task.rows))
-		}
-	}
-
 	return nil
-}
-
-// GetLackHandles gets the handles in expectedHandles but not in obtainedHandlesMap.
-func GetLackHandles(expectedHandles []int64, obtainedHandlesMap map[int64]struct{}) []int64 {
-	diffCnt := len(expectedHandles) - len(obtainedHandlesMap)
-	diffHandles := make([]int64, 0, diffCnt)
-	var cnt int
-	for _, handle := range expectedHandles {
-		isExist := false
-		if _, ok := obtainedHandlesMap[handle]; ok {
-			delete(obtainedHandlesMap, handle)
-			isExist = true
-		}
-		if !isExist {
-			diffHandles = append(diffHandles, handle)
-			cnt++
-			if cnt == diffCnt {
-				break
-			}
-		}
-	}
-
-	return diffHandles
 }

@@ -127,8 +127,6 @@ type PhysicalIndexLookUpReader struct {
 	tablePlan  PhysicalPlan
 
 	ExtraHandleCol *expression.Column
-	// PushedLimit is used to avoid unnecessary table scan tasks of IndexLookUpReader.
-	PushedLimit *PushedDownLimit
 }
 
 // PhysicalIndexScan represents an index scan plan.
