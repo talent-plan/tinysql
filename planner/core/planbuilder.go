@@ -152,15 +152,6 @@ var clauseMsg = map[clauseCode]string{
 	globalOrderByClause: "global ORDER clause",
 }
 
-type capFlagType = uint64
-
-const (
-	_ capFlagType = iota
-	// canExpandAST indicates whether the origin AST can be expanded during plan
-	// building. ONLY used for `CreateViewStmt` now.
-	canExpandAST
-)
-
 // PlanBuilder builds Plan from an ast.Node.
 // It just builds the ast node straightforwardly.
 type PlanBuilder struct {
@@ -172,8 +163,6 @@ type PlanBuilder struct {
 	tableHintInfo []tableHintInfo
 	// optFlag indicates the flags of the optimizer rules.
 	optFlag uint64
-	// capFlag indicates the capability flags.
-	capFlag capFlagType
 
 	curClause clauseCode
 
