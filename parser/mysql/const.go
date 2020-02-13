@@ -16,9 +16,6 @@ package mysql
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pingcap/errors"
-	. "github.com/pingcap/tidb/parser/format"
 )
 
 func newInvalidModeErr(s string) error {
@@ -749,40 +746,6 @@ var Priority2Str = map[PriorityEnum]string{
 	LowPriority:     "LOW_PRIORITY",
 	HighPriority:    "HIGH_PRIORITY",
 	DelayedPriority: "DELAYED",
-}
-
-// Str2Priority is used to convert a string to a priority.
-func Str2Priority(val string) PriorityEnum {
-	val = strings.ToUpper(val)
-	switch val {
-	case "NO_PRIORITY":
-		return NoPriority
-	case "HIGH_PRIORITY":
-		return HighPriority
-	case "LOW_PRIORITY":
-		return LowPriority
-	case "DELAYED":
-		return DelayedPriority
-	default:
-		return NoPriority
-	}
-}
-
-// Restore implements Node interface.
-func (n *PriorityEnum) Restore(ctx *RestoreCtx) error {
-	switch *n {
-	case NoPriority:
-		return nil
-	case LowPriority:
-		ctx.WriteKeyWord("LOW_PRIORITY")
-	case HighPriority:
-		ctx.WriteKeyWord("HIGH_PRIORITY")
-	case DelayedPriority:
-		ctx.WriteKeyWord("DELAYED")
-	default:
-		return errors.Errorf("undefined PriorityEnum Type[%d]", *n)
-	}
-	return nil
 }
 
 // PrimaryKeyName defines primary key name.

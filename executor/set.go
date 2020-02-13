@@ -20,8 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
@@ -47,24 +45,6 @@ func (e *SetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	e.done = true
 	sessionVars := e.ctx.GetSessionVars()
 	for _, v := range e.vars {
-		// Variable is case insensitive, we use lower case.
-		if v.Name == ast.SetNames {
-			// This is set charset stmt.
-			dt, err := v.Expr.(*expression.Constant).Eval(chunk.Row{})
-			if err != nil {
-				return err
-			}
-			cs := dt.GetString()
-			var co string
-			if v.ExtendValue != nil {
-				co = v.ExtendValue.Value.GetString()
-			}
-			err = e.setCharset(cs, co)
-			if err != nil {
-				return err
-			}
-			continue
-		}
 		name := strings.ToLower(v.Name)
 		if !v.IsSystem {
 			// Set user variable.
@@ -169,22 +149,6 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 		}
 	}
 
-	return nil
-}
-
-func (e *SetExecutor) setCharset(cs, co string) error {
-	var err error
-	if len(co) == 0 {
-		co, err = charset.GetDefaultCollation(cs)
-		if err != nil {
-			return err
-		}
-	}
-	sessionVars := e.ctx.GetSessionVars()
-	for _, v := range variable.SetNamesVariables {
-		terror.Log(sessionVars.SetSystemVar(v, cs))
-	}
-	terror.Log(sessionVars.SetSystemVar(variable.CollationConnection, co))
 	return nil
 }
 

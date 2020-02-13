@@ -401,12 +401,11 @@ type Assignment struct {
 
 // VarAssignment represents a variable assignment in Set, such as set global a = 1.
 type VarAssignment struct {
-	Name        string
-	Expr        Expression
-	IsDefault   bool
-	IsGlobal    bool
-	IsSystem    bool
-	ExtendValue *Constant
+	Name      string
+	Expr      Expression
+	IsDefault bool
+	IsGlobal  bool
+	IsSystem  bool
 }
 
 // splitNormalFormItems split CNF(conjunctive normal form) like "a and b and c", or DNF(disjunctive normal form) like "a or b or c"

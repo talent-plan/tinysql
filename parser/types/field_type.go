@@ -15,7 +15,6 @@ package types
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/pingcap/tidb/parser/charset"
@@ -195,124 +194,6 @@ func (ft *FieldType) String() string {
 	}
 
 	return strings.Join(strs, " ")
-}
-
-// Restore implements Node interface.
-func (ft *FieldType) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord(TypeToStr(ft.Tp, ft.Charset))
-
-	precision := UnspecifiedLength
-	scale := UnspecifiedLength
-
-	switch ft.Tp {
-	case mysql.TypeEnum, mysql.TypeSet:
-		ctx.WritePlain("(")
-		for i, e := range ft.Elems {
-			if i != 0 {
-				ctx.WritePlain(",")
-			}
-			ctx.WriteString(e)
-		}
-		ctx.WritePlain(")")
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
-		precision = ft.Decimal
-	case mysql.TypeDecimal, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-		precision = ft.Flen
-		scale = ft.Decimal
-	default:
-		precision = ft.Flen
-	}
-
-	if precision != UnspecifiedLength {
-		ctx.WritePlainf("(%d", precision)
-		if scale != UnspecifiedLength {
-			ctx.WritePlainf(",%d", scale)
-		}
-		ctx.WritePlain(")")
-	}
-
-	if mysql.HasUnsignedFlag(ft.Flag) {
-		ctx.WriteKeyWord(" UNSIGNED")
-	}
-	if mysql.HasZerofillFlag(ft.Flag) {
-		ctx.WriteKeyWord(" ZEROFILL")
-	}
-	if mysql.HasBinaryFlag(ft.Flag) && ft.Charset != charset.CharsetBin {
-		ctx.WriteKeyWord(" BINARY")
-	}
-
-	if IsTypeChar(ft.Tp) || IsTypeBlob(ft.Tp) {
-		if ft.Charset != "" && ft.Charset != charset.CharsetBin {
-			ctx.WriteKeyWord(" CHARACTER SET " + ft.Charset)
-		}
-		if ft.Collate != "" && ft.Collate != charset.CharsetBin {
-			ctx.WriteKeyWord(" COLLATE ")
-			ctx.WritePlain(ft.Collate)
-		}
-	}
-
-	return nil
-}
-
-// RestoreAsCastType is used for write AST back to string.
-func (ft *FieldType) RestoreAsCastType(ctx *format.RestoreCtx) {
-	switch ft.Tp {
-	case mysql.TypeVarString:
-		if ft.Charset == charset.CharsetBin && ft.Collate == charset.CollationBin {
-			ctx.WriteKeyWord("BINARY")
-		} else {
-			ctx.WriteKeyWord("CHAR")
-		}
-		if ft.Flen != UnspecifiedLength {
-			ctx.WritePlainf("(%d)", ft.Flen)
-		}
-		if ft.Flag&mysql.BinaryFlag != 0 {
-			ctx.WriteKeyWord(" BINARY")
-		}
-		if ft.Charset != charset.CharsetBin && ft.Charset != mysql.DefaultCharset {
-			ctx.WriteKeyWord(" CHARSET ")
-			ctx.WriteKeyWord(ft.Charset)
-		}
-	case mysql.TypeDate:
-		ctx.WriteKeyWord("DATE")
-	case mysql.TypeDatetime:
-		ctx.WriteKeyWord("DATETIME")
-		if ft.Decimal > 0 {
-			ctx.WritePlainf("(%d)", ft.Decimal)
-		}
-	case mysql.TypeNewDecimal:
-		ctx.WriteKeyWord("DECIMAL")
-		if ft.Flen > 0 && ft.Decimal > 0 {
-			ctx.WritePlainf("(%d, %d)", ft.Flen, ft.Decimal)
-		} else if ft.Flen > 0 {
-			ctx.WritePlainf("(%d)", ft.Flen)
-		}
-	case mysql.TypeDuration:
-		ctx.WriteKeyWord("TIME")
-		if ft.Decimal > 0 {
-			ctx.WritePlainf("(%d)", ft.Decimal)
-		}
-	case mysql.TypeLonglong:
-		if ft.Flag&mysql.UnsignedFlag != 0 {
-			ctx.WriteKeyWord("UNSIGNED")
-		} else {
-			ctx.WriteKeyWord("SIGNED")
-		}
-	case mysql.TypeJSON:
-		ctx.WriteKeyWord("JSON")
-	case mysql.TypeDouble:
-		ctx.WriteKeyWord("DOUBLE")
-	case mysql.TypeFloat:
-		ctx.WriteKeyWord("FLOAT")
-	}
-}
-
-// FormatAsCastType is used for write AST back to string.
-func (ft *FieldType) FormatAsCastType(w io.Writer) {
-	var sb strings.Builder
-	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &sb)
-	ft.RestoreAsCastType(restoreCtx)
-	fmt.Fprint(w, sb.String())
 }
 
 // VarStorageLen indicates this column is a variable length column.

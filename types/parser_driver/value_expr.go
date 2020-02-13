@@ -18,9 +18,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 )
@@ -63,45 +61,6 @@ type ValueExpr struct {
 	ast.TexprNode
 	types.Datum
 	projectionOffset int
-}
-
-// Restore implements Node interface.
-func (n *ValueExpr) Restore(ctx *format.RestoreCtx) error {
-	switch n.Kind() {
-	case types.KindNull:
-		ctx.WriteKeyWord("NULL")
-	case types.KindInt64:
-		if n.Type.Flag&mysql.IsBooleanFlag != 0 {
-			if n.GetInt64() > 0 {
-				ctx.WriteKeyWord("TRUE")
-			} else {
-				ctx.WriteKeyWord("FALSE")
-			}
-		} else {
-			ctx.WritePlain(strconv.FormatInt(n.GetInt64(), 10))
-		}
-	case types.KindUint64:
-		ctx.WritePlain(strconv.FormatUint(n.GetUint64(), 10))
-	case types.KindFloat32:
-		ctx.WritePlain(strconv.FormatFloat(n.GetFloat64(), 'e', -1, 32))
-	case types.KindFloat64:
-		ctx.WritePlain(strconv.FormatFloat(n.GetFloat64(), 'e', -1, 64))
-	case types.KindString:
-		if n.Type.Charset != "" && n.Type.Charset != mysql.DefaultCharset {
-			ctx.WritePlain("_")
-			ctx.WriteKeyWord(n.Type.Charset)
-		}
-		ctx.WriteString(n.GetString())
-	case types.KindBytes:
-		ctx.WriteString(n.GetString())
-	case types.KindInterface, types.KindMinNotNull, types.KindMaxValue,
-		types.KindRaw:
-		// TODO implement Restore function
-		return errors.New("Not implemented")
-	default:
-		return errors.New("can't format to string")
-	}
-	return nil
 }
 
 // GetDatumString implements the ast.ValueExpr interface.

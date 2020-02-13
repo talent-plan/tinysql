@@ -14,7 +14,6 @@
 package ast
 
 import (
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 )
@@ -203,20 +202,6 @@ type WildCardField struct {
 
 	Table  model.CIStr
 	Schema model.CIStr
-}
-
-// Restore implements Node interface.
-func (n *WildCardField) Restore(ctx *RestoreCtx) error {
-	if schema := n.Schema.String(); schema != "" {
-		ctx.WriteName(schema)
-		ctx.WritePlain(".")
-	}
-	if table := n.Table.String(); table != "" {
-		ctx.WriteName(table)
-		ctx.WritePlain(".")
-	}
-	ctx.WritePlain("*")
-	return nil
 }
 
 // Accept implements Node Accept interface.

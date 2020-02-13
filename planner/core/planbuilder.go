@@ -300,12 +300,6 @@ func (b *PlanBuilder) buildSet(ctx context.Context, v *ast.SetStmt) (Plan, error
 		} else {
 			assign.IsDefault = true
 		}
-		if vars.ExtendValue != nil {
-			assign.ExtendValue = &expression.Constant{
-				Value:   vars.ExtendValue.(*driver.ValueExpr).Datum,
-				RetType: &vars.ExtendValue.(*driver.ValueExpr).Type,
-			}
-		}
 		p.VarAssigns = append(p.VarAssigns, assign)
 	}
 	return p, nil
@@ -453,10 +447,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 	var ret Plan
 	var err error
 	switch as.Tp {
-	case ast.AdminShowNextRowID:
-		p := &ShowNextRowID{TableName: as.Tables[0]}
-		p.setSchemaAndNames(buildShowNextRowID())
-		ret = p
 	case ast.AdminShowDDL:
 		p := &ShowDDL{}
 		p.setSchemaAndNames(buildShowDDLFields())
@@ -474,14 +464,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 				return nil, err
 			}
 		}
-	case ast.AdminCancelDDLJobs:
-		p := &CancelDDLJobs{JobIDs: as.JobIDs}
-		p.setSchemaAndNames(buildCancelDDLJobsFields())
-		ret = p
-	case ast.AdminShowDDLJobQueries:
-		p := &ShowDDLJobQueries{JobIDs: as.JobIDs}
-		p.setSchemaAndNames(buildShowDDLJobQueriesFields())
-		ret = p
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.AdminStmt(%T) for buildAdmin", as)
 	}
@@ -534,15 +516,6 @@ func (b *PlanBuilder) buildAnalyze(as *ast.AnalyzeTableStmt) (Plan, error) {
 	return p, nil
 }
 
-func buildShowNextRowID() (*expression.Schema, types.NameSlice) {
-	schema := newColumnsWithNames(4)
-	schema.Append(buildColumnWithName("", "DB_NAME", mysql.TypeVarchar, mysql.MaxDatabaseNameLength))
-	schema.Append(buildColumnWithName("", "TABLE_NAME", mysql.TypeVarchar, mysql.MaxTableNameLength))
-	schema.Append(buildColumnWithName("", "COLUMN_NAME", mysql.TypeVarchar, mysql.MaxColumnNameLength))
-	schema.Append(buildColumnWithName("", "NEXT_GLOBAL_ROW_ID", mysql.TypeLonglong, 4))
-	return schema.col2Schema(), schema.names
-}
-
 func buildShowDDLFields() (*expression.Schema, types.NameSlice) {
 	schema := newColumnsWithNames(6)
 	schema.Append(buildColumnWithName("", "SCHEMA_VER", mysql.TypeLonglong, 4))
@@ -584,20 +557,6 @@ func buildTableRegionsSchema() (*expression.Schema, types.NameSlice) {
 	schema.Append(buildColumnWithName("", "READ_BYTES", mysql.TypeLonglong, 4))
 	schema.Append(buildColumnWithName("", "APPROXIMATE_SIZE(MB)", mysql.TypeLonglong, 4))
 	schema.Append(buildColumnWithName("", "APPROXIMATE_KEYS", mysql.TypeLonglong, 4))
-	return schema.col2Schema(), schema.names
-}
-
-func buildShowDDLJobQueriesFields() (*expression.Schema, types.NameSlice) {
-	schema := newColumnsWithNames(1)
-	schema.Append(buildColumnWithName("", "QUERY", mysql.TypeVarchar, 256))
-	return schema.col2Schema(), schema.names
-}
-
-func buildCancelDDLJobsFields() (*expression.Schema, types.NameSlice) {
-	schema := newColumnsWithNames(2)
-	schema.Append(buildColumnWithName("", "JOB_ID", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "RESULT", mysql.TypeVarchar, 128))
-
 	return schema.col2Schema(), schema.names
 }
 

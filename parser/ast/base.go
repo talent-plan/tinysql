@@ -14,7 +14,6 @@
 package ast
 
 import (
-	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/types"
 )
 
@@ -32,10 +31,6 @@ func (n *node) SetText(text string) {
 // Text implements Node interface.
 func (n *node) Text() string {
 	return n.text
-}
-
-func (n *node) Restore(ctx *format.RestoreCtx) error {
-	panic("do not call it")
 }
 
 // stmtNode implements StmtNode interface.

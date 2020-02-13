@@ -174,8 +174,6 @@ func (e *Explain) prepareSchema() error {
 		fieldNames = []string{"id", "count", "task", "operator info"}
 	case format == ast.ExplainFormatDOT:
 		fieldNames = []string{"dot contents"}
-	case format == ast.ExplainFormatHint:
-		fieldNames = []string{"hint"}
 	default:
 		return errors.Errorf("explain format '%s' is not supported now", e.Format)
 	}

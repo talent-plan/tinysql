@@ -738,7 +738,6 @@ import (
 	UseStmt				"USE statement"
 
 %type   <item>
-	AdminShowSlow			"Admin Show Slow statement"
 	AlterTableSpec			"Alter table specification"
 	AlterTableSpecList		"Alter table specification list"
 	AlterTableSpecListOpt		"Alter table specification list optional"
@@ -795,8 +794,6 @@ import (
 	GlobalScope			"The scope of variable"
 	GroupByClause			"GROUP BY clause"
 	HavingClause			"HAVING clause"
-	HandleRange			"handle range"
-	HandleRangeList			"handle range list"
 	IfExists			"If Exists"
 	IfNotExists			"If Not Exists"
 	IndexHint			"index hint"
@@ -873,8 +870,6 @@ import (
 	TableRef 			"table reference"
 	TableRefs 			"table references"
 
-	TransactionChar		"Transaction characteristic"
-	TransactionChars	"Transaction characteristic list"
 	Values			"values"
 	ValuesList		"values list"
 	ValuesOpt		"values optional"
@@ -916,7 +911,6 @@ import (
 	OptCharset		"Optional Character setting"
 	OptCollate		"Optional Collate setting"
 	NUM			"A number"
-	NumList			"Some numbers"
 	LengthNum		"Field length num(uint64)"
 	StorageOptimizerHintOpt "Storage level optimizer hint"
 	TableOptimizerHintOpt	"Table level optimizer hint"
@@ -953,7 +947,6 @@ import (
 	Year			"{YEAR|SQL_TSI_YEAR}"
 	OuterOpt		"optional OUTER clause"
 	CrossOpt		"Cross join option"
-	IsolationLevel		"Isolation level"
 	ShowIndexKwd		"Show index/indexs/key keyword"
 	DistinctKwd		"DISTINCT/DISTINCTROW keyword"
 	FromOrIn		"From or In"
@@ -2209,32 +2202,11 @@ ExplainStmt:
 			Format: "row",
 		}
 	}
-|   ExplainSym "FOR" "CONNECTION" NUM
-    {
-        $$ = &ast.ExplainForStmt{
-            Format:       "row",
-            ConnectionID: getUint64FromNUM($4),
-        }
-    }
-|   ExplainSym "FORMAT" "=" stringLit "FOR" "CONNECTION" NUM
-    {
-        $$ = &ast.ExplainForStmt{
-            Format:       $4,
-            ConnectionID: getUint64FromNUM($7),
-        }
-    }
 |	ExplainSym "FORMAT" "=" stringLit ExplainableStmt
 	{
 		$$ = &ast.ExplainStmt{
 			Stmt:	$5,
 			Format: $4,
-		}
-	}
-|	ExplainSym "FORMAT" "=" ExplainFormatType "FOR" "CONNECTION" NUM
-	{
-		$$ = &ast.ExplainForStmt{
-			Format:       $4.(string),
-			ConnectionID: getUint64FromNUM($7),
 		}
 	}
 |	ExplainSym "FORMAT" "=" ExplainFormatType ExplainableStmt
@@ -2244,14 +2216,6 @@ ExplainStmt:
 			Format: $4.(string),
 		}
 	}
-|   ExplainSym "ANALYZE" ExplainableStmt
-    {
-        $$ = &ast.ExplainStmt {
-            Stmt:   $3,
-            Format: "row",
-            Analyze: true,
-        }
-    }
 
 ExplainFormatType:
 	"TRADITIONAL"
@@ -4352,89 +4316,6 @@ SetStmt:
 	{
 		$$ = &ast.SetStmt{Variables: $2.([]*ast.VariableAssignment)}
 	}
-|	"SET" "GLOBAL" "TRANSACTION" TransactionChars
-	{
-		vars := $4.([]*ast.VariableAssignment)
-		for _, v := range vars {
-			v.IsGlobal = true
-		}
-		$$ = &ast.SetStmt{Variables: vars}
-	}
-|	"SET" "SESSION" "TRANSACTION" TransactionChars
-	{
-		$$ = &ast.SetStmt{Variables: $4.([]*ast.VariableAssignment)}
-	}
-|	"SET" "TRANSACTION" TransactionChars
-	{
-		assigns := $3.([]*ast.VariableAssignment)
-		for i:=0; i<len(assigns); i++ {
-			if assigns[i].Name == "tx_isolation" {
-				// A special session variable that make setting tx_isolation take effect one time.
-				assigns[i].Name = "tx_isolation_one_shot"
-			}
-		}
-		$$ = &ast.SetStmt{Variables: assigns}
-	}
-
-TransactionChars:
-	TransactionChar
-	{
-		if $1 != nil {
-			$$ = $1
-		} else {
-			$$ = []*ast.VariableAssignment{}
-		}
-	}
-|	TransactionChars ',' TransactionChar
-	{
-		if $3 != nil {
-			varAssigns := $3.([]*ast.VariableAssignment)
-			$$ = append($1.([]*ast.VariableAssignment), varAssigns...)
-		} else {
-			$$ = $1
-		}
-	}
-
-TransactionChar:
-	"ISOLATION" "LEVEL" IsolationLevel
-	{
-		varAssigns := []*ast.VariableAssignment{}
-		expr := ast.NewValueExpr($3)
-		varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_isolation", Value: expr, IsSystem: true})
-		$$ = varAssigns
-	}
-|	"READ" "WRITE"
-	{
-		varAssigns := []*ast.VariableAssignment{}
-		expr := ast.NewValueExpr("0")
-		varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_read_only", Value: expr, IsSystem: true})
-		$$ = varAssigns
-	}
-|	"READ" "ONLY"
-	{
-		varAssigns := []*ast.VariableAssignment{}
-		expr := ast.NewValueExpr("1")
-		varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_read_only", Value: expr, IsSystem: true})
-		$$ = varAssigns
-	}
-
-IsolationLevel:
-	"REPEATABLE" "READ"
-	{
-		$$ = ast.RepeatableRead
-	}
-|	"READ"	"COMMITTED"
-	{
-		$$ = ast.ReadCommitted
-	}
-|	"READ"	"UNCOMMITTED"
-	{
-		$$ = ast.ReadUncommitted
-	}
-|	"SERIALIZABLE"
-	{
-		$$ = ast.Serializable
-	}
 
 SetExpr:
 	"ON"
@@ -4491,37 +4372,6 @@ VariableAssignment:
 		v := $1
 		v = strings.TrimPrefix(v, "@")
 		$$ = &ast.VariableAssignment{Name: v, Value: $3}
-	}
-|	"NAMES" CharsetName
-	{
-		$$ = &ast.VariableAssignment{
-			Name: ast.SetNames,
-			Value: ast.NewValueExpr($2.(string)),
-		}
-	}
-|	"NAMES" CharsetName "COLLATE" "DEFAULT"
-	{
-		$$ = &ast.VariableAssignment{
-			Name: ast.SetNames,
-			Value: ast.NewValueExpr($2.(string)),
-		}
-	}
-|	"NAMES" CharsetName "COLLATE" StringName
-	{
-		$$ = &ast.VariableAssignment{
-			Name: ast.SetNames,
-			Value: ast.NewValueExpr($2.(string)),
-			ExtendValue: ast.NewValueExpr($4.(string)),
-		}
-	}
-|	"NAMES" "DEFAULT"
-	{
-		v := &ast.DefaultExpr{}
-		$$ = &ast.VariableAssignment{Name: ast.SetNames, Value: v}
-	}
-|	CharsetKw CharsetNameOrDefault
-	{
-		$$ = &ast.VariableAssignment{Name: ast.SetNames, Value: $2}
 	}
 
 CharsetNameOrDefault:
@@ -4631,135 +4481,6 @@ AdminStmt:
 		}
 		$$ = stmt
 	}
-|	"ADMIN" "SHOW" TableName "NEXT_ROW_ID"
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminShowNextRowID,
-			Tables: []*ast.TableName{$3.(*ast.TableName)},
-		}
-	}
-|	"ADMIN" "CHECK" "TABLE" TableNameList
-	{
-		$$ = &ast.AdminStmt{
-			Tp:	ast.AdminCheckTable,
-			Tables: $4.([]*ast.TableName),
-		}
-	}
-|	"ADMIN" "CHECK" "INDEX" TableName Identifier
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminCheckIndex,
-			Tables: []*ast.TableName{$4.(*ast.TableName)},
-			Index: string($5),
-		}
-	}
-|	"ADMIN" "RECOVER" "INDEX" TableName Identifier
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminRecoverIndex,
-			Tables: []*ast.TableName{$4.(*ast.TableName)},
-			Index: string($5),
-		}
-	}
-|	"ADMIN" "CLEANUP" "INDEX" TableName Identifier
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminCleanupIndex,
-			Tables: []*ast.TableName{$4.(*ast.TableName)},
-			Index: string($5),
-		}
-	}
-|	"ADMIN" "CHECK" "INDEX" TableName Identifier HandleRangeList
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminCheckIndexRange,
-			Tables:	[]*ast.TableName{$4.(*ast.TableName)},
-			Index: string($5),
-			HandleRanges: $6.([]ast.HandleRange),
-		}
-	}
-|	"ADMIN" "CANCEL" "DDL" "JOBS" NumList
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminCancelDDLJobs,
-			JobIDs: $5.([]int64),
-		}
-	}
-|	"ADMIN" "SHOW" "DDL" "JOB" "QUERIES" NumList
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminShowDDLJobQueries,
-			JobIDs: $6.([]int64),
-		}
-	}
-|	"ADMIN" "SHOW" "SLOW" AdminShowSlow
-	{
-		$$ = &ast.AdminStmt{
-			Tp: ast.AdminShowSlow,
-			ShowSlow: $4.(*ast.ShowSlow),
-		}
-	}
-
-AdminShowSlow:
-	"RECENT" NUM
-	{
-		$$ = &ast.ShowSlow{
-			Tp: ast.ShowSlowRecent,
-			Count: getUint64FromNUM($2),
-		}
-	}
-|	"TOP" NUM
-	{
-		$$ = &ast.ShowSlow{
-			Tp: ast.ShowSlowTop,
-			Kind: ast.ShowSlowKindDefault,
-			Count: getUint64FromNUM($2),
-		}
-	}
-|	"TOP" "INTERNAL" NUM
-	{
-		$$ = &ast.ShowSlow{
-			Tp: ast.ShowSlowTop,
-			Kind: ast.ShowSlowKindInternal,
-			Count: getUint64FromNUM($3),
-		}
-	}
-|	"TOP" "ALL" NUM
-	{
-		$$ = &ast.ShowSlow{
-			Tp: ast.ShowSlowTop,
-			Kind: ast.ShowSlowKindAll,
-			Count: getUint64FromNUM($3),
-		}
-	}
-
-HandleRangeList:
-	HandleRange
-	{
-		$$ = []ast.HandleRange{$1.(ast.HandleRange)}
-	}
-|	HandleRangeList ',' HandleRange
-	{
-		$$ = append($1.([]ast.HandleRange), $3.(ast.HandleRange))
-	}
-
-HandleRange:
-	'(' NUM ',' NUM ')'
-	{
-		$$ = ast.HandleRange{Begin: $2.(int64), End: $4.(int64)}
-	}
-
-
-NumList:
-       NUM
-       {
-	        $$ = []int64{$1.(int64)}
-       }
-|
-       NumList ',' NUM
-       {
-	        $$ = append($1.([]int64), $3.(int64))
-       }
 
 /****************************Show Statement*******************************/
 ShowStmt:

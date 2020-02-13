@@ -16,9 +16,6 @@ package opcode
 import (
 	"fmt"
 	"io"
-
-	"github.com/pingcap/errors"
-	. "github.com/pingcap/tidb/parser/format"
 )
 
 // Op is opcode type.
@@ -138,13 +135,4 @@ var opsLiteral = map[Op]string{
 // Format the ExprNode into a Writer.
 func (o Op) Format(w io.Writer) {
 	fmt.Fprintf(w, "%s", opsLiteral[o])
-}
-
-// Restore the Op into a Writer
-func (o Op) Restore(ctx *RestoreCtx) error {
-	if v, ok := opsLiteral[o]; ok {
-		ctx.WriteKeyWord(v)
-		return nil
-	}
-	return errors.Errorf("Invalid opcode type %d during restoring AST to SQL text", o)
 }

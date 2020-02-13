@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/terror"
@@ -180,43 +179,6 @@ func checkGoroutineExists(keyword string) bool {
 	profile.WriteTo(buf, 1)
 	str := buf.String()
 	return strings.Contains(str, keyword)
-}
-
-func (s *seqTestSuite) TestAdminShowNextID(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tidb/meta/autoid/mockAutoIDChange"), IsNil)
-	}()
-	step := int64(10)
-	autoIDStep := autoid.GetStep()
-	autoid.SetStep(step)
-	defer autoid.SetStep(autoIDStep)
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t(id int, c int)")
-	// Start handle is 1.
-	r := tk.MustQuery("admin show t next_row_id")
-	r.Check(testkit.Rows("test t _tidb_rowid 1"))
-	// Row ID is step + 1.
-	tk.MustExec("insert into t values(1, 1)")
-	r = tk.MustQuery("admin show t next_row_id")
-	r.Check(testkit.Rows("test t _tidb_rowid 11"))
-	// Row ID is original + step.
-	for i := 0; i < int(step); i++ {
-		tk.MustExec("insert into t values(10000, 1)")
-	}
-	r = tk.MustQuery("admin show t next_row_id")
-	r.Check(testkit.Rows("test t _tidb_rowid 21"))
-
-	// test for a table with the primary key
-	tk.MustExec("create table tt(id int primary key auto_increment, c int)")
-	// Start handle is 1.
-	r = tk.MustQuery("admin show tt next_row_id")
-	r.Check(testkit.Rows("test tt id 1"))
-	// After rebasing auto ID, row ID is 20 + step + 1.
-	tk.MustExec("insert into tt values(20, 1)")
-	r = tk.MustQuery("admin show tt next_row_id")
-	r.Check(testkit.Rows("test tt id 31"))
 }
 
 func (s *seqTestSuite) TestMaxDeltaSchemaCount(c *C) {

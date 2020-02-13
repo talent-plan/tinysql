@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/types"
@@ -285,79 +284,6 @@ func (s *testParserSuite) RunTest(c *C, table []testCase) {
 	}
 }
 
-func (s *testParserSuite) RunRestoreTest(c *C, sourceSQLs, expectSQLs string) {
-	var sb strings.Builder
-	parser := parser.New()
-	comment := Commentf("source %v", sourceSQLs)
-	stmts, _, err := parser.Parse(sourceSQLs, "", "")
-	c.Assert(err, IsNil, comment)
-	restoreSQLs := ""
-	for _, stmt := range stmts {
-		sb.Reset()
-		err = stmt.Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
-		c.Assert(err, IsNil, comment)
-		restoreSQL := sb.String()
-		comment = Commentf("source %v; restore %v", sourceSQLs, restoreSQL)
-		restoreStmt, err := parser.ParseOneStmt(restoreSQL, "", "")
-		c.Assert(err, IsNil, comment)
-		CleanNodeText(stmt)
-		CleanNodeText(restoreStmt)
-		c.Assert(restoreStmt, DeepEquals, stmt, comment)
-		if restoreSQLs != "" {
-			restoreSQLs += "; "
-		}
-		restoreSQLs += restoreSQL
-	}
-	comment = Commentf("restore %v; expect %v", restoreSQLs, expectSQLs)
-	c.Assert(restoreSQLs, Equals, expectSQLs, comment)
-}
-
-func (s *testParserSuite) RunTestInRealAsFloatMode(c *C, table []testCase) {
-	parser := parser.New()
-	parser.SetSQLMode(mysql.ModeRealAsFloat)
-	for _, t := range table {
-		_, _, err := parser.Parse(t.src, "", "")
-		comment := Commentf("source %v", t.src)
-		if !t.ok {
-			c.Assert(err, NotNil, comment)
-			continue
-		}
-		c.Assert(err, IsNil, comment)
-		// restore correctness test
-		if t.ok {
-			s.RunRestoreTestInRealAsFloatMode(c, t.src, t.restore)
-		}
-	}
-}
-
-func (s *testParserSuite) RunRestoreTestInRealAsFloatMode(c *C, sourceSQLs, expectSQLs string) {
-	var sb strings.Builder
-	parser := parser.New()
-	parser.SetSQLMode(mysql.ModeRealAsFloat)
-	comment := Commentf("source %v", sourceSQLs)
-	stmts, _, err := parser.Parse(sourceSQLs, "", "")
-	c.Assert(err, IsNil, comment)
-	restoreSQLs := ""
-	for _, stmt := range stmts {
-		sb.Reset()
-		err = stmt.Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
-		c.Assert(err, IsNil, comment)
-		restoreSQL := sb.String()
-		comment = Commentf("source %v; restore %v", sourceSQLs, restoreSQL)
-		restoreStmt, err := parser.ParseOneStmt(restoreSQL, "", "")
-		c.Assert(err, IsNil, comment)
-		CleanNodeText(stmt)
-		CleanNodeText(restoreStmt)
-		c.Assert(restoreStmt, DeepEquals, stmt, comment)
-		if restoreSQLs != "" {
-			restoreSQLs += "; "
-		}
-		restoreSQLs += restoreSQL
-	}
-	comment = Commentf("restore %v; expect %v", restoreSQLs, expectSQLs)
-	c.Assert(restoreSQLs, Equals, expectSQLs, comment)
-}
-
 func (s *testParserSuite) RunErrMsgTest(c *C, table []testErrMsgCase) {
 	parser := parser.New()
 	for _, t := range table {
@@ -472,20 +398,6 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"admin show ddl jobs where id > 0;", true, "ADMIN SHOW DDL JOBS WHERE `id`>0"},
 		{"admin show ddl jobs 20 where id=0;", true, "ADMIN SHOW DDL JOBS 20 WHERE `id`=0"},
 		{"admin show ddl jobs -1;", false, ""},
-		{"admin show ddl job queries 1", true, "ADMIN SHOW DDL JOB QUERIES 1"},
-		{"admin show ddl job queries 1, 2, 3, 4", true, "ADMIN SHOW DDL JOB QUERIES 1, 2, 3, 4"},
-		{"admin show t1 next_row_id", true, "ADMIN SHOW `t1` NEXT_ROW_ID"},
-		{"admin check table t1, t2;", true, "ADMIN CHECK TABLE `t1`, `t2`"},
-		{"admin check index tableName idxName;", true, "ADMIN CHECK INDEX `tableName` idxName"},
-		{"admin check index tableName idxName (1, 2), (4, 5);", true, "ADMIN CHECK INDEX `tableName` idxName (1,2), (4,5)"},
-		{"admin cancel ddl jobs 1", true, "ADMIN CANCEL DDL JOBS 1"},
-		{"admin cancel ddl jobs 1, 2", true, "ADMIN CANCEL DDL JOBS 1, 2"},
-		{"admin recover index t1 idx_a", true, "ADMIN RECOVER INDEX `t1` idx_a"},
-		{"admin cleanup index t1 idx_a", true, "ADMIN CLEANUP INDEX `t1` idx_a"},
-		{"admin show slow top 3", true, "ADMIN SHOW SLOW TOP 3"},
-		{"admin show slow top internal 7", true, "ADMIN SHOW SLOW TOP INTERNAL 7"},
-		{"admin show slow top all 9", true, "ADMIN SHOW SLOW TOP ALL 9"},
-		{"admin show slow recent 11", true, "ADMIN SHOW SLOW RECENT 11"},
 
 		// for insert ... set
 		{"INSERT INTO t SET a=1,b=2", true, "INSERT INTO `t` SET `a`=1,`b`=2"},
@@ -1472,18 +1384,10 @@ func (s *testParserSuite) TestExplain(c *C) {
 		{"DESC SCHE.TABL", true, "DESC `SCHE`.`TABL`"},
 		{"DESC SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
 		{"DESCRIBE SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
-		{"EXPLAIN ANALYZE SELECT 1", true, "EXPLAIN ANALYZE SELECT 1"},
 		{"EXPLAIN FORMAT = 'dot' SELECT 1", true, "EXPLAIN FORMAT = 'dot' SELECT 1"},
 		{"EXPLAIN FORMAT = 'row' SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
 		{"EXPLAIN FORMAT = 'ROW' SELECT 1", true, "EXPLAIN FORMAT = 'ROW' SELECT 1"},
 		{"EXPLAIN SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
-		{"EXPLAIN FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
-		{"EXPLAIN FOR connection 42", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 42"},
-		{"EXPLAIN FORMAT = 'dot' FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'dot' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = 'row' FOR connection 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = TRADITIONAL FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = TRADITIONAL SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
-		{"EXPLAIN FORMAT = JSON FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'json' FOR CONNECTION 1"},
 		{"EXPLAIN FORMAT = JSON SELECT 1", true, "EXPLAIN FORMAT = 'json' SELECT 1"},
 		{"EXPLAIN FORMAT = 'hint' SELECT 1", true, "EXPLAIN FORMAT = 'hint' SELECT 1"},
 	}
@@ -1519,38 +1423,6 @@ func (s *testParserSuite) TestAnalyze(c *C) {
 		{"analyze table t,t1", true, "ANALYZE TABLE `t`,`t1`"},
 	}
 	s.RunTest(c, table)
-}
-
-func (s *testParserSuite) TestSetTransaction(c *C) {
-	// Set transaction is equivalent to setting the global or session value of tx_isolation.
-	// For example:
-	// SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED
-	// SET SESSION tx_isolation='READ-COMMITTED'
-	tests := []struct {
-		input    string
-		isGlobal bool
-		value    string
-	}{
-		{
-			"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
-			false, "READ-COMMITTED",
-		},
-		{
-			"SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ",
-			true, "REPEATABLE-READ",
-		},
-	}
-	parser := parser.New()
-	for _, t := range tests {
-		stmt1, err := parser.ParseOneStmt(t.input, "", "")
-		c.Assert(err, IsNil)
-		setStmt := stmt1.(*ast.SetStmt)
-		vars := setStmt.Variables[0]
-		c.Assert(vars.Name, Equals, "tx_isolation")
-		c.Assert(vars.IsGlobal, Equals, t.isGlobal)
-		c.Assert(vars.IsSystem, Equals, true)
-		c.Assert(vars.Value.(ast.ValueExpr).GetValue(), Equals, t.value)
-	}
 }
 
 func (s *testParserSuite) TestSideEffect(c *C) {
@@ -1654,55 +1526,4 @@ func (s *testParserSuite) TestQuotedVariableColumnName(c *C) {
 	for i, field := range ss.Fields.Fields {
 		c.Assert(field.Text(), Equals, expected[i])
 	}
-}
-
-// CleanNodeText set the text of node and all child node empty.
-// For test only.
-func CleanNodeText(node ast.Node) {
-	var cleaner nodeTextCleaner
-	node.Accept(&cleaner)
-}
-
-// nodeTextCleaner clean the text of a node and it's child node.
-// For test only.
-type nodeTextCleaner struct {
-}
-
-// Enter implements Visitor interface.
-func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
-	in.SetText("")
-	switch node := in.(type) {
-	case *ast.CreateTableStmt:
-		for _, col := range node.Cols {
-			col.Tp.Charset = strings.ToUpper(col.Tp.Charset)
-			col.Tp.Collate = strings.ToUpper(col.Tp.Collate)
-		}
-	case *ast.Constraint:
-		if node.Option != nil {
-			if node.Option.KeyBlockSize == 0x0 && node.Option.Tp == 0 && node.Option.Comment == "" {
-				node.Option = nil
-			}
-		}
-	case *ast.FuncCallExpr:
-		node.FnName.O = strings.ToLower(node.FnName.O)
-	case *ast.AggregateFuncExpr:
-		node.F = strings.ToLower(node.F)
-	case *ast.SelectField:
-		node.Offset = 0
-	case *driver.ValueExpr:
-	case *ast.AlterTableStmt:
-		var specs []*ast.AlterTableSpec
-		for _, v := range node.Specs {
-			if v.Tp != 0 && !(v.Tp == ast.AlterTableOption) {
-				specs = append(specs, v)
-			}
-		}
-		node.Specs = specs
-	}
-	return in, false
-}
-
-// Leave implements Visitor interface.
-func (checker *nodeTextCleaner) Leave(in ast.Node) (out ast.Node, ok bool) {
-	return in, true
 }

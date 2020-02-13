@@ -18,7 +18,6 @@ import (
 	"io"
 	"strings"
 
-	. "github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
 )
@@ -157,20 +156,6 @@ type ColumnName struct {
 	Schema model.CIStr
 	Table  model.CIStr
 	Name   model.CIStr
-}
-
-// Restore implements Node interface.
-func (n *ColumnName) Restore(ctx *RestoreCtx) error {
-	if n.Schema.O != "" {
-		ctx.WriteName(n.Schema.O)
-		ctx.WritePlain(".")
-	}
-	if n.Table.O != "" {
-		ctx.WriteName(n.Table.O)
-		ctx.WritePlain(".")
-	}
-	ctx.WriteName(n.Name.O)
-	return nil
 }
 
 // Accept implements Node Accept interface.
