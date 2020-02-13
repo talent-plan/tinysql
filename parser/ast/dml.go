@@ -683,44 +683,14 @@ type ShowStmtType int
 // Show statement types.
 const (
 	ShowNone = iota
-	ShowEngines
 	ShowDatabases
 	ShowTables
-	ShowTableStatus
-	ShowColumns
 	ShowWarnings
-	ShowCharset
 	ShowVariables
-	ShowStatus
-	ShowCollation
 	ShowCreateTable
-	ShowCreateView
-	ShowCreateUser
-	ShowCreateSequence
-	ShowGrants
-	ShowTriggers
-	ShowProcedureStatus
-	ShowIndex
 	ShowProcessList
 	ShowCreateDatabase
-	ShowEvents
-	ShowStatsMeta
-	ShowStatsHistograms
-	ShowStatsBuckets
-	ShowStatsHealthy
-	ShowPlugins
-	ShowProfile
-	ShowProfiles
-	ShowMasterStatus
-	ShowPrivileges
 	ShowErrors
-	ShowBindings
-	ShowPumpStatus
-	ShowDrainerStatus
-	ShowOpenTables
-	ShowAnalyzeStatus
-	ShowRegions
-	ShowBuiltins
 )
 
 // ShowStmt is a statement to provide information about databases, tables, columns and so on.
@@ -763,13 +733,6 @@ func (n *ShowStmt) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Column = node.(*ColumnName)
-	}
-
-	switch n.Tp {
-	case ShowTriggers, ShowProcedureStatus, ShowProcessList, ShowEvents:
-		// We don't have any data to return for those types,
-		// but visiting Where may cause resolving error, so return here to avoid error.
-		return v.Leave(n)
 	}
 
 	if n.Where != nil {

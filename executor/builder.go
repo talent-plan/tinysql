@@ -198,12 +198,6 @@ func (b *executorBuilder) buildShow(v *plannercore.PhysicalShow) Executor {
 		GlobalScope:  v.GlobalScope,
 		is:           b.is,
 	}
-	if e.Tp == ast.ShowMasterStatus {
-		// show master status need start ts.
-		if _, err := e.ctx.Txn(true); err != nil {
-			b.err = err
-		}
-	}
 	return e
 }
 

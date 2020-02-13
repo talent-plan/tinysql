@@ -126,25 +126,6 @@ func (s *testMySQLConstSuite) TestSQLMode(c *C) {
 	}
 }
 
-func (s *testMySQLConstSuite) TestRealAsFloatMode(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("create table t (a real);")
-	result := tk.MustQuery("desc t")
-	c.Check(result.Rows(), HasLen, 1)
-	row := result.Rows()[0]
-	c.Assert(row[1], Equals, "double")
-
-	tk.MustExec("drop table if exists t;")
-	tk.MustExec("set sql_mode='REAL_AS_FLOAT'")
-	tk.MustExec("create table t (a real)")
-	result = tk.MustQuery("desc t")
-	c.Check(result.Rows(), HasLen, 1)
-	row = result.Rows()[0]
-	c.Assert(row[1], Equals, "float")
-}
-
 func (s *testMySQLConstSuite) TestIgnoreSpaceMode(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")

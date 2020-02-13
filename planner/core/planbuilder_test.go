@@ -35,25 +35,12 @@ type testPlanBuilderSuite struct {
 func (s *testPlanBuilderSuite) TestShow(c *C) {
 	node := &ast.ShowStmt{}
 	tps := []ast.ShowStmtType{
-		ast.ShowEngines,
 		ast.ShowDatabases,
 		ast.ShowTables,
-		ast.ShowTableStatus,
-		ast.ShowColumns,
 		ast.ShowWarnings,
-		ast.ShowCharset,
 		ast.ShowVariables,
-		ast.ShowStatus,
-		ast.ShowCollation,
 		ast.ShowCreateTable,
-		ast.ShowCreateUser,
-		ast.ShowGrants,
-		ast.ShowTriggers,
-		ast.ShowProcedureStatus,
-		ast.ShowIndex,
 		ast.ShowCreateDatabase,
-		ast.ShowEvents,
-		ast.ShowMasterStatus,
 	}
 	for _, tp := range tps {
 		node.Tp = tp

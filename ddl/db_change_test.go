@@ -177,49 +177,6 @@ func checkResult(result *testkit.Result, expected [][]interface{}) error {
 	return nil
 }
 
-func (s *testStateChangeSuite) TestShowIndex(c *C) {
-	_, err := s.se.Execute(context.Background(), `create table t(c1 int primary key, c2 int)`)
-	c.Assert(err, IsNil)
-	defer s.se.Execute(context.Background(), "drop table t")
-
-	callback := &ddl.TestDDLCallback{}
-	prevState := model.StateNone
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test_db_state")
-	showIndexSQL := `show index from t`
-	var checkErr error
-	callback.OnJobUpdatedExported = func(job *model.Job) {
-		if job.SchemaState == prevState || checkErr != nil {
-			return
-		}
-		switch job.SchemaState {
-		case model.StateDeleteOnly, model.StateWriteOnly, model.StateWriteReorganization:
-			result, err1 := s.execQuery(tk, showIndexSQL)
-			if err1 != nil {
-				checkErr = err1
-				break
-			}
-			checkErr = checkResult(result, testkit.Rows("t 0 PRIMARY 1 c1 A 0 <nil> <nil>  BTREE  "))
-		}
-	}
-
-	d := s.dom.DDL()
-	originalCallback := d.GetHook()
-	d.(ddl.DDLForTest).SetHook(callback)
-	alterTableSQL := `alter table t add index c2(c2)`
-	_, err = s.se.Execute(context.Background(), alterTableSQL)
-	c.Assert(err, IsNil)
-	c.Assert(errors.ErrorStack(checkErr), Equals, "")
-
-	result, err := s.execQuery(tk, showIndexSQL)
-	c.Assert(err, IsNil)
-	err = checkResult(result, testkit.Rows("t 0 PRIMARY 1 c1 A 0 <nil> <nil>  BTREE  ", "t 1 c2 1 c2 A 0 <nil> <nil> YES BTREE  "))
-	c.Assert(err, IsNil)
-	d.(ddl.DDLForTest).SetHook(originalCallback)
-
-	c.Assert(err, IsNil)
-}
-
 func (s *testStateChangeSuite) TestParallelAlterModifyColumn(c *C) {
 	sql := "ALTER TABLE t MODIFY COLUMN b int;"
 	f := func(c *C, err1, err2 error) {

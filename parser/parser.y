@@ -788,7 +788,6 @@ import (
 	FieldAsName			"Field alias name"
 	FieldAsNameOpt			"Field alias name opt"
 	FieldList			"field expression list"
-	PluginNameList			"Plugin Name List"
 	TableRefsClause			"Table references clause"
 	FuncDatetimePrec		"Function datetime precision"
 	GlobalScope			"The scope of variable"
@@ -877,7 +876,6 @@ import (
 	VariableAssignmentList	"set variable value list"
 	WhereClause		"WHERE clause"
 	WhereClauseOptional	"Optional WHERE clause"
-	WithReadLockOpt		"With Read Lock opt"
 	WithValidation		"with validation"
 	WithValidationOpt	"optional with validation"
 	Type			"Types"
@@ -2176,26 +2174,7 @@ ExplainSym:
 "EXPLAIN" | "DESCRIBE" | "DESC"
 
 ExplainStmt:
-	ExplainSym TableName
-	{
-		$$ = &ast.ExplainStmt{
-			Stmt: &ast.ShowStmt{
-				Tp:	ast.ShowColumns,
-				Table:	$2.(*ast.TableName),
-			},
-		}
-	}
-|	ExplainSym TableName ColumnName
-	{
-		$$ = &ast.ExplainStmt{
-			Stmt: &ast.ShowStmt{
-				Tp:	ast.ShowColumns,
-				Table:	$2.(*ast.TableName),
-				Column:	$3.(*ast.ColumnName),
-			},
-		}
-	}
-|	ExplainSym ExplainableStmt
+	ExplainSym ExplainableStmt
 	{
 		$$ = &ast.ExplainStmt{
 			Stmt:	$2,
@@ -4524,17 +4503,9 @@ FromOrIn:
 "FROM" | "IN"
 
 ShowTargetFilterable:
-	"ENGINES"
-	{
-		$$ = &ast.ShowStmt{Tp: ast.ShowEngines}
-	}
-|	"DATABASES"
+	"DATABASES"
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowDatabases}
-	}
-|	CharsetKw
-	{
-		$$ = &ast.ShowStmt{Tp: ast.ShowCharset}
 	}
 |	OptFull "TABLES" ShowDatabaseNameOpt
 	{
@@ -4543,35 +4514,6 @@ ShowTargetFilterable:
 			DBName:	$3.(string),
 			Full:	$1.(bool),
 		}
-	}
-|	"OPEN" "TABLES" ShowDatabaseNameOpt
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowOpenTables,
-			DBName:	$3.(string),
-		}
-	}
-|	"TABLE" "STATUS" ShowDatabaseNameOpt
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowTableStatus,
-			DBName:	$3.(string),
-		}
-	}
-|	ShowIndexKwd FromOrIn TableName
-	{
-        $$ = &ast.ShowStmt{
-            Tp: ast.ShowIndex,
-            Table: $3.(*ast.TableName),
-		}
-	}
-|	ShowIndexKwd FromOrIn Identifier FromOrIn Identifier
-	{
-        show := &ast.ShowStmt{
-            Tp: ast.ShowIndex,
-            Table: &ast.TableName{Name:model.NewCIStr($3), Schema: model.NewCIStr($5)},
-		}
-        $$ = show
 	}
 |	"WARNINGS"
 	{
@@ -4588,74 +4530,7 @@ ShowTargetFilterable:
 			GlobalScope: $1.(bool),
 		}
 	}
-|	GlobalScope "STATUS"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: ast.ShowStatus,
-			GlobalScope: $1.(bool),
-		}
-	}
-|	GlobalScope "BINDINGS"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: ast.ShowBindings,
-			GlobalScope: $1.(bool),
-		}
-	}
-|	"COLLATION"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: 	ast.ShowCollation,
-		}
-	}
-|	"TRIGGERS" ShowDatabaseNameOpt
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowTriggers,
-			DBName:	$2.(string),
-		}
-	}
-|	"PROCEDURE" "STATUS"
-	{
-		$$ = &ast.ShowStmt {
-			Tp: ast.ShowProcedureStatus,
-		}
-	}
-|	"PUMP" "STATUS"
-	{
-		$$ = &ast.ShowStmt {
-			Tp: ast.ShowPumpStatus,
-		}
-	}
-|	"DRAINER" "STATUS"
-	{
-		$$ = &ast.ShowStmt {
-			Tp: ast.ShowDrainerStatus,
-		}
-	}
-|	"FUNCTION" "STATUS"
-	{
-		// This statement is similar to SHOW PROCEDURE STATUS but for stored functions.
-		// See http://dev.mysql.com/doc/refman/5.7/en/show-function-status.html
-		// We do not support neither stored functions nor stored procedures.
-		// So we reuse show procedure status process logic.
-		$$ = &ast.ShowStmt {
-			Tp: ast.ShowProcedureStatus,
-		}
-	}
-|	"EVENTS" ShowDatabaseNameOpt
-	{
-		$$ = &ast.ShowStmt{
-			Tp:	ast.ShowEvents,
-			DBName:	$2.(string),
-		}
-	}
-|	"PLUGINS"
-	{
-		$$ = &ast.ShowStmt{
-			Tp: 	ast.ShowPlugins,
-		}
-	}
+
 ShowLikeOrWhereOpt:
 	{
 		$$ = nil
@@ -4702,16 +4577,6 @@ ShowTableAliasOpt:
 		$$ = $2.(*ast.TableName)
 	}
 
-PluginNameList:
-	Identifier
-	{
-		$$ = []string{$1}
-	}
-|	PluginNameList ',' Identifier
-	{
-		$$ = append($1.([]string), $3)
-	}
-
 TableNameListOpt:
 	%prec empty
 	{
@@ -4722,14 +4587,6 @@ TableNameListOpt:
 		$$ = $1
 	}
 
-WithReadLockOpt:
-	{
-		$$ = false
-	}
-|	"WITH" "READ" "LOCK"
-	{
-		$$ = true
-	}
 
 Statement:
 	EmptyStmt

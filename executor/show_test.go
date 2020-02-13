@@ -15,8 +15,6 @@ package executor_test
 
 import (
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/parser/mysql"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testutil"
 )
@@ -51,35 +49,6 @@ func (s *testSuite5) TestShowErrors(c *C) {
 	tk.Exec(testSQL)
 
 	tk.MustQuery("show errors").Check(testutil.RowsWithSep("|", "Error|1050|Table 'test.show_errors' already exists"))
-}
-
-func (s *testSuite5) TestIssue3641(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	_, err := tk.Exec("show tables;")
-	c.Assert(err.Error(), Equals, plannercore.ErrNoDB.Error())
-	_, err = tk.Exec("show table status;")
-	c.Assert(err.Error(), Equals, plannercore.ErrNoDB.Error())
-}
-
-func (s *testSuite5) TestCollation(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-
-	rs, err := tk.Exec("show collation;")
-	c.Assert(err, IsNil)
-	fields := rs.Fields()
-	c.Assert(fields[0].Column.Tp, Equals, mysql.TypeVarchar)
-	c.Assert(fields[1].Column.Tp, Equals, mysql.TypeVarchar)
-	c.Assert(fields[2].Column.Tp, Equals, mysql.TypeLonglong)
-	c.Assert(fields[3].Column.Tp, Equals, mysql.TypeVarchar)
-	c.Assert(fields[4].Column.Tp, Equals, mysql.TypeVarchar)
-	c.Assert(fields[5].Column.Tp, Equals, mysql.TypeLonglong)
-}
-
-func (s *testSuite5) TestShowOpenTables(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustQuery("show open tables")
-	tk.MustQuery("show open tables in test")
 }
 
 func (s *testSuite5) TestShowEscape(c *C) {

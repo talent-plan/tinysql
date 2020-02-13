@@ -456,9 +456,6 @@ func (b *PlanBuilder) buildAdmin(ctx context.Context, as *ast.AdminStmt) (Plan, 
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.AdminStmt(%T) for buildAdmin", as)
 	}
-
-	// Admin command can only be executed by administrator.
-
 	return ret, nil
 }
 
@@ -530,22 +527,6 @@ func buildShowDDLJobsFields() (*expression.Schema, types.NameSlice) {
 	schema.Append(buildColumnWithName("", "START_TIME", mysql.TypeVarchar, 64))
 	schema.Append(buildColumnWithName("", "END_TIME", mysql.TypeVarchar, 64))
 	schema.Append(buildColumnWithName("", "STATE", mysql.TypeVarchar, 64))
-	return schema.col2Schema(), schema.names
-}
-
-func buildTableRegionsSchema() (*expression.Schema, types.NameSlice) {
-	schema := newColumnsWithNames(11)
-	schema.Append(buildColumnWithName("", "REGION_ID", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "START_KEY", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "END_KEY", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "LEADER_ID", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "LEADER_STORE_ID", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "PEERS", mysql.TypeVarchar, 64))
-	schema.Append(buildColumnWithName("", "SCATTERING", mysql.TypeTiny, 1))
-	schema.Append(buildColumnWithName("", "WRITTEN_BYTES", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "READ_BYTES", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "APPROXIMATE_SIZE(MB)", mysql.TypeLonglong, 4))
-	schema.Append(buildColumnWithName("", "APPROXIMATE_KEYS", mysql.TypeLonglong, 4))
 	return schema.col2Schema(), schema.names
 }
 
@@ -626,7 +607,7 @@ func (b *PlanBuilder) buildShow(ctx context.Context, show *ast.ShowStmt) (Plan, 
 		},
 	}.Init(b.ctx)
 	switch show.Tp {
-	case ast.ShowTables, ast.ShowTableStatus:
+	case ast.ShowTables:
 		if p.DBName == "" {
 			return nil, ErrNoDB
 		}
@@ -952,61 +933,6 @@ func (b *PlanBuilder) buildExplain(ctx context.Context, explain *ast.ExplainStmt
 	return b.buildExplainPlan(targetPlan, explain.Format, explain.Stmt)
 }
 
-func buildShowProcedureSchema() (*expression.Schema, []*types.FieldName) {
-	tblName := "ROUTINES"
-	schema := newColumnsWithNames(11)
-	schema.Append(buildColumnWithName(tblName, "Db", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Name", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Type", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Definer", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Modified", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "Created", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "Security_type", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Comment", mysql.TypeBlob, 196605))
-	schema.Append(buildColumnWithName(tblName, "character_set_client", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "collation_connection", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "Database Collation", mysql.TypeVarchar, 32))
-	return schema.col2Schema(), schema.names
-}
-
-func buildShowTriggerSchema() (*expression.Schema, []*types.FieldName) {
-	tblName := "TRIGGERS"
-	schema := newColumnsWithNames(11)
-	schema.Append(buildColumnWithName(tblName, "Trigger", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Event", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Table", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Statement", mysql.TypeBlob, 196605))
-	schema.Append(buildColumnWithName(tblName, "Timing", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Created", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "sql_mode", mysql.TypeBlob, 8192))
-	schema.Append(buildColumnWithName(tblName, "Definer", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "character_set_client", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "collation_connection", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "Database Collation", mysql.TypeVarchar, 32))
-	return schema.col2Schema(), schema.names
-}
-
-func buildShowEventsSchema() (*expression.Schema, []*types.FieldName) {
-	tblName := "EVENTS"
-	schema := newColumnsWithNames(15)
-	schema.Append(buildColumnWithName(tblName, "Db", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Name", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Time zone", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "Definer", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Type", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Execute At", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "Interval Value", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Interval Field", mysql.TypeVarchar, 128))
-	schema.Append(buildColumnWithName(tblName, "Starts", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "Ends", mysql.TypeDatetime, 19))
-	schema.Append(buildColumnWithName(tblName, "Status", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "Originator", mysql.TypeInt24, 4))
-	schema.Append(buildColumnWithName(tblName, "character_set_client", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "collation_connection", mysql.TypeVarchar, 32))
-	schema.Append(buildColumnWithName(tblName, "Database Collation", mysql.TypeVarchar, 32))
-	return schema.col2Schema(), schema.names
-}
-
 func buildShowWarningsSchema() (*expression.Schema, types.NameSlice) {
 	tblName := "WARNINGS"
 	schema := newColumnsWithNames(3)
@@ -1021,98 +947,21 @@ func buildShowSchema(s *ast.ShowStmt) (schema *expression.Schema, outputNames []
 	var names []string
 	var ftypes []byte
 	switch s.Tp {
-	case ast.ShowProcedureStatus:
-		return buildShowProcedureSchema()
-	case ast.ShowTriggers:
-		return buildShowTriggerSchema()
-	case ast.ShowEvents:
-		return buildShowEventsSchema()
 	case ast.ShowWarnings, ast.ShowErrors:
 		return buildShowWarningsSchema()
-	case ast.ShowRegions:
-		return buildTableRegionsSchema()
-	case ast.ShowEngines:
-		names = []string{"Engine", "Support", "Comment", "Transactions", "XA", "Savepoints"}
 	case ast.ShowDatabases:
 		names = []string{"Database"}
-	case ast.ShowOpenTables:
-		names = []string{"Database", "Table", "In_use", "Name_locked"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLong, mysql.TypeLong}
 	case ast.ShowTables:
 		names = []string{fmt.Sprintf("Tables_in_%s", s.DBName)}
 		if s.Full {
 			names = append(names, "Table_type")
 		}
-	case ast.ShowTableStatus:
-		names = []string{"Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length",
-			"Data_length", "Max_data_length", "Index_length", "Data_free", "Auto_increment",
-			"Create_time", "Update_time", "Check_time", "Collation", "Checksum",
-			"Create_options", "Comment"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeLonglong,
-			mysql.TypeLonglong, mysql.TypeLonglong, mysql.TypeLonglong, mysql.TypeLonglong, mysql.TypeLonglong,
-			mysql.TypeDatetime, mysql.TypeDatetime, mysql.TypeDatetime, mysql.TypeVarchar, mysql.TypeVarchar,
-			mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowColumns:
-		names = table.ColDescFieldNames(s.Full)
-	case ast.ShowCharset:
-		names = []string{"Charset", "Description", "Default collation", "Maxlen"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong}
-	case ast.ShowVariables, ast.ShowStatus:
+	case ast.ShowVariables:
 		names = []string{"Variable_name", "Value"}
-	case ast.ShowCollation:
-		names = []string{"Collation", "Charset", "Id", "Default", "Compiled", "Sortlen"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong,
-			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong}
 	case ast.ShowCreateTable:
 		names = []string{"Table", "Create Table"}
 	case ast.ShowCreateDatabase:
 		names = []string{"Database", "Create Database"}
-	case ast.ShowDrainerStatus:
-		names = []string{"NodeID", "Address", "State", "Max_Commit_Ts", "Update_Time"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar}
-	case ast.ShowIndex:
-		names = []string{"Table", "Non_unique", "Key_name", "Seq_in_index",
-			"Column_name", "Collation", "Cardinality", "Sub_part", "Packed",
-			"Null", "Index_type", "Comment", "Index_comment"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeLonglong,
-			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeLonglong,
-			mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowPumpStatus:
-		names = []string{"NodeID", "Address", "State", "Max_Commit_Ts", "Update_Time"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar}
-	case ast.ShowStatsMeta:
-		names = []string{"Db_name", "Table_name", "Partition_name", "Update_time", "Modify_count", "Row_count"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeDatetime, mysql.TypeLonglong, mysql.TypeLonglong}
-	case ast.ShowStatsHistograms:
-		names = []string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Update_time", "Distinct_count", "Null_count", "Avg_col_size", "Correlation"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeTiny, mysql.TypeDatetime,
-			mysql.TypeLonglong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeDouble}
-	case ast.ShowStatsBuckets:
-		names = []string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Bucket_id", "Count",
-			"Repeats", "Lower_Bound", "Upper_Bound"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeTiny, mysql.TypeLonglong,
-			mysql.TypeLonglong, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowStatsHealthy:
-		names = []string{"Db_name", "Table_name", "Partition_name", "Healthy"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong}
-	case ast.ShowProfiles: // ShowProfiles is deprecated.
-		names = []string{"Query_ID", "Duration", "Query"}
-		ftypes = []byte{mysql.TypeLong, mysql.TypeDouble, mysql.TypeVarchar}
-	case ast.ShowMasterStatus:
-		names = []string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowPrivileges:
-		names = []string{"Privilege", "Context", "Comment"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowBindings:
-		names = []string{"Original_sql", "Bind_sql", "Default_db", "Status", "Create_time", "Update_time", "Charset", "Collation"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeDatetime, mysql.TypeDatetime, mysql.TypeVarchar, mysql.TypeVarchar}
-	case ast.ShowAnalyzeStatus:
-		names = []string{"Table_schema", "Table_name", "Partition_name", "Job_info", "Processed_rows", "Start_time", "State"}
-		ftypes = []byte{mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeVarchar, mysql.TypeLonglong, mysql.TypeDatetime, mysql.TypeVarchar}
-	case ast.ShowBuiltins:
-		names = []string{"Supported_builtin_functions"}
-		ftypes = []byte{mysql.TypeVarchar}
 	}
 
 	schema = expression.NewSchema(make([]*expression.Column, 0, len(names))...)

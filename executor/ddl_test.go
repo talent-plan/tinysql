@@ -14,7 +14,6 @@
 package executor_test
 
 import (
-	"context"
 	"fmt"
 	. "github.com/pingcap/check"
 	ddlutil "github.com/pingcap/tidb/ddl/util"
@@ -24,61 +23,10 @@ import (
 	"github.com/pingcap/tidb/parser/terror"
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/testkit"
 	"math"
 	"strings"
 )
-
-func (s *testSuite6) TestCreateTable(c *C) {
-	tk := testkit.NewTestKit(c, s.store)
-	tk.MustExec("use test")
-	// Test create an exist database
-	_, err := tk.Exec("CREATE database test")
-	c.Assert(err, NotNil)
-
-	// Test create an exist table
-	tk.MustExec("CREATE TABLE create_test (id INT NOT NULL DEFAULT 1, name varchar(255), PRIMARY KEY(id));")
-
-	_, err = tk.Exec("CREATE TABLE create_test (id INT NOT NULL DEFAULT 1, name varchar(255), PRIMARY KEY(id));")
-	c.Assert(err, NotNil)
-
-	// Test "if not exist"
-	tk.MustExec("CREATE TABLE if not exists test(id INT NOT NULL DEFAULT 1, name varchar(255), PRIMARY KEY(id));")
-
-	// Testcase for https://github.com/pingcap/tidb/issues/312
-	tk.MustExec(`create table issue312_1 (c float(24));`)
-	tk.MustExec(`create table issue312_2 (c float(25));`)
-	rs, err := tk.Exec(`desc issue312_1`)
-	c.Assert(err, IsNil)
-	ctx := context.Background()
-	req := rs.NewChunk()
-	it := chunk.NewIterator4Chunk(req)
-	for {
-		err1 := rs.Next(ctx, req)
-		c.Assert(err1, IsNil)
-		if req.NumRows() == 0 {
-			break
-		}
-		for row := it.Begin(); row != it.End(); row = it.Next() {
-			c.Assert(row.GetString(1), Equals, "float")
-		}
-	}
-	rs, err = tk.Exec(`desc issue312_2`)
-	c.Assert(err, IsNil)
-	req = rs.NewChunk()
-	it = chunk.NewIterator4Chunk(req)
-	for {
-		err1 := rs.Next(ctx, req)
-		c.Assert(err1, IsNil)
-		if req.NumRows() == 0 {
-			break
-		}
-		for row := it.Begin(); row != it.End(); row = it.Next() {
-			c.Assert(req.GetRow(0).GetString(1), Equals, "double")
-		}
-	}
-}
 
 func (s *testSuite6) TestCreateDropDatabase(c *C) {
 	tk := testkit.NewTestKit(c, s.store)

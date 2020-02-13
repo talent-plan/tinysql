@@ -112,17 +112,6 @@ func (s *testIntegrationSuite) TestIndexScan(c *C) {
 	}
 }
 
-func (s *testIntegrationSuite) TestBasicShow(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a int primary key, b int)")
-	tk.MustExec("set session tidb_enable_cascades_planner = 1")
-	tk.MustQuery("desc t").Check(testkit.Rows(
-		"a int(11) NO PRI <nil> ",
-		"b int(11) YES  <nil> ",
-	))
-}
-
 func (s *testIntegrationSuite) TestSort(c *C) {
 	tk := testkit.NewTestKitWithInit(c, s.store)
 	tk.MustExec("drop table if exists t")

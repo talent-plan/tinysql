@@ -23,7 +23,6 @@ import (
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/ast"
@@ -38,7 +37,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/format"
-	"github.com/pingcap/tidb/util/sqlexec"
 )
 
 // ShowExec represents a show executor.
@@ -95,61 +93,20 @@ func (e *ShowExec) Next(ctx context.Context, req *chunk.Chunk) error {
 
 func (e *ShowExec) fetchAll(ctx context.Context) error {
 	switch e.Tp {
-	case ast.ShowCharset:
-		return e.fetchShowCharset()
-	case ast.ShowCollation:
-		return e.fetchShowCollation()
-	case ast.ShowColumns:
-		return e.fetchShowColumns(ctx)
 	case ast.ShowCreateTable:
 		return e.fetchShowCreateTable()
 	case ast.ShowCreateDatabase:
 		return e.fetchShowCreateDatabase()
 	case ast.ShowDatabases:
 		return e.fetchShowDatabases()
-	case ast.ShowEngines:
-		return e.fetchShowEngines()
-	case ast.ShowIndex:
-		return e.fetchShowIndex()
-	case ast.ShowProcedureStatus:
-		return e.fetchShowProcedureStatus()
-	case ast.ShowStatus:
-		return e.fetchShowStatus()
 	case ast.ShowTables:
 		return e.fetchShowTables()
-	case ast.ShowOpenTables:
-		return e.fetchShowOpenTables()
-	case ast.ShowTableStatus:
-		return e.fetchShowTableStatus()
-	case ast.ShowTriggers:
-		return e.fetchShowTriggers()
 	case ast.ShowVariables:
 		return e.fetchShowVariables()
 	case ast.ShowWarnings:
 		return e.fetchShowWarnings(false)
 	case ast.ShowErrors:
 		return e.fetchShowWarnings(true)
-	case ast.ShowEvents:
-		// empty result
-	case ast.ShowProfiles:
-		// empty result
-	case ast.ShowMasterStatus:
-		return e.fetchShowMasterStatus()
-	case ast.ShowBuiltins:
-		return e.fetchShowBuiltins()
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowEngines() error {
-	sql := `SELECT * FROM information_schema.engines`
-	rows, _, err := e.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
-
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for _, row := range rows {
-		e.result.AppendRow(row)
 	}
 	return nil
 }
@@ -180,12 +137,6 @@ func (e *ShowExec) fetchShowDatabases() error {
 	return nil
 }
 
-func (e *ShowExec) fetchShowOpenTables() error {
-	// TiDB has no concept like mysql's "table cache" and "open table"
-	// For simplicity, we just return an empty result with the same structure as MySQL's SHOW OPEN TABLES
-	return nil
-}
-
 func (e *ShowExec) fetchShowTables() error {
 	if !e.is.SchemaExists(e.DBName) {
 		return ErrBadDB.GenWithStackByArgs(e.DBName)
@@ -205,170 +156,6 @@ func (e *ShowExec) fetchShowTables() error {
 			e.appendRow([]interface{}{v})
 		}
 	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowTableStatus() error {
-	if !e.is.SchemaExists(e.DBName) {
-		return ErrBadDB.GenWithStackByArgs(e.DBName)
-	}
-
-	sql := fmt.Sprintf(`SELECT
-               table_name, engine, version, row_format, table_rows,
-               avg_row_length, data_length, max_data_length, index_length,
-               data_free, auto_increment, create_time, update_time, check_time,
-               table_collation, IFNULL(checksum,''), create_options, table_comment
-               FROM information_schema.tables
-	       WHERE table_schema='%s' ORDER BY table_name`, e.DBName)
-
-	rows, _, err := e.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
-
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	for _, row := range rows {
-		e.result.AppendRow(row)
-
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowColumns(ctx context.Context) error {
-	tb, err := e.getTable()
-
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	cols := tb.Cols()
-	for _, col := range cols {
-		if e.Column != nil && e.Column.Name.L != col.Name.L {
-			continue
-		}
-
-		desc := table.NewColDesc(col)
-		var columnDefault interface{}
-		if desc.DefaultValue != nil {
-			// SHOW COLUMNS result expects string value
-			defaultValStr := fmt.Sprintf("%v", desc.DefaultValue)
-			columnDefault = defaultValStr
-		}
-
-		// The FULL keyword causes the output to include the column collation and comments,
-		// as well as the privileges you have for each column.
-		if e.Full {
-			e.appendRow([]interface{}{
-				desc.Field,
-				desc.Type,
-				desc.Collation,
-				desc.Null,
-				desc.Key,
-				columnDefault,
-				desc.Extra,
-				desc.Privileges,
-				desc.Comment,
-			})
-		} else {
-			e.appendRow([]interface{}{
-				desc.Field,
-				desc.Type,
-				desc.Null,
-				desc.Key,
-				columnDefault,
-				desc.Extra,
-			})
-		}
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowIndex() error {
-	tb, err := e.getTable()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if tb.Meta().PKIsHandle {
-		var pkCol *table.Column
-		for _, col := range tb.Cols() {
-			if mysql.HasPriKeyFlag(col.Flag) {
-				pkCol = col
-				break
-			}
-		}
-		e.appendRow([]interface{}{
-			tb.Meta().Name.O, // Table
-			0,                // Non_unique
-			"PRIMARY",        // Key_name
-			1,                // Seq_in_index
-			pkCol.Name.O,     // Column_name
-			"A",              // Collation
-			0,                // Cardinality
-			nil,              // Sub_part
-			nil,              // Packed
-			"",               // Null
-			"BTREE",          // Index_type
-			"",               // Comment
-			"",               // Index_comment
-		})
-	}
-	for _, idx := range tb.Indices() {
-		idxInfo := idx.Meta()
-		if idxInfo.State != model.StatePublic {
-			continue
-		}
-		for i, col := range idxInfo.Columns {
-			nonUniq := 1
-			if idx.Meta().Unique {
-				nonUniq = 0
-			}
-			var subPart interface{}
-			if col.Length != types.UnspecifiedLength {
-				subPart = col.Length
-			}
-			nullVal := "YES"
-			if idx.Meta().Name.O == mysql.PrimaryKeyName {
-				nullVal = ""
-			}
-			e.appendRow([]interface{}{
-				tb.Meta().Name.O,       // Table
-				nonUniq,                // Non_unique
-				idx.Meta().Name.O,      // Key_name
-				i + 1,                  // Seq_in_index
-				col.Name.O,             // Column_name
-				"A",                    // Collation
-				0,                      // Cardinality
-				subPart,                // Sub_part
-				nil,                    // Packed
-				nullVal,                // Null
-				idx.Meta().Tp.String(), // Index_type
-				"",                     // Comment
-				idx.Meta().Comment,     // Index_comment
-			})
-		}
-	}
-	return nil
-}
-
-// fetchShowCharset gets all charset information and fill them into e.rows.
-// See http://dev.mysql.com/doc/refman/5.7/en/show-character-set.html
-func (e *ShowExec) fetchShowCharset() error {
-	descs := charset.GetSupportedCharsets()
-	for _, desc := range descs {
-		e.appendRow([]interface{}{
-			desc.Name,
-			desc.Desc,
-			desc.DefaultCollation,
-			desc.Maxlen,
-		})
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowMasterStatus() error {
-	tso := e.ctx.GetSessionVars().TxnCtx.StartTS
-	e.appendRow([]interface{}{"tidb-binlog", tso, "", "", ""})
 	return nil
 }
 
@@ -413,29 +200,6 @@ func (e *ShowExec) fetchShowVariables() (err error) {
 			}
 			e.appendRow([]interface{}{varName, varValue})
 		}
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowStatus() error {
-	sessionVars := e.ctx.GetSessionVars()
-	statusVars, err := variable.GetStatusVars(sessionVars)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for status, v := range statusVars {
-		if e.GlobalScope && v.Scope == variable.ScopeSession {
-			continue
-		}
-		switch v.Value.(type) {
-		case []interface{}, nil:
-			v.Value = fmt.Sprintf("%v", v.Value)
-		}
-		value, err := types.ToString(v.Value)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		e.appendRow([]interface{}{status, value})
 	}
 	return nil
 }
@@ -660,33 +424,6 @@ func (e *ShowExec) fetchShowCreateDatabase() error {
 	return nil
 }
 
-func (e *ShowExec) fetchShowCollation() error {
-	collations := charset.GetSupportedCollations()
-	for _, v := range collations {
-		isDefault := ""
-		if v.IsDefault {
-			isDefault = "Yes"
-		}
-		e.appendRow([]interface{}{
-			v.Name,
-			v.CharsetName,
-			v.ID,
-			isDefault,
-			"Yes",
-			1,
-		})
-	}
-	return nil
-}
-
-func (e *ShowExec) fetchShowTriggers() error {
-	return nil
-}
-
-func (e *ShowExec) fetchShowProcedureStatus() error {
-	return nil
-}
-
 func (e *ShowExec) fetchShowWarnings(errOnly bool) error {
 	warns := e.ctx.GetSessionVars().StmtCtx.GetWarnings()
 	for _, w := range warns {
@@ -743,11 +480,4 @@ func (e *ShowExec) appendRow(row []interface{}) {
 			e.result.AppendNull(i)
 		}
 	}
-}
-
-func (e *ShowExec) fetchShowBuiltins() error {
-	for _, f := range expression.GetBuiltinList() {
-		e.appendRow([]interface{}{f})
-	}
-	return nil
 }
