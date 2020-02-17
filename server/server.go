@@ -42,7 +42,6 @@ import (
 	// For pprof
 	_ "net/http/pprof"
 
-	"github.com/blacktear23/go-proxyprotocol"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
@@ -168,12 +167,6 @@ func (s *Server) Run() error {
 				}
 			}
 
-			// If we got PROXY protocol error, we should continue accept.
-			if proxyprotocol.IsProxyProtocolError(err) {
-				logutil.BgLogger().Error("PROXY protocol failed", zap.Error(err))
-				continue
-			}
-
 			logutil.BgLogger().Error("accept failed", zap.Error(err))
 			return errors.Trace(err)
 		}
@@ -191,7 +184,6 @@ func (s *Server) Run() error {
 	terror.Log(errors.Trace(err))
 	s.listener = nil
 	for {
-
 		logutil.BgLogger().Error("listener stopped, waiting for manual kill.")
 		time.Sleep(time.Minute)
 	}

@@ -2,7 +2,6 @@ module github.com/pingcap/tidb
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/blacktear23/go-proxyprotocol v0.0.0-20180807104634-af7a81e8dd0d
 	github.com/cznic/golex v0.0.0-20181122101858-9c343928389c // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548
 	github.com/cznic/parser v0.0.0-20181122101858-d773202d5b1f
