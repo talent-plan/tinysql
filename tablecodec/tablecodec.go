@@ -30,12 +30,6 @@ import (
 )
 
 var (
-	errInvalidKey       = terror.ClassXEval.New(mysql.ErrInvalidKey, mysql.MySQLErrName[mysql.ErrInvalidKey])
-	errInvalidRecordKey = terror.ClassXEval.New(mysql.ErrInvalidRecordKey, mysql.MySQLErrName[mysql.ErrInvalidRecordKey])
-	errInvalidIndexKey  = terror.ClassXEval.New(mysql.ErrInvalidIndexKey, mysql.MySQLErrName[mysql.ErrInvalidIndexKey])
-)
-
-var (
 	tablePrefix     = []byte{'t'}
 	recordPrefixSep = []byte("_r")
 	indexPrefixSep  = []byte("_i")
@@ -58,11 +52,11 @@ func TablePrefix() []byte {
 	return tablePrefix
 }
 
-// EncodeRowKey encodes the table id and record handle into a kv.Key
-func EncodeRowKey(tableID int64, encodedHandle []byte) kv.Key {
-	buf := make([]byte, 0, RecordRowKeyLen)
-	buf = appendTableRecordPrefix(buf, tableID)
-	buf = append(buf, encodedHandle...)
+// appendTableRecordPrefix appends table record prefix  "t[tableID]_r".
+func appendTableRecordPrefix(buf []byte, tableID int64) []byte {
+	buf = append(buf, tablePrefix...)
+	buf = codec.EncodeInt(buf, tableID)
+	buf = append(buf, recordPrefixSep...)
 	return buf
 }
 
@@ -72,27 +66,6 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 	buf = appendTableRecordPrefix(buf, tableID)
 	buf = codec.EncodeInt(buf, handle)
 	return buf
-}
-
-// CutRowKeyPrefix cuts the row key prefix.
-func CutRowKeyPrefix(key kv.Key) []byte {
-	return key[prefixLen:]
-}
-
-// EncodeRecordKey encodes the recordPrefix, row handle into a kv.Key.
-func EncodeRecordKey(recordPrefix kv.Key, h int64) kv.Key {
-	buf := make([]byte, 0, len(recordPrefix)+idLen)
-	buf = append(buf, recordPrefix...)
-	buf = codec.EncodeInt(buf, h)
-	return buf
-}
-
-func hasTablePrefix(key kv.Key) bool {
-	return key[0] == tablePrefix[0]
-}
-
-func hasRecordPrefixSep(key kv.Key) bool {
-	return key[0] == recordPrefixSep[0] && key[1] == recordPrefixSep[1]
 }
 
 // DecodeRecordKey decodes the key and gets the tableID, handle.
@@ -124,6 +97,39 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	return
 }
 
+// appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
+func appendTableIndexPrefix(buf []byte, tableID int64) []byte {
+	buf = append(buf, tablePrefix...)
+	buf = codec.EncodeInt(buf, tableID)
+	buf = append(buf, indexPrefixSep...)
+	return buf
+}
+
+// EncodeIndexSeekKey encodes an index value to kv.Key.
+func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key {
+	key := make([]byte, 0, prefixLen+len(encodedValue))
+	key = appendTableIndexPrefix(key, tableID)
+	key = codec.EncodeInt(key, idxID)
+	key = append(key, encodedValue...)
+	return key
+}
+
+// DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
+func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
+	k := key
+
+	tableID, indexID, isRecord, err := DecodeKeyHead(key)
+	if err != nil {
+		return 0, 0, nil, errors.Trace(err)
+	}
+	if isRecord {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q", k)
+	}
+	indexValues = key[prefixLen+idLen:]
+
+	return tableID, indexID, indexValues, nil
+}
+
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []string, err error) {
 	k := key
@@ -134,8 +140,6 @@ func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []str
 	}
 
 	for len(key) > 0 {
-		// FIXME: Without the schema information, we can only decode the raw kind of
-		// the column. For instance, MysqlTime is internally saved as uint64.
 		remain, d, e := codec.DecodeOne(key)
 		if e != nil {
 			return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, e)
@@ -148,6 +152,59 @@ func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []str
 		key = remain
 	}
 	return
+}
+
+// EncodeRow encode row data and column ids into a slice of byte.
+// Row layout: colID1, value1, colID2, value2, .....
+// valBuf and values pass by caller, for reducing EncodeRow allocates temporary bufs. If you pass valBuf and values as nil,
+// EncodeRow will allocate it.
+func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, error) {
+	if len(row) != len(colIDs) {
+		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
+	}
+	valBuf = valBuf[:0]
+	if values == nil {
+		values = make([]types.Datum, len(row)*2)
+	}
+	for i, c := range row {
+		id := colIDs[i]
+		values[2*i].SetInt64(id)
+		values[2*i+1] = c
+	}
+	if len(values) == 0 {
+		// We could not set nil value into kv.
+		return append(valBuf, codec.NilFlag), nil
+	}
+	return codec.EncodeValue(sc, valBuf, values...)
+}
+
+// EncodeRowKey encodes the table id and record handle into a kv.Key
+func EncodeRowKey(tableID int64, encodedHandle []byte) kv.Key {
+	buf := make([]byte, 0, RecordRowKeyLen)
+	buf = appendTableRecordPrefix(buf, tableID)
+	buf = append(buf, encodedHandle...)
+	return buf
+}
+
+// CutRowKeyPrefix cuts the row key prefix.
+func CutRowKeyPrefix(key kv.Key) []byte {
+	return key[prefixLen:]
+}
+
+// EncodeRecordKey encodes the recordPrefix, row handle into a kv.Key.
+func EncodeRecordKey(recordPrefix kv.Key, h int64) kv.Key {
+	buf := make([]byte, 0, len(recordPrefix)+idLen)
+	buf = append(buf, recordPrefix...)
+	buf = codec.EncodeInt(buf, h)
+	return buf
+}
+
+func hasTablePrefix(key kv.Key) bool {
+	return key[0] == tablePrefix[0]
+}
+
+func hasRecordPrefixSep(key kv.Key) bool {
+	return key[0] == recordPrefixSep[0] && key[1] == recordPrefixSep[1]
 }
 
 // DecodeMetaKey decodes the key and get the meta key and meta field.
@@ -170,22 +227,6 @@ func DecodeMetaKey(ek kv.Key) (key []byte, field []byte, err error) {
 	}
 	_, field, err = codec.DecodeBytes(ek, nil)
 	return key, field, errors.Trace(err)
-}
-
-// DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
-func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
-	k := key
-
-	tableID, indexID, isRecord, err := DecodeKeyHead(key)
-	if err != nil {
-		return 0, 0, nil, errors.Trace(err)
-	}
-	if isRecord {
-		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q", k)
-	}
-	indexValues = key[prefixLen+idLen:]
-
-	return tableID, indexID, indexValues, nil
 }
 
 // DecodeKeyHead decodes the key's head and gets the tableID, indexID. isRecordKey is true when is a record key.
@@ -247,30 +288,6 @@ func DecodeRowKey(key kv.Key) (int64, error) {
 // EncodeValue encodes a go value to bytes.
 func EncodeValue(sc *stmtctx.StatementContext, b []byte, raw types.Datum) ([]byte, error) {
 	return codec.EncodeValue(sc, b, raw)
-}
-
-// EncodeRow encode row data and column ids into a slice of byte.
-// Row layout: colID1, value1, colID2, value2, .....
-// valBuf and values pass by caller, for reducing EncodeRow allocates temporary bufs. If you pass valBuf and values as nil,
-// EncodeRow will allocate it.
-func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, error) {
-	if len(row) != len(colIDs) {
-		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
-	}
-	valBuf = valBuf[:0]
-	if values == nil {
-		values = make([]types.Datum, len(row)*2)
-	}
-	for i, c := range row {
-		id := colIDs[i]
-		values[2*i].SetInt64(id)
-		values[2*i+1] = c
-	}
-	if len(values) == 0 {
-		// We could not set nil value into kv.
-		return append(valBuf, codec.NilFlag), nil
-	}
-	return codec.EncodeValue(sc, valBuf, values...)
 }
 
 // DecodeColumnValue decodes data to a Datum according to the column info.
@@ -384,15 +401,6 @@ func CutRowNew(data []byte, colIDs map[int64]int) ([][]byte, error) {
 // unflatten converts a raw datum to a column datum.
 func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
 	return datum, nil
-}
-
-// EncodeIndexSeekKey encodes an index value to kv.Key.
-func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key {
-	key := make([]byte, 0, prefixLen+len(encodedValue))
-	key = appendTableIndexPrefix(key, tableID)
-	key = codec.EncodeInt(key, idxID)
-	key = append(key, encodedValue...)
-	return key
 }
 
 // CutIndexKey cuts encoded index key into colIDs to bytes slices map.
@@ -521,22 +529,6 @@ func EncodeTablePrefix(tableID int64) kv.Key {
 	return key
 }
 
-// appendTableRecordPrefix appends table record prefix  "t[tableID]_r".
-func appendTableRecordPrefix(buf []byte, tableID int64) []byte {
-	buf = append(buf, tablePrefix...)
-	buf = codec.EncodeInt(buf, tableID)
-	buf = append(buf, recordPrefixSep...)
-	return buf
-}
-
-// appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
-func appendTableIndexPrefix(buf []byte, tableID int64) []byte {
-	buf = append(buf, tablePrefix...)
-	buf = codec.EncodeInt(buf, tableID)
-	buf = append(buf, indexPrefixSep...)
-	return buf
-}
-
 // ReplaceRecordKeyTableID replace the tableID in the recordKey buf.
 func ReplaceRecordKeyTableID(buf []byte, tableID int64) []byte {
 	if len(buf) < len(tablePrefix)+8 {
@@ -602,6 +594,12 @@ func GetTableIndexKeyRange(tableID, indexID int64) (startKey, endKey []byte) {
 	endKey = EncodeIndexSeekKey(tableID, indexID, []byte{255})
 	return
 }
+
+var (
+	errInvalidKey       = terror.ClassXEval.New(mysql.ErrInvalidKey, mysql.MySQLErrName[mysql.ErrInvalidKey])
+	errInvalidRecordKey = terror.ClassXEval.New(mysql.ErrInvalidRecordKey, mysql.MySQLErrName[mysql.ErrInvalidRecordKey])
+	errInvalidIndexKey  = terror.ClassXEval.New(mysql.ErrInvalidIndexKey, mysql.MySQLErrName[mysql.ErrInvalidIndexKey])
+)
 
 func init() {
 	mySQLErrCodes := map[terror.ErrCode]uint16{
