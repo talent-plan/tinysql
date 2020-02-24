@@ -40,9 +40,8 @@ type HashJoinExec struct {
 	buildKeys         []*expression.Column
 
 	// concurrency is the number of partition, build and join workers.
-	concurrency   uint
-	rowContainer  *hashRowContainer
-	buildFinished chan error
+	concurrency  uint
+	rowContainer *hashRowContainer
 	// joinWorkerWaitGroup is for sync multiple join workers.
 	joinWorkerWaitGroup sync.WaitGroup
 	finished            atomic.Value
@@ -87,10 +86,6 @@ func (e *HashJoinExec) Close() error {
 	close(e.closeCh)
 	e.finished.Store(true)
 	if e.prepared {
-		if e.buildFinished != nil {
-			for range e.buildFinished {
-			}
-		}
 		if e.joinResultCh != nil {
 			for range e.joinResultCh {
 			}
@@ -133,7 +128,6 @@ func (e *HashJoinExec) Open(ctx context.Context) error {
 // fetchProbeSideChunks get chunks from fetches chunks from the big table in a background goroutine
 // and sends the chunks to multiple channels which will be read by multiple join workers.
 func (e *HashJoinExec) fetchProbeSideChunks(ctx context.Context) {
-	hasWaitedForBuild := false
 	for {
 		if e.finished.Load().(bool) {
 			return
@@ -161,71 +155,12 @@ func (e *HashJoinExec) fetchProbeSideChunks(ctx context.Context) {
 			}
 			return
 		}
-		if !hasWaitedForBuild {
-			if probeSideResult.NumRows() == 0 {
-				e.finished.Store(true)
-				return
-			}
-			jobFinished, buildErr := e.wait4BuildSide()
-			if buildErr != nil {
-				e.joinResultCh <- &hashjoinWorkerResult{
-					err: buildErr,
-				}
-				return
-			} else if jobFinished {
-				return
-			}
-			hasWaitedForBuild = true
-		}
 
 		if probeSideResult.NumRows() == 0 {
 			return
 		}
 
 		probeSideResource.dest <- probeSideResult
-	}
-}
-
-func (e *HashJoinExec) wait4BuildSide() (finished bool, err error) {
-	select {
-	case <-e.closeCh:
-		return true, nil
-	case err := <-e.buildFinished:
-		if err != nil {
-			return false, err
-		}
-	}
-	if e.rowContainer.Len() == 0 && e.joinType == plannercore.InnerJoin {
-		return true, nil
-	}
-	return false, nil
-}
-
-// fetchBuildSideRows fetches all rows from build side executor, and append them
-// to e.buildSideResult.
-func (e *HashJoinExec) fetchBuildSideRows(ctx context.Context, chkCh chan<- *chunk.Chunk, doneCh <-chan struct{}) {
-	defer close(chkCh)
-	var err error
-	for {
-		if e.finished.Load().(bool) {
-			return
-		}
-		chk := chunk.NewChunkWithCapacity(e.buildSideExec.base().retFieldTypes, e.ctx.GetSessionVars().MaxChunkSize)
-		err = Next(ctx, e.buildSideExec, chk)
-		if err != nil {
-			e.buildFinished <- errors.Trace(err)
-			return
-		}
-		if chk.NumRows() == 0 {
-			return
-		}
-		select {
-		case <-doneCh:
-			return
-		case <-e.closeCh:
-			return
-		case chkCh <- chk:
-		}
 	}
 }
 
@@ -441,8 +376,10 @@ func (e *HashJoinExec) join2Chunk(workerID uint, probeSideChk *chunk.Chunk, hCtx
 // step 2. fetch data from probe child in a background goroutine and probe the hash table in multiple join workers.
 func (e *HashJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	if !e.prepared {
-		e.buildFinished = make(chan error, 1)
-		go util.WithRecovery(func() { e.fetchAndBuildHashTable(ctx) }, e.handleFetchAndBuildHashTablePanic)
+		err := e.fetchAndBuildHashTable(ctx)
+		if err != nil {
+			return err
+		}
 		e.fetchAndProbeHashTable(ctx)
 		e.prepared = true
 	}
@@ -464,34 +401,7 @@ func (e *HashJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	return nil
 }
 
-func (e *HashJoinExec) handleFetchAndBuildHashTablePanic(r interface{}) {
-	if r != nil {
-		e.buildFinished <- errors.Errorf("%v", r)
-	}
-	close(e.buildFinished)
-}
-
-func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) {
-	// buildSideResultCh transfers build side chunk from build side fetch to build hash table.
-	buildSideResultCh := make(chan *chunk.Chunk, 1)
-	doneCh := make(chan struct{})
-	go util.WithRecovery(func() { e.fetchBuildSideRows(ctx, buildSideResultCh, doneCh) }, nil)
-
-	// TODO: Parallel build hash table. Currently not support because `rowHashMap` is not thread-safe.
-	err := e.buildHashTableForList(buildSideResultCh)
-	if err != nil {
-		e.buildFinished <- errors.Trace(err)
-		close(doneCh)
-	}
-	// Wait fetchBuildSideRows be finished.
-	// 1. if buildHashTableForList fails
-	// 2. if probeSideResult.NumRows() == 0, fetchProbeSideChunks will not wait for the build side.
-	for range buildSideResultCh {
-	}
-}
-
-// buildHashTableForList builds hash table from `list`.
-func (e *HashJoinExec) buildHashTableForList(buildSideResultCh <-chan *chunk.Chunk) error {
+func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) error {
 	buildKeyColIdx := make([]int, len(e.buildKeys))
 	for i := range e.buildKeys {
 		buildKeyColIdx[i] = e.buildKeys[i].Index
@@ -503,14 +413,23 @@ func (e *HashJoinExec) buildHashTableForList(buildSideResultCh <-chan *chunk.Chu
 	}
 	initList := chunk.NewList(allTypes, e.initCap, e.maxChunkSize)
 	e.rowContainer = newHashRowContainer(e.ctx, int(e.buildSideEstCount), hCtx, initList)
-	for chk := range buildSideResultCh {
+
+	var err error
+	for {
 		if e.finished.Load().(bool) {
-			return nil
+			return err
+		}
+		chk := chunk.NewChunkWithCapacity(e.buildSideExec.base().retFieldTypes, e.ctx.GetSessionVars().MaxChunkSize)
+		err = Next(ctx, e.buildSideExec, chk)
+		if err != nil {
+			return err
+		}
+		if chk.NumRows() == 0 {
+			return err
 		}
 		err := e.rowContainer.PutChunk(chk)
 		if err != nil {
 			return err
 		}
 	}
-	return nil
 }
