@@ -26,7 +26,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
@@ -35,96 +34,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/mock"
 )
-
-type benchHelper struct {
-	ctx   sessionctx.Context
-	exprs []Expression
-
-	inputTypes  []*types.FieldType
-	outputTypes []*types.FieldType
-	inputChunk  *chunk.Chunk
-	outputChunk *chunk.Chunk
-}
-
-func (h *benchHelper) init() {
-	numRows := 4 * 1024
-
-	h.ctx = mock.NewContext()
-	h.ctx.GetSessionVars().StmtCtx.TimeZone = time.Local
-	h.ctx.GetSessionVars().InitChunkSize = 32
-	h.ctx.GetSessionVars().MaxChunkSize = numRows
-
-	h.inputTypes = make([]*types.FieldType, 0, 10)
-	h.inputTypes = append(h.inputTypes, &types.FieldType{
-		Tp:      mysql.TypeLonglong,
-		Flen:    mysql.MaxIntWidth,
-		Decimal: 0,
-		Flag:    mysql.BinaryFlag,
-		Charset: charset.CharsetBin,
-		Collate: charset.CollationBin,
-	})
-	h.inputTypes = append(h.inputTypes, &types.FieldType{
-		Tp:      mysql.TypeDouble,
-		Flen:    mysql.MaxRealWidth,
-		Decimal: types.UnspecifiedLength,
-		Flag:    mysql.BinaryFlag,
-		Charset: charset.CharsetBin,
-		Collate: charset.CollationBin,
-	})
-
-	// Use 20 string columns to show the cache performance.
-	for i := 0; i < 20; i++ {
-		h.inputTypes = append(h.inputTypes, &types.FieldType{
-			Tp:      mysql.TypeVarString,
-			Flen:    0,
-			Decimal: types.UnspecifiedLength,
-			Charset: charset.CharsetUTF8,
-			Collate: charset.CollationUTF8,
-		})
-	}
-
-	h.inputChunk = chunk.NewChunkWithCapacity(h.inputTypes, numRows)
-	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
-		h.inputChunk.AppendInt64(0, 4)
-		h.inputChunk.AppendFloat64(1, 2.019)
-		for i := 0; i < 20; i++ {
-			h.inputChunk.AppendString(2+i, `abcdefughasfjsaljal1321798273528791!&(*#&@&^%&%^&!)sadfashqwer`)
-		}
-	}
-
-	cols := make([]*Column, 0, len(h.inputTypes))
-	for i := 0; i < len(h.inputTypes); i++ {
-		cols = append(cols, &Column{
-			UniqueID: int64(i),
-			RetType:  h.inputTypes[i],
-			Index:    i,
-		})
-	}
-
-	h.exprs = append(h.exprs, cols[2])
-	h.exprs = append(h.exprs, cols[2])
-
-	h.outputTypes = make([]*types.FieldType, 0, len(h.exprs))
-	for i := 0; i < len(h.exprs); i++ {
-		h.outputTypes = append(h.outputTypes, h.exprs[i].GetType())
-	}
-
-	h.outputChunk = chunk.NewChunkWithCapacity(h.outputTypes, numRows)
-}
-
-func BenchmarkVectorizedExecute(b *testing.B) {
-	h := benchHelper{}
-	h.init()
-	inputIter := chunk.NewIterator4Chunk(h.inputChunk)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		h.outputChunk.Reset()
-		if err := VectorizedExecute(h.ctx, h.exprs, inputIter, h.outputChunk); err != nil {
-			panic("errors happened during \"VectorizedExecute\"")
-		}
-	}
-}
 
 func BenchmarkScalarFunctionClone(b *testing.B) {
 	col := &Column{RetType: types.NewFieldType(mysql.TypeLonglong)}

@@ -74,17 +74,6 @@ func HasAssignSetVarFunc(expr Expression) bool {
 	return false
 }
 
-// VectorizedExecute evaluates a list of expressions column by column and append their results to "output" Chunk.
-func VectorizedExecute(ctx sessionctx.Context, exprs []Expression, iterator *chunk.Iterator4Chunk, output *chunk.Chunk) error {
-	for colID, expr := range exprs {
-		err := evalOneColumn(ctx, expr, iterator, output, colID)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func evalOneVec(ctx sessionctx.Context, expr Expression, input *chunk.Chunk, output *chunk.Chunk, colIdx int) error {
 	ft := expr.GetType()
 	result := output.Column(colIdx)
