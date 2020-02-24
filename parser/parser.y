@@ -753,12 +753,8 @@ import (
 	ColumnDefList			"table column definition list"
 	ColumnFormat			"Column format"
 	ColumnName			"column name"
-	ColumnNameOrUserVariable	"column name or user variable"
 	ColumnNameList			"column name list"
-	ColumnNameOrUserVariableList	"column name or user variable list"
 	ColumnNameListOpt		"column name list opt"
-	ColumnNameOrUserVarListOpt	"column name or user vairiabe list opt"
-	ColumnNameOrUserVarListOptWithBrackets	"column name or user variable list opt with brackets"
 	ColumnSetValue			"insert statement set value by column name"
 	ColumnSetValueList		"insert statement set value by column name list"
 	CompareOp			"Compare opcode"
@@ -1478,46 +1474,6 @@ ColumnNameListOpt:
 |	ColumnNameList
 	{
 		$$ = $1.([]*ast.ColumnName)
-	}
-
-ColumnNameOrUserVarListOpt:
-	/* EMPTY */
-	{
-		$$ = []*ast.ColumnNameOrUserVar{}
-	}
-|	ColumnNameOrUserVariableList
-	{
-		$$ = $1.([]*ast.ColumnNameOrUserVar)
-	}
-
-ColumnNameOrUserVariableList:
-	ColumnNameOrUserVariable
-	{
-		$$ = []*ast.ColumnNameOrUserVar{$1.(*ast.ColumnNameOrUserVar)}
-	}
-|	ColumnNameOrUserVariableList ',' ColumnNameOrUserVariable
-	{
-		$$ = append($1.([]*ast.ColumnNameOrUserVar), $3.(*ast.ColumnNameOrUserVar))
-	}
-
-ColumnNameOrUserVariable:
-	ColumnName
-	{
-		$$ = &ast.ColumnNameOrUserVar{ColumnName: $1.(*ast.ColumnName)}
-	}
-|	UserVariable
-	{
-		$$ = &ast.ColumnNameOrUserVar{UserVar: $1.(*ast.VariableExpr)}
-	}
-
-ColumnNameOrUserVarListOptWithBrackets:
-	/* EMPTY */
-	{
-		$$ = []*ast.ColumnNameOrUserVar{}
-	}
-|	'(' ColumnNameOrUserVarListOpt ')'
-	{
-		$$ = $2.([]*ast.ColumnNameOrUserVar)
 	}
 
 CommitStmt:
