@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
-	"github.com/pingcap/tidb/util/testutil"
 )
 
 var _ = Suite(&testSessionSuite{})
@@ -374,13 +373,6 @@ func (s *testSessionSuite2) TestIndexColumnLength(c *C) {
 
 	idxC2Cols := tables.FindIndexByColName(tab, "c2").Meta().Columns
 	c.Assert(idxC2Cols[0].Length, Equals, 6)
-}
-
-// TestISColumns tests information_schema.columns.
-func (s *testSessionSuite2) TestISColumns(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("select ORDINAL_POSITION from INFORMATION_SCHEMA.COLUMNS;")
-	tk.MustQuery("SELECT CHARACTER_SET_NAME FROM INFORMATION_SCHEMA.CHARACTER_SETS WHERE CHARACTER_SET_NAME = 'utf8mb4'").Check(testkit.Rows("utf8mb4"))
 }
 
 func (s *testSessionSuite2) TestMultiStmts(c *C) {
@@ -744,53 +736,6 @@ func (s *testSessionSuite2) TestStatementErrorInTransaction(c *C) {
 	tk.MustQuery(`select * from statement_side_effect`).Check(testkit.Rows("1"))
 	tk.MustExec("commit")
 	tk.MustQuery(`select * from statement_side_effect`).Check(testkit.Rows("1"))
-}
-
-// TestSetGroupConcatMaxLen is for issue #7034
-func (s *testSessionSuite2) TestSetGroupConcatMaxLen(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-
-	// Normal case
-	tk.MustExec("set global group_concat_max_len = 100")
-	tk.MustExec("set @@session.group_concat_max_len = 50")
-	result := tk.MustQuery("show global variables  where variable_name='group_concat_max_len';")
-	result.Check(testkit.Rows("group_concat_max_len 100"))
-
-	result = tk.MustQuery("show session variables  where variable_name='group_concat_max_len';")
-	result.Check(testkit.Rows("group_concat_max_len 50"))
-
-	result = tk.MustQuery("select @@group_concat_max_len;")
-	result.Check(testkit.Rows("50"))
-
-	result = tk.MustQuery("select @@global.group_concat_max_len;")
-	result.Check(testkit.Rows("100"))
-
-	result = tk.MustQuery("select @@session.group_concat_max_len;")
-	result.Check(testkit.Rows("50"))
-
-	tk.MustExec("set @@group_concat_max_len = 1024")
-
-	result = tk.MustQuery("select @@group_concat_max_len;")
-	result.Check(testkit.Rows("1024"))
-
-	result = tk.MustQuery("select @@global.group_concat_max_len;")
-	result.Check(testkit.Rows("100"))
-
-	result = tk.MustQuery("select @@session.group_concat_max_len;")
-	result.Check(testkit.Rows("1024"))
-
-	// Test value out of range
-	tk.MustExec("set @@group_concat_max_len=1")
-	tk.MustQuery("show warnings").Check(testutil.RowsWithSep("|", "Warning|1292|Truncated incorrect group_concat_max_len value: '1'"))
-	result = tk.MustQuery("select @@group_concat_max_len;")
-	result.Check(testkit.Rows("4"))
-
-	_, err := tk.Exec("set @@group_concat_max_len = 18446744073709551616")
-	c.Assert(terror.ErrorEqual(err, variable.ErrWrongTypeForVar), IsTrue, Commentf("err %v", err))
-
-	// Test illegal type
-	_, err = tk.Exec("set @@group_concat_max_len='hello'")
-	c.Assert(terror.ErrorEqual(err, variable.ErrWrongTypeForVar), IsTrue, Commentf("err %v", err))
 }
 
 func (s *testSessionSuite2) TestTxnGoString(c *C) {

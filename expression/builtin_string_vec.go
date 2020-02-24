@@ -81,7 +81,7 @@ func (b *builtinStrcmpSig) vecEvalInt(input *chunk.Chunk, result *chunk.Column) 
 }
 
 func (b *builtinLengthSig) vectorized() bool {
-	return true
+	return false
 }
 
 // vecEvalInt evaluates a builtinLengthSig.
