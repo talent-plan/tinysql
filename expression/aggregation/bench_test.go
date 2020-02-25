@@ -29,7 +29,7 @@ func BenchmarkCreateContext(b *testing.B) {
 		RetType: types.NewFieldType(mysql.TypeLonglong),
 	}
 	ctx := mock.NewContext()
-	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col}, false)
+	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -47,44 +47,7 @@ func BenchmarkResetContext(b *testing.B) {
 		RetType: types.NewFieldType(mysql.TypeLonglong),
 	}
 	ctx := mock.NewContext()
-	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col}, false)
-	if err != nil {
-		b.Fatal(err)
-	}
-	fun := desc.GetAggFunc(ctx)
-	evalCtx := fun.CreateContext(ctx.GetSessionVars().StmtCtx)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		fun.ResetContext(ctx.GetSessionVars().StmtCtx, evalCtx)
-	}
-	b.ReportAllocs()
-}
-
-func BenchmarkCreateDistinctContext(b *testing.B) {
-	col := &expression.Column{
-		Index:   0,
-		RetType: types.NewFieldType(mysql.TypeLonglong),
-	}
-	ctx := mock.NewContext()
-	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col}, true)
-	if err != nil {
-		b.Fatal(err)
-	}
-	fun := desc.GetAggFunc(ctx)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		fun.CreateContext(ctx.GetSessionVars().StmtCtx)
-	}
-	b.ReportAllocs()
-}
-
-func BenchmarkResetDistinctContext(b *testing.B) {
-	col := &expression.Column{
-		Index:   0,
-		RetType: types.NewFieldType(mysql.TypeLonglong),
-	}
-	ctx := mock.NewContext()
-	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col}, true)
+	desc, err := NewAggFuncDesc(ctx, ast.AggFuncAvg, []expression.Expression{col})
 	if err != nil {
 		b.Fatal(err)
 	}

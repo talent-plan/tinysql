@@ -22,9 +22,6 @@ import (
 func ExplainAggFunc(agg *AggFuncDesc) string {
 	var buffer bytes.Buffer
 	fmt.Fprintf(&buffer, "%s(", agg.Name)
-	if agg.HasDistinct {
-		buffer.WriteString("distinct ")
-	}
 	for i, arg := range agg.Args {
 		buffer.WriteString(arg.ExplainInfo())
 		if i+1 < len(agg.Args) {

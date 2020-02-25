@@ -45,9 +45,6 @@ func (af *avgFunction) updateAvg(sc *stmtctx.StatementContext, evalCtx *AggEvalu
 }
 
 func (af *avgFunction) ResetContext(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext) {
-	if af.HasDistinct {
-		evalCtx.DistinctChecker = createDistinctChecker(sc)
-	}
 	evalCtx.Value.SetNull()
 	evalCtx.Count = 0
 }

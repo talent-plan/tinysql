@@ -26,24 +26,19 @@ type AggFuncDesc struct {
 	baseFuncDesc
 	// Mode represents the execution mode of the aggregation function.
 	Mode AggFunctionMode
-	// HasDistinct represents whether the aggregation function contains distinct attribute.
-	HasDistinct bool
 }
 
 // NewAggFuncDesc creates an aggregation function signature descriptor.
-func NewAggFuncDesc(ctx sessionctx.Context, name string, args []expression.Expression, hasDistinct bool) (*AggFuncDesc, error) {
+func NewAggFuncDesc(ctx sessionctx.Context, name string, args []expression.Expression) (*AggFuncDesc, error) {
 	b, err := newBaseFuncDesc(ctx, name, args)
 	if err != nil {
 		return nil, err
 	}
-	return &AggFuncDesc{baseFuncDesc: b, HasDistinct: hasDistinct}, nil
+	return &AggFuncDesc{baseFuncDesc: b}, nil
 }
 
 // Equal checks whether two aggregation function signatures are equal.
 func (a *AggFuncDesc) Equal(ctx sessionctx.Context, other *AggFuncDesc) bool {
-	if a.HasDistinct != other.HasDistinct {
-		return false
-	}
 	return a.baseFuncDesc.equal(ctx, &other.baseFuncDesc)
 }
 
@@ -68,8 +63,7 @@ func (a *AggFuncDesc) Split(ordinal []int) (partialAggDesc, finalAggDesc *AggFun
 		panic("Error happened during AggFuncDesc.Split, the AggFunctionMode is not CompleteMode or FinalMode.")
 	}
 	finalAggDesc = &AggFuncDesc{
-		Mode:        FinalMode, // We only support FinalMode now in final phase.
-		HasDistinct: a.HasDistinct,
+		Mode: FinalMode, // We only support FinalMode now in final phase.
 	}
 	finalAggDesc.Name = a.Name
 	finalAggDesc.RetTp = a.RetTp

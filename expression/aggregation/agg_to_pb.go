@@ -25,9 +25,6 @@ import (
 
 // AggFuncToPBExpr converts aggregate function to pb.
 func AggFuncToPBExpr(sc *stmtctx.StatementContext, client kv.Client, aggFunc *AggFuncDesc) *tipb.Expr {
-	if aggFunc.HasDistinct {
-		return nil
-	}
 	pc := expression.NewPBConverter(client, sc)
 	var tp tipb.ExprType
 	switch aggFunc.Name {
@@ -91,6 +88,5 @@ func PBExprToAggFuncDesc(sc *stmtctx.StatementContext, aggFunc *tipb.Expr, field
 	return &AggFuncDesc{
 		baseFuncDesc: base,
 		Mode:         Partial1Mode,
-		HasDistinct:  false,
 	}, nil
 }

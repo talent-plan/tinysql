@@ -175,11 +175,8 @@
   {
     "name": "TestDAGPlanBuilderAgg",
     "cases": [
-      // Test distinct.
-      "select distinct b from t",
       // Test agg + table.
       "select sum(a), avg(b + c) from t group by d",
-      "select sum(distinct a), avg(b + c) from t group by d",
       //  Test group by (c + d)
       "select sum(e), avg(e + c) from t where c = 1 group by (c + d)",
       // Test stream agg + index single.

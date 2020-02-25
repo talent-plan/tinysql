@@ -772,7 +772,6 @@ import (
 	DistinctOpt			"Explicit distinct option"
 	DefaultFalseDistinctOpt		"Distinct option which defaults to false"
 	DefaultTrueDistinctOpt		"Distinct option which defaults to true"
-	BuggyDefaultFalseDistinctOpt	"Distinct option which accepts DISTINCT ALL and defaults to false"
 	EqOpt				"= or empty"
 	EscapedTableRef 		"escaped table reference"
 	ExplainFormatType		"explain format type"
@@ -3103,13 +3102,6 @@ DefaultTrueDistinctOpt:
 	}
 |	DistinctOpt
 
-BuggyDefaultFalseDistinctOpt:
-	DefaultFalseDistinctOpt
-|	DistinctKwd "ALL"
-	{
-		$$ = true
-	}
-
 
 FunctionNameConflict:
 	"ASCII"
@@ -3255,39 +3247,30 @@ FunctionNameDateArithMultiForms:
 |	builtinSubDate
 
 SumExpr:
-	"AVG" '(' BuggyDefaultFalseDistinctOpt Expression ')'
+	"AVG" '(' Expression ')'
 	{
-
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
-	}
-|	builtinCount '(' DistinctKwd ExpressionList ')'
-	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: $4.([]ast.ExprNode), Distinct: true}
-	}
-|	builtinCount '(' "ALL" Expression ')'
-	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4},}
+		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
 	}
 |	builtinCount '(' Expression ')'
 	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3},}
+		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
 	}
 |	builtinCount '(' '*' ')'
 	{
 		args := []ast.ExprNode{ast.NewValueExpr(1)}
 		$$ = &ast.AggregateFuncExpr{F: $1, Args: args,}
 	}
-|	builtinMax '(' BuggyDefaultFalseDistinctOpt Expression ')'
+|	builtinMax '(' Expression ')'
 	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
+		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
 	}
-|	builtinMin '(' BuggyDefaultFalseDistinctOpt Expression ')'
+|	builtinMin '(' Expression ')'
 	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
+		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
 	}
-|	builtinSum '(' BuggyDefaultFalseDistinctOpt Expression ')'
+|	builtinSum '(' Expression ')'
 	{
-		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
+		$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
 	}
 
 OptGConcatSeparator:

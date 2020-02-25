@@ -53,13 +53,6 @@ func buildCount(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 		ordinal: ordinal,
 	}
 
-	// If HasDistinct and mode is CompleteMode or Partial1Mode, we should
-	// use countOriginalWithDistinct.
-	if aggFuncDesc.HasDistinct &&
-		(aggFuncDesc.Mode == aggregation.CompleteMode || aggFuncDesc.Mode == aggregation.Partial1Mode) {
-		return &countOriginalWithDistinct{baseCount{base}}
-	}
-
 	switch aggFuncDesc.Mode {
 	case aggregation.CompleteMode, aggregation.Partial1Mode:
 		switch aggFuncDesc.Args[0].GetType().EvalType() {
@@ -91,14 +84,8 @@ func buildSum(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	default:
 		switch aggFuncDesc.RetTp.EvalType() {
 		case types.ETInt:
-			if aggFuncDesc.HasDistinct {
-				return &sum4DistinctInt64{base}
-			}
 			return &sum4Int64{base}
 		default:
-			if aggFuncDesc.HasDistinct {
-				return &sum4DistinctFloat64{base}
-			}
 			return &sum4Float64{base}
 		}
 	}
@@ -121,14 +108,8 @@ func buildAvg(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	case aggregation.CompleteMode, aggregation.Partial1Mode:
 		switch aggFuncDesc.RetTp.EvalType() {
 		case types.ETInt:
-			if aggFuncDesc.HasDistinct {
-				return &avgOriginal4DistinctInt64{base}
-			}
 			return &avgOriginal4Int64{baseAvgInt64{base}}
 		default:
-			if aggFuncDesc.HasDistinct {
-				return &avgOriginal4DistinctFloat64{base}
-			}
 			return &avgOriginal4Float64{baseAvgFloat64{base}}
 		}
 

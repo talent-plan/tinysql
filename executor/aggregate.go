@@ -19,7 +19,6 @@ import (
 
 	"github.com/cznic/mathutil"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/executor/aggfuncs"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -136,15 +135,10 @@ type AfFinalResult struct {
 type HashAggExec struct {
 	baseExecutor
 
-	sc               *stmtctx.StatementContext
-	PartialAggFuncs  []aggfuncs.AggFunc
-	FinalAggFuncs    []aggfuncs.AggFunc
-	partialResultMap aggPartialResultMapper
-	groupSet         set.StringSet
-	groupKeys        []string
-	cursor4GroupKey  int
-	GroupByItems     []expression.Expression
-	groupKeyBuffer   [][]byte
+	sc              *stmtctx.StatementContext
+	PartialAggFuncs []aggfuncs.AggFunc
+	FinalAggFuncs   []aggfuncs.AggFunc
+	GroupByItems    []expression.Expression
 
 	finishCh         chan struct{}
 	finalOutputCh    chan *AfFinalResult
@@ -154,15 +148,11 @@ type HashAggExec struct {
 	partialWorkers   []HashAggPartialWorker
 	finalWorkers     []HashAggFinalWorker
 	defaultVal       *chunk.Chunk
-	childResult      *chunk.Chunk
 
 	// isChildReturnEmpty indicates whether the child executor only returns an empty input.
 	isChildReturnEmpty bool
-	// After we support parallel execution for aggregation functions with distinct,
-	// we can remove this attribute.
-	isUnparallelExec bool
-	prepared         bool
-	executed         bool
+	prepared           bool
+	executed           bool
 }
 
 // HashAggInput indicates the input of hash agg exec.
@@ -195,12 +185,6 @@ func (d *HashAggIntermData) getPartialResultBatch(sc *stmtctx.StatementContext, 
 
 // Close implements the Executor Close interface.
 func (e *HashAggExec) Close() error {
-	if e.isUnparallelExec {
-		e.childResult = nil
-		e.groupSet = nil
-		e.partialResultMap = nil
-		return e.baseExecutor.Close()
-	}
 	// `Close` may be called after `Open` without calling `Next` in test.
 	if !e.prepared {
 		close(e.inputCh)
@@ -235,19 +219,8 @@ func (e *HashAggExec) Open(ctx context.Context) error {
 	}
 	e.prepared = false
 
-	if e.isUnparallelExec {
-		e.initForUnparallelExec()
-		return nil
-	}
 	e.initForParallelExec(e.ctx)
 	return nil
-}
-
-func (e *HashAggExec) initForUnparallelExec() {
-	e.groupSet = set.NewStringSet()
-	e.partialResultMap = make(aggPartialResultMapper)
-	e.groupKeyBuffer = make([][]byte, 0, 8)
-	e.childResult = newFirstChunk(e.children[0])
 }
 
 func (e *HashAggExec) initForParallelExec(ctx sessionctx.Context) {
@@ -560,9 +533,6 @@ func (w *HashAggFinalWorker) run(ctx sessionctx.Context, waitGroup *sync.WaitGro
 // Next implements the Executor Next interface.
 func (e *HashAggExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.Reset()
-	if e.isUnparallelExec {
-		return e.unparallelExec(ctx, req)
-	}
 	return e.parallelExec(ctx, req)
 }
 
@@ -644,12 +614,6 @@ func (e *HashAggExec) parallelExec(ctx context.Context, chk *chunk.Chunk) error 
 		e.prepared = true
 	}
 
-	failpoint.Inject("parallelHashAggError", func(val failpoint.Value) {
-		if val.(bool) {
-			failpoint.Return(errors.New("HashAggExec.parallelExec error"))
-		}
-	})
-
 	if e.executed {
 		return nil
 	}
@@ -673,97 +637,4 @@ func (e *HashAggExec) parallelExec(ctx context.Context, chk *chunk.Chunk) error 
 			return nil
 		}
 	}
-}
-
-// unparallelExec executes hash aggregation algorithm in single thread.
-func (e *HashAggExec) unparallelExec(ctx context.Context, chk *chunk.Chunk) error {
-	// In this stage we consider all data from src as a single group.
-	if !e.prepared {
-		err := e.execute(ctx)
-		if err != nil {
-			return err
-		}
-		if (len(e.groupSet) == 0) && len(e.GroupByItems) == 0 {
-			// If no groupby and no data, we should add an empty group.
-			// For example:
-			// "select count(c) from t;" should return one row [0]
-			// "select count(c) from t group by c1;" should return empty result set.
-			e.groupSet.Insert("")
-			e.groupKeys = append(e.groupKeys, "")
-		}
-		e.prepared = true
-	}
-	chk.Reset()
-
-	// Since we return e.maxChunkSize rows every time, so we should not traverse
-	// `groupSet` because of its randomness.
-	for ; e.cursor4GroupKey < len(e.groupKeys); e.cursor4GroupKey++ {
-		partialResults := e.getPartialResults(e.groupKeys[e.cursor4GroupKey])
-		if len(e.PartialAggFuncs) == 0 {
-			chk.SetNumVirtualRows(chk.NumRows() + 1)
-		}
-		for i, af := range e.PartialAggFuncs {
-			if err := af.AppendFinalResult2Chunk(e.ctx, partialResults[i], chk); err != nil {
-				return err
-			}
-		}
-		if chk.IsFull() {
-			e.cursor4GroupKey++
-			return nil
-		}
-	}
-	return nil
-}
-
-// execute fetches Chunks from src and update each aggregate function for each row in Chunk.
-func (e *HashAggExec) execute(ctx context.Context) (err error) {
-	for {
-		err := Next(ctx, e.children[0], e.childResult)
-		if err != nil {
-			return err
-		}
-
-		failpoint.Inject("unparallelHashAggError", func(val failpoint.Value) {
-			if val.(bool) {
-				failpoint.Return(errors.New("HashAggExec.unparallelExec error"))
-			}
-		})
-
-		// no more data.
-		if e.childResult.NumRows() == 0 {
-			return nil
-		}
-
-		e.groupKeyBuffer, err = getGroupKey(e.ctx, e.childResult, e.groupKeyBuffer, e.GroupByItems)
-		if err != nil {
-			return err
-		}
-
-		for j := 0; j < e.childResult.NumRows(); j++ {
-			groupKey := string(e.groupKeyBuffer[j])
-			if !e.groupSet.Exist(groupKey) {
-				e.groupSet.Insert(groupKey)
-				e.groupKeys = append(e.groupKeys, groupKey)
-			}
-			partialResults := e.getPartialResults(groupKey)
-			for i, af := range e.PartialAggFuncs {
-				err = af.UpdatePartialResult(e.ctx, []chunk.Row{e.childResult.GetRow(j)}, partialResults[i])
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-}
-
-func (e *HashAggExec) getPartialResults(groupKey string) []aggfuncs.PartialResult {
-	partialResults, ok := e.partialResultMap[groupKey]
-	if !ok {
-		partialResults = make([]aggfuncs.PartialResult, 0, len(e.PartialAggFuncs))
-		for _, af := range e.PartialAggFuncs {
-			partialResults = append(partialResults, af.AllocPartialResult())
-		}
-		e.partialResultMap[groupKey] = partialResults
-	}
-	return partialResults
 }

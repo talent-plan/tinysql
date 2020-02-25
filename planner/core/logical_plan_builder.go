@@ -91,7 +91,7 @@ func (b *PlanBuilder) buildAggregation(ctx context.Context, p LogicalPlan, aggFu
 			p = np
 			newArgList = append(newArgList, newArg)
 		}
-		newFunc, err := aggregation.NewAggFuncDesc(b.ctx, aggFunc.F, newArgList, aggFunc.Distinct)
+		newFunc, err := aggregation.NewAggFuncDesc(b.ctx, aggFunc.F, newArgList)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -115,7 +115,7 @@ func (b *PlanBuilder) buildAggregation(ctx context.Context, p LogicalPlan, aggFu
 		}
 	}
 	for i, col := range p.Schema().Columns {
-		newFunc, err := aggregation.NewAggFuncDesc(b.ctx, ast.AggFuncFirstRow, []expression.Expression{col}, false)
+		newFunc, err := aggregation.NewAggFuncDesc(b.ctx, ast.AggFuncFirstRow, []expression.Expression{col})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -610,7 +610,7 @@ func (b *PlanBuilder) buildDistinct(child LogicalPlan, length int) (*LogicalAggr
 	}.Init(b.ctx)
 	plan4Agg.collectGroupByColumns()
 	for _, col := range child.Schema().Columns {
-		aggDesc, err := aggregation.NewAggFuncDesc(b.ctx, ast.AggFuncFirstRow, []expression.Expression{col}, false)
+		aggDesc, err := aggregation.NewAggFuncDesc(b.ctx, ast.AggFuncFirstRow, []expression.Expression{col})
 		if err != nil {
 			return nil, err
 		}

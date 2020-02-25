@@ -97,11 +97,3 @@ func (s *testSuiteAgg) TestInjectProjBelowTopN(c *C) {
 		tk.MustQuery(tt).Check(testkit.Rows(output[i]...))
 	}
 }
-
-func (s *testSuiteAgg) TestIssue10099(c *C) {
-	tk := testkit.NewTestKitWithInit(c, s.store)
-	tk.MustExec("drop table if exists t")
-	tk.MustExec("create table t(a char(10), b char(10))")
-	tk.MustExec("insert into t values('1', '222'), ('12', '22')")
-	tk.MustQuery("select count(distinct a, b) from t").Check(testkit.Rows("2"))
-}

@@ -78,7 +78,7 @@ func (s *testSuite) testMergePartialResult(c *C, p aggTest) {
 	iter := chunk.NewIterator4Chunk(srcChk)
 
 	args := []expression.Expression{&expression.Column{RetType: p.dataType, Index: 0}}
-	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args, false)
+	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args)
 	c.Assert(err, IsNil)
 	partialDesc, finalDesc := desc.Split([]int{0, 1})
 
@@ -169,7 +169,7 @@ func (s *testSuite) testAggFunc(c *C, p aggTest) {
 	srcChk.AppendDatum(0, &types.Datum{})
 
 	args := []expression.Expression{&expression.Column{RetType: p.dataType, Index: 0}}
-	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args, false)
+	desc, err := aggregation.NewAggFuncDesc(s.ctx, p.funcName, args)
 	c.Assert(err, IsNil)
 	finalFunc := aggfuncs.Build(s.ctx, desc, 0)
 	finalPr := finalFunc.AllocPartialResult()
@@ -191,26 +191,6 @@ func (s *testSuite) testAggFunc(c *C, p aggTest) {
 	finalFunc.AppendFinalResult2Chunk(s.ctx, finalPr, resultChk)
 	dt = resultChk.GetRow(0).GetDatum(0, desc.RetTp)
 	result, err = dt.CompareDatum(s.ctx.GetSessionVars().StmtCtx, &p.results[0])
-	c.Assert(err, IsNil)
-	c.Assert(result, Equals, 0)
-
-	// test the agg func with distinct
-	desc, err = aggregation.NewAggFuncDesc(s.ctx, p.funcName, args, true)
-	c.Assert(err, IsNil)
-	finalFunc = aggfuncs.Build(s.ctx, desc, 0)
-	finalPr = finalFunc.AllocPartialResult()
-
-	resultChk.Reset()
-	iter = chunk.NewIterator4Chunk(srcChk)
-	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-		finalFunc.UpdatePartialResult(s.ctx, []chunk.Row{row}, finalPr)
-	}
-	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
-		finalFunc.UpdatePartialResult(s.ctx, []chunk.Row{row}, finalPr)
-	}
-	finalFunc.AppendFinalResult2Chunk(s.ctx, finalPr, resultChk)
-	dt = resultChk.GetRow(0).GetDatum(0, desc.RetTp)
-	result, err = dt.CompareDatum(s.ctx.GetSessionVars().StmtCtx, &p.results[1])
 	c.Assert(err, IsNil)
 	c.Assert(result, Equals, 0)
 

@@ -177,11 +177,8 @@ func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 }
 
 type aggTestCase struct {
-	// The test table's schema is fixed (aggCol Double, groupBy LongLong).
-	execType    string // "hash" or "stream"
 	aggFunc     string // sum, avg, count ....
 	groupByNDV  int    // the number of distinct group-by keys
-	hasDistinct bool
 	rows        int
 	concurrency int
 	ctx         sessionctx.Context
@@ -195,15 +192,15 @@ func (a aggTestCase) columns() []*expression.Column {
 }
 
 func (a aggTestCase) String() string {
-	return fmt.Sprintf("(execType:%v, aggFunc:%v, ndv:%v, hasDistinct:%v, rows:%v, concurrency:%v)",
-		a.execType, a.aggFunc, a.groupByNDV, a.hasDistinct, a.rows, a.concurrency)
+	return fmt.Sprintf("(aggFunc:%v, ndv:%v, rows:%v, concurrency:%v)",
+		a.aggFunc, a.groupByNDV, a.rows, a.concurrency)
 }
 
-func defaultAggTestCase(exec string) *aggTestCase {
+func defaultAggTestCase() *aggTestCase {
 	ctx := mock.NewContext()
 	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
 	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
-	return &aggTestCase{exec, ast.AggFuncSum, 1000, false, 10000000, 4, ctx}
+	return &aggTestCase{ast.AggFuncSum, 1000, 10000000, 4, ctx}
 }
 
 func buildHashAggExecutor(ctx sessionctx.Context, src Executor, schema *expression.Schema,
@@ -233,29 +230,21 @@ func buildAggExecutor(b *testing.B, testCase *aggTestCase, child Executor) Execu
 	childCols := testCase.columns()
 	schema := expression.NewSchema(childCols...)
 	groupBy := []expression.Expression{childCols[1]}
-	aggFunc, err := aggregation.NewAggFuncDesc(testCase.ctx, testCase.aggFunc, []expression.Expression{childCols[0]}, testCase.hasDistinct)
+	aggFunc, err := aggregation.NewAggFuncDesc(testCase.ctx, testCase.aggFunc, []expression.Expression{childCols[0]})
 	if err != nil {
 		b.Fatal(err)
 	}
 	aggFuncs := []*aggregation.AggFuncDesc{aggFunc}
-
-	var aggExec Executor
-	switch testCase.execType {
-	case "hash":
-		aggExec = buildHashAggExecutor(testCase.ctx, child, schema, aggFuncs, groupBy)
-	default:
-		b.Fatal("not implement")
-	}
+	aggExec := buildHashAggExecutor(testCase.ctx, child, schema, aggFuncs, groupBy)
 	return aggExec
 }
 
 func benchmarkAggExecWithCase(b *testing.B, casTest *aggTestCase) {
 	cols := casTest.columns()
-	orders := []bool{false, casTest.execType == "stream"}
 	dataSource := buildMockDataSource(mockDataSourceParameters{
 		schema: expression.NewSchema(cols...),
 		ndvs:   []int{0, casTest.groupByNDV},
-		orders: orders,
+		orders: []bool{false},
 		rows:   casTest.rows,
 		ctx:    casTest.ctx,
 	})
@@ -293,42 +282,8 @@ func BenchmarkAggRows(b *testing.B) {
 	concurrencies := []int{1, 4, 8, 15, 20, 30, 40}
 	for _, row := range rows {
 		for _, con := range concurrencies {
-			for _, exec := range []string{"hash", "stream"} {
-				if exec == "stream" && con > 1 {
-					continue
-				}
-				cas := defaultAggTestCase(exec)
-				cas.rows = row
-				cas.concurrency = con
-				b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-					benchmarkAggExecWithCase(b, cas)
-				})
-			}
-		}
-	}
-}
-
-func BenchmarkAggGroupByNDV(b *testing.B) {
-	NDVs := []int{10, 100, 1000, 10000, 100000, 1000000, 10000000}
-	for _, NDV := range NDVs {
-		for _, exec := range []string{"hash", "stream"} {
-			cas := defaultAggTestCase(exec)
-			cas.groupByNDV = NDV
-			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-				benchmarkAggExecWithCase(b, cas)
-			})
-		}
-	}
-}
-
-func BenchmarkAggConcurrency(b *testing.B) {
-	concs := []int{1, 4, 8, 15, 20, 30, 40}
-	for _, con := range concs {
-		for _, exec := range []string{"hash", "stream"} {
-			if exec == "stream" && con > 1 {
-				continue
-			}
-			cas := defaultAggTestCase(exec)
+			cas := defaultAggTestCase()
+			cas.rows = row
 			cas.concurrency = con
 			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
 				benchmarkAggExecWithCase(b, cas)
@@ -337,20 +292,36 @@ func BenchmarkAggConcurrency(b *testing.B) {
 	}
 }
 
+func BenchmarkAggGroupByNDV(b *testing.B) {
+	NDVs := []int{10, 100, 1000, 10000, 100000, 1000000, 10000000}
+	for _, NDV := range NDVs {
+		cas := defaultAggTestCase()
+		cas.groupByNDV = NDV
+		b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+			benchmarkAggExecWithCase(b, cas)
+		})
+	}
+}
+
+func BenchmarkAggConcurrency(b *testing.B) {
+	concs := []int{1, 4, 8, 15, 20, 30, 40}
+	for _, con := range concs {
+		cas := defaultAggTestCase()
+		cas.concurrency = con
+		b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+			benchmarkAggExecWithCase(b, cas)
+		})
+	}
+}
+
 func BenchmarkAggDistinct(b *testing.B) {
 	rows := []int{100000, 1000000, 10000000}
-	distincts := []bool{false, true}
 	for _, row := range rows {
-		for _, exec := range []string{"hash", "stream"} {
-			for _, distinct := range distincts {
-				cas := defaultAggTestCase(exec)
-				cas.rows = row
-				cas.hasDistinct = distinct
-				b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
-					benchmarkAggExecWithCase(b, cas)
-				})
-			}
-		}
+		cas := defaultAggTestCase()
+		cas.rows = row
+		b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+			benchmarkAggExecWithCase(b, cas)
+		})
 	}
 }
 

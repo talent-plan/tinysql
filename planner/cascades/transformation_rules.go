@@ -340,8 +340,7 @@ func (r *PushAggDownGather) OnTransform(old *memo.ExprIter) (newExprs []*memo.Gr
 	partialAggFuncs := make([]*aggregation.AggFuncDesc, len(agg.AggFuncs))
 	for i, aggFunc := range agg.AggFuncs {
 		newAggFunc := &aggregation.AggFuncDesc{
-			HasDistinct: false,
-			Mode:        aggregation.Partial1Mode,
+			Mode: aggregation.Partial1Mode,
 		}
 		newAggFunc.Name = aggFunc.Name
 		newAggFunc.RetTp = aggFunc.RetTp

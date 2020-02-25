@@ -573,7 +573,7 @@ func BuildFinalModeAggregation(
 	partialCursor := 0
 	finalAggFuncs = make([]*aggregation.AggFuncDesc, len(aggFuncs))
 	for i, aggFunc := range aggFuncs {
-		finalAggFunc := &aggregation.AggFuncDesc{HasDistinct: false}
+		finalAggFunc := &aggregation.AggFuncDesc{}
 		finalAggFunc.Name = aggFunc.Name
 		args := make([]expression.Expression, 0, len(aggFunc.Args))
 		if aggregation.NeedCount(finalAggFunc.Name) {
@@ -681,10 +681,7 @@ func RemoveUnnecessaryFirstRow(
 
 // cpuCostDivisor computes the concurrency to which we would amortize CPU cost
 // for hash aggregation.
-func (p *PhysicalHashAgg) cpuCostDivisor(hasDistinct bool) (float64, float64) {
-	if hasDistinct {
-		return 0, 0
-	}
+func (p *PhysicalHashAgg) cpuCostDivisor() (float64, float64) {
 	sessionVars := p.ctx.GetSessionVars()
 	finalCon, partialCon := sessionVars.HashAggFinalConcurrency, sessionVars.HashAggPartialConcurrency
 	// According to `ValidateSetSystemVar`, `finalCon` and `partialCon` cannot be less than or equal to 0.
@@ -744,13 +741,12 @@ func (p *PhysicalHashAgg) attach2Task(tasks ...task) task {
 // GetCost computes the cost of hash aggregation considering CPU/memory.
 func (p *PhysicalHashAgg) GetCost(inputRows float64, isRoot bool) float64 {
 	cardinality := p.statsInfo().RowCount
-	numDistinctFunc := p.numDistinctFunc()
 	aggFuncFactor := p.getAggFuncCostFactor()
 	var cpuCost float64
 	sessVars := p.ctx.GetSessionVars()
 	if isRoot {
 		cpuCost = inputRows * sessVars.CPUFactor * aggFuncFactor
-		divisor, con := p.cpuCostDivisor(numDistinctFunc > 0)
+		divisor, con := p.cpuCostDivisor()
 		if divisor > 0 {
 			cpuCost /= divisor
 			// Cost of additional goroutines.
@@ -760,8 +756,5 @@ func (p *PhysicalHashAgg) GetCost(inputRows float64, isRoot bool) float64 {
 		cpuCost = inputRows * sessVars.CopCPUFactor * aggFuncFactor
 	}
 	memoryCost := cardinality * sessVars.MemoryFactor * float64(len(p.AggFuncs))
-	// When aggregation has distinct flag, we would allocate a map for each group to
-	// check duplication.
-	memoryCost += inputRows * distinctFactor * sessVars.MemoryFactor * float64(numDistinctFunc)
 	return cpuCost + memoryCost
 }

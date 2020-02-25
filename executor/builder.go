@@ -519,34 +519,20 @@ func (b *executorBuilder) buildHashAgg(v *plannercore.PhysicalHashAgg) Executor 
 	} else {
 		e.defaultVal = chunk.NewChunkWithCapacity(retTypes(e), 1)
 	}
-	for _, aggDesc := range v.AggFuncs {
-		if aggDesc.HasDistinct {
-			e.isUnparallelExec = true
-		}
-	}
-	// When we set both tidb_hashagg_final_concurrency and tidb_hashagg_partial_concurrency to 1,
-	// we do not need to parallelly execute hash agg,
-	// and this action can be a workaround when meeting some unexpected situation using parallelExec.
-	if finalCon, partialCon := sessionVars.HashAggFinalConcurrency, sessionVars.HashAggPartialConcurrency; finalCon <= 0 || partialCon <= 0 || finalCon == 1 && partialCon == 1 {
-		e.isUnparallelExec = true
-	}
 	partialOrdinal := 0
 	for i, aggDesc := range v.AggFuncs {
-		if e.isUnparallelExec {
-			e.PartialAggFuncs = append(e.PartialAggFuncs, aggfuncs.Build(b.ctx, aggDesc, i))
-		} else {
-			ordinal := []int{partialOrdinal}
+
+		ordinal := []int{partialOrdinal}
+		partialOrdinal++
+		if aggDesc.Name == ast.AggFuncAvg {
+			ordinal = append(ordinal, partialOrdinal+1)
 			partialOrdinal++
-			if aggDesc.Name == ast.AggFuncAvg {
-				ordinal = append(ordinal, partialOrdinal+1)
-				partialOrdinal++
-			}
-			partialAggDesc, finalDesc := aggDesc.Split(ordinal)
-			partialAggFunc := aggfuncs.Build(b.ctx, partialAggDesc, i)
-			finalAggFunc := aggfuncs.Build(b.ctx, finalDesc, i)
-			e.PartialAggFuncs = append(e.PartialAggFuncs, partialAggFunc)
-			e.FinalAggFuncs = append(e.FinalAggFuncs, finalAggFunc)
 		}
+		partialAggDesc, finalDesc := aggDesc.Split(ordinal)
+		partialAggFunc := aggfuncs.Build(b.ctx, partialAggDesc, i)
+		finalAggFunc := aggfuncs.Build(b.ctx, finalDesc, i)
+		e.PartialAggFuncs = append(e.PartialAggFuncs, partialAggFunc)
+		e.FinalAggFuncs = append(e.FinalAggFuncs, finalAggFunc)
 		if e.defaultVal != nil {
 			value := aggDesc.GetDefaultValue()
 			e.defaultVal.AppendDatum(i, &value)

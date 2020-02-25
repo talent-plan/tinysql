@@ -402,16 +402,8 @@
     "Name": "TestDAGPlanBuilderAgg",
     "Cases": [
       {
-        "SQL": "select distinct b from t",
-        "Best": "TableReader(Table(t))->HashAgg"
-      },
-      {
         "SQL": "select sum(a), avg(b + c) from t group by d",
         "Best": "TableReader(Table(t)->HashAgg)->HashAgg"
-      },
-      {
-        "SQL": "select sum(distinct a), avg(b + c) from t group by d",
-        "Best": "TableReader(Table(t))->Projection->HashAgg"
       },
       {
         "SQL": "select sum(e), avg(e + c) from t where c = 1 group by (c + d)",

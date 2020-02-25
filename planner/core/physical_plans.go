@@ -265,15 +265,6 @@ type basePhysicalAgg struct {
 	GroupByItems []expression.Expression
 }
 
-func (p *basePhysicalAgg) numDistinctFunc() (num int) {
-	for _, fun := range p.AggFuncs {
-		if fun.HasDistinct {
-			num++
-		}
-	}
-	return
-}
-
 func (p *basePhysicalAgg) getAggFuncCostFactor() (factor float64) {
 	factor = 0.0
 	for _, agg := range p.AggFuncs {

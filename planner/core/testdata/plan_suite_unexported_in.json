@@ -109,8 +109,7 @@
       "select sum(b) from t group by c, d, e",
       "select tt.a, sum(tt.b) from (select a, b from t) tt group by tt.a",
       "select count(1) from (select count(1), a as b from t group by a) tt group by b",
-      "select a, count(b) from t group by a",
-      "select a, count(distinct a, b) from t group by a"
+      "select a, count(b) from t group by a"
     ]
   },
   {
@@ -175,14 +174,8 @@
   {
     "name": "TestOuterJoinEliminator",
     "cases": [
-      // Test left outer join + distinct
-      "select distinct t1.a, t1.b from t t1 left outer join t t2 on t1.b = t2.b",
-      // Test right outer join + distinct
-      "select distinct t2.a, t2.b from t t1 right outer join t t2 on t1.b = t2.b",
       // Test duplicate agnostic agg functions on join
       "select max(t1.a), min(test.t1.b) from t t1 left join t t2 on t1.b = t2.b",
-      "select sum(distinct t1.a) from t t1 left join t t2 on t1.a = t2.a and t1.b = t2.b",
-      "select count(distinct t1.a, t1.b) from t t1 left join t t2 on t1.b = t2.b",
       // Test left outer join
       "select t1.b from t t1 left outer join t t2 on t1.a = t2.a",
       // Test right outer join

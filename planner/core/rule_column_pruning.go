@@ -109,7 +109,7 @@ func (la *LogicalAggregation) PruneColumns(parentUsedCols []*expression.Column) 
 	}
 	if len(la.AggFuncs) == 0 {
 		// If all the aggregate functions are pruned, we should add an aggregate function to keep the correctness.
-		one, err := aggregation.NewAggFuncDesc(la.ctx, ast.AggFuncFirstRow, []expression.Expression{expression.One}, false)
+		one, err := aggregation.NewAggFuncDesc(la.ctx, ast.AggFuncFirstRow, []expression.Expression{expression.One})
 		if err != nil {
 			return err
 		}

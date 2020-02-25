@@ -153,7 +153,6 @@ func (o *outerJoinEliminator) isInnerJoinKeysContainIndex(innerPlan LogicalPlan,
 //   1. MAX(arg)
 //   2. MIN(arg)
 //   3. FIRST_ROW(arg)
-//   4. Other agg functions with DISTINCT flag, like SUM(DISTINCT arg)
 func (o *outerJoinEliminator) getDupAgnosticAggCols(
 	p LogicalPlan,
 	oldAggCols []*expression.Column, // Reuse the original buffer.
@@ -164,8 +163,7 @@ func (o *outerJoinEliminator) getDupAgnosticAggCols(
 	}
 	newAggCols = oldAggCols[:0]
 	for _, aggDesc := range agg.AggFuncs {
-		if !aggDesc.HasDistinct &&
-			aggDesc.Name != ast.AggFuncFirstRow &&
+		if aggDesc.Name != ast.AggFuncFirstRow &&
 			aggDesc.Name != ast.AggFuncMax &&
 			aggDesc.Name != ast.AggFuncMin {
 			// If not all aggregate functions are duplicate agnostic,

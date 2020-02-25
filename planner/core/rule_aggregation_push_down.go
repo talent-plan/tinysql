@@ -30,18 +30,13 @@ type aggregationPushDownSolver struct {
 // isDecomposable checks if an aggregate function is decomposable. An aggregation function $F$ is decomposable
 // if there exist aggregation functions F_1 and F_2 such that F(S_1 union all S_2) = F_2(F_1(S_1),F_1(S_2)),
 // where S_1 and S_2 are two sets of values. We call S_1 and S_2 partial groups.
-// It's easy to see that max, min, first row is decomposable, no matter whether it's distinct, but sum(distinct) and
-// count(distinct) is not.
-// Currently we don't support avg and concat.
 func (a *aggregationPushDownSolver) isDecomposable(fun *aggregation.AggFuncDesc) bool {
 	switch fun.Name {
 	case ast.AggFuncAvg:
 		// TODO: Support avg push down.
 		return false
-	case ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncFirstRow:
+	case ast.AggFuncMax, ast.AggFuncMin, ast.AggFuncFirstRow, ast.AggFuncSum, ast.AggFuncCount:
 		return true
-	case ast.AggFuncSum, ast.AggFuncCount:
-		return !fun.HasDistinct
 	default:
 		return false
 	}
@@ -258,7 +253,7 @@ func (a *aggregationPushDownSolver) makeNewAgg(ctx sessionctx.Context, aggFuncs 
 		newAggFuncDescs = append(newAggFuncDescs, newFuncs...)
 	}
 	for _, gbyCol := range gbyCols {
-		firstRow, err := aggregation.NewAggFuncDesc(agg.ctx, ast.AggFuncFirstRow, []expression.Expression{gbyCol}, false)
+		firstRow, err := aggregation.NewAggFuncDesc(agg.ctx, ast.AggFuncFirstRow, []expression.Expression{gbyCol})
 		if err != nil {
 			return nil, err
 		}
@@ -269,8 +264,6 @@ func (a *aggregationPushDownSolver) makeNewAgg(ctx sessionctx.Context, aggFuncs 
 	}
 	agg.AggFuncs = newAggFuncDescs
 	agg.SetSchema(schema)
-	// TODO: Add a Projection if any argument of aggregate funcs or group by items are scalar functions.
-	// agg.buildProjectionIfNecessary()
 	return agg, nil
 }
 

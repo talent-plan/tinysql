@@ -56,28 +56,27 @@ func NewDistAggFunc(expr *tipb.Expr, fieldTps []*types.FieldType, sc *stmtctx.St
 	}
 	switch expr.Tp {
 	case tipb.ExprType_Sum:
-		return &sumFunction{aggFunction: newAggFunc(ast.AggFuncSum, args, false)}, nil
+		return &sumFunction{aggFunction: newAggFunc(ast.AggFuncSum, args)}, nil
 	case tipb.ExprType_Count:
-		return &countFunction{aggFunction: newAggFunc(ast.AggFuncCount, args, false)}, nil
+		return &countFunction{aggFunction: newAggFunc(ast.AggFuncCount, args)}, nil
 	case tipb.ExprType_Avg:
-		return &avgFunction{aggFunction: newAggFunc(ast.AggFuncAvg, args, false)}, nil
+		return &avgFunction{aggFunction: newAggFunc(ast.AggFuncAvg, args)}, nil
 	case tipb.ExprType_Max:
-		return &maxMinFunction{aggFunction: newAggFunc(ast.AggFuncMax, args, false), isMax: true}, nil
+		return &maxMinFunction{aggFunction: newAggFunc(ast.AggFuncMax, args), isMax: true}, nil
 	case tipb.ExprType_Min:
-		return &maxMinFunction{aggFunction: newAggFunc(ast.AggFuncMin, args, false)}, nil
+		return &maxMinFunction{aggFunction: newAggFunc(ast.AggFuncMin, args)}, nil
 	case tipb.ExprType_First:
-		return &firstRowFunction{aggFunction: newAggFunc(ast.AggFuncFirstRow, args, false)}, nil
+		return &firstRowFunction{aggFunction: newAggFunc(ast.AggFuncFirstRow, args)}, nil
 	}
 	return nil, errors.Errorf("Unknown aggregate function type %v", expr.Tp)
 }
 
 // AggEvaluateContext is used to store intermediate result when calculating aggregate functions.
 type AggEvaluateContext struct {
-	DistinctChecker *distinctChecker
-	Count           int64
-	Value           types.Datum
-	Buffer          *bytes.Buffer // Buffer is used for group_concat.
-	GotFirstRow     bool          // It will check if the agg has met the first row key.
+	Count       int64
+	Value       types.Datum
+	Buffer      *bytes.Buffer // Buffer is used for group_concat.
+	GotFirstRow bool          // It will check if the agg has met the first row key.
 }
 
 // AggFunctionMode stands for the aggregation function's mode.
@@ -104,8 +103,8 @@ type aggFunction struct {
 	*AggFuncDesc
 }
 
-func newAggFunc(funcName string, args []expression.Expression, hasDistinct bool) aggFunction {
-	agg := &AggFuncDesc{HasDistinct: hasDistinct}
+func newAggFunc(funcName string, args []expression.Expression) aggFunction {
+	agg := &AggFuncDesc{}
 	agg.Name = funcName
 	agg.Args = args
 	return aggFunction{AggFuncDesc: agg}
@@ -114,16 +113,10 @@ func newAggFunc(funcName string, args []expression.Expression, hasDistinct bool)
 // CreateContext implements Aggregation interface.
 func (af *aggFunction) CreateContext(sc *stmtctx.StatementContext) *AggEvaluateContext {
 	evalCtx := &AggEvaluateContext{}
-	if af.HasDistinct {
-		evalCtx.DistinctChecker = createDistinctChecker(sc)
-	}
 	return evalCtx
 }
 
 func (af *aggFunction) ResetContext(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext) {
-	if af.HasDistinct {
-		evalCtx.DistinctChecker = createDistinctChecker(sc)
-	}
 	evalCtx.Value.SetNull()
 }
 
@@ -135,15 +128,6 @@ func (af *aggFunction) updateSum(sc *stmtctx.StatementContext, evalCtx *AggEvalu
 	}
 	if value.IsNull() {
 		return nil
-	}
-	if af.HasDistinct {
-		d, err1 := evalCtx.DistinctChecker.Check([]types.Datum{value})
-		if err1 != nil {
-			return err1
-		}
-		if !d {
-			return nil
-		}
 	}
 	evalCtx.Value, err = calculateSum(sc, evalCtx.Value, value)
 	if err != nil {

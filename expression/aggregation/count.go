@@ -25,10 +25,6 @@ type countFunction struct {
 
 // Update implements Aggregation interface.
 func (cf *countFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.StatementContext, row chunk.Row) error {
-	var datumBuf []types.Datum
-	if cf.HasDistinct {
-		datumBuf = make([]types.Datum, 0, len(cf.Args))
-	}
 	for _, a := range cf.Args {
 		value, err := a.Eval(row)
 		if err != nil {
@@ -40,18 +36,6 @@ func (cf *countFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.Stateme
 		if cf.Mode == FinalMode || cf.Mode == Partial2Mode {
 			evalCtx.Count += value.GetInt64()
 		}
-		if cf.HasDistinct {
-			datumBuf = append(datumBuf, value)
-		}
-	}
-	if cf.HasDistinct {
-		d, err := evalCtx.DistinctChecker.Check(datumBuf)
-		if err != nil {
-			return err
-		}
-		if !d {
-			return nil
-		}
 	}
 	if cf.Mode == CompleteMode || cf.Mode == Partial1Mode {
 		evalCtx.Count++
@@ -60,9 +44,6 @@ func (cf *countFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.Stateme
 }
 
 func (cf *countFunction) ResetContext(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext) {
-	if cf.HasDistinct {
-		evalCtx.DistinctChecker = createDistinctChecker(sc)
-	}
 	evalCtx.Count = 0
 }
 
