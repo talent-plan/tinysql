@@ -16,7 +16,6 @@ package executor
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
@@ -44,11 +43,9 @@ type HashJoinExec struct {
 	rowContainer *hashRowContainer
 	// joinWorkerWaitGroup is for sync multiple join workers.
 	joinWorkerWaitGroup sync.WaitGroup
-	finished            atomic.Value
 	// closeCh add a lock for closing executor.
-	closeCh      chan struct{}
-	joinType     plannercore.JoinType
-	requiredRows int64
+	closeCh  chan struct{}
+	joinType plannercore.JoinType
 
 	// We build individual joiner for each join worker when use chunk-based
 	// execution, to avoid the concurrency of joiner.chk and joiner.selected.
@@ -59,8 +56,7 @@ type HashJoinExec struct {
 	joinChkResourceCh  []chan *chunk.Chunk
 	joinResultCh       chan *hashjoinWorkerResult
 
-	prepared    bool
-	isOuterJoin bool
+	prepared bool
 }
 
 // probeChkResource stores the result of the join probe side fetch worker,
@@ -84,7 +80,6 @@ type hashjoinWorkerResult struct {
 // Close implements the Executor Close interface.
 func (e *HashJoinExec) Close() error {
 	close(e.closeCh)
-	e.finished.Store(true)
 	if e.prepared {
 		if e.joinResultCh != nil {
 			for range e.joinResultCh {
@@ -118,49 +113,64 @@ func (e *HashJoinExec) Open(ctx context.Context) error {
 	}
 
 	e.prepared = false
-
 	e.closeCh = make(chan struct{})
-	e.finished.Store(false)
 	e.joinWorkerWaitGroup = sync.WaitGroup{}
 	return nil
 }
 
-// fetchProbeSideChunks get chunks from fetches chunks from the big table in a background goroutine
-// and sends the chunks to multiple channels which will be read by multiple join workers.
-func (e *HashJoinExec) fetchProbeSideChunks(ctx context.Context) {
-	for {
-		if e.finished.Load().(bool) {
-			return
-		}
-
-		var probeSideResource *probeChkResource
-		var ok bool
-		select {
-		case <-e.closeCh:
-			return
-		case probeSideResource, ok = <-e.probeChkResourceCh:
-			if !ok {
-				return
-			}
-		}
-		probeSideResult := probeSideResource.chk
-		if e.isOuterJoin {
-			required := int(atomic.LoadInt64(&e.requiredRows))
-			probeSideResult.SetRequiredRows(required, e.maxChunkSize)
-		}
-		err := Next(ctx, e.probeSideExec, probeSideResult)
+// Next implements the Executor Next interface.
+// hash join constructs the result following these steps:
+// step 1. fetch data from build side child and build a hash table;
+// step 2. fetch data from probe child in a background goroutine and probe the hash table in multiple join workers.
+func (e *HashJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
+	if !e.prepared {
+		err := e.fetchAndBuildHashTable(ctx)
 		if err != nil {
-			e.joinResultCh <- &hashjoinWorkerResult{
-				err: err,
-			}
-			return
+			return err
 		}
+		e.fetchAndProbeHashTable(ctx)
+		e.prepared = true
+	}
+	req.Reset()
 
-		if probeSideResult.NumRows() == 0 {
-			return
+	result, ok := <-e.joinResultCh
+	if !ok {
+		return nil
+	}
+	if result.err != nil {
+		return result.err
+	}
+	req.SwapColumns(result.chk)
+	result.src <- result.chk
+	return nil
+}
+
+func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) error {
+	buildKeyColIdx := make([]int, len(e.buildKeys))
+	for i := range e.buildKeys {
+		buildKeyColIdx[i] = e.buildKeys[i].Index
+	}
+	allTypes := e.buildSideExec.base().retFieldTypes
+	hCtx := &hashContext{
+		allTypes:  allTypes,
+		keyColIdx: buildKeyColIdx,
+	}
+	initList := chunk.NewList(allTypes, e.initCap, e.maxChunkSize)
+	e.rowContainer = newHashRowContainer(e.ctx, int(e.buildSideEstCount), hCtx, initList)
+
+	for {
+		chk := chunk.NewChunkWithCapacity(e.buildSideExec.base().retFieldTypes, e.ctx.GetSessionVars().MaxChunkSize)
+		err := Next(ctx, e.buildSideExec, chk)
+		if err != nil {
+			return err
 		}
-
-		probeSideResource.dest <- probeSideResult
+		if chk.NumRows() == 0 {
+			return nil
+		}
+		err = e.rowContainer.PutChunk(chk)
+		if err != nil {
+			return err
+		}
 	}
 }
 
@@ -196,6 +206,37 @@ func (e *HashJoinExec) initializeForProbe() {
 	e.joinResultCh = make(chan *hashjoinWorkerResult, e.concurrency+1)
 }
 
+// fetchProbeSideChunks get chunks from fetches chunks from the big table in a background goroutine
+// and sends the chunks to multiple channels which will be read by multiple join workers.
+func (e *HashJoinExec) fetchProbeSideChunks(ctx context.Context) {
+	for {
+		var probeSideResource *probeChkResource
+		var ok bool
+		select {
+		case <-e.closeCh:
+			return
+		case probeSideResource, ok = <-e.probeChkResourceCh:
+			if !ok {
+				return
+			}
+		}
+		probeSideResult := probeSideResource.chk
+		err := Next(ctx, e.probeSideExec, probeSideResult)
+		if err != nil {
+			e.joinResultCh <- &hashjoinWorkerResult{
+				err: err,
+			}
+			return
+		}
+
+		if probeSideResult.NumRows() == 0 {
+			return
+		}
+
+		probeSideResource.dest <- probeSideResult
+	}
+}
+
 func (e *HashJoinExec) fetchAndProbeHashTable(ctx context.Context) {
 	e.initializeForProbe()
 	e.joinWorkerWaitGroup.Add(1)
@@ -214,28 +255,6 @@ func (e *HashJoinExec) fetchAndProbeHashTable(ctx context.Context) {
 		go util.WithRecovery(func() { e.runJoinWorker(workID, probeKeyColIdx) }, e.handleJoinWorkerPanic)
 	}
 	go util.WithRecovery(e.waitJoinWorkersAndCloseResultChan, nil)
-}
-
-func (e *HashJoinExec) handleProbeSideFetcherPanic(r interface{}) {
-	for i := range e.probeResultChs {
-		close(e.probeResultChs[i])
-	}
-	if r != nil {
-		e.joinResultCh <- &hashjoinWorkerResult{err: errors.Errorf("%v", r)}
-	}
-	e.joinWorkerWaitGroup.Done()
-}
-
-func (e *HashJoinExec) handleJoinWorkerPanic(r interface{}) {
-	if r != nil {
-		e.joinResultCh <- &hashjoinWorkerResult{err: errors.Errorf("%v", r)}
-	}
-	e.joinWorkerWaitGroup.Done()
-}
-
-func (e *HashJoinExec) waitJoinWorkersAndCloseResultChan() {
-	e.joinWorkerWaitGroup.Wait()
-	close(e.joinResultCh)
 }
 
 func (e *HashJoinExec) runJoinWorker(workerID uint, probeKeyColIdx []int) {
@@ -257,9 +276,6 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, probeKeyColIdx []int) {
 		keyColIdx: probeKeyColIdx,
 	}
 	for ok := true; ok; {
-		if e.finished.Load().(bool) {
-			break
-		}
 		select {
 		case <-e.closeCh:
 			return
@@ -281,6 +297,41 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, probeKeyColIdx []int) {
 	} else if joinResult.err != nil || (joinResult.chk != nil && joinResult.chk.NumRows() > 0) {
 		e.joinResultCh <- joinResult
 	}
+}
+
+func (e *HashJoinExec) getNewJoinResult(workerID uint) (bool, *hashjoinWorkerResult) {
+	joinResult := &hashjoinWorkerResult{
+		src: e.joinChkResourceCh[workerID],
+	}
+	ok := true
+	select {
+	case <-e.closeCh:
+		ok = false
+	case joinResult.chk, ok = <-e.joinChkResourceCh[workerID]:
+	}
+	return ok, joinResult
+}
+
+func (e *HashJoinExec) waitJoinWorkersAndCloseResultChan() {
+	e.joinWorkerWaitGroup.Wait()
+	close(e.joinResultCh)
+}
+
+func (e *HashJoinExec) handleProbeSideFetcherPanic(r interface{}) {
+	for i := range e.probeResultChs {
+		close(e.probeResultChs[i])
+	}
+	if r != nil {
+		e.joinResultCh <- &hashjoinWorkerResult{err: errors.Errorf("%v", r)}
+	}
+	e.joinWorkerWaitGroup.Done()
+}
+
+func (e *HashJoinExec) handleJoinWorkerPanic(r interface{}) {
+	if r != nil {
+		e.joinResultCh <- &hashjoinWorkerResult{err: errors.Errorf("%v", r)}
+	}
+	e.joinWorkerWaitGroup.Done()
 }
 
 func (e *HashJoinExec) joinMatchedProbeSideRow2Chunk(workerID uint, probeKey uint64, probeSideRow chunk.Row, hCtx *hashContext,
@@ -316,19 +367,6 @@ func (e *HashJoinExec) joinMatchedProbeSideRow2Chunk(workerID uint, probeKey uin
 		e.joiners[workerID].onMissMatch(probeSideRow, joinResult.chk)
 	}
 	return true, joinResult
-}
-
-func (e *HashJoinExec) getNewJoinResult(workerID uint) (bool, *hashjoinWorkerResult) {
-	joinResult := &hashjoinWorkerResult{
-		src: e.joinChkResourceCh[workerID],
-	}
-	ok := true
-	select {
-	case <-e.closeCh:
-		ok = false
-	case joinResult.chk, ok = <-e.joinChkResourceCh[workerID]:
-	}
-	return ok, joinResult
 }
 
 func (e *HashJoinExec) join2Chunk(workerID uint, probeSideChk *chunk.Chunk, hCtx *hashContext, joinResult *hashjoinWorkerResult,
@@ -368,68 +406,4 @@ func (e *HashJoinExec) join2Chunk(workerID uint, probeSideChk *chunk.Chunk, hCtx
 		}
 	}
 	return true, joinResult
-}
-
-// Next implements the Executor Next interface.
-// hash join constructs the result following these steps:
-// step 1. fetch data from build side child and build a hash table;
-// step 2. fetch data from probe child in a background goroutine and probe the hash table in multiple join workers.
-func (e *HashJoinExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
-	if !e.prepared {
-		err := e.fetchAndBuildHashTable(ctx)
-		if err != nil {
-			return err
-		}
-		e.fetchAndProbeHashTable(ctx)
-		e.prepared = true
-	}
-	if e.isOuterJoin {
-		atomic.StoreInt64(&e.requiredRows, int64(req.RequiredRows()))
-	}
-	req.Reset()
-
-	result, ok := <-e.joinResultCh
-	if !ok {
-		return nil
-	}
-	if result.err != nil {
-		e.finished.Store(true)
-		return result.err
-	}
-	req.SwapColumns(result.chk)
-	result.src <- result.chk
-	return nil
-}
-
-func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) error {
-	buildKeyColIdx := make([]int, len(e.buildKeys))
-	for i := range e.buildKeys {
-		buildKeyColIdx[i] = e.buildKeys[i].Index
-	}
-	allTypes := e.buildSideExec.base().retFieldTypes
-	hCtx := &hashContext{
-		allTypes:  allTypes,
-		keyColIdx: buildKeyColIdx,
-	}
-	initList := chunk.NewList(allTypes, e.initCap, e.maxChunkSize)
-	e.rowContainer = newHashRowContainer(e.ctx, int(e.buildSideEstCount), hCtx, initList)
-
-	var err error
-	for {
-		if e.finished.Load().(bool) {
-			return err
-		}
-		chk := chunk.NewChunkWithCapacity(e.buildSideExec.base().retFieldTypes, e.ctx.GetSessionVars().MaxChunkSize)
-		err = Next(ctx, e.buildSideExec, chk)
-		if err != nil {
-			return err
-		}
-		if chk.NumRows() == 0 {
-			return err
-		}
-		err := e.rowContainer.PutChunk(chk)
-		if err != nil {
-			return err
-		}
-	}
 }

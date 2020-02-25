@@ -443,7 +443,6 @@ func (b *executorBuilder) buildHashJoin(v *plannercore.PhysicalHashJoin) Executo
 		baseExecutor:      newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), leftExec, rightExec),
 		concurrency:       v.Concurrency,
 		joinType:          v.JoinType,
-		isOuterJoin:       v.JoinType.IsOuterJoin(),
 		buildSideEstCount: v.Children()[v.InnerChildIdx].StatsCount(),
 	}
 

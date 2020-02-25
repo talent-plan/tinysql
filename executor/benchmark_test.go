@@ -401,7 +401,6 @@ func prepare4HashJoin(testCase *hashJoinTestCase, innerExec, outerExec Executor)
 		baseExecutor:      newBaseExecutor(testCase.ctx, joinSchema, stringutil.StringerStr("HashJoin"), innerExec, outerExec),
 		concurrency:       uint(testCase.concurrency),
 		joinType:          0, // InnerJoin
-		isOuterJoin:       false,
 		buildKeys:         joinKeys,
 		probeKeys:         joinKeys,
 		buildSideExec:     innerExec,
