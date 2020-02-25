@@ -56,8 +56,6 @@ func (af *avgFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.Statement
 		err = af.updateSum(sc, evalCtx, row)
 	case Partial2Mode, FinalMode:
 		err = af.updateAvg(sc, evalCtx, row)
-	case DedupMode:
-		panic("DedupMode is not supported now.")
 	}
 	return err
 }

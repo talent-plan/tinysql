@@ -28,7 +28,6 @@ var (
 	_ AggFunc = (*countOriginal4Int)(nil)
 	_ AggFunc = (*countOriginal4Real)(nil)
 	_ AggFunc = (*countOriginal4String)(nil)
-	_ AggFunc = (*countOriginalWithDistinct)(nil)
 
 	// All the AggFunc implementations for "FIRSTROW" are listed here.
 	_ AggFunc = (*firstRow4Int)(nil)
@@ -45,16 +44,12 @@ var (
 
 	// All the AggFunc implementations for "AVG" are listed here.
 	_ AggFunc = (*avgOriginal4Int64)(nil)
-	_ AggFunc = (*avgOriginal4DistinctInt64)(nil)
 	_ AggFunc = (*avgPartial4Int64)(nil)
 
 	_ AggFunc = (*avgOriginal4Float64)(nil)
 	_ AggFunc = (*avgPartial4Float64)(nil)
-	_ AggFunc = (*avgOriginal4DistinctFloat64)(nil)
 
 	// All the AggFunc implementations for "SUM" are listed here.
-	_ AggFunc = (*sum4DistinctFloat64)(nil)
-	_ AggFunc = (*sum4DistinctInt64)(nil)
 	_ AggFunc = (*sum4Int64)(nil)
 	_ AggFunc = (*sum4Float64)(nil)
 )

@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/set"
 )
 
 type partialResult4SumFloat64 struct {
@@ -28,16 +27,6 @@ type partialResult4SumFloat64 struct {
 type partialResult4Int64 struct {
 	val    int64
 	isNull bool
-}
-
-type partialResult4SumDistinctFloat64 struct {
-	partialResult4SumFloat64
-	valSet set.Float64Set
-}
-
-type partialResult4SumDistinctInt64 struct {
-	partialResult4Int64
-	valSet set.Int64Set
 }
 
 type baseSumAggFunc struct {
@@ -161,108 +150,5 @@ func (e *sum4Int64) MergePartialResult(sctx sessionctx.Context, src, dst Partial
 	}
 	p2.val = newSum
 	p2.isNull = false
-	return nil
-}
-
-type sum4DistinctFloat64 struct {
-	baseSumAggFunc
-}
-
-func (e *sum4DistinctFloat64) AllocPartialResult() PartialResult {
-	p := new(partialResult4SumDistinctFloat64)
-	p.isNull = true
-	p.valSet = set.NewFloat64Set()
-	return PartialResult(p)
-}
-
-func (e *sum4DistinctFloat64) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4SumDistinctFloat64)(pr)
-	p.isNull = true
-	p.valSet = set.NewFloat64Set()
-}
-
-func (e *sum4DistinctFloat64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4SumDistinctFloat64)(pr)
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalReal(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull || p.valSet.Exist(input) {
-			continue
-		}
-		p.valSet.Insert(input)
-		if p.isNull {
-			p.val = input
-			p.isNull = false
-			continue
-		}
-		p.val += input
-	}
-	return nil
-}
-
-func (e *sum4DistinctFloat64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4SumDistinctFloat64)(pr)
-	if p.isNull {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendFloat64(e.ordinal, p.val)
-	return nil
-}
-
-type sum4DistinctInt64 struct {
-	baseSumAggFunc
-}
-
-func (e *sum4DistinctInt64) AllocPartialResult() PartialResult {
-	p := new(partialResult4SumDistinctInt64)
-	p.isNull = true
-	p.valSet = set.NewInt64Set()
-	return PartialResult(p)
-}
-
-func (e *sum4DistinctInt64) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4SumDistinctInt64)(pr)
-	p.isNull = true
-	p.valSet = set.NewInt64Set()
-}
-
-func (e *sum4DistinctInt64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4SumDistinctInt64)(pr)
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalInt(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-		if p.valSet.Exist(input) {
-			continue
-		}
-		p.valSet.Insert(input)
-		if p.isNull {
-			p.val = input
-			p.isNull = false
-			continue
-		}
-		newSum, err := types.AddInt64(p.val, input)
-		if err != nil {
-			return err
-		}
-		p.val = newSum
-	}
-	return nil
-}
-
-func (e *sum4DistinctInt64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4SumDistinctInt64)(pr)
-	if p.isNull {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendInt64(e.ordinal, p.val)
 	return nil
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/set"
 )
 
 // All the following avg function implementations return the decimal result,
@@ -127,63 +126,6 @@ func (e *avgPartial4Int64) MergePartialResult(sctx sessionctx.Context, src Parti
 	return nil
 }
 
-type partialResult4AvgDistinctInt64 struct {
-	partialResult4AvgInt64
-	valSet set.Int64Set
-}
-
-type avgOriginal4DistinctInt64 struct {
-	baseAggFunc
-}
-
-func (e *avgOriginal4DistinctInt64) AllocPartialResult() PartialResult {
-	p := &partialResult4AvgDistinctInt64{
-		valSet: set.NewInt64Set(),
-	}
-	return PartialResult(p)
-}
-
-func (e *avgOriginal4DistinctInt64) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4AvgDistinctInt64)(pr)
-	p.sum = 0
-	p.count = int64(0)
-	p.valSet = set.NewInt64Set()
-}
-
-func (e *avgOriginal4DistinctInt64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4AvgDistinctInt64)(pr)
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalInt(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull {
-			continue
-		}
-		if p.valSet.Exist(input) {
-			continue
-		}
-		p.valSet.Insert(input)
-		newSum, err := types.AddInt64(p.sum, input)
-		if err != nil {
-			return err
-		}
-		p.sum = newSum
-		p.count++
-	}
-	return nil
-}
-
-func (e *avgOriginal4DistinctInt64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4AvgDistinctInt64)(pr)
-	if p.count == 0 {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendInt64(e.ordinal, p.sum/p.count)
-	return nil
-}
-
 // All the following avg function implementations return the float64 result,
 // which store the partial results in "partialResult4AvgFloat64".
 //
@@ -272,56 +214,5 @@ func (e *avgPartial4Float64) MergePartialResult(sctx sessionctx.Context, src Par
 	p1, p2 := (*partialResult4AvgFloat64)(src), (*partialResult4AvgFloat64)(dst)
 	p2.sum += p1.sum
 	p2.count += p1.count
-	return nil
-}
-
-type partialResult4AvgDistinctFloat64 struct {
-	partialResult4AvgFloat64
-	valSet set.Float64Set
-}
-
-type avgOriginal4DistinctFloat64 struct {
-	baseAggFunc
-}
-
-func (e *avgOriginal4DistinctFloat64) AllocPartialResult() PartialResult {
-	p := &partialResult4AvgDistinctFloat64{
-		valSet: set.NewFloat64Set(),
-	}
-	return PartialResult(p)
-}
-
-func (e *avgOriginal4DistinctFloat64) ResetPartialResult(pr PartialResult) {
-	p := (*partialResult4AvgDistinctFloat64)(pr)
-	p.sum = float64(0)
-	p.count = int64(0)
-	p.valSet = set.NewFloat64Set()
-}
-
-func (e *avgOriginal4DistinctFloat64) UpdatePartialResult(sctx sessionctx.Context, rowsInGroup []chunk.Row, pr PartialResult) error {
-	p := (*partialResult4AvgDistinctFloat64)(pr)
-	for _, row := range rowsInGroup {
-		input, isNull, err := e.args[0].EvalReal(sctx, row)
-		if err != nil {
-			return err
-		}
-		if isNull || p.valSet.Exist(input) {
-			continue
-		}
-
-		p.sum += input
-		p.count++
-		p.valSet.Insert(input)
-	}
-	return nil
-}
-
-func (e *avgOriginal4DistinctFloat64) AppendFinalResult2Chunk(sctx sessionctx.Context, pr PartialResult, chk *chunk.Chunk) error {
-	p := (*partialResult4AvgDistinctFloat64)(pr)
-	if p.count == 0 {
-		chk.AppendNull(e.ordinal)
-		return nil
-	}
-	chk.AppendFloat64(e.ordinal, p.sum/float64(p.count))
 	return nil
 }

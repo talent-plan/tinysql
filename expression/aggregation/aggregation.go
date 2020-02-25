@@ -89,14 +89,12 @@ type AggFunctionMode int
 // | FinalMode       | partial data | final result |
 // | Partial1Mode    | origin data  | partial data |
 // | Partial2Mode    | partial data | partial data |
-// | DedupMode       | origin data  | origin data  |
 // |-----------------|--------------|--------------|
 const (
 	CompleteMode AggFunctionMode = iota
 	FinalMode
 	Partial1Mode
 	Partial2Mode
-	DedupMode
 )
 
 type aggFunction struct {

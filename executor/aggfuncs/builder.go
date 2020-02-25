@@ -43,11 +43,6 @@ func Build(ctx sessionctx.Context, aggFuncDesc *aggregation.AggFuncDesc, ordinal
 
 // buildCount builds the AggFunc implementation for function "COUNT".
 func buildCount(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
-	// If mode is DedupMode, we return nil for not implemented.
-	if aggFuncDesc.Mode == aggregation.DedupMode {
-		return nil // not implemented yet.
-	}
-
 	base := baseAggFunc{
 		args:    aggFuncDesc.Args,
 		ordinal: ordinal,
@@ -78,16 +73,11 @@ func buildSum(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 			ordinal: ordinal,
 		},
 	}
-	switch aggFuncDesc.Mode {
-	case aggregation.DedupMode:
-		return nil
+	switch aggFuncDesc.RetTp.EvalType() {
+	case types.ETInt:
+		return &sum4Int64{base}
 	default:
-		switch aggFuncDesc.RetTp.EvalType() {
-		case types.ETInt:
-			return &sum4Int64{base}
-		default:
-			return &sum4Float64{base}
-		}
+		return &sum4Float64{base}
 	}
 }
 
@@ -98,11 +88,6 @@ func buildAvg(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 		ordinal: ordinal,
 	}
 	switch aggFuncDesc.Mode {
-	// Build avg functions which consume the original data and remove the
-	// duplicated input of the same group.
-	case aggregation.DedupMode:
-		return nil // not implemented yet.
-
 	// Build avg functions which consume the original data and update their
 	// partial results.
 	case aggregation.CompleteMode, aggregation.Partial1Mode:
@@ -137,22 +122,18 @@ func buildFirstRow(aggFuncDesc *aggregation.AggFuncDesc, ordinal int) AggFunc {
 	if fieldType.Tp == mysql.TypeBit {
 		evalType = types.ETString
 	}
-	switch aggFuncDesc.Mode {
-	case aggregation.DedupMode:
-	default:
-		switch evalType {
-		case types.ETInt:
-			return &firstRow4Int{base}
-		case types.ETReal:
-			switch fieldType.Tp {
-			case mysql.TypeFloat:
-				return &firstRow4Float32{base}
-			case mysql.TypeDouble:
-				return &firstRow4Float64{base}
-			}
-		case types.ETString:
-			return &firstRow4String{base}
+	switch evalType {
+	case types.ETInt:
+		return &firstRow4Int{base}
+	case types.ETReal:
+		switch fieldType.Tp {
+		case mysql.TypeFloat:
+			return &firstRow4Float32{base}
+		case mysql.TypeDouble:
+			return &firstRow4Float64{base}
 		}
+	case types.ETString:
+		return &firstRow4String{base}
 	}
 	return nil
 }
@@ -171,25 +152,21 @@ func buildMaxMin(aggFuncDesc *aggregation.AggFuncDesc, ordinal int, isMax bool) 
 	if fieldType.Tp == mysql.TypeBit {
 		evalType = types.ETString
 	}
-	switch aggFuncDesc.Mode {
-	case aggregation.DedupMode:
-	default:
-		switch evalType {
-		case types.ETInt:
-			if mysql.HasUnsignedFlag(fieldType.Flag) {
-				return &maxMin4Uint{base}
-			}
-			return &maxMin4Int{base}
-		case types.ETReal:
-			switch fieldType.Tp {
-			case mysql.TypeFloat:
-				return &maxMin4Float32{base}
-			case mysql.TypeDouble:
-				return &maxMin4Float64{base}
-			}
-		case types.ETString:
-			return &maxMin4String{base}
+	switch evalType {
+	case types.ETInt:
+		if mysql.HasUnsignedFlag(fieldType.Flag) {
+			return &maxMin4Uint{base}
 		}
+		return &maxMin4Int{base}
+	case types.ETReal:
+		switch fieldType.Tp {
+		case mysql.TypeFloat:
+			return &maxMin4Float32{base}
+		case mysql.TypeDouble:
+			return &maxMin4Float64{base}
+		}
+	case types.ETString:
+		return &maxMin4String{base}
 	}
 	return nil
 }
