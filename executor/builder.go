@@ -443,7 +443,7 @@ func (b *executorBuilder) buildHashJoin(v *plannercore.PhysicalHashJoin) Executo
 		baseExecutor:      newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), leftExec, rightExec),
 		concurrency:       v.Concurrency,
 		joinType:          v.JoinType,
-		buildSideEstCount: v.Children()[v.InnerChildIdx].StatsCount(),
+		innerSideEstCount: v.Children()[v.InnerChildIdx].StatsCount(),
 	}
 
 	defaultValues := v.DefaultValues
@@ -453,26 +453,26 @@ func (b *executorBuilder) buildHashJoin(v *plannercore.PhysicalHashJoin) Executo
 			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
 			return nil
 		}
-		e.buildSideExec = leftExec
-		e.probeSideExec = rightExec
-		e.probeSideFilter = v.RightConditions
-		e.buildKeys = v.LeftJoinKeys
-		e.probeKeys = v.RightJoinKeys
+		e.innerSideExec = leftExec
+		e.outerSideExec = rightExec
+		e.outerSideFilter = v.RightConditions
+		e.innerKeys = v.LeftJoinKeys
+		e.outerKeys = v.RightJoinKeys
 		if defaultValues == nil {
-			defaultValues = make([]types.Datum, e.buildSideExec.Schema().Len())
+			defaultValues = make([]types.Datum, e.innerSideExec.Schema().Len())
 		}
 	} else {
 		if len(v.RightConditions) > 0 {
 			b.err = errors.Annotate(ErrBuildExecutor, "join's inner condition should be empty")
 			return nil
 		}
-		e.buildSideExec = rightExec
-		e.probeSideExec = leftExec
-		e.probeSideFilter = v.LeftConditions
-		e.buildKeys = v.RightJoinKeys
-		e.probeKeys = v.LeftJoinKeys
+		e.innerSideExec = rightExec
+		e.outerSideExec = leftExec
+		e.outerSideFilter = v.LeftConditions
+		e.innerKeys = v.RightJoinKeys
+		e.outerKeys = v.LeftJoinKeys
 		if defaultValues == nil {
-			defaultValues = make([]types.Datum, e.buildSideExec.Schema().Len())
+			defaultValues = make([]types.Datum, e.innerSideExec.Schema().Len())
 		}
 	}
 	e.joiners = make([]joiner, e.concurrency)

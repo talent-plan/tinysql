@@ -372,13 +372,13 @@ func prepare4HashJoin(testCase *hashJoinTestCase, innerExec, outerExec Executor)
 		baseExecutor:      newBaseExecutor(testCase.ctx, joinSchema, stringutil.StringerStr("HashJoin"), innerExec, outerExec),
 		concurrency:       uint(testCase.concurrency),
 		joinType:          0, // InnerJoin
-		buildKeys:         joinKeys,
-		probeKeys:         joinKeys,
-		buildSideExec:     innerExec,
-		probeSideExec:     outerExec,
-		buildSideEstCount: float64(testCase.rows),
+		innerKeys:         joinKeys,
+		outerKeys:         joinKeys,
+		innerSideExec:     innerExec,
+		outerSideExec:     outerExec,
+		innerSideEstCount: float64(testCase.rows),
 	}
-	defaultValues := make([]types.Datum, e.buildSideExec.Schema().Len())
+	defaultValues := make([]types.Datum, e.innerSideExec.Schema().Len())
 	lhsTypes, rhsTypes := retTypes(innerExec), retTypes(outerExec)
 	e.joiners = make([]joiner, e.concurrency)
 	for i := uint(0); i < e.concurrency; i++ {
