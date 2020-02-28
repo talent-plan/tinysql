@@ -6,6 +6,10 @@ TinySQL is a course designed to teach you how to implement a distributed relatio
 >
 > This course is still working in progress.
 
+## Prerequisites
+
+Experience with Go is required. If not, it is recommended to learn [A Tour of Go](https://tour.golang.org/) first.
+
 ## Course Overview
 
 This course will take you from idea to implementation, with the essential topics of distributed relational database covered. 
@@ -17,10 +21,6 @@ The course is organized into three parts:
 2. Explains the life of a read-only SQL, which includes parsing, execution, and the optimization of SQL plans.
 
 3. Focuses on SQLs (including DML and DDL) that change the state of the database: how they get implemented and how to deal with the interaction of them and read-only statements.
-
-## Prerequisites
-
-Experience with Go is required. If not, it is recommended to learn [A Tour of Go](https://tour.golang.org/) first.
 
 ## Other courses in this series
 
