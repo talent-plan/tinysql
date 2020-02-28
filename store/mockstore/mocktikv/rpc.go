@@ -34,8 +34,6 @@ import (
 // For gofail injection.
 var undeterminedErr = terror.ErrResultUndetermined
 
-const requestMaxSize = 8 * 1024 * 1024
-
 func checkGoContext(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -53,13 +51,6 @@ func convertToKeyError(err error) *kvrpcpb.KeyError {
 				PrimaryLock: locked.Primary,
 				LockVersion: locked.StartTS,
 				LockTtl:     locked.TTL,
-			},
-		}
-	}
-	if alreadyExist, ok := errors.Cause(err).(*ErrKeyAlreadyExist); ok {
-		return &kvrpcpb.KeyError{
-			AlreadyExist: &kvrpcpb.AlreadyExist{
-				Key: alreadyExist.Key,
 			},
 		}
 	}
@@ -200,22 +191,8 @@ func (h *rpcHandler) checkRequestContext(ctx *kvrpcpb.Context) *errorpb.Error {
 	return nil
 }
 
-func (h *rpcHandler) checkRequestSize(size int) *errorpb.Error {
-	// TiKV has a limitation on raft log size.
-	// mocktikv has no raft inside, so we check the request's size instead.
-	if size >= requestMaxSize {
-		return &errorpb.Error{
-			RaftEntryTooLarge: &errorpb.RaftEntryTooLarge{},
-		}
-	}
-	return nil
-}
-
 func (h *rpcHandler) checkRequest(ctx *kvrpcpb.Context, size int) *errorpb.Error {
-	if err := h.checkRequestContext(ctx); err != nil {
-		return err
-	}
-	return h.checkRequestSize(size)
+	return h.checkRequestContext(ctx)
 }
 
 func (h *rpcHandler) checkKeyInRegion(key []byte) bool {
@@ -276,18 +253,17 @@ func (h *rpcHandler) handleKvCommit(req *kvrpcpb.CommitRequest) *kvrpcpb.CommitR
 	return &resp
 }
 
-func (h *rpcHandler) handleKvCheckTxnStatus(req *kvrpcpb.CheckTxnStatusRequest) *kvrpcpb.CheckTxnStatusResponse {
+func (h *rpcHandler) handleKvCheckTxnStatus(req *kvrpcpb.CheckTxnStatusRequest) (*kvrpcpb.CheckTxnStatusResponse, error) {
 	if !h.checkKeyInRegion(req.PrimaryKey) {
 		panic("KvCheckTxnStatus: key not in region")
 	}
 	var resp kvrpcpb.CheckTxnStatusResponse
-	ttl, commitTS, action, err := h.mvccStore.CheckTxnStatus(req.GetPrimaryKey(), req.GetLockTs(), req.GetCallerStartTs(), req.GetCurrentTs(), req.GetRollbackIfNotExist())
+	ttl, commitTS, action, err := h.mvccStore.CheckTxnStatus(req.GetPrimaryKey(), req.GetLockTs(), req.GetCurrentTs())
 	if err != nil {
-		resp.Error = convertToKeyError(err)
-	} else {
-		resp.LockTtl, resp.CommitVersion, resp.Action = ttl, commitTS, action
+		return nil, err
 	}
-	return &resp
+	resp.LockTtl, resp.CommitVersion, resp.Action = ttl, commitTS, action
+	return &resp, nil
 }
 
 func (h *rpcHandler) handleKvBatchRollback(req *kvrpcpb.BatchRollbackRequest) *kvrpcpb.BatchRollbackResponse {
@@ -424,12 +400,6 @@ func (c *RPCClient) checkArgs(ctx context.Context, addr string) (*rpcHandler, er
 
 // SendRequest sends a request to mock cluster.
 func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
-	failpoint.Inject("rpcServerBusy", func(val failpoint.Value) {
-		if val.(bool) {
-			failpoint.Return(tikvrpc.GenRegionErrorResp(req, &errorpb.Error{ServerIsBusy: &errorpb.ServerIsBusy{}}))
-		}
-	})
-
 	reqCtx := &req.Context
 	resp := &tikvrpc.Response{}
 
@@ -502,7 +472,8 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 			resp.Resp = &kvrpcpb.CheckTxnStatusResponse{RegionError: err}
 			return resp, nil
 		}
-		resp.Resp = handler.handleKvCheckTxnStatus(r)
+		resp.Resp, err = handler.handleKvCheckTxnStatus(r)
+		return resp, err
 	case tikvrpc.CmdBatchRollback:
 		r := req.BatchRollback()
 		if err := handler.checkRequest(reqCtx, r.Size()); err != nil {

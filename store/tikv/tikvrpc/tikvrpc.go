@@ -154,19 +154,9 @@ func (req *Request) Cop() *coprocessor.Request {
 	return req.req.(*coprocessor.Request)
 }
 
-// SplitRegion returns SplitRegionRequest in request.
-func (req *Request) SplitRegion() *kvrpcpb.SplitRegionRequest {
-	return req.req.(*kvrpcpb.SplitRegionRequest)
-}
-
 // CheckTxnStatus returns CheckTxnStatusRequest in request.
 func (req *Request) CheckTxnStatus() *kvrpcpb.CheckTxnStatusRequest {
 	return req.req.(*kvrpcpb.CheckTxnStatusRequest)
-}
-
-// TxnHeartBeat returns TxnHeartBeatRequest in request.
-func (req *Request) TxnHeartBeat() *kvrpcpb.TxnHeartBeatRequest {
-	return req.req.(*kvrpcpb.TxnHeartBeatRequest)
 }
 
 // Response wraps all kv/coprocessor responses.

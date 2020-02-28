@@ -235,23 +235,9 @@ func (s *RegionRequestSender) onRegionError(bo *Backoffer, ctx *RPCContext, seed
 		err = s.regionCache.OnRegionEpochNotMatch(bo, ctx, epochNotMatch.CurrentRegions)
 		return false, errors.Trace(err)
 	}
-	if regionErr.GetServerIsBusy() != nil {
-		logutil.BgLogger().Warn("tikv reports `ServerIsBusy` retry later",
-			zap.String("reason", regionErr.GetServerIsBusy().GetReason()),
-			zap.Stringer("ctx", ctx))
-		err = bo.Backoff(boServerBusy, errors.Errorf("server is busy, ctx: %v", ctx))
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-		return true, nil
-	}
 	if regionErr.GetStaleCommand() != nil {
 		logutil.BgLogger().Debug("tikv reports `StaleCommand`", zap.Stringer("ctx", ctx))
 		return true, nil
-	}
-	if regionErr.GetRaftEntryTooLarge() != nil {
-		logutil.BgLogger().Warn("tikv reports `RaftEntryTooLarge`", zap.Stringer("ctx", ctx))
-		return false, errors.New(regionErr.String())
 	}
 	// For other errors, we only drop cache here.
 	// Because caller may need to re-split the request.

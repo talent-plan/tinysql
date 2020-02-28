@@ -293,11 +293,9 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 
 	var status TxnStatus
 	req := tikvrpc.NewRequest(tikvrpc.CmdCheckTxnStatus, &kvrpcpb.CheckTxnStatusRequest{
-		PrimaryKey:         primary,
-		LockTs:             txnID,
-		CallerStartTs:      callerStartTS,
-		CurrentTs:          currentTS,
-		RollbackIfNotExist: rollbackIfNotExist,
+		PrimaryKey: primary,
+		LockTs:     txnID,
+		CurrentTs:  currentTS,
 	})
 	for {
 		loc, err := lr.store.GetRegionCache().LocateKey(bo, primary)
@@ -323,11 +321,6 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 			return status, errors.Trace(ErrBodyMissing)
 		}
 		cmdResp := resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
-		if keyErr := cmdResp.GetError(); keyErr != nil {
-			err = errors.Errorf("unexpected err: %s, tid: %v", keyErr, txnID)
-			logutil.BgLogger().Error("getTxnStatus error", zap.Error(err))
-			return status, err
-		}
 		status.action = cmdResp.Action
 		if cmdResp.LockTtl != 0 {
 			status.ttl = cmdResp.LockTtl
@@ -354,14 +347,6 @@ func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cl
 		}
 		if status.IsCommitted() {
 			lreq.CommitVersion = status.CommitTS()
-		}
-		if l.TxnSize < bigTxnThreshold {
-			// Only resolve specified keys when it is a small transaction,
-			// prevent from scanning the whole region in this case.
-			lreq.Keys = [][]byte{l.Key}
-			if !status.IsCommitted() {
-				logutil.BgLogger().Info("resolveLock rollback", zap.String("lock", l.String()))
-			}
 		}
 		req := tikvrpc.NewRequest(tikvrpc.CmdResolveLock, lreq)
 		resp, err := lr.store.SendReq(bo, req, loc.Region, readTimeoutShort)

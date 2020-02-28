@@ -793,10 +793,8 @@ func (mvcc *MVCCLevelDB) Cleanup(key []byte, startTS, currentTS uint64) error {
 // transaction, so it's not simply a read-only operation.
 //
 // primaryKey + lockTS together could locate the primary lock.
-// callerStartTS is the start ts of reader transaction.
 // currentTS is the current ts, but it may be inaccurate. Just use it to check TTL.
-func (mvcc *MVCCLevelDB) CheckTxnStatus(primaryKey []byte, lockTS, callerStartTS, currentTS uint64,
-	rollbackIfNotExist bool) (ttl uint64, commitTS uint64, action kvrpcpb.Action, err error) {
+func (mvcc *MVCCLevelDB) CheckTxnStatus(primaryKey []byte, lockTS, currentTS uint64) (ttl uint64, commitTS uint64, action kvrpcpb.Action, err error) {
 	mvcc.mu.Lock()
 	defer mvcc.mu.Unlock()
 
@@ -854,23 +852,6 @@ func (mvcc *MVCCLevelDB) CheckTxnStatus(primaryKey []byte, lockTS, callerStartTS
 			// If current transaction is already rollback.
 			return 0, 0, kvrpcpb.Action_NoAction, nil
 		}
-	}
-
-	// Maybe caused by concurrent prewrite operation.
-	// Especially in the non-block reading case, the secondary lock is likely to be
-	// written before the primary lock.
-
-	if rollbackIfNotExist {
-		batch := &leveldb.Batch{}
-		if err1 := rollbackLock(batch, primaryKey, lockTS); err1 != nil {
-			err = errors.Trace(err1)
-			return
-		}
-		if err1 := mvcc.db.Write(batch, nil); err1 != nil {
-			err = errors.Trace(err1)
-			return
-		}
-		return 0, 0, kvrpcpb.Action_LockNotExistRollback, nil
 	}
 
 	return 0, 0, action, nil
