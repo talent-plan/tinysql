@@ -12,6 +12,8 @@ Experience with Go is required. If not, it is recommended to learn [A Tour of Go
 
 ## Course Overview
 
+The detailed information you can get in the directory `courses`.
+
 This course will take you from idea to implementation, with the essential topics of distributed relational database covered. 
 
 The course is organized into three parts:
