@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
-	"github.com/pingcap-incubator/tinykv/proto/pkg/pdpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/schedulerpb"
 	pd "github.com/pingcap-incubator/tinykv/scheduler/client"
 )
 
@@ -127,8 +127,8 @@ func (c *pdClient) ScatterRegion(ctx context.Context, regionID uint64) error {
 	return nil
 }
 
-func (c *pdClient) GetOperator(ctx context.Context, regionID uint64) (*pdpb.GetOperatorResponse, error) {
-	return &pdpb.GetOperatorResponse{Status: pdpb.OperatorStatus_SUCCESS}, nil
+func (c *pdClient) GetOperator(ctx context.Context, regionID uint64) (*schedulerpb.GetOperatorResponse, error) {
+	return &schedulerpb.GetOperatorResponse{Status: schedulerpb.OperatorStatus_SUCCESS}, nil
 }
 
 func (c *pdClient) GetLeaderAddr() string { return "mockpd" }

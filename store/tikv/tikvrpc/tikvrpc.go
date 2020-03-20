@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap-incubator/tinykv/proto/pkg/errorpb"
 	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap-incubator/tinykv/proto/pkg/metapb"
-	"github.com/pingcap-incubator/tinykv/proto/pkg/tikvpb"
+	"github.com/pingcap-incubator/tinykv/proto/pkg/tinykvpb"
 	"github.com/pingcap/errors"
 )
 
@@ -284,7 +284,7 @@ func (resp *Response) GetRegionError() (*errorpb.Error, error) {
 // CallRPC launches a rpc call.
 // ch is needed to implement timeout for coprocessor streaing, the stream object's
 // cancel function will be sent to the channel, together with a lease checked by a background goroutine.
-func CallRPC(ctx context.Context, client tikvpb.TikvClient, req *Request) (*Response, error) {
+func CallRPC(ctx context.Context, client tinykvpb.TinyKvClient, req *Request) (*Response, error) {
 	resp := &Response{}
 	var err error
 	switch req.Type {

@@ -2,7 +2,7 @@ cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMT
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/Connor1996/badger v1.5.1-0.20200220043901-cee19f7bcf4f/go.mod h1:eDy3lZfjgEs4EC8pePI7y/Qx509ylx/S94y/dimtkxc=
+github.com/Connor1996/badger v1.5.1-0.20200306031920-9bbcbd8ba570/go.mod h1:eDy3lZfjgEs4EC8pePI7y/Qx509ylx/S94y/dimtkxc=
 github.com/DataDog/zstd v1.4.1/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/StackExchange/wmi v0.0.0-20180725035823-b12b22c5341f/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
@@ -212,8 +212,8 @@ github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFSt
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.3.0/go.mod h1:PN7xzY2wHTK0K9p34ErDQMlFxa51Fk0OUruD3k1mMwo=
 github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99/go.mod h1:HUpKUBZnpzkdx0kD/+Yfuft+uD3zHGtXF/XJB14TUr4=
-github.com/pingcap-incubator/tinykv v0.0.0-20200228053301-fe104c5af6f8 h1:YehYtyEPnB/zXQoZ7QVJjIM3+07moKByqksooLOAZh8=
-github.com/pingcap-incubator/tinykv v0.0.0-20200228053301-fe104c5af6f8/go.mod h1:n3OadcgyPjTs8XMuBnC5L/ZmuoyIVdMs17wp8FJpSnI=
+github.com/pingcap-incubator/tinykv v0.0.0-20200320061650-f660f803e910 h1:GIPU47lHQDyOrnDcXn+lUTiSKnnEYJniLIByNb7JLo8=
+github.com/pingcap-incubator/tinykv v0.0.0-20200320061650-f660f803e910/go.mod h1:YBDZKrKXGtZ8JnIwiiugENs8ykQiMNKOdaTC5lnEGVc=
 github.com/pingcap/errcode v0.0.0-20180921232412-a1a7271709d9 h1:KH4f4Si9XK6/IW50HtoaiLIFHGkapOM6w83za47UYik=
 github.com/pingcap/errcode v0.0.0-20180921232412-a1a7271709d9/go.mod h1:4b2X8xSqxIroj/IZ9MX/VGZhAwc11wB9wRIzHvz6SeM=
 github.com/pingcap/errors v0.10.1/go.mod h1:Oi8TUi2kEtXXLMJk9l1cGmz20kV3TaQ0usTwv5KuLY8=
