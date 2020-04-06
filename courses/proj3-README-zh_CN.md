@@ -10,11 +10,11 @@
 
 ## 第二部分 Hash Aggregation
 
-第二部分文档
+[第二部分文档](./proj3-part2-README-zh_CN.md)
 
 ## 第三部分 Hash Join
 
-第三部分文档
+[第三部分文档](./proj3-part3-README-zh_CN.md)
 
 ## 评分
 
