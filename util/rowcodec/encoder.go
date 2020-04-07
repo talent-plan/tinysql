@@ -16,11 +16,8 @@ package rowcodec
 import (
 	"math"
 	"sort"
-	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -176,27 +173,6 @@ func EncodeValueDatum(sc *stmtctx.StatementContext, d types.Datum, buffer []byte
 		buffer = encodeUint(buffer, d.GetUint64())
 	case types.KindString, types.KindBytes:
 		buffer = append(buffer, d.GetBytes()...)
-	case types.KindMysqlTime:
-		// for mysql datetime, timestamp and date type
-		t := d.GetMysqlTime()
-		if t.Type == mysql.TypeTimestamp && sc != nil && sc.TimeZone != time.UTC {
-			err = t.ConvertTimeZone(sc.TimeZone, time.UTC)
-			if err != nil {
-				return
-			}
-		}
-		var v uint64
-		v, err = t.ToPackedUint()
-		if err != nil {
-			return
-		}
-		buffer = encodeUint(buffer, v)
-	case types.KindMysqlDuration:
-		buffer = encodeInt(buffer, int64(d.GetMysqlDuration().Duration))
-	case types.KindMysqlEnum:
-		buffer = encodeUint(buffer, d.GetMysqlEnum().Value)
-	case types.KindMysqlSet:
-		buffer = encodeUint(buffer, d.GetMysqlSet().Value)
 	case types.KindBinaryLiteral, types.KindMysqlBit:
 		// We don't need to handle errors here since the literal is ensured to be able to store in uint64 in convertToMysqlBit.
 		var val uint64
@@ -207,19 +183,6 @@ func EncodeValueDatum(sc *stmtctx.StatementContext, d types.Datum, buffer []byte
 		buffer = encodeUint(buffer, val)
 	case types.KindFloat32, types.KindFloat64:
 		buffer = codec.EncodeFloat(buffer, d.GetFloat64())
-	case types.KindMysqlDecimal:
-		buffer, err = codec.EncodeDecimal(buffer, d.GetMysqlDecimal(), d.Length(), d.Frac())
-		if sc != nil {
-			if terror.ErrorEqual(err, types.ErrTruncated) {
-				err = sc.HandleTruncate(err)
-			} else if terror.ErrorEqual(err, types.ErrOverflow) {
-				err = sc.HandleOverflow(err, err)
-			}
-		}
-	case types.KindMysqlJSON:
-		j := d.GetMysqlJSON()
-		buffer = append(buffer, j.TypeCode)
-		buffer = append(buffer, j.Value...)
 	case types.KindNull:
 	case types.KindMinNotNull:
 	case types.KindMaxValue:

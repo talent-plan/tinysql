@@ -20,11 +20,10 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -101,11 +100,7 @@ func (s *testSuite) TestDecodeRowWithHandle(c *C) {
 		cdt := chkRow.GetDatumRow(fts)
 		for i, t := range testData {
 			d := cdt[i]
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.bt)
-			}
+			c.Assert(d, DeepEquals, t.bt)
 		}
 
 		// decode to old row bytes.
@@ -120,11 +115,7 @@ func (s *testSuite) TestDecodeRowWithHandle(c *C) {
 			remain, d, err := codec.DecodeOne(oldRow[i])
 			c.Assert(err, IsNil)
 			c.Assert(len(remain), Equals, 0)
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.bt)
-			}
+			c.Assert(d, DeepEquals, t.bt)
 		}
 	}
 
@@ -172,24 +163,6 @@ func (s *testSuite) TestDecodeRowWithHandle(c *C) {
 }
 
 func (s *testSuite) TestTypesNewRowCodec(c *C) {
-	getJSONDatum := func(value string) types.Datum {
-		j, err := json.ParseBinaryFromString(value)
-		c.Assert(err, IsNil)
-		var d types.Datum
-		d.SetMysqlJSON(j)
-		return d
-	}
-	getSetDatum := func(name string, value uint64) types.Datum {
-		var d types.Datum
-		d.SetMysqlSet(types.Set{Name: name, Value: value})
-		return d
-	}
-	getTime := func(value string) types.Time {
-		t, err := types.ParseTime(&stmtctx.StatementContext{TimeZone: time.UTC}, value, mysql.TypeTimestamp, 6)
-		c.Assert(err, IsNil)
-		return t
-	}
-
 	encodeAndDecode := func(c *C, testData []testData) {
 		// transform test data into input.
 		colIDs := make([]int64, 0, len(testData))
@@ -238,11 +211,7 @@ func (s *testSuite) TestTypesNewRowCodec(c *C) {
 		cdt := chkRow.GetDatumRow(fts)
 		for i, t := range testData {
 			d := cdt[i]
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.dt)
-			}
+			c.Assert(d, DeepEquals, t.dt)
 		}
 
 		// decode to old row bytes.
@@ -257,11 +226,7 @@ func (s *testSuite) TestTypesNewRowCodec(c *C) {
 			remain, d, err := codec.DecodeOne(oldRow[i])
 			c.Assert(err, IsNil)
 			c.Assert(len(remain), Equals, 0)
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.bt)
-			}
+			c.Assert(d, DeepEquals, t.bt)
 		}
 	}
 
@@ -299,50 +264,10 @@ func (s *testSuite) TestTypesNewRowCodec(c *C) {
 			false,
 		},
 		{
-			5,
-			withFsp(6)(types.NewFieldType(mysql.TypeTimestamp)),
-			types.NewTimeDatum(getTime("2011-11-10 11:11:11.999999")),
-			types.NewUintDatum(1840446893366133311),
-			nil,
-			false,
-		},
-		{
-			16,
-			withFsp(0)(types.NewFieldType(mysql.TypeDuration)),
-			types.NewDurationDatum(getDuration("4:00:00")),
-			types.NewIntDatum(14400000000000),
-			nil,
-			false,
-		},
-		{
-			8,
-			types.NewFieldType(mysql.TypeNewDecimal),
-			types.NewDecimalDatum(types.NewDecFromStringForTest("1.99")),
-			types.NewDecimalDatum(types.NewDecFromStringForTest("1.99")),
-			nil,
-			false,
-		},
-		{
 			12,
 			types.NewFieldType(mysql.TypeYear),
 			types.NewIntDatum(1999),
 			types.NewIntDatum(1999),
-			nil,
-			false,
-		},
-		{
-			9,
-			withEnumElems("y", "n")(types.NewFieldType(mysql.TypeEnum)),
-			types.NewMysqlEnumDatum(types.Enum{Name: "n", Value: 2}),
-			types.NewUintDatum(2),
-			nil,
-			false,
-		},
-		{
-			14,
-			types.NewFieldType(mysql.TypeJSON),
-			getJSONDatum(`{"a":2}`),
-			getJSONDatum(`{"a":2}`),
 			nil,
 			false,
 		},
@@ -375,22 +300,6 @@ func (s *testSuite) TestTypesNewRowCodec(c *C) {
 			types.NewFieldType(mysql.TypeFloat),
 			types.NewFloat32Datum(6),
 			types.NewFloat64Datum(6),
-			nil,
-			false,
-		},
-		{
-			117,
-			withEnumElems("n1", "n2")(types.NewFieldType(mysql.TypeSet)),
-			getSetDatum("n1", 1),
-			types.NewUintDatum(1),
-			nil,
-			false,
-		},
-		{
-			118,
-			withFlen(24)(types.NewFieldType(mysql.TypeBit)), // 3 bit
-			types.NewMysqlBitDatum(types.NewBinaryLiteralFromUint(3223600, 3)),
-			types.NewUintDatum(3223600),
 			nil,
 			false,
 		},
@@ -489,11 +398,7 @@ func (s *testSuite) TestNilAndDefault(c *C) {
 		cdt := chkRow.GetDatumRow(fts)
 		for i, t := range testData {
 			d := cdt[i]
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.bt)
-			}
+			c.Assert(d, DeepEquals, t.bt)
 		}
 
 		// decode to old row bytes.
@@ -508,11 +413,7 @@ func (s *testSuite) TestNilAndDefault(c *C) {
 			remain, d, err := codec.DecodeOne(oldRow[i])
 			c.Assert(err, IsNil)
 			c.Assert(len(remain), Equals, 0)
-			if d.Kind() == types.KindMysqlDecimal {
-				c.Assert(d.GetMysqlDecimal(), DeepEquals, t.bt.GetMysqlDecimal())
-			} else {
-				c.Assert(d, DeepEquals, t.bt)
-			}
+			c.Assert(d, DeepEquals, t.bt)
 		}
 	}
 	dtNilData := []testData{
@@ -609,7 +510,8 @@ func (s *testSuite) TestCodecUtil(c *C) {
 	}
 	tps[3] = types.NewFieldType(mysql.TypeNull)
 	sc := new(stmtctx.StatementContext)
-	oldRow, err := tablecodec.EncodeRow(sc, types.MakeDatums(1, 2, 3, nil), colIDs, nil, nil)
+	rd := &rowcodec.Encoder{}
+	oldRow, err := tablecodec.EncodeRow(sc, types.MakeDatums(1, 2, 3, nil), colIDs, nil, nil, rd)
 	c.Check(err, IsNil)
 	var (
 		rb     rowcodec.Encoder
@@ -654,44 +556,6 @@ func (s *testSuite) TestCodecUtil(c *C) {
 	c.Assert(rowcodec.IsRowKey([]byte{'t', 'r'}), IsFalse)
 }
 
-func (s *testSuite) TestOldRowCodec(c *C) {
-	colIDs := []int64{1, 2, 3, 4}
-	tps := make([]*types.FieldType, 4)
-	for i := 0; i < 3; i++ {
-		tps[i] = types.NewFieldType(mysql.TypeLonglong)
-	}
-	tps[3] = types.NewFieldType(mysql.TypeNull)
-	sc := new(stmtctx.StatementContext)
-	oldRow, err := tablecodec.EncodeRow(sc, types.MakeDatums(1, 2, 3, nil), colIDs, nil, nil)
-	c.Check(err, IsNil)
-
-	var (
-		rb     rowcodec.Encoder
-		newRow []byte
-	)
-	newRow, err = rowcodec.EncodeFromOldRow(&rb, nil, oldRow, nil)
-	c.Check(err, IsNil)
-	cols := make([]rowcodec.ColInfo, len(tps))
-	for i, tp := range tps {
-		cols[i] = rowcodec.ColInfo{
-			ID:      colIDs[i],
-			Tp:      int32(tp.Tp),
-			Flag:    int32(tp.Flag),
-			Flen:    tp.Flen,
-			Decimal: tp.Decimal,
-			Elems:   tp.Elems,
-		}
-	}
-	rd := rowcodec.NewChunkDecoder(cols, 0, nil, time.Local)
-	chk := chunk.NewChunkWithCapacity(tps, 1)
-	err = rd.DecodeToChunk(newRow, -1, chk)
-	c.Assert(err, IsNil)
-	row := chk.GetRow(0)
-	for i := 0; i < 3; i++ {
-		c.Assert(row.GetInt64(i), Equals, int64(i)+1)
-	}
-}
-
 var (
 	withUnsigned = func(ft *types.FieldType) *types.FieldType {
 		ft.Flag = ft.Flag | mysql.UnsignedFlag
@@ -714,10 +578,6 @@ var (
 			ft.Flen = flen
 			return ft
 		}
-	}
-	getDuration = func(value string) types.Duration {
-		dur, _ := types.ParseDuration(nil, value, 0)
-		return dur
 	}
 	getOldDatumByte = func(d types.Datum) []byte {
 		b, err := tablecodec.EncodeValue(nil, nil, d)

@@ -18,10 +18,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -128,53 +127,9 @@ func (decoder *DatumMapDecoder) decodeColDatum(col *ColInfo, colData []byte) (ty
 	case mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeString,
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		d.SetBytes(colData)
-	case mysql.TypeNewDecimal:
-		_, dec, _, _, err := codec.DecodeDecimal(colData)
-		if err != nil {
-			return d, err
-		}
-		d.SetMysqlDecimal(dec)
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		var t types.Time
-		t.Type = uint8(col.Tp)
-		t.Fsp = int8(col.Decimal)
-		err := t.FromPackedUint(decodeUint(colData))
-		if err != nil {
-			return d, err
-		}
-		if byte(col.Tp) == mysql.TypeTimestamp && !t.IsZero() {
-			err = t.ConvertTimeZone(time.UTC, decoder.loc)
-			if err != nil {
-				return d, err
-			}
-		}
-		d.SetMysqlTime(t)
-	case mysql.TypeDuration:
-		var dur types.Duration
-		dur.Duration = time.Duration(decodeInt(colData))
-		dur.Fsp = int8(col.Decimal)
-		d.SetMysqlDuration(dur)
-	case mysql.TypeEnum:
-		// ignore error deliberately, to read empty enum value.
-		enum, err := types.ParseEnumValue(col.Elems, decodeUint(colData))
-		if err != nil {
-			enum = types.Enum{}
-		}
-		d.SetMysqlEnum(enum)
-	case mysql.TypeSet:
-		set, err := types.ParseSetValue(col.Elems, decodeUint(colData))
-		if err != nil {
-			return d, err
-		}
-		d.SetMysqlSet(set)
 	case mysql.TypeBit:
 		byteSize := (col.Flen + 7) >> 3
 		d.SetMysqlBit(types.NewBinaryLiteralFromUint(decodeUint(colData), byteSize))
-	case mysql.TypeJSON:
-		var j json.BinaryJSON
-		j.TypeCode = colData[0]
-		j.Value = colData[1:]
-		d.SetMysqlJSON(j)
 	default:
 		return d, errors.Errorf("unknown type %d", col.Tp)
 	}
@@ -265,53 +220,9 @@ func (decoder *ChunkDecoder) decodeColToChunk(colIdx int, col *ColInfo, colData 
 	case mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeString,
 		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		chk.AppendBytes(colIdx, colData)
-	case mysql.TypeNewDecimal:
-		_, dec, _, _, err := codec.DecodeDecimal(colData)
-		if err != nil {
-			return err
-		}
-		chk.AppendMyDecimal(colIdx, dec)
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		var t types.Time
-		t.Type = uint8(col.Tp)
-		t.Fsp = int8(col.Decimal)
-		err := t.FromPackedUint(decodeUint(colData))
-		if err != nil {
-			return err
-		}
-		if byte(col.Tp) == mysql.TypeTimestamp && decoder.loc != nil && !t.IsZero() {
-			err = t.ConvertTimeZone(time.UTC, decoder.loc)
-			if err != nil {
-				return err
-			}
-		}
-		chk.AppendTime(colIdx, t)
-	case mysql.TypeDuration:
-		var dur types.Duration
-		dur.Duration = time.Duration(decodeInt(colData))
-		dur.Fsp = int8(col.Decimal)
-		chk.AppendDuration(colIdx, dur)
-	case mysql.TypeEnum:
-		// ignore error deliberately, to read empty enum value.
-		enum, err := types.ParseEnumValue(col.Elems, decodeUint(colData))
-		if err != nil {
-			enum = types.Enum{}
-		}
-		chk.AppendEnum(colIdx, enum)
-	case mysql.TypeSet:
-		set, err := types.ParseSetValue(col.Elems, decodeUint(colData))
-		if err != nil {
-			return err
-		}
-		chk.AppendSet(colIdx, set)
 	case mysql.TypeBit:
 		byteSize := (col.Flen + 7) >> 3
 		chk.AppendBytes(colIdx, types.NewBinaryLiteralFromUint(decodeUint(colData), byteSize))
-	case mysql.TypeJSON:
-		var j json.BinaryJSON
-		j.TypeCode = colData[0]
-		j.Value = colData[1:]
-		chk.AppendJSON(colIdx, j)
 	default:
 		return errors.Errorf("unknown type %d", col.Tp)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tidb/util/testleak"
 )
 
@@ -81,7 +82,8 @@ func (s *testTableCodecSuite) TestCutRow(c *C) {
 	for _, col := range cols {
 		colIDs = append(colIDs, col.id)
 	}
-	bs, err := EncodeRow(sc, row, colIDs, nil, nil)
+	rd := &rowcodec.Encoder{}
+	bs, err := EncodeRow(sc, row, colIDs, nil, nil, rd)
 	c.Assert(err, IsNil)
 	c.Assert(bs, NotNil)
 

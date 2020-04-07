@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	"github.com/pingcap/tidb/util/rowcodec"
 )
 
 // Error instances.
@@ -313,6 +314,9 @@ type SessionVars struct {
 
 	// replicaRead is used for reading data from replicas, only follower is supported at this time.
 	replicaRead kv.ReplicaReadType
+
+	// RowEncoder is reused in session for encode row data.
+	RowEncoder rowcodec.Encoder
 }
 
 // ConnectionInfo present connection used by audit.

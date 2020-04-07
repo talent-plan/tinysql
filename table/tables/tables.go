@@ -272,7 +272,8 @@ func (t *TableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 	key := t.RecordKey(h)
 	sessVars := ctx.GetSessionVars()
 	sc := sessVars.StmtCtx
-	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
+	rd := &sessVars.RowEncoder
+	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil, rd)
 	if err != nil {
 		return err
 	}
@@ -477,7 +478,8 @@ func (t *TableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	adjustRowValuesBuf(writeBufs, len(row))
 	key := t.RecordKey(recordID)
 	sc := sessVars.StmtCtx
-	writeBufs.RowValBuf, err = tablecodec.EncodeRow(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues)
+	rd := &sessVars.RowEncoder
+	writeBufs.RowValBuf, err = tablecodec.EncodeRow(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues, rd)
 	if err != nil {
 		return 0, err
 	}

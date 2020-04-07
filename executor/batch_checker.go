@@ -55,7 +55,8 @@ func encodeNewRow(ctx sessionctx.Context, t table.Table, row []types.Datum) ([]b
 			skimmedRow = append(skimmedRow, row[col.Offset])
 		}
 	}
-	newRowValue, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, skimmedRow, colIDs, nil, nil)
+	rd := &ctx.GetSessionVars().RowEncoder
+	newRowValue, err := tablecodec.EncodeRow(ctx.GetSessionVars().StmtCtx, skimmedRow, colIDs, nil, nil, rd)
 	if err != nil {
 		return nil, err
 	}

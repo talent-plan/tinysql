@@ -16,19 +16,17 @@ package mocktikv
 import (
 	"bytes"
 	"context"
+	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tipb/go-tipb"
-	"sort"
 )
 
 var (
@@ -59,6 +57,8 @@ type tableScanExec struct {
 	counts    []int64
 
 	src executor
+
+	rd *rowcodec.BytesDecoder
 }
 
 func (e *tableScanExec) SetSrcExec(exec executor) {
@@ -133,7 +133,7 @@ func (e *tableScanExec) getRowFromPoint(ran kv.KeyRange) ([][]byte, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	row, err := getRowData(e.Columns, e.colIDs, handle, val)
+	row, err := getRowData(e.Columns, e.colIDs, handle, val, e.rd)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -181,7 +181,7 @@ func (e *tableScanExec) getRowFromRange(ran kv.KeyRange) ([][]byte, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	row, err := getRowData(e.Columns, e.colIDs, handle, pair.Value)
+	row, err := getRowData(e.Columns, e.colIDs, handle, pair.Value, e.rd)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -526,48 +526,14 @@ func hasColVal(data [][]byte, colIDs map[int64]int, id int64) bool {
 }
 
 // getRowData decodes raw byte slice to row data.
-func getRowData(columns []*tipb.ColumnInfo, colIDs map[int64]int, handle int64, value []byte) ([][]byte, error) {
-	values, err := tablecodec.CutRowNew(value, colIDs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if values == nil {
-		values = make([][]byte, len(colIDs))
-	}
-	// Fill the handle and null columns.
-	for _, col := range columns {
-		id := col.GetColumnId()
-		offset := colIDs[id]
-		if col.GetPkHandle() || id == model.ExtraHandleID {
-			var handleDatum types.Datum
-			if mysql.HasUnsignedFlag(uint(col.GetFlag())) {
-				// PK column is Unsigned.
-				handleDatum = types.NewUintDatum(uint64(handle))
-			} else {
-				handleDatum = types.NewIntDatum(handle)
-			}
-			handleData, err1 := codec.EncodeValue(nil, nil, handleDatum)
-			if err1 != nil {
-				return nil, errors.Trace(err1)
-			}
-			values[offset] = handleData
-			continue
-		}
-		if hasColVal(values, colIDs, id) {
-			continue
-		}
-		if len(col.DefaultVal) > 0 {
-			values[offset] = col.DefaultVal
-			continue
-		}
-		if mysql.HasNotNullFlag(uint(col.GetFlag())) {
-			return nil, errors.Errorf("Miss column %d", id)
-		}
-
-		values[offset] = []byte{codec.NilFlag}
-	}
-
-	return values, nil
+func getRowData(
+	columns []*tipb.ColumnInfo,
+	colIDs map[int64]int,
+	handle int64,
+	value []byte,
+	rd *rowcodec.BytesDecoder,
+) ([][]byte, error) {
+	return rd.DecodeToBytes(colIDs, handle, value, nil)
 }
 
 func convertToExprs(sc *stmtctx.StatementContext, fieldTps []*types.FieldType, pbExprs []*tipb.Expr) ([]expression.Expression, error) {

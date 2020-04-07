@@ -17,9 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -34,23 +32,6 @@ func BenchmarkEncode(b *testing.B) {
 	var err error
 	for i := 0; i < b.N; i++ {
 		buf, err = xb.Encode(nil, colIDs, oldRow, buf)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkEncodeFromOldRow(b *testing.B) {
-	b.ReportAllocs()
-	oldRow := types.MakeDatums(1, "abc", 1.1)
-	oldRowData, err := tablecodec.EncodeRow(new(stmtctx.StatementContext), oldRow, []int64{1, 2, 3}, nil, nil)
-	if err != nil {
-		b.Fatal(err)
-	}
-	var xb rowcodec.Encoder
-	var buf []byte
-	for i := 0; i < b.N; i++ {
-		buf, err = rowcodec.EncodeFromOldRow(&xb, nil, oldRowData, buf)
 		if err != nil {
 			b.Fatal(err)
 		}

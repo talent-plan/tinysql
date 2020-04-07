@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/structure"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tidb/util/rowcodec"
 )
 
 var (
@@ -158,24 +159,11 @@ func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []str
 // Row layout: colID1, value1, colID2, value2, .....
 // valBuf and values pass by caller, for reducing EncodeRow allocates temporary bufs. If you pass valBuf and values as nil,
 // EncodeRow will allocate it.
-func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, error) {
+func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum, rd *rowcodec.Encoder, ) ([]byte, error) {
 	if len(row) != len(colIDs) {
 		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
 	}
-	valBuf = valBuf[:0]
-	if values == nil {
-		values = make([]types.Datum, len(row)*2)
-	}
-	for i, c := range row {
-		id := colIDs[i]
-		values[2*i].SetInt64(id)
-		values[2*i+1] = c
-	}
-	if len(values) == 0 {
-		// We could not set nil value into kv.
-		return append(valBuf, codec.NilFlag), nil
-	}
-	return codec.EncodeValue(sc, valBuf, values...)
+	return rd.Encode(sc, colIDs, row, valBuf)
 }
 
 // EncodeRowKey encodes the table id and record handle into a kv.Key
