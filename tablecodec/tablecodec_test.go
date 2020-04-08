@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tidb/util/testleak"
 )
 
@@ -57,49 +56,6 @@ func (s *testTableCodecSuite) TestTableCodec(c *C) {
 type column struct {
 	id int64
 	tp *types.FieldType
-}
-
-func (s *testTableCodecSuite) TestCutRow(c *C) {
-	defer testleak.AfterTest(c)()
-
-	var err error
-	c1 := &column{id: 1, tp: types.NewFieldType(mysql.TypeLonglong)}
-	c2 := &column{id: 2, tp: types.NewFieldType(mysql.TypeVarchar)}
-	cols := []*column{c1, c2}
-
-	row := make([]types.Datum, 2)
-	row[0] = types.NewIntDatum(100)
-	row[1] = types.NewBytesDatum([]byte("abc"))
-
-	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
-	data := make([][]byte, 3)
-	data[0], err = EncodeValue(sc, nil, row[0])
-	c.Assert(err, IsNil)
-	data[1], err = EncodeValue(sc, nil, row[1])
-	c.Assert(err, IsNil)
-	// Encode
-	colIDs := make([]int64, 0, 2)
-	for _, col := range cols {
-		colIDs = append(colIDs, col.id)
-	}
-	rd := &rowcodec.Encoder{}
-	bs, err := EncodeRow(sc, row, colIDs, nil, nil, rd)
-	c.Assert(err, IsNil)
-	c.Assert(bs, NotNil)
-
-	// Decode
-	colMap := make(map[int64]int, 2)
-	for i, col := range cols {
-		colMap[col.id] = i
-	}
-	r, err := CutRowNew(bs, colMap)
-	c.Assert(err, IsNil)
-	c.Assert(r, NotNil)
-	c.Assert(r, HasLen, 2)
-	// Compare cut row and original row
-	for i := range colIDs {
-		c.Assert(r[i], DeepEquals, data[i])
-	}
 }
 
 func (s *testTableCodecSuite) TestCutKeyNew(c *C) {

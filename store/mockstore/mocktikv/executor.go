@@ -517,14 +517,6 @@ func (e *limitExec) Next(ctx context.Context) (value [][]byte, err error) {
 	return value, nil
 }
 
-func hasColVal(data [][]byte, colIDs map[int64]int, id int64) bool {
-	offset, ok := colIDs[id]
-	if ok && data[offset] != nil {
-		return true
-	}
-	return false
-}
-
 // getRowData decodes raw byte slice to row data.
 func getRowData(
 	columns []*tipb.ColumnInfo,

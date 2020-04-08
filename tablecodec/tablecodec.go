@@ -159,7 +159,7 @@ func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []str
 // Row layout: colID1, value1, colID2, value2, .....
 // valBuf and values pass by caller, for reducing EncodeRow allocates temporary bufs. If you pass valBuf and values as nil,
 // EncodeRow will allocate it.
-func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum, rd *rowcodec.Encoder, ) ([]byte, error) {
+func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum, rd *rowcodec.Encoder) ([]byte, error) {
 	if len(row) != len(colIDs) {
 		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
 	}
@@ -344,46 +344,39 @@ func DecodeRowWithMap(b []byte, cols map[int64]*types.FieldType, loc *time.Locat
 // DecodeRow decodes a byte slice into datums.
 // Row layout: colID1, value1, colID2, value2, .....
 func DecodeRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, error) {
-	return DecodeRowWithMap(b, cols, loc, nil)
+	return DecodeRowWithMapNew(b, cols, loc, nil)
 }
 
-// CutRowNew cuts encoded row into byte slices and return columns' byte slice.
-// Row layout: colID1, value1, colID2, value2, .....
-func CutRowNew(data []byte, colIDs map[int64]int) ([][]byte, error) {
-	if data == nil {
-		return nil, nil
+// DecodeRowWithMapNew decode a row to datum map.
+func DecodeRowWithMapNew(b []byte, cols map[int64]*types.FieldType, loc *time.Location, row map[int64]types.Datum) (map[int64]types.Datum, error) {
+	if row == nil {
+		row = make(map[int64]types.Datum, len(cols))
 	}
-	if len(data) == 1 && data[0] == codec.NilFlag {
-		return nil, nil
+	if b == nil {
+		return row, nil
+	}
+	if len(b) == 1 && b[0] == codec.NilFlag {
+		return row, nil
 	}
 
-	var (
-		cnt int
-		b   []byte
-		err error
-		cid int64
-	)
-	row := make([][]byte, len(colIDs))
-	for len(data) > 0 && cnt < len(colIDs) {
-		// Get col id.
-		data, cid, err = codec.CutColumnID(data)
-		if err != nil {
-			return nil, errors.Trace(err)
+	reqCols := make([]rowcodec.ColInfo, len(cols))
+	var idx int
+	for id, tp := range cols {
+		reqCols[idx] = rowcodec.ColInfo{
+			ID:      id,
+			Tp:      int32(tp.Tp),
+			Flag:    int32(tp.Flag),
+			Flen:    tp.Flen,
+			Decimal: tp.Decimal,
+			Elems:   tp.Elems,
 		}
-
-		// Get col value.
-		b, data, err = codec.CutOne(data)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		offset, ok := colIDs[cid]
-		if ok {
-			row[offset] = b
-			cnt++
-		}
+		idx++
 	}
-	return row, nil
+	// for decodeToMap:
+	// - no need handle
+	// - no need get default value
+	rd := rowcodec.NewDatumMapDecoder(reqCols, -1, loc)
+	return rd.DecodeToDatumMap(b, -1, row)
 }
 
 // unflatten converts a raw datum to a column datum.

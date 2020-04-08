@@ -520,7 +520,6 @@ func (s *testSuite) TestCodecUtil(c *C) {
 	newRow, err = rowcodec.EncodeFromOldRow(&rb, nil, oldRow, nil)
 	c.Assert(err, IsNil)
 	c.Assert(rowcodec.IsNewFormat(newRow), IsTrue)
-	c.Assert(rowcodec.IsNewFormat(oldRow), IsFalse)
 
 	// test stringer for decoder.
 	var cols []rowcodec.ColInfo
@@ -560,24 +559,6 @@ var (
 	withUnsigned = func(ft *types.FieldType) *types.FieldType {
 		ft.Flag = ft.Flag | mysql.UnsignedFlag
 		return ft
-	}
-	withEnumElems = func(elem ...string) func(ft *types.FieldType) *types.FieldType {
-		return func(ft *types.FieldType) *types.FieldType {
-			ft.Elems = elem
-			return ft
-		}
-	}
-	withFsp = func(fsp int) func(ft *types.FieldType) *types.FieldType {
-		return func(ft *types.FieldType) *types.FieldType {
-			ft.Decimal = fsp
-			return ft
-		}
-	}
-	withFlen = func(flen int) func(ft *types.FieldType) *types.FieldType {
-		return func(ft *types.FieldType) *types.FieldType {
-			ft.Flen = flen
-			return ft
-		}
 	}
 	getOldDatumByte = func(d types.Datum) []byte {
 		b, err := tablecodec.EncodeValue(nil, nil, d)
