@@ -52,12 +52,6 @@ func (s *testTableCodecSuite) TestTableCodec(c *C) {
 	c.Assert(h, Equals, int64(2))
 }
 
-// column is a structure used for test
-type column struct {
-	id int64
-	tp *types.FieldType
-}
-
 func (s *testTableCodecSuite) TestCutKeyNew(c *C) {
 	values := []types.Datum{types.NewIntDatum(1), types.NewBytesDatum([]byte("abc")), types.NewFloat64Datum(5.5)}
 	handle := types.NewIntDatum(100)

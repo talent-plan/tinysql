@@ -251,14 +251,6 @@ func getRowData(
 	return buffer.rd.DecodeToBytes(colIDs, handle, value, buffer.handleBytes)
 }
 
-func hasColVal(data [][]byte, colIDs map[int64]int, id int64) bool {
-	offset, ok := colIDs[id]
-	if ok && data[offset] != nil {
-		return true
-	}
-	return false
-}
-
 type processKVFunc func(key, value []byte) error
 
 func iterTxnMemBuffer(ctx sessionctx.Context, kvRanges []kv.KeyRange, fn processKVFunc) error {
