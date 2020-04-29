@@ -1,0 +1,57 @@
+[
+  {
+    "name": "TestIssue9562",
+    "cases": [
+      [
+        "create table t(a int, b int, index idx_ab(a, b))",
+        "explain select * from t t1 join t t2 where t1.b = t2.b and t2.b is null"
+      ]
+    ]
+  },
+  {
+    "name": "TestNullCount",
+    "cases": [
+      "explain select * from t where a is null",
+      "explain select * from t use index(idx) where a is null",
+      "explain select * from t where b = 1",
+      "explain select * from t where b < 1"
+    ]
+  },
+  {
+    "name": "TestEmptyTable",
+    "cases": [
+      "select * from t where t.c1 <= 50",
+      "select * from t, t1 where t.c1 = t1.c1",
+      "select * from t limit 0"
+    ]
+  },
+  {
+    "name": "TestIndexRead",
+    "cases": [
+      "select count(*) from t group by e",
+      "select count(*) from t where e <= 10 group by e",
+      "select count(*) from t where e <= 50",
+      "select count(*) from t where c > '1' group by b",
+      "select count(*) from t where e = 1 group by b",
+      "select count(*) from t where e > 1 group by b",
+      "select count(e) from t where t.b <= 20",
+      "select count(e) from t where t.b <= 30",
+      "select count(e) from t where t.b <= 40",
+      "select count(e) from t where t.b <= 50",
+      "select count(e) from t where t.b <= 100000000000",
+      "select * from t where t.b <= 40",
+      "select * from t where t.b <= 50",
+      "select * from t where t.b <= 10000000000",
+      // test panic
+      "select * from t where 1 and t.b <= 50",
+      "select * from t where t.b <= 100 order by t.a limit 1",
+      "select * from t where t.b <= 1 order by t.a limit 10",
+      "select * from t use index(b) where b = 1 order by a",
+      // test datetime
+      "select * from t where d < cast('1991-09-05' as datetime)",
+      // test timestamp
+      "select * from t where ts < '1991-09-05'",
+      "select sum(a) from t1 use index(idx) where a = 3 and b = 100000 group by a limit 1"
+    ]
+  }
+]

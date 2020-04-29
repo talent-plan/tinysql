@@ -1,0 +1,87 @@
+// Copyright 2017 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package tikv_test
+
+import (
+	"context"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	. "github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/parser/terror"
+	"github.com/pingcap/tidb/session"
+	. "github.com/pingcap/tidb/store/tikv"
+)
+
+var _ = Suite(new(testSQLSuite))
+
+type testSQLSuite struct {
+	OneByOneSuite
+	store Storage
+	dom   *domain.Domain
+}
+
+func (s *testSQLSuite) SetUpSuite(c *C) {
+	s.OneByOneSuite.SetUpSuite(c)
+	var err error
+	s.store = NewTestStore(c).(Storage)
+	s.dom, err = session.BootstrapSession(s.store)
+	c.Assert(err, IsNil)
+}
+
+func (s *testSQLSuite) TearDownSuite(c *C) {
+	s.dom.Close()
+	s.store.Close()
+	s.OneByOneSuite.TearDownSuite(c)
+}
+
+func (s *testSQLSuite) TestFailBusyServerCop(c *C) {
+	se, err := session.CreateSession4Test(s.store)
+	c.Assert(err, IsNil)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/tidb/store/mockstore/mocktikv/rpcServerBusy", `return(true)`), IsNil)
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond * 100)
+		c.Assert(failpoint.Disable("github.com/pingcap/tidb/store/mockstore/mocktikv/rpcServerBusy"), IsNil)
+	}()
+
+	go func() {
+		defer wg.Done()
+		rs, err := se.Execute(context.Background(), `SELECT variable_value FROM mysql.tidb WHERE variable_name="bootstrapped"`)
+		if len(rs) > 0 {
+			defer terror.Call(rs[0].Close)
+		}
+		c.Assert(err, IsNil)
+		req := rs[0].NewChunk()
+		err = rs[0].Next(context.Background(), req)
+		c.Assert(err, IsNil)
+		c.Assert(req.NumRows() == 0, IsFalse)
+		c.Assert(req.GetRow(0).GetString(0), Equals, "True")
+	}()
+
+	wg.Wait()
+}
+
+func TestMain(m *testing.M) {
+	ReadTimeoutMedium = 2 * time.Second
+	os.Exit(m.Run())
+}

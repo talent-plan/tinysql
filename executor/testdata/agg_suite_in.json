@@ -1,0 +1,12 @@
+[
+  {
+    "name": "TestInjectProjBelowTopN",
+    "cases": [
+      "explain select * from t order by i + 1",
+      "select * from t order by i + 1",
+      "explain select * from t order by i + 1 limit 2",
+      "select * from t order by i + 1 limit 2",
+      "select i, i, i from t order by i + 1"
+    ]
+  }
+]

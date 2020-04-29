@@ -1,0 +1,60 @@
+[
+  {
+    "Name": "TestIssue9562",
+    "Cases": [
+      {
+        "SQL": [
+          "create table t(a int, b int, index idx_ab(a, b))",
+          "explain select * from t t1 join t t2 where t1.b = t2.b and t2.b is null"
+        ],
+        "Plan": [
+          "Projection_7 0.00 root test.t.a, test.t.b, test.t.a, test.t.b",
+          "└─HashRightJoin_9 0.00 root inner join, equal:[eq(test.t.b, test.t.b)]",
+          "  ├─TableReader_12 0.00 root data:Selection_11",
+          "  │ └─Selection_11 0.00 cop isnull(test.t.b), not(isnull(test.t.b))",
+          "  │   └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "  └─TableReader_18 9990.00 root data:Selection_17",
+          "    └─Selection_17 9990.00 cop not(isnull(test.t.b))",
+          "      └─TableScan_16 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      }
+    ]
+  },
+  {
+    "Name": "TestNullCount",
+    "Cases": [
+      [
+        "TableReader_7 2.00 root data:Selection_6",
+        "└─Selection_6 2.00 cop isnull(test.t.a)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
+      ],
+      [
+        "IndexLookUp_7 2.00 root ",
+        "├─IndexScan_5 2.00 cop table:t, index:a, range:[NULL,NULL], keep order:false",
+        "└─TableScan_6 2.00 cop table:t, keep order:false"
+      ],
+      [
+        "TableReader_7 0.00 root data:Selection_6",
+        "└─Selection_6 0.00 cop eq(test.t.b, 1)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
+      ],
+      [
+        "TableReader_7 0.00 root data:Selection_6",
+        "└─Selection_6 0.00 cop lt(test.t.b, 1)",
+        "  └─TableScan_5 2.00 cop table:t, range:[-inf,+inf], keep order:false"
+      ]
+    ]
+  },
+  {
+    "Name": "TestEmptyTable",
+    "Cases": [
+      "TableReader(Table(t)->Sel([le(test.t.c1, 50)]))",
+      "LeftHashJoin{TableReader(Table(t)->Sel([not(isnull(test.t.c1))]))->TableReader(Table(t1)->Sel([not(isnull(test.t1.c1))]))}(test.t.c1,test.t1.c1)",
+      "Dual"
+    ]
+  },
+  {
+    "Name": "TestIndexRead",
+    "Cases": null
+  }
+]

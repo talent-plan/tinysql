@@ -1,0 +1,115 @@
+// Copyright 2018 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package core
+
+import (
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/terror"
+)
+
+// error definitions.
+var (
+	ErrUnsupportedType                 = terror.ClassOptimizer.New(mysql.ErrUnsupportedType, mysql.MySQLErrName[mysql.ErrUnsupportedType])
+	ErrAnalyzeMissIndex                = terror.ClassOptimizer.New(mysql.ErrAnalyzeMissIndex, mysql.MySQLErrName[mysql.ErrAnalyzeMissIndex])
+	ErrWrongParamCount                 = terror.ClassOptimizer.New(mysql.ErrWrongParamCount, mysql.MySQLErrName[mysql.ErrWrongParamCount])
+	ErrSchemaChanged                   = terror.ClassOptimizer.New(mysql.ErrSchemaChanged, mysql.MySQLErrName[mysql.ErrSchemaChanged])
+	ErrTablenameNotAllowedHere         = terror.ClassOptimizer.New(mysql.ErrTablenameNotAllowedHere, mysql.MySQLErrName[mysql.ErrTablenameNotAllowedHere])
+	ErrNotSupportedYet                 = terror.ClassOptimizer.New(mysql.ErrNotSupportedYet, mysql.MySQLErrName[mysql.ErrNotSupportedYet])
+	ErrWrongUsage                      = terror.ClassOptimizer.New(mysql.ErrWrongUsage, mysql.MySQLErrName[mysql.ErrWrongUsage])
+	ErrUnknown                         = terror.ClassOptimizer.New(mysql.ErrUnknown, mysql.MySQLErrName[mysql.ErrUnknown])
+	ErrUnknownTable                    = terror.ClassOptimizer.New(mysql.ErrUnknownTable, mysql.MySQLErrName[mysql.ErrUnknownTable])
+	ErrWrongArguments                  = terror.ClassOptimizer.New(mysql.ErrWrongArguments, mysql.MySQLErrName[mysql.ErrWrongArguments])
+	ErrWrongNumberOfColumnsInSelect    = terror.ClassOptimizer.New(mysql.ErrWrongNumberOfColumnsInSelect, mysql.MySQLErrName[mysql.ErrWrongNumberOfColumnsInSelect])
+	ErrBadGeneratedColumn              = terror.ClassOptimizer.New(mysql.ErrBadGeneratedColumn, mysql.MySQLErrName[mysql.ErrBadGeneratedColumn])
+	ErrFieldNotInGroupBy               = terror.ClassOptimizer.New(mysql.ErrFieldNotInGroupBy, mysql.MySQLErrName[mysql.ErrFieldNotInGroupBy])
+	ErrBadTable                        = terror.ClassOptimizer.New(mysql.ErrBadTable, mysql.MySQLErrName[mysql.ErrBadTable])
+	ErrKeyDoesNotExist                 = terror.ClassOptimizer.New(mysql.ErrKeyDoesNotExist, mysql.MySQLErrName[mysql.ErrKeyDoesNotExist])
+	ErrOperandColumns                  = terror.ClassOptimizer.New(mysql.ErrOperandColumns, mysql.MySQLErrName[mysql.ErrOperandColumns])
+	ErrInvalidGroupFuncUse             = terror.ClassOptimizer.New(mysql.ErrInvalidGroupFuncUse, mysql.MySQLErrName[mysql.ErrInvalidGroupFuncUse])
+	ErrIllegalReference                = terror.ClassOptimizer.New(mysql.ErrIllegalReference, mysql.MySQLErrName[mysql.ErrIllegalReference])
+	ErrNoDB                            = terror.ClassOptimizer.New(mysql.ErrNoDB, mysql.MySQLErrName[mysql.ErrNoDB])
+	ErrUnknownExplainFormat            = terror.ClassOptimizer.New(mysql.ErrUnknownExplainFormat, mysql.MySQLErrName[mysql.ErrUnknownExplainFormat])
+	ErrWrongGroupField                 = terror.ClassOptimizer.New(mysql.ErrWrongGroupField, mysql.MySQLErrName[mysql.ErrWrongGroupField])
+	ErrDupFieldName                    = terror.ClassOptimizer.New(mysql.ErrDupFieldName, mysql.MySQLErrName[mysql.ErrDupFieldName])
+	ErrNonUpdatableTable               = terror.ClassOptimizer.New(mysql.ErrNonUpdatableTable, mysql.MySQLErrName[mysql.ErrNonUpdatableTable])
+	ErrInternal                        = terror.ClassOptimizer.New(mysql.ErrInternal, mysql.MySQLErrName[mysql.ErrInternal])
+	ErrNonUniqTable                    = terror.ClassOptimizer.New(mysql.ErrNonuniqTable, mysql.MySQLErrName[mysql.ErrNonuniqTable])
+	ErrPartitionClauseOnNonpartitioned = terror.ClassOptimizer.New(mysql.ErrPartitionClauseOnNonpartitioned, mysql.MySQLErrName[mysql.ErrPartitionClauseOnNonpartitioned])
+	ErrUnsupportedOnGeneratedColumn    = terror.ClassOptimizer.New(mysql.ErrUnsupportedOnGeneratedColumn, mysql.MySQLErrName[mysql.ErrUnsupportedOnGeneratedColumn])
+	ErrPrivilegeCheckFail              = terror.ClassOptimizer.New(mysql.ErrPrivilegeCheckFail, mysql.MySQLErrName[mysql.ErrPrivilegeCheckFail])
+	ErrInvalidWildCard                 = terror.ClassOptimizer.New(mysql.ErrInvalidWildCard, mysql.MySQLErrName[mysql.ErrInvalidWildCard])
+	ErrMixOfGroupFuncAndFields         = terror.ClassOptimizer.New(mysql.ErrMixOfGroupFuncAndFieldsIncompatible, mysql.MySQLErrName[mysql.ErrMixOfGroupFuncAndFieldsIncompatible])
+	ErrDBaccessDenied                  = terror.ClassOptimizer.New(mysql.ErrDBaccessDenied, mysql.MySQLErrName[mysql.ErrDBaccessDenied])
+	ErrTableaccessDenied               = terror.ClassOptimizer.New(mysql.ErrTableaccessDenied, mysql.MySQLErrName[mysql.ErrTableaccessDenied])
+	ErrSpecificAccessDenied            = terror.ClassOptimizer.New(mysql.ErrSpecificAccessDenied, mysql.MySQLErrName[mysql.ErrSpecificAccessDenied])
+	ErrViewNoExplain                   = terror.ClassOptimizer.New(mysql.ErrViewNoExplain, mysql.MySQLErrName[mysql.ErrViewNoExplain])
+	ErrWrongValueCountOnRow            = terror.ClassOptimizer.New(mysql.ErrWrongValueCountOnRow, mysql.MySQLErrName[mysql.ErrWrongValueCountOnRow])
+	ErrViewInvalid                     = terror.ClassOptimizer.New(mysql.ErrViewInvalid, mysql.MySQLErrName[mysql.ErrViewInvalid])
+	ErrNoSuchThread                    = terror.ClassOptimizer.New(mysql.ErrNoSuchThread, mysql.MySQLErrName[mysql.ErrNoSuchThread])
+	ErrUnknownColumn                   = terror.ClassOptimizer.New(mysql.ErrBadField, mysql.MySQLErrName[mysql.ErrBadField])
+	ErrCartesianProductUnsupported     = terror.ClassOptimizer.New(mysql.ErrCartesianProductUnsupported, mysql.MySQLErrName[mysql.ErrCartesianProductUnsupported])
+	ErrStmtNotFound                    = terror.ClassOptimizer.New(mysql.ErrPreparedStmtNotFound, mysql.MySQLErrName[mysql.ErrPreparedStmtNotFound])
+	ErrAmbiguous                       = terror.ClassOptimizer.New(mysql.ErrNonUniq, mysql.MySQLErrName[mysql.ErrNonUniq])
+	// Since we cannot know if user loggined with a password, use message of ErrAccessDeniedNoPassword instead
+	ErrAccessDenied = terror.ClassOptimizer.New(mysql.ErrAccessDenied, mysql.MySQLErrName[mysql.ErrAccessDeniedNoPassword])
+)
+
+func init() {
+	mysqlErrCodeMap := map[terror.ErrCode]uint16{
+		mysql.ErrViewInvalid:                         mysql.ErrViewInvalid,
+		mysql.ErrUnknown:                             mysql.ErrUnknown,
+		mysql.ErrTablenameNotAllowedHere:             mysql.ErrTablenameNotAllowedHere,
+		mysql.ErrUnsupportedType:                     mysql.ErrUnsupportedType,
+		mysql.ErrAnalyzeMissIndex:                    mysql.ErrAnalyzeMissIndex,
+		mysql.ErrWrongParamCount:                     mysql.ErrWrongParamCount,
+		mysql.ErrSchemaChanged:                       mysql.ErrSchemaChanged,
+		mysql.ErrNotSupportedYet:                     mysql.ErrNotSupportedYet,
+		mysql.ErrWrongUsage:                          mysql.ErrWrongUsage,
+		mysql.ErrUnknownTable:                        mysql.ErrUnknownTable,
+		mysql.ErrWrongArguments:                      mysql.ErrWrongArguments,
+		mysql.ErrBadGeneratedColumn:                  mysql.ErrBadGeneratedColumn,
+		mysql.ErrFieldNotInGroupBy:                   mysql.ErrFieldNotInGroupBy,
+		mysql.ErrBadTable:                            mysql.ErrBadTable,
+		mysql.ErrKeyDoesNotExist:                     mysql.ErrKeyDoesNotExist,
+		mysql.ErrOperandColumns:                      mysql.ErrOperandColumns,
+		mysql.ErrInvalidGroupFuncUse:                 mysql.ErrInvalidGroupFuncUse,
+		mysql.ErrIllegalReference:                    mysql.ErrIllegalReference,
+		mysql.ErrNoDB:                                mysql.ErrNoDB,
+		mysql.ErrUnknownExplainFormat:                mysql.ErrUnknownExplainFormat,
+		mysql.ErrWrongGroupField:                     mysql.ErrWrongGroupField,
+		mysql.ErrDupFieldName:                        mysql.ErrDupFieldName,
+		mysql.ErrNonUpdatableTable:                   mysql.ErrNonUpdatableTable,
+		mysql.ErrInternal:                            mysql.ErrInternal,
+		mysql.ErrMixOfGroupFuncAndFieldsIncompatible: mysql.ErrMixOfGroupFuncAndFieldsIncompatible,
+		mysql.ErrWrongNumberOfColumnsInSelect:        mysql.ErrWrongNumberOfColumnsInSelect,
+		mysql.ErrWrongValueCountOnRow:                mysql.ErrWrongValueCountOnRow,
+		mysql.ErrPartitionClauseOnNonpartitioned:     mysql.ErrPartitionClauseOnNonpartitioned,
+		mysql.ErrDBaccessDenied:                      mysql.ErrDBaccessDenied,
+		mysql.ErrTableaccessDenied:                   mysql.ErrTableaccessDenied,
+		mysql.ErrSpecificAccessDenied:                mysql.ErrSpecificAccessDenied,
+		mysql.ErrViewNoExplain:                       mysql.ErrViewNoExplain,
+		mysql.ErrUnsupportedOnGeneratedColumn:        mysql.ErrUnsupportedOnGeneratedColumn,
+		mysql.ErrNoSuchThread:                        mysql.ErrNoSuchThread,
+		mysql.ErrAccessDenied:                        mysql.ErrAccessDenied,
+		mysql.ErrPrivilegeCheckFail:                  mysql.ErrPrivilegeCheckFail,
+		mysql.ErrCartesianProductUnsupported:         mysql.ErrCartesianProductUnsupported,
+		mysql.ErrPreparedStmtNotFound:                mysql.ErrPreparedStmtNotFound,
+		mysql.ErrNonUniq:                             mysql.ErrNonUniq,
+		mysql.ErrBadField:                            mysql.ErrBadField,
+		mysql.ErrNonuniqTable:                        mysql.ErrNonuniqTable,
+		mysql.ErrTooBigPrecision:                     mysql.ErrTooBigPrecision,
+		mysql.ErrInvalidWildCard:                     mysql.ErrInvalidWildCard,
+	}
+	terror.ErrClassToMySQLCodes[terror.ClassOptimizer] = mysqlErrCodeMap
+}

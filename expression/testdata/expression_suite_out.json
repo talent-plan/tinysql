@@ -1,0 +1,280 @@
+[
+  {
+    "Name": "TestOuterJoinPropConst",
+    "Cases": [
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a > t2.a and t1.a = 1",
+        "Result": [
+          "HashLeftJoin_6 33233333.33 root CARTESIAN left outer join, left cond:[eq(test.t1.a, 1)]",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 3323.33 root data:Selection_10",
+          "  └─Selection_10 3323.33 cop gt(1, test.t2.a)",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a > t2.a where t1.a = 1",
+        "Result": [
+          "HashLeftJoin_7 33233.33 root CARTESIAN left outer join",
+          "├─TableReader_10 10.00 root data:Selection_9",
+          "│ └─Selection_9 10.00 cop eq(test.t1.a, 1)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_13 3323.33 root data:Selection_12",
+          "  └─Selection_12 3323.33 cop gt(1, test.t2.a)",
+          "    └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = t2.a and t1.a > 1",
+        "Result": [
+          "HashLeftJoin_6 10000.00 root left outer join, equal:[eq(test.t1.a, test.t2.a)], left cond:[gt(test.t1.a, 1)]",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 3333.33 root data:Selection_10",
+          "  └─Selection_10 3333.33 cop gt(test.t2.a, 1), not(isnull(test.t2.a))",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = t2.a where t1.a > 1",
+        "Result": [
+          "HashLeftJoin_7 4166.67 root left outer join, equal:[eq(test.t1.a, test.t2.a)]",
+          "├─TableReader_10 3333.33 root data:Selection_9",
+          "│ └─Selection_9 3333.33 cop gt(test.t1.a, 1)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_13 3333.33 root data:Selection_12",
+          "  └─Selection_12 3333.33 cop gt(test.t2.a, 1), not(isnull(test.t2.a))",
+          "    └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a > t2.a where t2.a = 1",
+        "Result": [
+          "HashRightJoin_7 33333.33 root CARTESIAN right outer join",
+          "├─TableReader_10 3333.33 root data:Selection_9",
+          "│ └─Selection_9 3333.33 cop gt(test.t1.a, 1)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_13 10.00 root data:Selection_12",
+          "  └─Selection_12 10.00 cop eq(test.t2.a, 1)",
+          "    └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a = t2.a where t2.a > 1",
+        "Result": [
+          "HashRightJoin_7 4166.67 root right outer join, equal:[eq(test.t1.a, test.t2.a)]",
+          "├─TableReader_10 3333.33 root data:Selection_9",
+          "│ └─Selection_9 3333.33 cop gt(test.t1.a, 1), not(isnull(test.t1.a))",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_13 3333.33 root data:Selection_12",
+          "  └─Selection_12 3333.33 cop gt(test.t2.a, 1)",
+          "    └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a = t2.a and t2.a > 1",
+        "Result": [
+          "HashRightJoin_6 10000.00 root right outer join, equal:[eq(test.t1.a, test.t2.a)], right cond:gt(test.t2.a, 1)",
+          "├─TableReader_9 3333.33 root data:Selection_8",
+          "│ └─Selection_8 3333.33 cop gt(test.t1.a, 1), not(isnull(test.t1.a))",
+          "│   └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 10000.00 root data:TableScan_10",
+          "  └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a > t2.a and t2.a = 1",
+        "Result": [
+          "HashRightJoin_6 33333333.33 root CARTESIAN right outer join, right cond:eq(test.t2.a, 1)",
+          "├─TableReader_9 3333.33 root data:Selection_8",
+          "│ └─Selection_8 3333.33 cop gt(test.t1.a, 1)",
+          "│   └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 10000.00 root data:TableScan_10",
+          "  └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = t2.a and t2.a > 1",
+        "Result": [
+          "HashLeftJoin_6 10000.00 root left outer join, equal:[eq(test.t1.a, test.t2.a)]",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 3333.33 root data:Selection_10",
+          "  └─Selection_10 3333.33 cop gt(test.t2.a, 1), not(isnull(test.t2.a))",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a > t2.a and t2.a = 1",
+        "Result": [
+          "HashLeftJoin_6 100000.00 root CARTESIAN left outer join, other cond:gt(test.t1.a, test.t2.a)",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 10.00 root data:Selection_10",
+          "  └─Selection_10 10.00 cop eq(test.t2.a, 1), not(isnull(test.t2.a))",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a > t2.a and t1.a = 1",
+        "Result": [
+          "HashRightJoin_6 100000.00 root CARTESIAN right outer join, other cond:gt(test.t1.a, test.t2.a)",
+          "├─TableReader_9 10.00 root data:Selection_8",
+          "│ └─Selection_8 10.00 cop eq(test.t1.a, 1), not(isnull(test.t1.a))",
+          "│   └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 10000.00 root data:TableScan_10",
+          "  └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on t1.a = t2.a and t1.a > 1",
+        "Result": [
+          "HashRightJoin_6 10000.00 root right outer join, equal:[eq(test.t1.a, test.t2.a)]",
+          "├─TableReader_9 3333.33 root data:Selection_8",
+          "│ └─Selection_8 3333.33 cop gt(test.t1.a, 1), not(isnull(test.t1.a))",
+          "│   └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 10000.00 root data:TableScan_10",
+          "  └─TableScan_10 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = t1.b and t1.a > 1",
+        "Result": [
+          "HashLeftJoin_6 100000000.00 root CARTESIAN left outer join, left cond:[eq(test.t1.a, test.t1.b) gt(test.t1.a, 1)]",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_10 10000.00 root data:TableScan_9",
+          "  └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t2.a = t2.b and t2.a > 1",
+        "Result": [
+          "HashLeftJoin_6 26666666.67 root CARTESIAN left outer join",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 2666.67 root data:Selection_10",
+          "  └─Selection_10 2666.67 cop eq(test.t2.a, test.t2.b), gt(test.t2.a, 1)",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = 1 and false",
+        "Result": [
+          "TableDual_8 0.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = 1 and null",
+        "Result": [
+          "TableDual_8 0.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = null",
+        "Result": [
+          "TableDual_8 0.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = 1 and t1.a = 2",
+        "Result": [
+          "TableDual_8 0.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = 1 and t1.a = 1",
+        "Result": [
+          "HashLeftJoin_7 80000.00 root CARTESIAN left outer join",
+          "├─TableReader_10 10.00 root data:Selection_9",
+          "│ └─Selection_9 10.00 cop eq(test.t1.a, 1)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_12 10000.00 root data:TableScan_11",
+          "  └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on false",
+        "Result": [
+          "HashLeftJoin_6 80000000.00 root CARTESIAN left outer join",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableDual_9 8000.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 right join t2 on false",
+        "Result": [
+          "HashRightJoin_6 80000000.00 root CARTESIAN right outer join",
+          "├─TableDual_7 8000.00 root rows:0",
+          "└─TableReader_9 10000.00 root data:TableScan_8",
+          "  └─TableScan_8 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = 1 and t1.a = 2",
+        "Result": [
+          "HashLeftJoin_6 80000000.00 root CARTESIAN left outer join",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableDual_9 8000.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a =1 where t1.a = 2",
+        "Result": [
+          "HashLeftJoin_7 80000.00 root CARTESIAN left outer join",
+          "├─TableReader_10 10.00 root data:Selection_9",
+          "│ └─Selection_9 10.00 cop eq(test.t1.a, 2)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableDual_11 8000.00 root rows:0"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t2.a = 1 and t2.a = 2",
+        "Result": [
+          "HashLeftJoin_6 10000.00 root CARTESIAN left outer join",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_11 0.00 root data:Selection_10",
+          "  └─Selection_10 0.00 cop eq(test.t2.a, 1), eq(test.t2.a, 2)",
+          "    └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on t1.a = 1 or (t1.a = 2 and t1.a = 3)",
+        "Result": [
+          "HashLeftJoin_6 100000000.00 root CARTESIAN left outer join, left cond:[or(eq(test.t1.a, 1), 0)]",
+          "├─TableReader_8 10000.00 root data:TableScan_7",
+          "│ └─TableScan_7 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_10 10000.00 root data:TableScan_9",
+          "  └─TableScan_9 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 left join t2 on true where t1.a = 1 or (t1.a = 2 and t1.a = 3)",
+        "Result": [
+          "HashLeftJoin_7 80000.00 root CARTESIAN left outer join",
+          "├─TableReader_10 10.00 root data:Selection_9",
+          "│ └─Selection_9 10.00 cop or(eq(test.t1.a, 1), 0)",
+          "│   └─TableScan_8 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "└─TableReader_12 10000.00 root data:TableScan_11",
+          "  └─TableScan_11 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select * from t1 where t1.b > 1 or t1.b in (select b from t2)",
+        "Result": [
+          "Projection_7 8000.00 root test.t1.id, test.t1.a, test.t1.b",
+          "└─Selection_8 8000.00 root or(gt(test.t1.b, 1), Column#7)",
+          "  └─HashLeftJoin_9 10000.00 root CARTESIAN left outer semi join, other cond:eq(test.t1.b, test.t2.b)",
+          "    ├─TableReader_11 10000.00 root data:TableScan_10",
+          "    │ └─TableScan_10 10000.00 cop table:t1, range:[-inf,+inf], keep order:false, stats:pseudo",
+          "    └─TableReader_13 10000.00 root data:TableScan_12",
+          "      └─TableScan_12 10000.00 cop table:t2, range:[-inf,+inf], keep order:false, stats:pseudo"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,549 @@
+[
+  {
+    "Name": "TestEagerAggregation",
+    "Cases": [
+      "DataScan(t)->Aggr(sum(test.t.a),sum(plus(test.t.a, 1)),count(test.t.a))->Projection",
+      "DataScan(t)->Aggr(sum(plus(test.t.a, test.t.b)),sum(plus(test.t.a, test.t.c)),count(test.t.a))->Sel([gt(Column#13, 0)])->Projection->Sort->Projection",
+      "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
+      "Join{DataScan(a)->DataScan(b)->Aggr(sum(test.t.a),firstrow(test.t.c))}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
+      "Join{DataScan(a)->DataScan(b)->Aggr(sum(test.t.a),firstrow(test.t.c))}(test.t.c,test.t.c)->Aggr(sum(Column#26),firstrow(test.t.a))->Projection",
+      "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26),firstrow(test.t.a))->Projection",
+      "Join{DataScan(a)->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(test.t.a),sum(test.t.a))->Projection",
+      "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#27),max(test.t.a))->Projection",
+      "Join{DataScan(a)->DataScan(b)->Aggr(sum(test.t.a),firstrow(test.t.c))}(test.t.c,test.t.c)->Aggr(max(test.t.a),sum(Column#27))->Projection",
+      "Join{Join{DataScan(a)->DataScan(b)}(test.t.c,test.t.c)->DataScan(c)}(test.t.c,test.t.c)->Aggr(sum(test.t.a))->Projection",
+      "Join{DataScan(a)->DataScan(b)->Aggr(sum(test.t.a),firstrow(test.t.c))}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
+      "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
+      "Join{DataScan(a)->Aggr(sum(test.t.a),firstrow(test.t.c))->DataScan(b)}(test.t.c,test.t.c)->Aggr(sum(Column#26))->Projection",
+      "DataScan(t)->Aggr(sum(test.t.a))->Projection",
+      "Join{DataScan(a)->DataScan(b)->Aggr(max(test.t.b),firstrow(test.t.c))}(test.t.c,test.t.c)->Projection->Projection",
+      "Join{DataScan(a)->DataScan(b)}(test.t.a,test.t.a)->Aggr(max(test.t.b),max(test.t.b))->Projection",
+      "Join{DataScan(a)->DataScan(b)}(test.t.a,test.t.a)(test.t.b,test.t.b)->Aggr(max(test.t.c))->Projection",
+      "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Projection->Projection"
+    ]
+  },
+  {
+    "Name": "TestPlanBuilder",
+    "Cases": [
+      "TableReader(Table(t)->Limit)->Limit->Delete",
+      "*core.Explain",
+      "*core.Explain",
+      "*core.Explain",
+      "*core.Explain",
+      "*core.Explain",
+      "*core.Explain",
+      "*core.Explain",
+      "TableReader(Table(t))->Insert",
+      "Dual->Projection"
+    ]
+  },
+  {
+    "Name": "TestPredicatePushDown",
+    "Cases": [
+      "Join{DataScan(a)->DataScan(b)}(test.t.a,test.t.a)->Aggr(count(1))->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Projection",
+      "Join{Join{DataScan(ta)->DataScan(tb)}(test.t.a,test.t.a)->DataScan(tc)}(test.t.b,test.t.b)->Projection",
+      "Join{Join{DataScan(ta)->DataScan(tb)}(test.t.a,test.t.a)->DataScan(tc)}(test.t.b,test.t.b)->Projection",
+      "Join{DataScan(ta)->DataScan(tb)}(test.t.d,test.t.d)->Sel([or(ifnull(test.t.d, 1), isnull(test.t.d))])->Projection",
+      "DataScan(t)->Aggr(count(test.t.a),firstrow(test.t.a))->Sel([lt(Column#13, 1)])->Projection",
+      "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Projection",
+      "Dual->Projection"
+    ]
+  },
+  {
+    "Name": "TestTopNPushDown",
+    "Cases": [
+      "DataScan(t)->TopN([test.t.b],0,5)->Projection",
+      "DataScan(t)->Limit->Projection",
+      "DataScan(t)->Aggr(count(test.t.b),firstrow(test.t.a))->Limit->Projection",
+      "DataScan(t)->Aggr(count(test.t.b),firstrow(test.t.a),firstrow(test.t.c))->TopN([test.t.c],0,5)->Projection",
+      "Join{DataScan(t)->DataScan(s)}->TopN([test.t.a],0,5)->Projection",
+      "Join{DataScan(t)->DataScan(s)}->Limit->Projection",
+      "Join{DataScan(t)->TopN([test.t.a],0,5)->DataScan(s)}(test.t.a,test.t.a)->TopN([test.t.a],0,5)->Projection",
+      "Join{DataScan(t)->TopN([test.t.a],0,10)->DataScan(s)}(test.t.a,test.t.a)->TopN([test.t.a],5,5)->Projection",
+      "Join{DataScan(t)->Limit->DataScan(s)}(test.t.a,test.t.a)->Limit->Projection",
+      "Join{DataScan(t)->DataScan(s)->TopN([test.t.a],0,5)}(test.t.a,test.t.a)->TopN([test.t.a],0,5)->Projection",
+      "Join{DataScan(t)->DataScan(s)}(test.t.a,test.t.a)->TopN([test.t.a test.t.b],0,5)->Projection",
+      "Join{DataScan(t1)->TopN([test.t.b],0,5)->DataScan(t2)}(test.t.e,test.t.e)->TopN([test.t.b],0,5)->Projection",
+      "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->TopN([ifnull(test.t.h, test.t.b)],0,5)->Projection->Projection"
+    ]
+  },
+  {
+    "Name": "TestUniqueKeyInfo",
+    "Cases": [
+      {
+        "1": [
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.a"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.a"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.a"
+          ],
+          [
+            "test.t.b"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.a"
+          ],
+          [
+            "test.t.b"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.c",
+            "test.t.d",
+            "test.t.e"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.c",
+            "test.t.d",
+            "test.t.e"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "4": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.f"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.f"
+          ]
+        ],
+        "5": [
+          [
+            "test.t.f"
+          ]
+        ],
+        "6": [
+          [
+            "test.t.f"
+          ]
+        ]
+      },
+      {
+        "1": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "2": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "3": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ],
+        "4": [
+          [
+            "test.t.f"
+          ],
+          [
+            "test.t.f",
+            "test.t.g"
+          ],
+          [
+            "test.t.a"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "Name": "TestAggPrune",
+    "Cases": [
+      "DataScan(t)->Projection",
+      "DataScan(t)->Aggr(sum(test.t.b))->Projection",
+      "DataScan(t)->Projection",
+      "DataScan(t)->Projection",
+      "DataScan(t)->Projection"
+    ]
+  },
+  {
+    "Name": "TestColumnPruning",
+    "Cases": [
+      {
+        "1": [
+          "test.t.a"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a"
+        ],
+        "2": [
+          "test.t.a"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a"
+        ],
+        "2": [
+          "test.t.d"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a",
+          "test.t.d"
+        ],
+        "2": [
+          "test.t.d"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a",
+          "test.t.d"
+        ],
+        "2": [
+          "test.t.a",
+          "test.t.b",
+          "test.t.d"
+        ]
+      },
+      {
+        "1": [
+          "test.t.a",
+          "test.t.b",
+          "test.t.c"
+        ]
+      }
+    ]
+  },
+  {
+    "Name": "TestDeriveNotNullConds",
+    "Cases": [
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->Projection",
+        "Left": "[not(isnull(test.t.e))]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}->Projection",
+        "Left": "[not(isnull(test.t.e))]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->Projection",
+        "Left": "[not(isnull(test.t.e))]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->Projection",
+        "Left": "[]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}->Projection",
+        "Left": "[]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->Projection",
+        "Left": "[]",
+        "Right": "[not(isnull(test.t.e))]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.e,test.t.e)->Projection",
+        "Left": "[not(isnull(test.t.e))]",
+        "Right": "[]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Projection",
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Projection",
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Plan": "Join{DataScan(t1)->DataScan(t2)}->Projection",
+        "Left": "[]",
+        "Right": "[]"
+      }
+    ]
+  },
+  {
+    "Name": "TestJoinPredicatePushDown",
+    "Cases": [
+      {
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]",
+        "Right": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[or(eq(test.t.c, 1), eq(test.t.a, 2))]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[eq(test.t.c, 1) or(eq(test.t.a, 3), eq(test.t.a, 4))]",
+        "Right": "[or(eq(test.t.a, 3), eq(test.t.a, 4))]"
+      },
+      {
+        "Left": "[or(and(gt(test.t.a, 1), lt(test.t.a, 3)), eq(test.t.a, 2))]",
+        "Right": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]",
+        "Right": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[or(eq(test.t.c, 1), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[]",
+        "Right": "[or(or(eq(test.t.a, 3), eq(test.t.a, 4)), eq(test.t.a, 2))]"
+      },
+      {
+        "Left": "[gt(test.t.a, 1)]",
+        "Right": "[]"
+      }
+    ]
+  },
+  {
+    "Name": "TestJoinReOrder",
+    "Cases": [
+      "Join{Join{Join{Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.b)->DataScan(t3)}(test.t.a,test.t.b)->DataScan(t4)}(test.t.c,test.t.a)(test.t.c,test.t.d)->Join{DataScan(t5)->DataScan(t6)}(test.t.d,test.t.d)}->Projection",
+      "Join{Join{Join{Join{DataScan(t1)->DataScan(t8)}(test.t.a,test.t.a)->DataScan(t2)}->Join{DataScan(t3)->DataScan(t4)}}->Join{Join{DataScan(t5)->DataScan(t6)}->DataScan(t7)}}->Projection",
+      "Join{Join{Join{Join{DataScan(t5)->DataScan(t1)}(test.t.a,test.t.a)->DataScan(t2)}(test.t.a,test.t.a)->DataScan(t3)}(test.t.a,test.t.a)(test.t.a,test.t.a)->DataScan(t4)}(test.t.a,test.t.a)(test.t.a,test.t.a)(test.t.a,test.t.a)->Projection",
+      "Join{Join{Join{DataScan(t3)->DataScan(t1)}->Join{DataScan(t2)->DataScan(t4)}}->DataScan(t5)}->Projection"
+    ]
+  },
+  {
+    "Name": "TestOuterJoinEliminator",
+    "Cases": [
+      "DataScan(t1)->Aggr(max(test.t.a),min(test.t.b))->Projection",
+      "DataScan(t1)->Projection",
+      "DataScan(t2)->Projection",
+      "Join{Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->DataScan(t3)->TopN([test.t.b true],0,1)}(test.t.b,test.t.b)->TopN([test.t.b true],0,1)->Aggr(max(test.t.b))->Projection",
+      "DataScan(t1)->Projection",
+      "Join{DataScan(t1)->DataScan(t2)}(test.t.a,test.t.a)->Sort->Projection"
+    ]
+  },
+  {
+    "Name": "TestSimplifyOuterJoin",
+    "Cases": [
+      {
+        "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Sel([or(gt(test.t.c, 1), gt(test.t.c, 1))])->Projection",
+        "JoinType": "left outer join"
+      },
+      {
+        "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.b,test.t.b)->Projection",
+        "JoinType": "inner join"
+      },
+      {
+        "Best": "Join{DataScan(t1)->DataScan(t2)}(test.t.c,test.t.c)->Projection",
+        "JoinType": "inner join"
+      }
+    ]
+  },
+  {
+    "Name": "TestOuterWherePredicatePushDown",
+    "Cases": [
+      {
+        "Sel": "[or(and(eq(test.t.a, 1), isnull(test.t.a)), and(eq(test.t.a, 2), eq(test.t.a, 2)))]",
+        "Left": "[or(eq(test.t.a, 1), eq(test.t.a, 2))]",
+        "Right": "[]"
+      },
+      {
+        "Sel": "[or(and(eq(test.t.c, 1), or(eq(test.t.a, 3), eq(test.t.a, 3))), and(eq(test.t.a, 2), eq(test.t.a, 2)))]",
+        "Left": "[or(eq(test.t.c, 1), eq(test.t.a, 2))]",
+        "Right": "[]"
+      },
+      {
+        "Sel": "[or(and(eq(test.t.c, 1), or(and(eq(test.t.a, 3), eq(test.t.a, 3)), and(eq(test.t.a, 4), eq(test.t.a, 4)))), and(eq(test.t.a, 2), isnull(test.t.a)))]",
+        "Left": "[or(and(eq(test.t.c, 1), or(eq(test.t.a, 3), eq(test.t.a, 4))), eq(test.t.a, 2))]",
+        "Right": "[]"
+      }
+    ]
+  }
+]

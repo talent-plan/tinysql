@@ -1,0 +1,113 @@
+cat checklist.md
+# Following the checklist saves the reviewers' time and gets your PR reviewed faster.
+
+# Self Review
+Have you reviewed every line of your changes by yourself?
+
+# Test
+Have you added enough test cases to cover the new feature or bug fix?
+Also, add comments to describe your test cases.
+
+# Naming
+Do function names keep consistent with its behavior?
+Is it easy to infer the function's behavior by its name?
+
+# Comment
+Is there any code that confuses the reviewer?
+Add comments on them! You'll be asked to do so anyway.
+Make sure there is no syntax or spelling error in your comments.
+Some online syntax checking tools like Grammarly may be helpful.
+
+# Refactor
+Is there any way to refactor the code to make it more readable?
+If the refactoring touches a lot of existing code, send another PR to do it.
+
+# Single Purpose
+Make sure the PR does only one thing and nothing else.
+
+# Diff Size
+Make sure the diff size is no more than 500, split it into small PRs if it is too large.
+GO111MODULE=on go list -f '{{ join .Imports "\n" }}' github.com/pingcap/tidb/store/tikv | grep ^github.com/pingcap/parser$ || exit 0; exit 1
+GO111MODULE=on go build -o tools/bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
+Running in native mode.
+ok  	github.com/pingcap/tidb/config	0.028s	coverage: 44.4% of statements
+ok  	github.com/pingcap/tidb/ddl	7.268s	coverage: 76.9% of statements
+ok  	github.com/pingcap/tidb/ddl/failtest	1.698s	coverage: [no statements]
+?   	github.com/pingcap/tidb/ddl/testutil	[no test files]
+ok  	github.com/pingcap/tidb/ddl/util	1.345s	coverage: 64.4% of statements
+ok  	github.com/pingcap/tidb/distsql	0.037s	coverage: 87.3% of statements
+ok  	github.com/pingcap/tidb/domain	0.067s	coverage: 60.0% of statements
+ok  	github.com/pingcap/tidb/executor	3.869s	coverage: 74.7% of statements
+ok  	github.com/pingcap/tidb/executor/aggfuncs	0.050s	coverage: 82.6% of statements
+ok  	github.com/pingcap/tidb/executor/seqtest	0.283s	coverage: [no statements]
+ok  	github.com/pingcap/tidb/expression	6.127s	coverage: 75.6% of statements
+ok  	github.com/pingcap/tidb/expression/aggregation	0.044s	coverage: 46.7% of statements
+?   	github.com/pingcap/tidb/expression/generator/helper	[no test files]
+ok  	github.com/pingcap/tidb/infoschema	0.270s	coverage: 40.3% of statements
+ok  	github.com/pingcap/tidb/kv	0.235s	coverage: 81.8% of statements
+ok  	github.com/pingcap/tidb/kv/memdb	0.407s	coverage: 96.9% of statements
+ok  	github.com/pingcap/tidb/meta	0.036s	coverage: 85.5% of statements
+ok  	github.com/pingcap/tidb/meta/autoid	0.062s	coverage: 91.4% of statements
+ok  	github.com/pingcap/tidb/owner	12.977s	coverage: 68.4% of statements
+ok  	github.com/pingcap/tidb/parser	0.054s	coverage: 71.7% of statements
+ok  	github.com/pingcap/tidb/parser/ast	0.028s	coverage: 51.3% of statements
+ok  	github.com/pingcap/tidb/parser/charset	0.020s	coverage: 74.6% of statements
+ok  	github.com/pingcap/tidb/parser/format	0.022s	coverage: 70.9% of statements
+?   	github.com/pingcap/tidb/parser/goyacc	[no test files]
+ok  	github.com/pingcap/tidb/parser/model	0.029s	coverage: 53.5% of statements
+ok  	github.com/pingcap/tidb/parser/mysql	0.024s	coverage: 17.1% of statements
+?   	github.com/pingcap/tidb/parser/opcode	[no test files]
+ok  	github.com/pingcap/tidb/parser/terror	0.028s	coverage: 72.3% of statements
+ok  	github.com/pingcap/tidb/parser/types	0.019s	coverage: 64.0% of statements
+?   	github.com/pingcap/tidb/planner	[no test files]
+ok  	github.com/pingcap/tidb/planner/cascades	0.394s	coverage: 87.2% of statements
+ok  	github.com/pingcap/tidb/planner/core	2.246s	coverage: 78.4% of statements
+ok  	github.com/pingcap/tidb/planner/implementation	0.020s	coverage: 5.3% of statements
+ok  	github.com/pingcap/tidb/planner/memo	0.025s	coverage: 85.2% of statements
+?   	github.com/pingcap/tidb/planner/property	[no test files]
+?   	github.com/pingcap/tidb/planner/util	[no test files]
+ok  	github.com/pingcap/tidb/server	0.510s	coverage: 62.4% of statements
+ok  	github.com/pingcap/tidb/session	2.513s	coverage: 73.8% of statements
+ok  	github.com/pingcap/tidb/sessionctx	0.032s	coverage: 83.3% of statements
+ok  	github.com/pingcap/tidb/sessionctx/stmtctx	0.045s	coverage: 12.8% of statements
+ok  	github.com/pingcap/tidb/sessionctx/variable	0.035s	coverage: 36.5% of statements
+ok  	github.com/pingcap/tidb/statistics	4.599s	coverage: 81.5% of statements
+ok  	github.com/pingcap/tidb/store	5.280s	coverage: 95.5% of statements
+?   	github.com/pingcap/tidb/store/mockoracle	[no test files]
+?   	github.com/pingcap/tidb/store/mockstore	[no test files]
+ok  	github.com/pingcap/tidb/store/mockstore/mocktikv	0.141s	coverage: 36.5% of statements
+ok  	github.com/pingcap/tidb/store/tikv	31.811s	coverage: 71.3% of statements
+?   	github.com/pingcap/tidb/store/tikv/oracle	[no test files]
+ok  	github.com/pingcap/tidb/store/tikv/oracle/oracles	0.078s	coverage: 33.8% of statements
+?   	github.com/pingcap/tidb/store/tikv/tikvrpc	[no test files]
+ok  	github.com/pingcap/tidb/structure	0.046s	coverage: 85.8% of statements
+ok  	github.com/pingcap/tidb/table	0.042s	coverage: 50.0% of statements
+ok  	github.com/pingcap/tidb/table/tables	0.372s	coverage: 78.0% of statements
+ok  	github.com/pingcap/tidb/tablecodec	0.030s	coverage: 54.7% of statements
+ok  	github.com/pingcap/tidb/tidb-server	0.033s	coverage: 1.8% of statements
+ok  	github.com/pingcap/tidb/types	0.250s	coverage: 73.2% of statements
+?   	github.com/pingcap/tidb/types/parser_driver	[no test files]
+ok  	github.com/pingcap/tidb/util	0.054s	coverage: 86.9% of statements
+ok  	github.com/pingcap/tidb/util/admin	0.043s	coverage: 85.0% of statements
+ok  	github.com/pingcap/tidb/util/arena	0.026s	coverage: 100.0% of statements
+ok  	github.com/pingcap/tidb/util/chunk	0.029s	coverage: 47.8% of statements
+ok  	github.com/pingcap/tidb/util/codec	0.036s	coverage: 82.1% of statements
+ok  	github.com/pingcap/tidb/util/disjointset	0.027s	coverage: 100.0% of statements
+ok  	github.com/pingcap/tidb/util/format	0.025s	coverage: 83.6% of statements
+ok  	github.com/pingcap/tidb/util/hack	0.022s	coverage: 92.3% of statements
+ok  	github.com/pingcap/tidb/util/logutil	0.029s	coverage: 87.5% of statements
+ok  	github.com/pingcap/tidb/util/math	1.391s	coverage: 33.3% of statements
+ok  	github.com/pingcap/tidb/util/mock	0.025s	coverage: 18.1% of statements
+ok  	github.com/pingcap/tidb/util/mvmap	0.022s	coverage: 86.6% of statements
+ok  	github.com/pingcap/tidb/util/ranger	0.210s	coverage: 79.3% of statements
+?   	github.com/pingcap/tidb/util/rowDecoder	[no test files]
+ok  	github.com/pingcap/tidb/util/rowcodec	0.072s	coverage: 84.4% of statements
+ok  	github.com/pingcap/tidb/util/set	0.021s	coverage: 100.0% of statements
+?   	github.com/pingcap/tidb/util/signal	[no test files]
+?   	github.com/pingcap/tidb/util/sqlexec	[no test files]
+ok  	github.com/pingcap/tidb/util/stringutil	0.023s	coverage: 94.4% of statements
+ok  	github.com/pingcap/tidb/util/testkit	0.020s	coverage: 8.4% of statements
+?   	github.com/pingcap/tidb/util/testleak	[no test files]
+ok  	github.com/pingcap/tidb/util/testutil	0.015s	coverage: 15.3% of statements
+go generate ./...
+./tools/check/check-gogenerate.sh
