@@ -54,19 +54,19 @@
 
 ## 理解代码
 
-tablecodec 的主要代码位于 [tablecodec.go](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go)，这次我们需要关注的代码主要从 [L32](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L32) 到 [L146](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L146) 之间。
+tablecodec 的主要代码位于 [tablecodec.go](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go)，这次我们需要关注的代码主要从 [L33 到 L147](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L33-L146) 之间。
 
 代码一开始，定义了上文提到的三个常量：tablePrefix，recordPrefixSep 和 indexPrefixSep。
 
-接下来可以看到 [EncodeRowKeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L64) 和 [EncodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L86) 分别实现了上述所说的行数据和索引数据的编码。
+接下来可以看到 [EncodeRowKeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) 和 [EncodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86) 分别实现了上述所说的行数据和索引数据的编码。
 
 ## 作业描述
 
-根据上述 [EncodeRowKeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L64) 和 [EncodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L86)，实现 [DecodeRecordKey](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L72) 和 [DecodeIndexKeyPrefix](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec/tablecodec.go#L95)，注意由于参数 `key` 可能是不合法的，需要考虑错误处理。
+根据上述 [EncodeRowKeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) 和 [EncodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86)，实现 [DecodeRecordKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L72) 和 [DecodeIndexKeyPrefix](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L95)，注意由于参数 `key` 可能是不合法的，需要考虑错误处理。
 
 ## 测试
 
-通过 [tablecodec](https://github.com/pingcap-incubator/tinysql/blob/table-codec/tablecodec) 下所有测试。
+通过 [tablecodec](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec) 下所有测试。
 
 ## 评分
 
