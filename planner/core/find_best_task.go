@@ -274,6 +274,7 @@ func (ds *DataSource) skylinePruning(prop *property.PhysicalProperty) []*candida
 		// TODO: Here is the pruning phase. Will prune the access path which is must worse than others.
 		//       You'll need to implement the content in function `compareCandidates`.
 		//       And use it to prune unnecessary paths.
+		candidates = append(candidates, currentCandidate)
 	}
 	return candidates
 }

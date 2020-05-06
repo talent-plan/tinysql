@@ -14,8 +14,6 @@
 package core
 
 import (
-	"math/bits"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/ast"
