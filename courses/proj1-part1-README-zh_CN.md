@@ -32,7 +32,7 @@ TiDB> select * from person;
 4 row in set (0.00 sec)
 ```
 
-还可以制定指输出需要的列，例如：
+还可以制定只输出需要的列，例如：
 
 ```sql
 TiDB> select number,name from person;
