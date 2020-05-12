@@ -33,10 +33,10 @@ require (
 	go.uber.org/automaxprocs v1.2.0
 	go.uber.org/zap v1.12.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
-	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
 	golang.org/x/text v0.3.2
-	golang.org/x/tools v0.0.0-20191107010934-f79515f33823
+	golang.org/x/tools v0.0.0-20200509030707-2212a7e161a5
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.25.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0

@@ -3805,11 +3805,37 @@ IndexHintListOpt:
 
 JoinTable:
 	/* Use %prec to evaluate production TableRef before cross join */
+	
+	/*
+	$3 means the third argument
+	*/
+
+	/*tableName CrossJoinOption tableName*/
 	TableRef CrossOpt TableRef %prec tableRefPriority
 	{
 		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), Tp: ast.CrossJoin}
 	}
 	/* Your code here. */
+
+
+|	TableRef CrossOpt TableRef "ON" Expression
+	{	
+		/*
+		Construct a "Cross Join ON" ast.Node
+		*/
+		onCond := &ast.OnCondition{Expr: $5}
+		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode),  On: onCond, Tp:ast.CrossJoin}
+	}
+
+|	TableRef JoinType OuterOpt "JOIN" TableRef "ON" Expression
+	{	/*
+		Construct a OUTER JOIN ON ast.Node
+		*/
+		onCond := &ast.OnCondition{Expr: $7}
+		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $5.(ast.ResultSetNode), On: onCond, Tp: $2.(ast.JoinType) /*Determine JoinType by data $2(JoinType) */}
+	}
+
+
 
 JoinType:
 	"LEFT"

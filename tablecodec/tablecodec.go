@@ -28,6 +28,8 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
+
+	"fmt"
 )
 
 var (
@@ -70,9 +72,44 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 }
 
 // DecodeRecordKey decodes the key and gets the tableID, handle.
+// This function is to check Extract information from "t{tableID}_r{handle}", you need to get information of 
+// tableID and handle number
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
-	/* Your code here */
-	return
+	
+	// check table Prefix 
+	if !key.HasPrefix(tablePrefix){
+		return 0, 0, fmt.Errorf("Prefix not match")
+	}
+
+	
+	// copy key to rem
+	rem := make([]byte, len([]byte(key))+1) // + 1?
+	copy(rem, key)
+
+	// discard the first prefix
+	rem = rem[tablePrefixLength:]
+	
+	// decode the tableID
+	rem, tableID, err = codec.DecodeInt(rem)
+	if err != nil{
+		return 0, 0, err
+	}
+
+	// check record prefix
+	if !kv.Key(rem).HasPrefix(recordPrefixSep){
+		return 0, 0, fmt.Errorf("Prefix not match")
+	}
+
+	// discard the record prefix
+	rem = rem[recordPrefixSepLength: ]
+
+	// decode the handle number
+	_, handle, err = codec.DecodeInt(rem)
+	if err != nil{
+		return 0, 0, err
+	}
+	
+	return tableID, handle, err
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -93,8 +130,34 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 }
 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
+// kv.Key is the Key Structure of KV storage engine, type []byte
+// The goal of this function is to extract some information form a []byte key
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+
+	// Discard the "t" prefix, 1 byte
+	rem := key[1:]
+
+	// use DecodeInt to decode the tableID from the first 8 byte
+	rem, tableID, err = codec.DecodeInt(rem)
+	if err != nil {
+		return 0, 0, nil, err 
+	}
+
+	// Discard the indexPrefixSep 
+	rem = rem[len(indexPrefixSep):]
+
+	// Decode indexID
+	rem, indexID, err = codec.DecodeInt(rem)
+	if err != nil{
+		return 0, 0, nil, err
+	}
+
+	// Remain part is indexValues
+	indexValues = make([]byte, len(rem)) // + 1?
+	copy(indexValues, rem)
+
+	
 	return tableID, indexID, indexValues, nil
 }
 
