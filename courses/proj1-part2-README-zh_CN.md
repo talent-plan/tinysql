@@ -31,7 +31,7 @@
 每行数据按照如下规则进行编码成 Key-Value pair：
 
 ```
-    Key： tablePrefix_recordPrefixSep_tableID_rowID
+    Key： tablePrefix_tableID_recordPrefixSep_rowID
     Value: [col1, col2, col3, col4]
 ```
 
@@ -39,14 +39,14 @@
 对于索引，会为每一个索引分配表内唯一的 indexID，然后按照如下规则编码成 Key-Value pair：
 
 ```
-    Key: tablePrefix_indexPrefixSep_tableID_indexID_indexColumnsValue
+    Key: tablePrefix_tableID_indexPrefixSep_indexID_indexColumnsValue
     Value: rowID
 ```
 
 当然，我们还需要考虑非唯一索引，这个时候上面的方法就行不通了，我们需要将 rowID 也编码进 Key 里使之成为唯一的：
 
 ```
-   Key: tablePrefix_indexPrefixSep_tableID_indexID_ColumnsValue_rowID
+   Key: tablePrefix_tableID_indexPrefixSep_indexID_ColumnsValue_rowID
    Value：null
 ```
 
