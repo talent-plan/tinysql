@@ -85,7 +85,7 @@ func appendTableIndexPrefix(buf []byte, tableID int64) []byte {
 
 // EncodeIndexSeekKey encodes an index value to kv.Key.
 func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key {
-	key := make([]byte, 0, prefixLen+IdLen+len(encodedValue))
+	key := make([]byte, 0, prefixLen+idLen+len(encodedValue))
 	key = appendTableIndexPrefix(key, tableID)
 	key = codec.EncodeInt(key, idxID)
 	key = append(key, encodedValue...)
