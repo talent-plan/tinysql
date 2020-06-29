@@ -119,7 +119,7 @@ testSuite:
 clean:
 	$(GO) clean -i ./...
 	rm -rf *.out
-	rm -rf parser
+	cd parser && make clean
 
 # Split tests for CI to run `make test` in parallel.
 test: test_part_1 test_part_2
