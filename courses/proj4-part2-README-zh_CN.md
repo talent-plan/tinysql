@@ -29,7 +29,7 @@
 
 ### Skyline pruning
 
-你可以在 [TiDB proposal](https://github.com/pingcap/tidb/blob/master/docs/design/2019-01-25-skyline-pruning.md) 以及 [Skyline pruning operator](http://skylineresearch.in/skylineintro/The_Skyline_Operator.pdf) 来了解其理论基础。
+你可以在 [TiDB proposal](https://github.com/pingcap/tidb/blob/master/docs/design/2019-01-25-skyline-pruning.md) 以及 [Skyline pruning operator](http://www.cs.ust.hk/~dimitris/PAPERS/SIGMOD03-Skyline.pdf) 来了解其理论基础。
 
 这是一个启发式规则的筛选，用来筛除一些一定会差的选择分支。具体的筛选要求在 TiDB proposal 以及 `TODO` 注释的解释中有更详细的说明。你需要实现并通过 `TestSkylinePruning` 中的所有测试。实现的位置为 `find_best_task.go` 的 TODO 内容。
 
