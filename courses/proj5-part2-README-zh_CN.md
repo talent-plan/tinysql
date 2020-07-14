@@ -3,7 +3,7 @@
 ## 概览
 
 在这一小节我们将学习 Hash Join 及其实现，并且从这一小节开始我们将接触并发计算
-。Hash Join 是实现 Join 的一种常见方式，除此之外 TinySQL 还实现了与 Merge Sort 思想较类似的 [Merge Join](https://github.com/pingcap-incubator/tinysql/blob/master/executor/merge_join.go#L24)，感兴趣可以自行阅读。
+。Hash Join 是实现 Join 的一种常见方式，除此之外 TinySQL 还实现了与 Merge Sort 思想较类似的 [Merge Join](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/executor/merge_join.go#L24)，感兴趣可以自行阅读。
 
 ## Hash Join 算法简介
 
