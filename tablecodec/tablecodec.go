@@ -445,7 +445,6 @@ func DecodeIndexHandle(key, value []byte, colsLen int, pkTp *types.FieldType) (i
 			return 0, errors.Trace(err)
 		}
 		return d.GetInt64(), nil
-
 	} else if len(value) >= 8 {
 		return DecodeIndexValueAsHandle(value)
 	}
