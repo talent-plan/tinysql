@@ -43,7 +43,7 @@
     Value: rowID
 ```
 
-当然，我们还需要考虑非唯一索引，这个时候上面的方法就行不通了，我们需要将 rowID 也编码进 Key 里使之成为唯一的：
+当然，我们还需要考虑非唯一索引，这个时候上面的方法就行不通了，我们需要将 rowID 也编码进 Key 里使之成为非唯一的：
 
 ```
    Key: tablePrefix_tableID_indexPrefixSep_indexID_ColumnsValue_rowID
