@@ -32,7 +32,7 @@ TiDB> select * from person;
 4 row in set (0.00 sec)
 ```
 
-还可以制定只输出需要的列，例如：
+还可以指定只输出需要的列，例如：
 
 ```sql
 TiDB> select number,name from person;
@@ -63,7 +63,7 @@ TiDB> select name, birthday from person where region = 'north';
 
 通过 where 语句以及各种条件的组合，我们可以只得到满足某些信息的行。
 
-有些时候，我们还需要一些概括性的数据，例如表里满足某个条件的一共有多少行，这个时候我们需要聚合函数来计概括后的信息：
+有些时候，我们还需要一些概括性的数据，例如表里满足某个条件的一共有多少行，这个时候我们需要聚合函数来统计概括后的信息：
 
 
 ```sql
