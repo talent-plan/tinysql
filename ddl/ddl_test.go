@@ -41,8 +41,8 @@ import (
 type DDLForTest interface {
 	// SetHook sets the hook.
 	SetHook(h Callback)
-	// SetInterceptoror sets the interceptor.
-	SetInterceptoror(h Interceptor)
+	// SetInterceptor sets the interceptor.
+	SetInterceptor(h Interceptor)
 }
 
 // SetHook implements DDL.SetHook interface.
@@ -53,8 +53,8 @@ func (d *ddl) SetHook(h Callback) {
 	d.mu.hook = h
 }
 
-// SetInterceptoror implements DDL.SetInterceptoror interface.
-func (d *ddl) SetInterceptoror(i Interceptor) {
+// SetInterceptor implements DDL.SetInterceptor interface.
+func (d *ddl) SetInterceptor(i Interceptor) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
