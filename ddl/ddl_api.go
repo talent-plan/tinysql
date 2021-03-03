@@ -754,7 +754,7 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		//check if the index is primary or uniqiue.
+		//check if the index is primary or unique.
 		switch constr.Tp {
 		case ast.ConstraintPrimaryKey:
 			idxInfo.Primary = true
@@ -905,7 +905,7 @@ func isIgnorableSpec(tp ast.AlterTableType) bool {
 }
 
 // resolveAlterTableSpec resolves alter table algorithm and removes ignore table spec in specs.
-// returns valied specs, and the occurred error.
+// returns valid specs, and the occurred error.
 func resolveAlterTableSpec(ctx sessionctx.Context, specs []*ast.AlterTableSpec) ([]*ast.AlterTableSpec, error) {
 	validSpecs := make([]*ast.AlterTableSpec, 0, len(specs))
 	for _, spec := range specs {
@@ -1254,9 +1254,7 @@ func setDefaultValue(ctx sessionctx.Context, col *table.Column, option *ast.Colu
 	if hasDefaultValue, value, err = checkColumnDefaultValue(ctx, col, value); err != nil {
 		return hasDefaultValue, errors.Trace(err)
 	}
-	if err != nil {
-		return hasDefaultValue, errors.Trace(err)
-	}
+
 	err = col.SetDefaultValue(value)
 	if err != nil {
 		return hasDefaultValue, errors.Trace(err)

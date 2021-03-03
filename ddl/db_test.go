@@ -69,7 +69,7 @@ func setUpSuite(s *testDBSuite, c *C) {
 	session.DisableStats4Test()
 	s.schemaName = "test_db"
 	s.autoIDStep = autoid.GetStep()
-	ddl.WaitTimeWhenErrorOccured = 0
+	ddl.WaitTimeWhenErrorOccurred = 0
 
 	s.cluster = mocktikv.NewCluster()
 	mocktikv.BootstrapWithSingleStore(s.cluster)

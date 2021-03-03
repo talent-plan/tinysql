@@ -61,7 +61,7 @@ type testStateChangeSuiteBase struct {
 
 func (s *testStateChangeSuiteBase) SetUpSuite(c *C) {
 	s.lease = 200 * time.Millisecond
-	ddl.WaitTimeWhenErrorOccured = 1 * time.Microsecond
+	ddl.WaitTimeWhenErrorOccurred = 1 * time.Microsecond
 	var err error
 	s.store, err = mockstore.NewMockTikvStore()
 	c.Assert(err, IsNil)
