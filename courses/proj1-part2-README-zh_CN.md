@@ -68,6 +68,9 @@ tablecodec 的主要代码位于 [tablecodec.go](https://github.com/pingcap-incu
 
 通过 [tablecodec](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec) 下所有测试。
 
+你可以通过 `go test package_path -check.f func_name` 来跑一个具体的函数。以 `TestDecodeIndexKey` 为例，
+你可以使用 `go test github.com/pingcap/tidb/tablecodec -check.f TestDecodeIndexKey` 来跑这个具体的函数。
+
 ## 评分
 
 `TestDecodeIndexKey`  和 `TestRecordKey` 各占 50% 分数。
