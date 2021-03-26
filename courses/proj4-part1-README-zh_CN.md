@@ -8,16 +8,16 @@
 
 System R 两阶段模型可以说是现代数据库基于代价优化（Cost based optimize）的优化器的鼻祖。TiDB 目前生产环境中仍然采用的这一框架。
 
-[DoOptimize](https://github.com/pingcap-incubator/tinysql/blob/master/planner/core/optimizer.go#L76) 是优化器的入口。这里我们会传入原始的 Plan tree。然后在经过逻辑优化和物理优化后，返回一个最终的 Physical plan tree。
+[DoOptimize](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/planner/core/optimizer.go#L76) 是优化器的入口。这里我们会传入原始的 Plan tree。然后在经过逻辑优化和物理优化后，返回一个最终的 Physical plan tree。
 
 ### 逻辑优化
 
-[logicalOpimize](https://github.com/pingcap-incubator/tinysql/blob/master/planner/core/optimizer.go#L95) 是逻辑优化的入口。我们会顺序遍历所有的优化规则，每个优化规则会遍历整个 plan tree，同时对 plan tree 做一些修改，最后返回修改过的 plan tree。
+[logicalOpimize](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/planner/core/optimizer.go#L95) 是逻辑优化的入口。我们会顺序遍历所有的优化规则，每个优化规则会遍历整个 plan tree，同时对 plan tree 做一些修改，最后返回修改过的 plan tree。
 
 
 ### 物理优化
 
-[physicalOptimize](https://github.com/pingcap-incubator/tinysql/blob/master/planner/core/optimizer.go#L112) 是物理优化的入口。这个过程实际上是一个记忆化搜索的过程。
+[physicalOptimize](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/planner/core/optimizer.go#L112) 是物理优化的入口。这个过程实际上是一个记忆化搜索的过程。
 
 其记忆化搜索的过程大致可以用如下伪代码表示：
 
@@ -50,7 +50,7 @@ func findBestTask(p LogicalPlan, prop OrderProp) PhysicalPlan {
 }
 ```
 
-实际的执行代码可以在[findBestTask](https://github.com/pingcap-incubator/tinysql/blob/master/planner/core/find_best_task.go#L95) 中查看，其逻辑和上述伪代码基本一致。
+实际的执行代码可以在[findBestTask](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/planner/core/find_best_task.go#L95) 中查看，其逻辑和上述伪代码基本一致。
 
 ## Cascades 框架
 
