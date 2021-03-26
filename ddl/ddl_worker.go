@@ -38,8 +38,8 @@ import (
 var (
 	// ddlWorkerID is used for generating the next DDL worker ID.
 	ddlWorkerID = int32(0)
-	// WaitTimeWhenErrorOccured is waiting interval when processing DDL jobs encounter errors.
-	WaitTimeWhenErrorOccured = 1 * time.Second
+	// WaitTimeWhenErrorOccurred is waiting interval when processing DDL jobs encounter errors.
+	WaitTimeWhenErrorOccurred = 1 * time.Second
 )
 
 type workerType byte
@@ -372,8 +372,8 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 			// wait a while to retry again. If we don't wait here, DDL will retry this job immediately,
 			// which may act like a deadlock.
 			logutil.Logger(w.logCtx).Info("[ddl] run DDL job failed, sleeps a while then retries it.",
-				zap.Duration("waitTime", WaitTimeWhenErrorOccured), zap.Error(runJobErr))
-			time.Sleep(WaitTimeWhenErrorOccured)
+				zap.Duration("waitTime", WaitTimeWhenErrorOccurred), zap.Error(runJobErr))
+			time.Sleep(WaitTimeWhenErrorOccurred)
 		}
 
 		if err != nil {
@@ -582,7 +582,7 @@ func (w *worker) waitSchemaChanged(ctx context.Context, d *ddlCtx, waitTime time
 }
 
 // waitSchemaSynced handles the following situation:
-// If the job enters a new state, and the worker crashs when it's in the process of waiting for 2 * lease time,
+// If the job enters a new state, and the worker crashes when it's in the process of waiting for 2 * lease time,
 // Then the worker restarts quickly, we may run the job immediately again,
 // but in this case we don't wait enough 2 * lease time to let other servers update the schema.
 // So here we get the latest schema version to make sure all servers' schema version update to the latest schema version

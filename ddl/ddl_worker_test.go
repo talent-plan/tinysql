@@ -40,7 +40,7 @@ type testDDLSuite struct{}
 const testLease = 5 * time.Millisecond
 
 func (s *testDDLSuite) SetUpSuite(c *C) {
-	WaitTimeWhenErrorOccured = 1 * time.Microsecond
+	WaitTimeWhenErrorOccurred = 1 * time.Microsecond
 }
 
 func (s *testDDLSuite) TearDownSuite(c *C) {

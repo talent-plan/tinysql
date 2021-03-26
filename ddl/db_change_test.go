@@ -61,7 +61,7 @@ type testStateChangeSuiteBase struct {
 
 func (s *testStateChangeSuiteBase) SetUpSuite(c *C) {
 	s.lease = 200 * time.Millisecond
-	ddl.WaitTimeWhenErrorOccured = 1 * time.Microsecond
+	ddl.WaitTimeWhenErrorOccurred = 1 * time.Microsecond
 	var err error
 	s.store, err = mockstore.NewMockTikvStore()
 	c.Assert(err, IsNil)
@@ -505,7 +505,7 @@ func (s *testStateChangeSuite) TestParallelDDLBeforeRunDDLJob(c *C) {
 		return info
 	}
 	d := s.dom.DDL()
-	d.(ddl.DDLForTest).SetInterceptoror(intercept)
+	d.(ddl.DDLForTest).SetInterceptor(intercept)
 
 	// Make sure the connection 1 executes a SQL before the connection 2.
 	// And the connection 2 executes a SQL with an outdated information schema.
@@ -531,5 +531,5 @@ func (s *testStateChangeSuite) TestParallelDDLBeforeRunDDLJob(c *C) {
 	wg.Wait()
 
 	intercept = &ddl.TestInterceptor{}
-	d.(ddl.DDLForTest).SetInterceptoror(intercept)
+	d.(ddl.DDLForTest).SetInterceptor(intercept)
 }

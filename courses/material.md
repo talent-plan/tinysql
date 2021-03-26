@@ -8,8 +8,8 @@
 
 ##### 课程资料
 
-- https://cs186berkeley.net/static/notes/n0-SQLPart1.pdf
-- https://cs186berkeley.net/static/notes/n1-SQLPart2.pdf
+- https://cs186berkeley.net/resources/static/notes/n00-SQLPart1.pdf
+- https://cs186berkeley.net/resources/static/notes/n01-SQLPart2.pdf
 - https://15445.courses.cs.cmu.edu/fall2019/notes/01-introduction.pdf
 - https://15445.courses.cs.cmu.edu/fall2019/notes/02-advancedsql.pdf
 
