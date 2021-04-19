@@ -48,7 +48,7 @@ t10_i1_30_3 --> null
 
 ### 字节序
 
-<img src="/Users/lonekriss/Library/Application Support/typora-user-images/image-20210418221638356.png" alt="image-20210418221638356" style="zoom:50%;" />
+<img src="https://tva1.sinaimg.cn/large/008eGmZEgy1gppcx3xc89j30ok0ougp9.jpg" alt="image-20210418221638356" style="zoom:50%;" />
 
 
 
@@ -164,5 +164,5 @@ recor
 
 index
 
-![image-20210419205056982](/Users/lonekriss/Library/Application Support/typora-user-images/image-20210419205056982.png)
+![image-20210419205056982](https://tva1.sinaimg.cn/large/008eGmZEgy1gppcwxwty2j31aa01ot96.jpg)
 
