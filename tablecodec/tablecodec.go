@@ -63,16 +63,22 @@ func appendTableRecordPrefix(buf []byte, tableID int64) []byte {
 
 // EncodeRowKeyWithHandle encodes the table id, row handle into a kv.Key
 func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
-	buf := make([]byte, 0, RecordRowKeyLen)
-	buf = appendTableRecordPrefix(buf, tableID)
-	buf = codec.EncodeInt(buf, handle)
+	buf := make([]byte, 0, RecordRowKeyLen)     //容量为RecordRowKeyLen，初始化为0
+	buf = appendTableRecordPrefix(buf, tableID) //buf为 编码后的 t[tableID]_r
+	buf = codec.EncodeInt(buf, handle)          // 将tableid添加到buff后
 	return buf
 }
 
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
-	return
+	if len(key) != RecordRowKeyLen || !hasTablePrefix(key) || !hasRecordPrefixSep(key[prefixLen-2:]) {
+		return 0, 0, errInvalidKey.GenWithStack("invalid key - %q", key)
+	}
+	key, tid, _ := codec.DecodeInt(key[tablePrefixLength:])
+	key, _handle, _ := codec.DecodeInt(key[recordPrefixSepLength:])
+
+	return tid, _handle, nil
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -95,7 +101,13 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
-	return tableID, indexID, indexValues, nil
+	_tableID, _indexID, _, err := DecodeKeyHead(key)
+
+	if err != nil {
+		return 0, 0, nil, errInvalidKey.GenWithStack("invalid key - %q", key)
+	}
+	var values []byte = key[19:]
+	return _tableID, _indexID, values, nil
 }
 
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.

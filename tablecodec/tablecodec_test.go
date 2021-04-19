@@ -111,6 +111,7 @@ func (s *testTableCodecSuite) TestIndexKey(c *C) {
 func (s *testTableCodecSuite) TestRecordKey(c *C) {
 	tableID := int64(55)
 	tableKey := EncodeRowKeyWithHandle(tableID, math.MaxUint32)
+	fmt.Println(tableKey)
 	tTableID, _, isRecordKey, err := DecodeKeyHead(tableKey)
 	c.Assert(err, IsNil)
 	c.Assert(tTableID, Equals, tableID)
