@@ -3,13 +3,13 @@
 ## 概览
 
 在这一小节我们将学习 Hash Join 及其实现，并且从这一小节开始我们将接触并发计算
-。Hash Join 是实现 Join 的一种常见方式，除此之外 TinySQL 还实现了与 Merge Sort 思想较类似的 [Merge Join](https://github.com/pingcap-incubator/tinysql/blob/master/executor/merge_join.go#L24)，感兴趣可以自行阅读。
+。Hash Join 是实现 Join 的一种常见方式，除此之外 TinySQL 还实现了与 Merge Sort 思想较类似的 [Merge Join](https://github.com/pingcap-incubator/tinysql/blob/df75611ce926442bd6074b0f32b1351ca4aad925/executor/merge_join.go#L24)，感兴趣可以自行阅读。
 
 ## Hash Join 算法简介
 
 简单来说，对于两张表的 Hash Join，我们会选择选择一个内表来构造哈希表，然后对外 表的每一行数据都去这个哈希表中查找是否有匹配的数据。那怎样提高 Hash Join 的效率呢？在建立好哈希表后，实际上哈希表就是只读的了，那么查找匹配的过程其实是可以并行起来的，也就是说我们可以用多个线程同时查哈希表：
 
-![Hash Join 1](./imgs/proj3-part2-1.png)
+![Hash Join 1](imgs/proj5-part2-1.png)
 
 这样可以大大提高 Hash Join 的效率。
 
@@ -36,7 +36,7 @@
 
 Outer Fetcher 是一个后台 goroutine，他的主要计算逻辑在 fetchOuterSideChunks 这个函数中。它会不断的读大表的数据，并将获得的 Outer 表的数据分发给各个 Join Worker。这里多线程之间的资源交互可以用下图表示：
 
-![Hash Join 2](./imgs/proj3-part2-2.jpg)
+![Hash Join 2](imgs/proj5-part2-2.jpg)
 
 上图中涉及到了两个 channel：
 
@@ -55,7 +55,7 @@ Outer Fetcher 是一个后台 goroutine，他的主要计算逻辑在 fetchOuter
 
 每个 Join Worker 都是一个后台 goroutine，主要计算逻辑在 runJoinWorker 这个函数中。
 
-![Hash Join 3](./imgs/proj3-part2-3.jpg)
+![Hash Join 3](imgs/proj5-part2-3.jpg)
 
 上图中涉及到两个 channel：
 
