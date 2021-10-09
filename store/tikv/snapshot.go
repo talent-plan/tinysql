@@ -142,21 +142,14 @@ func (s *tikvSnapshot) get(bo *Backoffer, k kv.Key) ([]byte, error) {
 		cmdGetResp := resp.Resp.(*pb.GetResponse)
 		val := cmdGetResp.GetValue()
 		if keyErr := cmdGetResp.GetError(); keyErr != nil {
-			lock, err := extractLockFromKeyErr(keyErr)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			msBeforeExpired, err := cli.ResolveLocks(bo, s.version.Ver, []*Lock{lock})
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if msBeforeExpired > 0 {
-				err = bo.BackoffWithMaxSleep(boTxnLockFast, int(msBeforeExpired), errors.New(keyErr.String()))
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
-			}
+			// You need to handle the key error here
+			// If the key error is a lock, there are 2 possible cases:
+			//   1. The transaction is during commit, wait for a while and retry.
+			//   2. The transaction is dead with some locks left, resolve it.
+			// YOUR CODE HERE (proj6).
+			panic("YOUR CODE HERE")
 			continue
+
 		}
 		return val, nil
 	}

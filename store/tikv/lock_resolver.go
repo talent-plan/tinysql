@@ -292,11 +292,10 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 	// 2.3 No lock -- concurrence prewrite.
 
 	var status TxnStatus
-	req := tikvrpc.NewRequest(tikvrpc.CmdCheckTxnStatus, &kvrpcpb.CheckTxnStatusRequest{
-		PrimaryKey: primary,
-		LockTs:     txnID,
-		CurrentTs:  currentTS,
-	})
+	var req *tikvrpc.Request
+	// build the request
+	// YOUR CODE HERE (proj6).
+	panic("YOUR CODE HERE")
 	for {
 		loc, err := lr.store.GetRegionCache().LocateKey(bo, primary)
 		if err != nil {
@@ -321,17 +320,17 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 			return status, errors.Trace(ErrBodyMissing)
 		}
 		cmdResp := resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
-		status.action = cmdResp.Action
-		if cmdResp.LockTtl != 0 {
-			status.ttl = cmdResp.LockTtl
-		} else {
-			status.commitTS = cmdResp.CommitVersion
-			lr.saveResolved(txnID, status)
-		}
+		// Assign status with response
+		// YOUR CODE HERE (proj6).
+		panic("YOUR CODE HERE")
 		return status, nil
 	}
+
 }
 
+// resolveLock resolve the lock for the given transaction status which is checked from primary key.
+// If status is committed, the secondary should also be committed.
+// If status is not committed and the
 func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cleanRegions map[RegionVerID]struct{}) error {
 	cleanWholeRegion := l.TxnSize >= bigTxnThreshold
 	for {
@@ -342,13 +341,13 @@ func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cl
 		if _, ok := cleanRegions[loc.Region]; ok {
 			return nil
 		}
-		lreq := &kvrpcpb.ResolveLockRequest{
-			StartVersion: l.TxnID,
-		}
-		if status.IsCommitted() {
-			lreq.CommitVersion = status.CommitTS()
-		}
-		req := tikvrpc.NewRequest(tikvrpc.CmdResolveLock, lreq)
+
+		var req *tikvrpc.Request
+
+		// build the request
+		// YOUR CODE HERE (lab3).
+		panic("YOUR CODE HERE")
+
 		resp, err := lr.store.SendReq(bo, req, loc.Region, readTimeoutShort)
 		if err != nil {
 			return errors.Trace(err)
@@ -378,4 +377,5 @@ func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cl
 		}
 		return nil
 	}
+
 }
