@@ -346,7 +346,7 @@ func (lr *LockResolver) resolveLock(bo *Backoffer, l *Lock, status TxnStatus, cl
 		var req *tikvrpc.Request
 
 		// build the request
-		// YOUR CODE HERE (lab3).
+		// YOUR CODE HERE (proj6).
 		panic("YOUR CODE HERE")
 
 		resp, err := lr.store.SendReq(bo, req, loc.Region, readTimeoutShort)
