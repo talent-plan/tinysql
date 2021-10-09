@@ -420,7 +420,7 @@ func (c *twoPhaseCommitter) getUndeterminedErr() error {
 
 func (actionCommit) handleSingleBatch(c *twoPhaseCommitter, bo *Backoffer, batch batchKeys) error {
 	// follow actionPrewrite.handleSingleBatch, build the commit request
-	var resp *tikvrpc.Response
+	var sender *RegionRequestSender
 	var err error
 	// build and send the commit request
 	// YOUR CODE HERE (proj6).

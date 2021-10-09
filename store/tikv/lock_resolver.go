@@ -319,7 +319,8 @@ func (lr *LockResolver) getTxnStatus(bo *Backoffer, txnID uint64, primary []byte
 		if resp.Resp == nil {
 			return status, errors.Trace(ErrBodyMissing)
 		}
-		cmdResp := resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
+		_ = resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
+
 		// Assign status with response
 		// YOUR CODE HERE (proj6).
 		panic("YOUR CODE HERE")

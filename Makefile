@@ -269,5 +269,5 @@ vectorized-bench:
 
 
 proj6: failpoint-enable
-	go test -timeout 600s ./store/tikv
+	go test -timeout 600s ./store/tikv -mockStore=false
 	@$(FAILPOINT_DISABLE)
