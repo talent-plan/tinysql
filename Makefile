@@ -42,10 +42,10 @@ ifeq ("$(WITH_RACE)", "1")
 endif
 
 buildsucc:
-	@echo Build TiDB Server successfully!
+	@echo Build TinySQL Server successfully!
 
 server:
-	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tidb-server tidb-server/main.go
+	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tinysql-server tinysql-server/main.go
 
 fmt:
 	@echo "gofmt (simplify)"

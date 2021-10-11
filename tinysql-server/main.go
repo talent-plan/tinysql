@@ -15,7 +15,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"tinysql/parser/terror"
@@ -24,7 +23,6 @@ import (
 
 func main() {
 	server := createServer()
-	fmt.Println("[main]")
 	terror.MustNil(server.Run())
 }
 
