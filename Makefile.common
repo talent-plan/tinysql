@@ -1,0 +1,67 @@
+# Copyright 2021 PingCAP, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+PROJECT=tinysql
+GOPATH ?= $(shell go env GOPATH)
+P=8
+
+# Ensure GOPATH is set before running build process.
+ifeq "$(GOPATH)" ""
+  $(error Please set the environment variable GOPATH before running `make`)
+endif
+FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1 } }'
+
+CURDIR := $(shell pwd)
+path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin
+export PATH := $(path_to_add):$(PATH)
+
+GO              := GO111MODULE=on go
+GOBUILD         := $(GO) build $(BUILD_FLAG) -tags codes
+GOBUILDCOVERAGE := GOPATH=$(GOPATH) cd tinysql-server; $(GO) test -coverpkg="../..." -c .
+GOTEST          := $(GO) test -p $(P)
+OVERALLS        := GO111MODULE=on overalls
+STATICCHECK     := GO111MODULE=on staticcheck
+
+ARCH      := "`uname -s`"
+LINUX     := "Linux"
+MAC       := "Darwin"
+PACKAGE_LIST  := go list ./...
+PACKAGES  ?= $$($(PACKAGE_LIST))
+PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|$(PROJECT)/||'
+FILES     := $$(find $$($(PACKAGE_DIRECTORIES)) -name "*.go")
+UNCONVERT_PACKAGES_LIST := go list ./...| grep -vE "lightning\/checkpoints|lightning\/manual|lightning\/common"
+UNCONVERT_PACKAGES := $$($(UNCONVERT_PACKAGES_LIST))
+
+FAILPOINT_ENABLE  := $$(find $$PWD/ -type d | grep -vE "(\.git|tools)" | xargs tools/bin/failpoint-ctl enable)
+FAILPOINT_DISABLE := $$(find $$PWD/ -type d | grep -vE "(\.git|tools)" | xargs tools/bin/failpoint-ctl disable)
+
+CHECK_LDFLAGS += $(LDFLAGS) ${TEST_LDFLAGS}
+
+TARGET = ""
+
+# VB = Vector Benchmark
+VB_FILE =
+VB_FUNC =
+
+RACE_FLAG =
+ifeq ("$(WITH_RACE)", "1")
+	RACE_FLAG = -race
+	GOBUILD   = GOPATH=$(GOPATH) $(GO) build
+endif
+
+CHECK_FLAG =
+ifeq ("$(WITH_CHECK)", "1")
+	CHECK_FLAG = $(TEST_LDFLAGS)
+endif
