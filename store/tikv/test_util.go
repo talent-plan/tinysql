@@ -16,6 +16,7 @@ package tikv
 import (
 	"context"
 	"flag"
+
 	"github.com/google/uuid"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	"github.com/pingcap-incubator/tinykv/scheduler/client"

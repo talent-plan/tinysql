@@ -6,7 +6,6 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/terror"
-
 	"github.com/pingcap-incubator/tinykv/proto/pkg/kvrpcpb"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/kv"
