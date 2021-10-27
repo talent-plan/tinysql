@@ -346,7 +346,7 @@ func (c *twoPhaseCommitter) keySize(key []byte) int {
 }
 
 func (c *twoPhaseCommitter) buildPrewriteRequest(batch batchKeys) *tikvrpc.Request {
-	var req *pb.PrewriteResponse
+	var req *pb.PrewriteRequest
 	// YOUR CODE HERE (proj6).
 	panic("YOUR CODE HERE")
 	return tikvrpc.NewRequest(tikvrpc.CmdPrewrite, req, pb.Context{})
