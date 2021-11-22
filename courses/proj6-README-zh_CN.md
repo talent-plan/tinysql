@@ -29,7 +29,7 @@ Percolator 提交协议的两阶段提交分为 Prewrite 和 Commit，其中 Pre
 - Default CF 中存储了实际的 KV 数据。
 - Lock CF 中存储了锁，包括 Key 和时间戳信息，会在 Commit 成功时清理。
 
-Lock Resolver 的职责就是当一个事务在提交过程中遇到 Lock 时，需要如何应对。
+Lock Resolver 的职责就是应对一个事务在提交过程中遇到 Lock 的情况。
 
 当一个事务遇到 Lock 时，可能有几种情况。
 
