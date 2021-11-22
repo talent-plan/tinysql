@@ -4,6 +4,10 @@
 
 在这一章节，我们将实现 Percolator 提交协议。
 
+## Percolator
+
+[Percolator](https://research.google/pubs/pub36726/) 是 Google 于 2010 公开的一种分布式事务的处理协议。Percolator 协议将事务提交分为 Prewrite 与 Commit 两个阶段，实现了无协调者的分布式事务数据库。Google Spanner 借助于这一协议与 GPS 和原子钟的时钟同步协议实现了全球部署的分布式数据库。因为优秀的扩展性，它也被各家分布式数据库所使用，TiDB 与 TinySQL 的事务实现也基于这一协议。
+
 ## 执行模型介绍
 
 在 TiDB 中，事务的执行过程会被缓存在 buffer 中，在提交时，才会通过 Percolator 提交协议将其完整的写入到分布的 TiKV 存储引擎中。这一调用的入口是 `store/tikv/txn.go` 中的 `tikvTxn.Commit` 函数。
