@@ -12,7 +12,7 @@
 
 ## Two Phase Commit
 
-Percolator 提交协议的两阶段提交分为 Prewrite 和 Commit，其中 Prewrite 实际写入数据，Commit 让数据对外可见。其中，事务的成功以 Primary Key 为原子性标记，当 Prewrite 失败或是 Primary Key Commit 失败时需要进行垃圾清理，将写入的事务回滚。
+Percolator 提交协议的两阶段提交分为 Prewrite 和 Commit：Prewrite 实际写入数据，Commit 让数据对外可见。其中，事务的成功以 Primary Key 为原子性标记。当 Prewrite 失败或是 Primary Key Commit 失败时需要进行垃圾清理，将写入的事务回滚。
 
 一个事务中的 Key 可能会涉及到不同的 Region，在对 Key 进行写操作时，需要将其发送到正确的 Region 上才能够处理，`GroupKeysByRegion` 函数根据 region cache 将 Key 按 Region 分成多个 batch，但是可能出现因缓存过期而导致对应的存储节点返回 Region Error，此时需要分割 batch 后重试。
 
