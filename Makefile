@@ -14,7 +14,7 @@
 
 include Makefile.common
 
-.PHONY: server
+.PHONY: server client
 
 default: server buildsucc
 
@@ -41,3 +41,5 @@ fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
+client:
+	@cd client && make all
