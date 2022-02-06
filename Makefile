@@ -16,7 +16,7 @@ include Makefile.common
 
 .PHONY: server client
 
-default: server buildsucc
+default: fmt server client buildsucc
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin
@@ -34,12 +34,12 @@ endif
 buildsucc:
 	@echo Build TinySQL Server successfully!
 
-server:
-	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tinysql-server tinysql-server/main.go
-
 fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+
+server:
+	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tinysql-server tinysql-server/main.go
 
 client:
 	@cd client && make all

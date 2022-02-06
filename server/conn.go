@@ -132,7 +132,6 @@ func (cc *clientConn) readPacket(ctx context.Context) (*protocol.Message, error)
 	if _, err := io.ReadFull(cc.bufReadConn, msgContent); err != nil {
 		return nil, err
 	}
-
 	return &protocol.Message{
 		MsgType:   msgType[0],
 		MsgLength: msgLen,
