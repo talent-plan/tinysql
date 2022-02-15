@@ -21,11 +21,16 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"testing"
 	"tinysql/protocol"
 	"tinysql/util"
 
 	. "github.com/pingcap/check"
 )
+
+func TestT(t *testing.T) {
+	TestingT(t)
+}
 
 type ConnTestSuite struct {
 }
@@ -77,9 +82,9 @@ func (ts *ConnTestSuite) TestHandshake(c *C) {
 	}
 
 	_, err = cc.bufWriter.Write(completeMsg.Encode(nil))
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 	err = cc.flush()
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 	//TODO session has not implement
 	cc.OpenSession()
 }
