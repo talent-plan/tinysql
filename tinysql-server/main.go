@@ -15,15 +15,16 @@
 package main
 
 import (
-	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"tinysql/parser/terror"
+	"log"
 	"tinysql/server"
 )
 
 func main() {
 	server := createServer()
-	terror.MustNil(server.Run())
+	if err := server.Run(); err != nil {
+		log.Printf("server failed %v", err.Error())
+	}
 }
 
 func createServer() *server.Server {
