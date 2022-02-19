@@ -22,7 +22,7 @@ require (
 	github.com/pingcap/tidb v2.0.11+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20220218013436-7875c6003e5d
 	github.com/pingcap/tipb v0.0.0-20220215045658-d12dec7a7609
-	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/sirupsen/logrus v1.8.1
 	github.com/tikv/client-go/v2 v2.0.0-alpha // indirect
 	github.com/uber/jaeger-client-go v2.29.1+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect

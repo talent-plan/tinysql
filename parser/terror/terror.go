@@ -19,10 +19,11 @@ import (
 	"strings"
 	"sync"
 
+	"tinysql/parser/mysql"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"tinysql/parser/mysql"
 )
 
 // ErrCode represents a specific error type in a error class.

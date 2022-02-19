@@ -3,14 +3,10 @@
 package parser
 
 import (
-	"strings"
 
-	"tinysql/parser/mysql"
 	"tinysql/parser/ast"
 	"tinysql/parser/model"
 	"tinysql/parser/opcode"
-	"tinysql/parser/charset"
-	"tinysql/parser/types"
 )
 %}
 
@@ -64,10 +60,13 @@ import (
 %token	<ident>
 
     /*yy:token "%c"     */	identifier      "identifier"
+	/*yy:token "_%c"    */  underscoreCS	"UNDERSCORE_CHARSET"
     /*yy:token "\"%c\"" */	stringLit       "string literal"
+	invalid					"a special token never used by parser, used by lexer to indicate error"
     Identifier			"identifier or unreserved keyword"
 
 %type	<statement>
+	Statement			"statement"
 	SelectStmt			"SELECT statement"
 
 %type   <item>
@@ -90,6 +89,7 @@ import (
     WhereClause		    "WHERE clause"
     IsOrNotOp		    "Is predicate"
     InOrNotOp		    "In predicate"
+	CompareOp			"Compare opcode"
     
 %type	<expr>
     Expression			"expression"
@@ -285,7 +285,6 @@ TableFactor:
 	TableName TableAsNameOpt
 	{
 		tn := $1.(*ast.TableName)
-		tn.IndexHints = $3.([]*ast.IndexHint)
 		$$ = &ast.TableSource{Source: tn, AsName: $2.(model.CIStr)}
 	}
 
