@@ -120,12 +120,6 @@ func (s *Scanner) Lex(v *yySymType) int {
 		return toInt(s, v, lit)
 	case floatLit:
 		return toFloat(s, v, lit)
-	case decLit:
-		return toDecimal(s, v, lit)
-	case hexLit:
-		return toHex(s, v, lit)
-	case bitLit:
-		return toBit(s, v, lit)
 	case null:
 		v.item = nil
 	case quotedIdentifier:
@@ -202,25 +196,6 @@ func scanIdentifier(s *Scanner) (int, Pos, string) {
 	s.r.inc()
 	s.r.incAsLongAs(isIdentChar)
 	return identifier, pos, s.r.data(&pos)
-}
-
-func scanIdentifierOrString(s *Scanner) (tok int, lit string) {
-	ch1 := s.r.peek()
-	switch ch1 {
-	case '\'', '"':
-		tok, _, lit = startString(s)
-	case '`':
-		tok, _, lit = scanQuotedIdent(s)
-	default:
-		if isUserVarChar(ch1) {
-			pos := s.r.pos()
-			s.r.incAsLongAs(isUserVarChar)
-			tok, lit = identifier, s.r.data(&pos)
-		} else {
-			tok = int(ch1)
-		}
-	}
-	return
 }
 
 var (
@@ -307,7 +282,7 @@ func (s *Scanner) scanString() (tok int, pos Pos, lit string) {
 			}
 			str := mb.r.data(&pos)
 			mb.setUseBuf(str[1 : len(str)-1])
-		} else if ch0 == '\\' && !s.sqlMode.HasNoBackslashEscapesMode() {
+		} else if ch0 == '\\' {
 			mb.setUseBuf(mb.r.data(&pos)[1:])
 			ch0 = handleEscape(s)
 		}
@@ -361,28 +336,6 @@ func startWithNumber(s *Scanner) (tok int, pos Pos, lit string) {
 		case ch1 >= '0' && ch1 <= '7':
 			s.r.inc()
 			s.scanOct()
-		case ch1 == 'x' || ch1 == 'X':
-			s.r.inc()
-			p1 := s.r.pos()
-			s.scanHex()
-			p2 := s.r.pos()
-			// 0x, 0x7fz3 are identifier
-			if p1 == p2 || isDigit(s.r.peek()) {
-				s.r.incAsLongAs(isIdentChar)
-				return identifier, pos, s.r.data(&pos)
-			}
-			tok = hexLit
-		case ch1 == 'b':
-			s.r.inc()
-			p1 := s.r.pos()
-			s.scanBit()
-			p2 := s.r.pos()
-			// 0b, 0b123, 0b1ab are identifier
-			if p1 == p2 || isDigit(s.r.peek()) {
-				s.r.incAsLongAs(isIdentChar)
-				return identifier, pos, s.r.data(&pos)
-			}
-			tok = bitLit
 		case ch1 == '.':
 			return s.scanFloat(&pos)
 		case ch1 == 'B':
@@ -428,20 +381,6 @@ func (s *Scanner) scanOct() {
 	})
 }
 
-func (s *Scanner) scanHex() {
-	s.r.incAsLongAs(func(ch rune) bool {
-		return ch >= '0' && ch <= '9' ||
-			ch >= 'a' && ch <= 'f' ||
-			ch >= 'A' && ch <= 'F'
-	})
-}
-
-func (s *Scanner) scanBit() {
-	s.r.incAsLongAs(func(ch rune) bool {
-		return ch == '0' || ch == '1'
-	})
-}
-
 func (s *Scanner) scanFloat(beg *Pos) (tok int, pos Pos, lit string) {
 	s.r.p = *beg
 	// float = D1 . D2 e D3
@@ -467,7 +406,7 @@ func (s *Scanner) scanFloat(beg *Pos) (tok int, pos Pos, lit string) {
 			tok = identifier
 		}
 	} else {
-		tok = decLit
+		tok = -1 //should not ge here
 	}
 	pos, lit = *beg, s.r.data(beg)
 	return
@@ -522,12 +461,6 @@ func (r *reader) inc() {
 	}
 	r.p.Offset += r.w
 	r.p.Col++
-}
-
-func (r *reader) incN(n int) {
-	for i := 0; i < n; i++ {
-		r.inc()
-	}
 }
 
 func (r *reader) readByte() (ch rune) {

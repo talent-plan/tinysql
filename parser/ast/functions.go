@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pingcap/tidb/parser/model"
+	"tinysql/parser/model"
 )
 
 var (

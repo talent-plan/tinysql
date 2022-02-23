@@ -34,13 +34,12 @@ endif
 buildsucc:
 	@echo Build TinySQL Server successfully!
 
+server:
+	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tinysql-server tinysql-server/main.go
+
 fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
-
-
-server:
-	CGO_ENABLED=1 $(GOBUILD) $(RACE_FLAG) -o bin/tinysql-server tinysql-server/main.go
 
 client:
 	@cd client && make all

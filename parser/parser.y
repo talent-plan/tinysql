@@ -43,7 +43,6 @@ import (
 %token	<item>
 
 	/*yy:token "1.%d"   */	floatLit        "floating-point literal"
-	/*yy:token "1.%d"   */	decLit          "decimal literal"
 	/*yy:token "%d"     */	intLit          "integer literal"
 
 	eq		"="
@@ -113,7 +112,6 @@ import (
 %left 	pipes or pipesAsOr
 %left 	xor
 %left 	andand and
-%left 	between
 %left 	eq ge le neq neqSynonym '>' '<' is in
 %left 	'|'
 %left 	'&'
@@ -504,10 +502,6 @@ Literal:
 		$$ = ast.NewValueExpr(true)
 	}
 |	floatLit
-	{
-		$$ = ast.NewValueExpr($1)
-	}
-|	decLit
 	{
 		$$ = ast.NewValueExpr($1)
 	}

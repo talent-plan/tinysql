@@ -61,16 +61,16 @@ var (
 
 func init() {
 	parserMySQLErrCodes := map[terror.ErrCode]struct{}{
-		mysql.ErrSyntax:                  struct{}{},
-		mysql.ErrParse:                   struct{}{},
-		mysql.ErrUnknownCharacterSet:     struct{}{},
-		mysql.ErrInvalidYearColumnLength: struct{}{},
-		mysql.ErrWrongArguments:          struct{}{},
-		mysql.ErrWrongFieldTerminators:   struct{}{},
-		mysql.ErrTooBigDisplaywidth:      struct{}{},
-		mysql.ErrUnknownAlterLock:        struct{}{},
-		mysql.ErrUnknownAlterAlgorithm:   struct{}{},
-		mysql.ErrTooBigPrecision:         struct{}{},
+		mysql.ErrSyntax:                  {},
+		mysql.ErrParse:                   {},
+		mysql.ErrUnknownCharacterSet:     {},
+		mysql.ErrInvalidYearColumnLength: {},
+		mysql.ErrWrongArguments:          {},
+		mysql.ErrWrongFieldTerminators:   {},
+		mysql.ErrTooBigDisplaywidth:      {},
+		mysql.ErrUnknownAlterLock:        {},
+		mysql.ErrUnknownAlterAlgorithm:   {},
+		mysql.ErrTooBigPrecision:         {},
 	}
 	terror.ErrClassToMySQLCodes[terror.ClassParser] = parserMySQLErrCodes
 }
@@ -149,14 +149,6 @@ func (parser *Parser) Parse(sql, charset, collation string) (stmt []ast.StmtNode
 	return parser.result, warns, nil
 }
 
-func (parser *Parser) lastErrorAsWarn() {
-	if len(parser.lexer.errs) == 0 {
-		return
-	}
-	parser.lexer.warns = append(parser.lexer.warns, parser.lexer.errs[len(parser.lexer.errs)-1])
-	parser.lexer.errs = parser.lexer.errs[:len(parser.lexer.errs)-1]
-}
-
 // ParseOneStmt parses a query and returns an ast.StmtNode.
 // The query must have one statement, otherwise ErrSyntax is returned.
 func (parser *Parser) ParseOneStmt(sql, charset, collation string) (ast.StmtNode, error) {
@@ -174,16 +166,6 @@ func (parser *Parser) ParseOneStmt(sql, charset, collation string) (ast.StmtNode
 // ParseErrorWith returns "You have a syntax error near..." error message compatible with mysql.
 func ParseErrorWith(errstr string, lineno int) error {
 	return fmt.Errorf("near '%-.80s' at line %d", errstr, lineno)
-}
-
-// The select statement is not at the end of the whole statement, if the last
-// field text was set from its offset to the end of the src string, update
-// the last field text.
-func (parser *Parser) setLastSelectFieldText(st *ast.SelectStmt, lastEnd int) {
-	lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
-	if lastField.Offset+len(lastField.Text()) >= len(parser.src)-1 {
-		lastField.SetText(parser.src[lastField.Offset:lastEnd])
-	}
 }
 
 func (parser *Parser) startOffset(v *yySymType) int {
@@ -223,14 +205,4 @@ func toFloat(l yyLexer, lval *yySymType, str string) int {
 
 	lval.item = n
 	return floatLit
-}
-
-func getUint64FromNUM(num interface{}) uint64 {
-	switch v := num.(type) {
-	case int64:
-		return uint64(v)
-	case uint64:
-		return v
-	}
-	return 0
 }
