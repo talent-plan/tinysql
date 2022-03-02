@@ -16,7 +16,7 @@ include Makefile.common
 
 .PHONY: server client
 
-default: server buildsucc
+default: fmt server client buildsucc
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin

@@ -65,6 +65,7 @@ func (cc *clientConn) handshake(ctx context.Context) error {
 		return err
 	}
 
+
 	cc.OpenSession()
 
 	return nil
