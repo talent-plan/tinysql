@@ -6,11 +6,22 @@ TinySQL is a course designed to teach you how to implement a distributed relatio
 
 Experience with Go is required. If not, it is recommended to learn [A Tour of Go](https://tour.golang.org/) first.
 
-## Course Overview
+## Course Architecture
 
-The detailed information you can get in the directory `courses`.
+The entire course is designed based on [TiDB](https://github.com/pingcap/tidb).
 
-There's a [material list](./courses/material.md). It lists plenty of materials for you to study how a database system works. We picks some of the topics in it and prepare homework for you to have a better understand about it.
+The course is organized into six parts:
+
+- [Simple explanation of SQL and relational algebra](./courses/proj1-README-zh_CN.md)
+- [Parser](./courses/proj2-README-zh_CN.md)
+- [DDL](./courses/proj3-README-zh_CN.md)
+- [Optimizer](./courses/proj4-README-zh_CN.md)
+- [Executor](./courses/proj5-README-zh_CN.md)
+- [Percolator](./courses/proj6-README-zh_CN.md)
+
+## Material List
+
+There's a [material list](./courses/material.md). It lists plenty of materials for you to study how a database system works. We pick some topics in it and prepare homework for you to have a better understand about it.
 
 This course will take you from idea to implementation, with the essential topics of distributed relational database covered. 
 
