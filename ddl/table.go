@@ -355,21 +355,27 @@ func updateVersionAndTableInfoWithCheck(t *meta.Meta, job *model.Job, tblInfo *m
 		return ver, errors.Trace(err)
 	}
 	return updateVersionAndTableInfo(t, job, tblInfo, shouldUpdateVer)
-
 }
 
-// updateVersionAndTableInfo updates the schema version and the table information.
+/*  updateVersionAndTableInfo updates the schema version and the table information.
+ *  parameters:
+ *      t *meta.Meta:   handling meta information in a transaction;
+ *      job *model.Job: a ddl job, here is a drop column job;
+ *      tblInfo *model.TableInfo: table information
+ *      shouldUpdateVer bool: whether to update version
+ *  return value:
+ *     ver :  current version;
+ *     error: error information;
+ *  updateVersionAndTableInfo may need to follow the steps:
+ *       1. Update schema version;
+ *       2. Update table information;
+ *  Some hints that might be useful:
+ *       - Consider when you need to update tableInfo.UpdateTS by t.
+ *       - `t.UpdateTable` and `updateSchemaVersion` will be used here.
+ */
 func updateVersionAndTableInfo(t *meta.Meta, job *model.Job, tblInfo *model.TableInfo, shouldUpdateVer bool) (
 	ver int64, err error) {
-	if shouldUpdateVer {
-		ver, err = updateSchemaVersion(t, job)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-	}
+	// TODO complete this function.
 
-	if tblInfo.State == model.StatePublic {
-		tblInfo.UpdateTS = t.StartTS
-	}
-	return ver, t.UpdateTable(job.SchemaID, tblInfo)
+	return ver, errors.Trace(err)
 }

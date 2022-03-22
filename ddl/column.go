@@ -133,6 +133,27 @@ func checkAddColumn(t *meta.Meta, job *model.Job) (*model.TableInfo, *model.Colu
 	return tblInfo, columnInfo, col, offset, nil
 }
 
+/* onAddColumn handle add column job
+ *  parameters:
+ *      d *ddlCtx:      context of the ddl, but you won't use it here;
+ *      t *meta.Meta:   handling meta information in a transaction;
+ *      job *model.Job: a ddl job, here is an add column job;
+ *  return value:
+ *     ver :  current version;
+ *     error: error information, but err will be tracked by other tool and no need to return;
+ *  onAddColumn may need to follow the steps:
+ *       1. Judge whether the job is rolling back to call `onDropColumn`;
+ *       2. Get table and changed column information from job;
+ *       3. Creat a column to add if column info is null;
+ *       4. Determine the stage of the job.(stages order: none -> delete only -> write only -> reorg -> public);
+ *       5. Handle the job in the stage and move to next stage;
+ *       6. Update information and return version.
+ *  Some hints that might be useful:
+ *       - You need to complete the codes of each case.
+ *       - You'll need to find the right place where to put the function `adjustColumnInfoInAddColumn`.
+ *       - Pay attention to the state of schema and columnInfo.
+ *       - Remember use `FinishTableJob` to finish the job.
+ */
 func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	// Handle the rolling back job.
 	if job.IsRollingback() {
@@ -170,35 +191,21 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 		}
 	}
 
+	// TODO fill the codes of the each case.
 	originalState := columnInfo.State
 	switch columnInfo.State {
 	case model.StateNone:
-		// none -> delete only
-		job.SchemaState = model.StateDeleteOnly
-		columnInfo.State = model.StateDeleteOnly
+		// To be filled
 		ver, err = updateVersionAndTableInfoWithCheck(t, job, tblInfo, originalState != columnInfo.State)
 	case model.StateDeleteOnly:
-		// delete only -> write only
-		job.SchemaState = model.StateWriteOnly
-		columnInfo.State = model.StateWriteOnly
+		// To be filled
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != columnInfo.State)
 	case model.StateWriteOnly:
-		// write only -> reorganization
-		job.SchemaState = model.StateWriteReorganization
-		columnInfo.State = model.StateWriteReorganization
+		// To be filled
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != columnInfo.State)
 	case model.StateWriteReorganization:
-		// reorganization -> public
-		// Adjust table column offset.
-		adjustColumnInfoInAddColumn(tblInfo, offset)
-		columnInfo.State = model.StatePublic
+		// To be filled
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != columnInfo.State)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-
-		// Finish this job.
-		job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tblInfo)
 	default:
 		err = ErrInvalidDDLState.GenWithStackByArgs("column", columnInfo.State)
 	}
@@ -206,24 +213,26 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 	return ver, errors.Trace(err)
 }
 
-/* `onDropColumn` handle drop column job
+/*  onDropColumn handle drop column job
  *  parameters:
  *      t *meta.Meta:   handling meta information in a transaction;
  *      job *model.Job: a ddl job, here is a drop column job;
  *  return value:
  *     ver :  current version;
  *     error: error information, but err will be tracked by other tool and no need to return;
- *  `onDropColumn` may need to follow the steps:
+ *  onDropColumn may need to follow the steps:
  *       1. Get table and changed column information from job;
  *       2. Determine the stage of the job.(stages order: public -> write only -> delete only -> reorg );
  *       3. Handle the job in the stage and move to next stage;
  *       4. Update information and return version.
  *  Some hints that might be useful:
- *       - You need to complete the codes of the case `StatePublic`, `StateWriteOnly` and `StateDeleteOnly`.
+ *       - You need to complete the codes of each case.
  *       - You'll need to find the right place where to put the function `adjustColumnInfoInDropColumn`.
  *       - Also you'll need to take a corner case about the default value.
  *       - Think about how the not null property and default value will influence the `Drop Column` operation.
  *       - You can get a default value by `generateOriginDefaultValue`.
+ *       - Remember use `FinishTableJob` to finish the job.
+ *       - Don't forget to do something, if this is a rolling back add column job.
  */
 func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	tblInfo, colInfo, err := checkDropColumn(t, job)
@@ -233,7 +242,7 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 
 	originalState := colInfo.State
 
-	// TODO fill the codes of the case `StatePublic`, `StateWriteOnly` and `StateDeleteOnly`.
+	// TODO fill the codes of the each case.
 	switch colInfo.State {
 	case model.StatePublic:
 		// To be filled
@@ -245,21 +254,8 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 		// To be filled
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != colInfo.State)
 	case model.StateDeleteReorganization:
-		// reorganization -> absent
-		// All reorganization jobs are done, drop this column.
-		tblInfo.Columns = tblInfo.Columns[:len(tblInfo.Columns)-1]
-		colInfo.State = model.StateNone
+		// To be filled
 		ver, err = updateVersionAndTableInfo(t, job, tblInfo, originalState != colInfo.State)
-		if err != nil {
-			return ver, errors.Trace(err)
-		}
-
-		// Finish this job.
-		if job.IsRollingback() {
-			job.FinishTableJob(model.JobStateRollbackDone, model.StateNone, ver, tblInfo)
-		} else {
-			job.FinishTableJob(model.JobStateDone, model.StateNone, ver, tblInfo)
-		}
 	default:
 		err = errInvalidDDLJob.GenWithStackByArgs("table", tblInfo.State)
 	}
