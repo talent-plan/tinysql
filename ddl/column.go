@@ -206,6 +206,25 @@ func onAddColumn(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error)
 	return ver, errors.Trace(err)
 }
 
+/* `onDropColumn` handle drop column job
+ *  parameters:
+ *      t *meta.Meta:   handling meta information in a transaction;
+ *      job *model.Job: a ddl job, here is a drop column job;
+ *  return value:
+ *     ver :  current version;
+ *     error: error information, but err will be tracked by other tool and no need to return;
+ *  `onDropColumn` may need to follow the steps:
+ *       1. Get table and changed column information from job;
+ *       2. Determine the stage of the job.(stages order: public -> write only -> delete only -> reorg );
+ *       3. Handle the job in the stage and move to next stage;
+ *       4. Update information and return version.
+ *  Some hints that might be useful:
+ *       - You need to complete the codes of the case `StatePublic`, `StateWriteOnly` and `StateDeleteOnly`.
+ *       - You'll need to find the right place where to put the function `adjustColumnInfoInDropColumn`.
+ *       - Also you'll need to take a corner case about the default value.
+ *       - Think about how the not null property and default value will influence the `Drop Column` operation.
+ *       - You can get a default value by `generateOriginDefaultValue`.
+ */
 func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	tblInfo, colInfo, err := checkDropColumn(t, job)
 	if err != nil {
@@ -213,10 +232,8 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	}
 
 	originalState := colInfo.State
-	// TODO: fill the codes of the case `StatePublic`, `StateWriteOnly` and `StateDeleteOnly`.
-	//       You'll need to find the right place where to put the function `adjustColumnInfoInDropColumn`.
-	//       Also you'll need to take a corner case about the default value.
-	//       (Think about how the not null property and default value will influence the `Drop Column` operation.
+
+	// TODO fill the codes of the case `StatePublic`, `StateWriteOnly` and `StateDeleteOnly`.
 	switch colInfo.State {
 	case model.StatePublic:
 		// To be filled
