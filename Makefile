@@ -267,6 +267,9 @@ vectorized-bench:
 			-run=BenchmarkVectorizedBuiltin$(VB_FILE)Func \
 			-args "$(VB_FUNC)"
 
+test-proj1:
+	cd tablecodec && \
+	go test
 
 proj6: failpoint-enable
 	go test -timeout 600s ./store/tikv -mockStore=false

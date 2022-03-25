@@ -162,14 +162,14 @@ TiDB> select name, address from person inner join address on person.number = add
 
 完成 hackerrank 的下列题目
 
-[Revising the Select Query I](https://www.hackerrank.com/challenges/revising-the-select-query/problem) (10%)
-[Revising the Select Query II](https://www.hackerrank.com/challenges/revising-the-select-query-2/problem) (10%)
-[Revising Aggregations - The Count Function](https://www.hackerrank.com/challenges/revising-aggregations-the-count-function/problem) (10%)
-[Revising Aggregations - The Sum Function](https://www.hackerrank.com/challenges/revising-aggregations-sum/problem) (10%)
-[Revising Aggregations - Averages](https://www.hackerrank.com/challenges/revising-aggregations-the-average-function/problem) (10%)
-[African Cities](https://www.hackerrank.com/challenges/african-cities/problem) (10%)
-[Average Population of Each Continent](https://www.hackerrank.com/challenges/average-population-of-each-continent/problem) (10%)
-[Binary Tree Nodes](https://www.hackerrank.com/challenges/binary-search-tree-1/problem) (30%)
+- [Revising the Select Query I](https://www.hackerrank.com/challenges/revising-the-select-query/problem) (10%)
+- [Revising the Select Query II](https://www.hackerrank.com/challenges/revising-the-select-query-2/problem) (10%)
+- [Revising Aggregations - The Count Function](https://www.hackerrank.com/challenges/revising-aggregations-the-count-function/problem) (10%)
+- [Revising Aggregations - The Sum Function](https://www.hackerrank.com/challenges/revising-aggregations-sum/problem) (10%)
+- [Revising Aggregations - Averages](https://www.hackerrank.com/challenges/revising-aggregations-the-average-function/problem) (10%)
+- [African Cities](https://www.hackerrank.com/challenges/african-cities/problem) (10%)
+- [Average Population of Each Continent](https://www.hackerrank.com/challenges/average-population-of-each-continent/problem) (10%)
+- [Binary Tree Nodes](https://www.hackerrank.com/challenges/binary-search-tree-1/problem) (30%)
 
 ## 评分
 
