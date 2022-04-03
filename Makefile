@@ -268,6 +268,10 @@ vectorized-bench:
 			-args "$(VB_FUNC)"
 
 
+test-proj2:
+	cd parser && \
+	go test -check.f TestDMLStmt
+
 proj6: failpoint-enable
 	go test -timeout 600s ./store/tikv -mockStore=false
 	@$(FAILPOINT_DISABLE)
