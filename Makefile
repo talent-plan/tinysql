@@ -267,6 +267,9 @@ vectorized-bench:
 			-run=BenchmarkVectorizedBuiltin$(VB_FILE)Func \
 			-args "$(VB_FUNC)"
 
+test-proj4-1:
+	cd planner/core && \
+	go test -check.f TestPredicatePushDown && \
 
 proj6: failpoint-enable
 	go test -timeout 600s ./store/tikv -mockStore=false
