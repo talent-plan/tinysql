@@ -75,7 +75,7 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 * DecodeRecordKey decodes the key and gets the tableID, handle.
 	 * Decode is actually the reverse of encoding, so you can refer to EncodeRowKeyWithHandle.
 	 *
-	 * Parma
+	 * Parameters
 	 *   key: the key needs to be decoded. It may be invalid.
 	 *
 	 * Return value
@@ -124,7 +124,7 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	 * DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 	 * Decode is actually the reverse of encoding, so you can refer to EncodeIndexSeekKey.
 	 *
-	 * Parma
+	 * Parameters
 	 *   key: the key needs to be decoded. It may be invalid.
 	 *
 	 * Return value
