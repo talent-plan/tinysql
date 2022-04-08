@@ -72,6 +72,26 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
+	// Check table prefix.
+	if !key.HasPrefix(TablePrefix()) {
+		return 0, 0, errInvalidRecordKey.GenWithStack("invalid record key - %q", key)
+	}
+	// Parse table ID.
+	key = key[len(TablePrefix()):]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+	// Check record prefix.
+	if !key.HasPrefix(recordPrefixSep) {
+		return 0, 0, errInvalidRecordKey.GenWithStack("invalid record key - %q", key)
+	}
+	key = key[len(recordPrefixSep):]
+	// Parse handle.
+	key, handle, err = codec.DecodeInt(key)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
 	return
 }
 
@@ -95,6 +115,32 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+	// Check table index prefix.
+	if !key.HasPrefix(TablePrefix()) {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q", key)
+	}
+	// Prase tableID.
+	key = key[len(TablePrefix()):]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid key - %s %v", key, err)
+	}
+	// Check index prefix sep.
+	if !key.HasPrefix(indexPrefixSep) {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q", key)
+	}
+	// Parse index ID.
+	key = key[len(indexPrefixSep):]
+	key, indexID, err = codec.DecodeInt(key)
+	if err != nil {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid key - %s %v", key, err)
+	}
+	// Get indexValues.
+	if len(key) > 0 {
+		indexValues = key
+	} else {
+		indexValues = nil
+	}
 	return tableID, indexID, indexValues, nil
 }
 
