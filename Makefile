@@ -267,13 +267,21 @@ vectorized-bench:
 			-run=BenchmarkVectorizedBuiltin$(VB_FILE)Func \
 			-args "$(VB_FUNC)"
 
-test-proj4-1:
-	cd planner/core && \
-	go test -check.f TestPredicatePushDown && \
+
+test-proj1:
+	cd tablecodec && \
+	go test
 
 test-proj2:
 	cd parser && \
 	go test -check.f TestDMLStmt
+  
+test-proj4-1:
+	cd planner/core && \
+	go test -check.f TestPredicatePushDown && \
+
+
+
 
 proj6: failpoint-enable
 	go test -timeout 600s ./store/tikv -mockStore=false
