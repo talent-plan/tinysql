@@ -271,6 +271,10 @@ test-proj4-1:
 	cd planner/core && \
 	go test -check.f TestPredicatePushDown && \
 
+test-proj2:
+	cd parser && \
+	go test -check.f TestDMLStmt
+
 proj6: failpoint-enable
 	go test -timeout 600s ./store/tikv -mockStore=false
 	@$(FAILPOINT_DISABLE)
