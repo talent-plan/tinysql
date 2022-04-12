@@ -155,41 +155,23 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []string, err error) {
 	k := key
 
-	tableID, indexID, isRecord, err := DecodeKeyHead(key)
+	tableID, indexID, key, err = DecodeIndexKeyPrefix(key)
 	if err != nil {
 		return 0, 0, nil, errors.Trace(err)
 	}
-	if isRecord {
-		err = errInvalidIndexKey.GenWithStack("invalid index key - %q", k)
-		return 0, 0, nil, err
-	}
-	indexKey := key[prefixLen+idLen:]
-	indexValues, err = DecodeValuesBytesToStrings(indexKey)
-	if err != nil {
-		err = errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, err)
-		return 0, 0, nil, err
-	}
-	return tableID, indexID, indexValues, nil
-}
-
-// DecodeValuesBytesToStrings decode the raw bytes to strings for each columns.
-// FIXME: Without the schema information, we can only decode the raw kind of
-// the column. For instance, MysqlTime is internally saved as uint64.
-func DecodeValuesBytesToStrings(b []byte) ([]string, error) {
-	var datumValues []string
-	for len(b) > 0 {
-		remain, d, e := codec.DecodeOne(b)
+	for len(key) > 0 {
+		remain, d, e := codec.DecodeOne(key)
 		if e != nil {
-			return nil, e
+			return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, e)
 		}
 		str, e1 := d.ToString()
 		if e1 != nil {
-			return nil, e
+			return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, e1)
 		}
-		datumValues = append(datumValues, str)
-		b = remain
+		indexValues = append(indexValues, str)
+		key = remain
 	}
-	return datumValues, nil
+	return
 }
 
 // EncodeRow encode row data and column ids into a slice of byte.
