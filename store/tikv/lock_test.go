@@ -260,7 +260,7 @@ func (s *testLockSuite) prewriteTxnWithTTL(c *C, txn *tikvTxn, ttl uint64) {
 	committer, err := newTwoPhaseCommitterWithInit(txn, 0)
 	c.Assert(err, IsNil)
 	if ttl > 0 {
-		elapsed := time.Since(txn.startTime) / time.Millisecond
+		elapsed := time.Since(txn.startTime) / elapsedUnit
 		committer.lockTTL = uint64(elapsed) + ttl
 	}
 	err = committer.prewriteKeys(NewBackoffer(context.Background(), PrewriteMaxBackoff), committer.keys)
@@ -291,14 +291,17 @@ func (s *testLockSuite) ttlEquals(c *C, x, y uint64) {
 	// NOTE: On ppc64le, all integers are by default unsigned integers,
 	// hence we have to separately cast the value returned by "math.Abs()" function for ppc64le.
 	if runtime.GOARCH == "ppc64le" {
-		c.Assert(int(-math.Abs(float64(x-y))), LessEqual, 2)
+		c.Assert(int(-math.Abs(float64(x)-float64(y))), LessEqual, 2)
 	} else {
-		c.Assert(int(math.Abs(float64(x-y))), LessEqual, 2)
+		c.Assert(int(math.Abs(float64(x)-float64(y))), LessEqual, 2)
 	}
 
 }
 
 func (s *testLockSuite) TestLockTTL(c *C) {
+	// NOTE: `time.Second` is only applied for scaling `elapsedUnit` at the right proportion and only for this test
+	elapsedUnit = time.Second
+
 	txn, err := s.store.Begin()
 	c.Assert(err, IsNil)
 	txn.Set(kv.Key("key"), []byte("value"))
@@ -318,7 +321,7 @@ func (s *testLockSuite) TestLockTTL(c *C) {
 	}
 	s.prewriteTxn(c, txn.(*tikvTxn))
 	l = s.mustGetLock(c, []byte("key"))
-	s.ttlEquals(c, l.TTL, uint64(ttlFactor*2)+uint64(time.Since(start)/time.Millisecond))
+	s.ttlEquals(c, l.TTL, uint64(ttlFactor*2)+uint64(time.Since(start)/elapsedUnit))
 
 	// Txn with long read time.
 	start = time.Now()
@@ -328,7 +331,9 @@ func (s *testLockSuite) TestLockTTL(c *C) {
 	txn.Set(kv.Key("key"), []byte("value"))
 	s.prewriteTxn(c, txn.(*tikvTxn))
 	l = s.mustGetLock(c, []byte("key"))
-	s.ttlEquals(c, l.TTL, defaultLockTTL+uint64(time.Since(start)/time.Millisecond))
+	s.ttlEquals(c, l.TTL, defaultLockTTL+uint64(time.Since(start)/elapsedUnit))
+
+	elapsedUnit = time.Millisecond
 }
 
 func (s *testLockSuite) TestNewLockZeroTTL(c *C) {

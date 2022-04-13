@@ -237,7 +237,7 @@ func txnLockTTL(startTime time.Time, txnSize int) uint64 {
 	// Increase lockTTL by the transaction's read time.
 	// When resolving a lock, we compare current ts and startTS+lockTTL to decide whether to clean up. If a txn
 	// takes a long time to read, increasing its TTL will help to prevent it from been aborted soon after prewrite.
-	elapsed := time.Since(startTime) / time.Millisecond
+	elapsed := time.Since(startTime) / elapsedUnit
 	return lockTTL + uint64(elapsed)
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 	"sync"
+	"time"
 )
 
 // ResolvedCacheSize is max number of cached txn status.
@@ -101,6 +102,9 @@ var maxLockTTL uint64 = 120000
 
 // ttl = ttlFactor * sqrt(writeSizeInMiB)
 var ttlFactor = 6000
+
+// unit of elapsed time for increasing ttl
+var elapsedUnit = time.Millisecond
 
 // Lock represents a lock from tikv server.
 type Lock struct {
