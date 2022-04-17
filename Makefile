@@ -275,11 +275,30 @@ test-proj1:
 test-proj2:
 	cd parser && \
 	go test -check.f TestDMLStmt
+
+test-proj3:
+	cd ddl && \
+	go test -timeout 200s -check.f TestAddColumn TestDropColumn TestColumnChange
   
 test-proj4-1:
 	cd planner/core && \
 	go test -check.f TestPredicatePushDown && \
 
+test-proj4-2:
+	cd planner/core && \
+	go test -check.f TestSkylinePruning && \
+
+test-proj5-1:
+	cd executor && \
+	go test -check.f TestJoin
+
+test-proj5-2: failpoint-enable
+	go test -timeout 600s ./executor -check.f "testSuiteJoin1|testSuiteJoin2|testSuiteJoin3"
+	@$(FAILPOINT_DISABLE)
+
+test-proj5-3: failpoint-enable
+	go test -timeout 600s ./executor -check.f "testSuiteAgg"
+	@$(FAILPOINT_DISABLE)
 
 
 
