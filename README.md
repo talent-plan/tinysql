@@ -1,4 +1,4 @@
-# TinySQL
+# TinySQL Forked
 
 TinySQL is a course designed to teach you how to implement a distributed relational database in Go. TinySQL is also the name of the simplifed version of [TiDB](https://github.com/pingcap/tidb).
 
