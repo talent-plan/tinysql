@@ -42,6 +42,7 @@ const (
 	// RecordRowKeyLen is public for calculating average row size.
 	RecordRowKeyLen       = prefixLen + idLen /*handle*/
 	tablePrefixLength     = 1
+	indexPrefixSepLen     = 2
 	recordPrefixSepLength = 2
 )
 
@@ -98,6 +99,25 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
+
+	// tablePrefix_tableID_recordPrefixSep_rowID
+	if len(key) != RecordRowKeyLen {
+		return 0, 0, errInvalidIndexKey.GenWithStack("key's len %d do not match", len(key))
+	}
+	if !bytes.Equal(tablePrefix, key[:tablePrefixLength]) {
+		err = errInvalidIndexKey.GenWithStack("invalid format")
+	}
+	leave, tableID, err := codec.DecodeInt(key[tablePrefixLength:])
+	if err != nil {
+		return 0, 0, errInvalidIndexKey.GenWithStack(err.Error())
+	}
+	if !bytes.Equal(recordPrefixSep, leave[:recordPrefixSepLength]) {
+		err = errInvalidIndexKey.GenWithStack("invalid format")
+	}
+	_, handle, err = codec.DecodeInt(leave[recordPrefixSepLength:])
+	if err != nil {
+		return 0, 0, errInvalidIndexKey.GenWithStack(err.Error())
+	}
 	return
 }
 
@@ -148,6 +168,29 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
+
+	// tablePrefix_tableID_indexPrefixSep_indexID_indexColumnsValue
+	if len(key) < tablePrefixLength+idLen+indexPrefixSepLen {
+		err = errInvalidIndexKey.GenWithStack("key is too short")
+		return
+	}
+	if !bytes.Equal(tablePrefix, key[:tablePrefixLength]) {
+		err = errInvalidIndexKey.GenWithStack("invalid format")
+	}
+	leave, tableID, err := codec.DecodeInt(key[tablePrefixLength:])
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack(err.Error())
+		return
+	}
+	if !bytes.Equal(indexPrefixSep, leave[:indexPrefixSepLen]) {
+		err = errInvalidIndexKey.GenWithStack("invalid format")
+	}
+	leave, indexID, err = codec.DecodeInt(leave[indexPrefixSepLen:])
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack(err.Error())
+		return
+	}
+	indexValues = leave
 	return tableID, indexID, indexValues, nil
 }
 
