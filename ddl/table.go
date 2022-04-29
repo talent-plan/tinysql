@@ -15,6 +15,7 @@ package ddl
 
 import (
 	"fmt"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/infoschema"
@@ -133,7 +134,7 @@ func getTableInfoAndCancelFaultJob(t *meta.Meta, job *model.Job, schemaID int64)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	// only state public can be read
 	if tblInfo.State != model.StatePublic {
 		job.State = model.JobStateCancelled
 		return nil, ErrInvalidDDLState.GenWithStack("table %s is not in public, but %s", tblInfo.Name, tblInfo.State)
@@ -376,6 +377,21 @@ func updateVersionAndTableInfoWithCheck(t *meta.Meta, job *model.Job, tblInfo *m
 func updateVersionAndTableInfo(t *meta.Meta, job *model.Job, tblInfo *model.TableInfo, shouldUpdateVer bool) (
 	ver int64, err error) {
 	// TODO complete this function.
-
-	return ver, errors.Trace(err)
+	// update the version and return the new schema's version
+	if shouldUpdateVer {
+		ver, err = updateSchemaVersion(t, job)
+		if err != nil {
+			err = errors.Trace(err)
+			return
+		}
+	}
+	// update the table info
+	if tblInfo.State == model.StatePublic {
+		tblInfo.UpdateTS = t.StartTS
+	}
+	err = t.UpdateTable(job.SchemaID, tblInfo)
+	if err != nil {
+		err = errors.Trace(err)
+	}
+	return
 }

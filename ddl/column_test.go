@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/logutil"
 )
 
 var _ = Suite(&testColumnSuite{})
@@ -703,9 +704,11 @@ func (s *testColumnSuite) TestAddColumn(c *C) {
 	c.Assert(err, IsNil)
 
 	testCreateTable(c, ctx, d, s.dbInfo, tblInfo)
-	t := testGetTable(c, d, s.dbInfo.ID, tblInfo.ID)
 
+	t := testGetTable(c, d, s.dbInfo.ID, tblInfo.ID)
+	logutil.BgLogger().Info("[haiwu] create table success")
 	oldRow := types.MakeDatums(int64(1), int64(2), int64(3))
+
 	handle, err := t.AddRecord(ctx, oldRow)
 	c.Assert(err, IsNil)
 

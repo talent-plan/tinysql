@@ -67,6 +67,7 @@ func RunInNewTxn(store Storage, retryable bool, f func(txn Transaction) error) e
 				zap.Uint64("retry txn", txn.StartTS()),
 				zap.Uint64("original txn", originalTxnTS),
 				zap.Error(err))
+			// exponential backoff
 			BackOff(i)
 			continue
 		}
