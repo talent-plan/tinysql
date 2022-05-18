@@ -48,7 +48,7 @@
 
 ## 测试
 
-通过通过 `expression` 下所有测试和 `executor` 下面的 `TestJoin` 以及 `TestMergeJoin`。
+通过 `expression` 下所有测试和 `executor` 下面的 `TestJoin` 以及 `TestMergeJoin`。
 
 你可以通过 `go test package_path -check.f func_name` 来跑一个具体的函数。以 `TestJoin` 为例，你可以使用 `go test github.com/pingcap/pingcap-incubator/tinysql/executor -check.f TestJoin` 来跑这个具体的函数。同时可以将输出文件重定向至文件中来后续 debug。
 
