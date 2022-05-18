@@ -282,11 +282,11 @@ test-proj3:
   
 test-proj4-1:
 	cd planner/core && \
-	go test -check.f TestPredicatePushDown && \
+	go test -check.f TestPredicatePushDown
 
 test-proj4-2:
 	cd planner/core && \
-	go test -check.f TestSkylinePruning && \
+	go test -check.f TestSkylinePruning
 
 test-proj5-1:
 	cd executor && \
