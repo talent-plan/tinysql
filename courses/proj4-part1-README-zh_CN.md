@@ -6,7 +6,7 @@
 
 ![SQL](./imgs/proj4-1.png)
 
-我们在 project 2 中介绍了 SQL Parser 能够将 SQL 文本转换为数据库更容易处理的 AST 格式，从 Parser 往后，我们恩能够看到 Validator 和 Type Infer 两个流程。这两部分对应的是 SQL 合法性验证和类型系统，在实际的、用于生产环境的数据库系统中，这两部分十分重要，我们需要首先验证 SQL 的合法性，并且能够在预先定义的类型系统中成功识别和转换，以方便接下来的处理。不过由于这部分的内容略微枯燥，因此不作为 TinySQL 的课程内容，有兴趣的同学可以自行了解。
+我们在 project 2 中介绍了 SQL Parser 能够将 SQL 文本转换为数据库更容易处理的 AST 格式，从 Parser 往后，我们能够看到 Validator 和 Type Infer 两个流程。这两部分对应的是 SQL 合法性验证和类型系统，在实际的、用于生产环境的数据库系统中，这两部分十分重要，我们首先需要验证 SQL 的合法性，并且能够在预先定义的类型系统中成功识别和转换，以方便接下来的处理。不过由于这部分的内容略微枯燥，因此不作为 TinySQL 的课程内容，有兴趣的同学可以自行了解。
 
 接下来我们就看到第二行中依次出现了两个流程，Logical Optimizer 和 Physical Optimizer, 这里实际上是对应 System R 优化器框架中的概念，接下来，让我们进入这一节的内容。
 
@@ -14,7 +14,7 @@
 
 System R 两阶段模型可以说是现代数据库基于代价优化（Cost based optimize）的优化器的鼻祖。由于优化器框架的特殊性，我们将结合代码来介绍这一概念。
 
-从上图中可以看到，在进入优化器之前，数据依然是 AST 格式，接下来优化器会生成 Physical Plan 即 物理执行计划交由执行器执行。实际上，在进入优化器之前，我们就已经将 AST 格式的数据转换为 Plan(计划) 格式。
+从上图中可以看到，在进入优化器之前，数据依然是 AST 格式，接下来优化器会生成 Physical Plan 即物理执行计划交由执行器执行。实际上，在进入优化器之前，我们就已经将 AST 格式的数据转换为 Plan(计划) 格式。
 在 `/planner/optimize.go:func Optimize()` 中我们可以看到：
 
 ```go
@@ -186,7 +186,7 @@ func findBestTask(p LogicalPlan, prop OrderProp) PhysicalPlan {
 
 ## 额外内容
 
-如果你对 Cascades 优化器感兴趣，我们也提供了一个不是很完善的作业，你可以尝试完成 `transformation_rules.go` 中的 TODO 内容, 其对应的测试在 `transformation_rules_test.go` 中。
+如果你对 Cascades 优化器感兴趣，我们也提供了一个不是很完善的作业，你可以尝试完成 `transformation_rules.go` 中的 TODO 内容，其对应的测试在 `transformation_rules_test.go` 中。
 
 ## References
 - https://pingcap.com/zh/blog/tidb-source-code-reading-7
