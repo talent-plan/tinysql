@@ -116,7 +116,7 @@ testSuite:
 	@echo "testSuite"
 	./tools/check/check_testSuite.sh
 
-clean:
+clean: failpoint-disable
 	$(GO) clean -i ./...
 	rm -rf *.out
 	cd parser && make clean
