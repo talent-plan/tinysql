@@ -34,4 +34,4 @@ bin/goyacc: goyacc/main.go
 clean:
 	go clean -i ./...
 	rm -rf *.out
-	rm parser.go
+	rm -rf parser.go
