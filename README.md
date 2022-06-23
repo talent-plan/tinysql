@@ -66,7 +66,7 @@ mkdir -p data
 
 ## Autograding
 
-Since Jun 2022, we start use [classroom](./classroom.md) to accept labs and provide autograding timely. Once the classroom invitation is not provided, please try the tradition way to submit labs through email.
+Since Jun 2022, we start use [classroom](./classroom.md) to accept labs and provide autograding timely. Once the classroom invitation is not provided, please try the traditional way to submit labs through email.
 
 ## Contributing
 
