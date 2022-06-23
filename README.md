@@ -64,6 +64,10 @@ mkdir -p data
 ./tidb-server --store=tikv --path="127.0.0.1:2379"
 ```
 
+## Autograding
+
+Since Jun 2022, we start mainly use [classroom](./tutorial.md) to accept labs and provide autograding timely. Once the classroom invitation is not provided, please try the tradition way to submit labs through email.
+
 ## Contributing
 
 Contributions are welcomed and greatly appreciated. See [Contribution Guide](https://github.com/pingcap/community/tree/master/contributors) for details on submitting patches and the contribution workflow.
