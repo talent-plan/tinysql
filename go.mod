@@ -29,6 +29,7 @@ require (
 	go.uber.org/automaxprocs v1.2.0
 	go.uber.org/zap v1.14.0
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
 	golang.org/x/text v0.3.2
 	golang.org/x/tools v0.0.0-20200304193943-95d2e580d8eb
 	google.golang.org/grpc v1.25.1
