@@ -98,6 +98,48 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
+
+	// check table prefix
+
+	var buf []byte = key
+
+	// check len
+	if len(buf) < recordPrefixSepLength {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q short len", key)
+		return
+	}
+
+	// check table prefix "t"
+	bufTablePrefix := buf[:tablePrefixLength]
+	buf = buf[tablePrefixLength:]
+	if bytes.Compare(bufTablePrefix, tablePrefix) != 0 {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q unknown table prefix", key)
+		return
+	}
+
+	// decode tableID
+	buf, tableID, err = codec.DecodeInt(buf)
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q %v", key, err)
+		return
+	}
+
+	// check record prefix "_r"
+	bufRecordPrefix := buf[:2]
+	buf = buf[2:]
+	if bytes.Compare(bufRecordPrefix, recordPrefixSep) != 0 {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q unknown record prefix", key)
+		return
+	}
+
+	// decode handle
+	buf, handle, err = codec.DecodeInt(buf)
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q %v", key, err)
+		return
+	}
+
+	err = nil
 	return
 }
 
