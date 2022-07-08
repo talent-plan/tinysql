@@ -98,14 +98,11 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
-
-	// check table prefix
-
 	var buf []byte = key
 
 	// check len
 	if len(buf) < recordPrefixSepLength {
-		err = errInvalidIndexKey.GenWithStack("invalid record key - %q short len", key)
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q insufficient len", key)
 		return
 	}
 
