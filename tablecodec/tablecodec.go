@@ -190,7 +190,47 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
-	return tableID, indexID, indexValues, nil
+	var buf []byte = key
+
+	// check len
+	if len(buf) < prefixLen+idLen {
+		err = errInvalidIndexKey.GenWithStack("invalid index key - %q insufficient len", key)
+		return
+	}
+
+	// check table prefix "t"
+	bufTablePrefix := buf[:tablePrefixLength]
+	buf = buf[tablePrefixLength:]
+	if bytes.Compare(bufTablePrefix, tablePrefix) != 0 {
+		err = errInvalidIndexKey.GenWithStack("invalid index key - %q unknown table prefix", key)
+		return
+	}
+
+	// decode tableID
+	buf, tableID, err = codec.DecodeInt(buf)
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack("invalid record key - %q %v", key, err)
+		return
+	}
+
+	// check record prefix "_r"
+	bufRecordPrefix := buf[:2]
+	buf = buf[2:]
+	if bytes.Compare(bufRecordPrefix, indexPrefixSep) != 0 {
+		err = errInvalidIndexKey.GenWithStack("invalid index key - %q unknown index prefix", key)
+		return
+	}
+
+	// decode handle
+	buf, indexID, err = codec.DecodeInt(buf)
+	if err != nil {
+		err = errInvalidIndexKey.GenWithStack("invalid index key - %q %v", key, err)
+		return
+	}
+
+	indexValues = buf
+	err = nil
+	return
 }
 
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
