@@ -289,8 +289,9 @@ test-proj4-2:
 	go test -check.f TestSkylinePruning
 
 test-proj5-1:
-	cd executor && \
-	go test -check.f TestJoin
+	go test ./executor -check.f "TestSelectExec" && \
+	cd expression && \
+	go test -timeout 60s
 
 test-proj5-2: failpoint-enable
 	go test -timeout 600s ./executor -check.f "testSuiteJoin1|testSuiteJoin2|testSuiteJoin3"
@@ -299,7 +300,6 @@ test-proj5-2: failpoint-enable
 test-proj5-3: failpoint-enable
 	go test -timeout 600s ./executor -check.f "testSuiteAgg"
 	@$(FAILPOINT_DISABLE)
-
 
 
 proj6: failpoint-enable

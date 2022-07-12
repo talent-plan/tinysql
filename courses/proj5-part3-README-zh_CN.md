@@ -85,10 +85,14 @@ Hash Aggregation 的执行阶段可分为如下图所示的 5 步：
 
 ## 作业描述
 
-补充完整 `aggregate.go` 中的 TODO 代码
+- 补充完整 `aggregate.go` 中的 TODO 代码，包括 `consumeIntermData` 和 `shuffleIntermData` 两个方法。
+
+## 测试
+
+- 完成 `aggregate_test.go` 中的所有测试
+
+你可以通过 `make test-proj5-3` 来运行测试
 
 ## 评分
 
-完成 `aggregate_test.go` 中的测试
-
-
+全部通过可得 100 分。若有测试未通过按比例扣分。
