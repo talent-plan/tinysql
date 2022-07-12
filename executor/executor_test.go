@@ -135,6 +135,17 @@ func (s *testSuiteP1) TestChange(c *C) {
 	c.Assert(tk.ExecToErr("alter table t change c d varchar(100)"), NotNil)
 }
 
+func (s *testSuiteP1) TestSelectExec(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec(`use test;`)
+	tk.MustExec(`drop table if exists t;`)
+	tk.MustExec(`create table t(a bigint, b bigint);`)
+	tk.MustExec(`insert into t values(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6);`)
+
+	r := tk.MustQuery("select a from (select * from t limit 3) k where a != 1;")
+	r.Check(testkit.Rows("2", "3"))
+}
+
 func (s *baseTestSuite) fillData(tk *testkit.TestKit, table string) {
 	tk.MustExec("use test")
 	tk.MustExec(fmt.Sprintf("create table %s(id int not null default 1, name varchar(255), PRIMARY KEY(id));", table))

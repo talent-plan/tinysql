@@ -43,14 +43,15 @@
 
 ## 作业描述
 
-- 实现向量化表达式 [vecEvalInt](https://github.com/tidb-incubator/tinysql/blob/course/expression/builtin_string_vec.go#L89)，并将 [vectorized](https://github.com/tidb-incubator/tinysql/blob/course/expression/builtin_string_vec.go#L84) 的返回值改为 `true`
+- 实现向量化表达式 [vecEvalInt](https://github.com/tidb-incubator/tinysql/blob/course/expression/builtin_string_vec.go#L89) ，并将 [vectorized](https://github.com/tidb-incubator/tinysql/blob/course/expression/builtin_string_vec.go#L84) 的返回值改为 `true`
 - 实现向量化 selection 的 [Next](https://github.com/tidb-incubator/tinysql/blob/course/executor/executor.go#L380) 函数。
 
 ## 测试
 
-通过通过 `expression` 下所有测试和 `executor` 下面的 `TestJoin` 以及 `TestMergeJoin`。
+- 通过 `expression` 下的所有测试
+- 通过 `executor/executor_test.go` 中 `TestSelectExec`。
 
-你可以通过 `go test package_path -check.f func_name` 来跑一个具体的函数。以 `TestJoin` 为例，你可以使用 `go test github.com/pingcap/pingcap-incubator/tinysql/executor -check.f TestJoin` 来跑这个具体的函数。同时可以将输出文件重定向至文件中来后续 debug。
+你可以直接通过 `make test-proj5-1` 来运行测试，也可以通过 `go test package_path -check.f func_name` 来跑一个具体的函数。以 `TestSelectExec` 为例，你可以使用 `go test ./executor -check.f "TestSelectExec"` 来跑这个具体的函数。
 
 ## 评分
 

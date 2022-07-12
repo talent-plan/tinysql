@@ -82,13 +82,15 @@ Outer Fetcher 是一个后台 goroutine，他的主要计算逻辑在 fetchOuter
 
 ## 作业
 
-实现 [runJoinWorker](https://github.com/tidb-incubator/tinysql/blob/course/executor/join.go#L243) 以及 [fetchAndBuildHashTable](https://github.com/tidb-incubator/tinysql/blob/course/executor/join.go#L148)。
+实现 [runJoinWorker](https://github.com/tidb-incubator/tinysql/blob/course/executor/join.go#L243) 以及 [fetchAndBuildHashTable](https://github.com/tidb-incubator/tinysql/blob/course/executor/join.go#L148) 。
 
 ## 测试
 
-通过 `join_test.go` 下的所有测试
+- 通过 `join_test.go` 下除 `TestJoin` 以外的所有测试用例。
+- `TestJoin` 测试用例涉及到 project5-3 中 `aggregate` 相关方法，可以在完成整个 project5 后再测试，该测试不会计算到分数之中。
+
+你可以通过 `make test-proj5-2` 来运行测试。
 
 ## 评分
 
 全部通过可得 100 分。若有测试未通过按比例扣分。
-
