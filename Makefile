@@ -278,7 +278,7 @@ test-proj2:
 
 test-proj3:
 	cd ddl && \
-	go test -timeout 200s -check.f TestAddColumn TestDropColumn TestColumnChange
+	go test -timeout 200s -check.f "TestAddColumn|TestDropColumn|TestColumnChange"
   
 test-proj4-1:
 	cd planner/core && \
