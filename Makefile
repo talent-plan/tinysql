@@ -12,7 +12,7 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin
 export PATH := $(path_to_add):$(PATH)
 
-GOCMD			?= go
+GOCMD           ?= go
 GO              := GO111MODULE=on $(GOCMD)
 GOBUILD         := $(GO) build $(BUILD_FLAG) -tags codes
 GOBUILDCOVERAGE := GOPATH=$(GOPATH) cd tidb-server; $(GO) test -coverpkg="../..." -c .
