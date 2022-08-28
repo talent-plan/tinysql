@@ -12,7 +12,8 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH))):$(PWD)/tools/bin
 export PATH := $(path_to_add):$(PATH)
 
-GO              := GO111MODULE=on go
+GOCMD			?= go
+GO              := GO111MODULE=on $(GOCMD)
 GOBUILD         := $(GO) build $(BUILD_FLAG) -tags codes
 GOBUILDCOVERAGE := GOPATH=$(GOPATH) cd tidb-server; $(GO) test -coverpkg="../..." -c .
 GOTEST          := $(GO) test -p $(P)
@@ -262,7 +263,7 @@ tools/bin/golangci-lint:
 # 	$ make vectorized-bench VB_FILE=Time VB_FUNC=builtinCurrentDateSig
 vectorized-bench:
 	cd ./expression && \
-		go test -v -benchmem \
+		$(GOCMD) test -v -benchmem \
 			-bench=BenchmarkVectorizedBuiltin$(VB_FILE)Func \
 			-run=BenchmarkVectorizedBuiltin$(VB_FILE)Func \
 			-args "$(VB_FUNC)"
@@ -270,38 +271,38 @@ vectorized-bench:
 
 test-proj1:
 	cd tablecodec && \
-	go test
+	$(GOCMD) test
 
 test-proj2:
 	cd parser && \
-	go test -check.f TestDMLStmt
+	$(GOCMD) test -check.f TestDMLStmt
 
 test-proj3:
 	cd ddl && \
-	go test -timeout 200s -check.f "TestAddColumn|TestDropColumn|TestColumnChange"
+	$(GOCMD) test -timeout 200s -check.f "TestAddColumn|TestDropColumn|TestColumnChange"
   
 test-proj4-1:
 	cd planner/core && \
-	go test -check.f TestPredicatePushDown
+	$(GOCMD) test -check.f TestPredicatePushDown
 
 test-proj4-2:
 	cd planner/core && \
-	go test -check.f TestSkylinePruning
+	$(GOCMD) test -check.f TestSkylinePruning
 
 test-proj5-1:
-	go test ./executor -check.f "TestSelectExec" && \
+	$(GOCMD) test ./executor -check.f "TestSelectExec" && \
 	cd expression && \
-	go test -timeout 60s
+	$(GOCMD) test -timeout 60s
 
 test-proj5-2: failpoint-enable
-	go test -timeout 600s ./executor -check.f "testSuiteJoin1|testSuiteJoin2|testSuiteJoin3"
+	$(GOCMD) test -timeout 600s ./executor -check.f "testSuiteJoin1|testSuiteJoin2|testSuiteJoin3"
 	@$(FAILPOINT_DISABLE)
 
 test-proj5-3: failpoint-enable
-	go test -timeout 600s ./executor -check.f "testSuiteAgg"
+	$(GOCMD) test -timeout 600s ./executor -check.f "testSuiteAgg"
 	@$(FAILPOINT_DISABLE)
 
 
 proj6: failpoint-enable
-	go test -timeout 600s ./store/tikv -mockStore=false
+	$(GOCMD) test -timeout 600s ./store/tikv -mockStore=false
 	@$(FAILPOINT_DISABLE)
