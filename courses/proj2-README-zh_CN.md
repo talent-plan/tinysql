@@ -391,7 +391,7 @@ union 后面是对 token 和非终结符按照类型分别定义：
 ...
 ```
 
-parser.y 文件的第二部分是 SQL 语法的产生式和每个规则对应的 aciton。SQL语法非常复杂，parser.y 的大部分内容都是产生式的定义。
+parser.y 文件的第二部分是 SQL 语法的产生式和每个规则对应的 action。SQL语法非常复杂，parser.y 的大部分内容都是产生式的定义。
 
 SQL 语法可以参照 MySQL 参考手册的 SQL Statements 部分，例如 SELECT 语法的定义如下：
 
