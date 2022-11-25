@@ -34,7 +34,7 @@
 
 ### Outer Fetcher
 
-Outer Fetcher 是一个后台 goroutine，他的主要计算逻辑在 fetchOuterSideChunks 这个函数中。它会不断的读大表的数据，并将获得的 Outer 表的数据分发给各个 Join Worker。这里多线程之间的资源交互可以用下图表示：
+Outer Fetcher 是一个后台 goroutine，它的主要计算逻辑在 fetchOuterSideChunks 这个函数中。它会不断的读大表的数据，并将获得的 Outer 表的数据分发给各个 Join Worker。这里多线程之间的资源交互可以用下图表示：
 
 ![Hash Join 2](imgs/proj5-part2-2.jpg)
 
