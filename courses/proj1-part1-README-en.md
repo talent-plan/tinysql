@@ -4,6 +4,8 @@
 
 In this section, we will look at the logical representation and data processing using SQL. You can get your hands dirty by manipulating the database on [A Tour of TiDB](https://tour.tidb.io/).
 
+If you are quite familiar with SQL, you may skip this section.
+
 ## An Overview of SQL Syntax
 
 In relational databases, data exists in the form of `tables`. For example, in [A Tour of TiDB](https://tour.pingcap.io/), there is a `person` table:
