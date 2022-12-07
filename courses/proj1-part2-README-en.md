@@ -1,79 +1,77 @@
-# Table Codec
+# Section II Table Codec
 
 ## Overview
 
-In this chapter, we'll explain how the data on the table is mapped to TinyKV.
+In this section, we will explain how the data in the table is mapped to the storage engine, TinyKV.
 
-## Introduction to Table Codec
+## Introduction to TableCodec
 
-Judging from the data processing described in the previous section, what kind of properties do we need to store:
+Based on the data processing patterns mentioned in the previous section, here are a few requirements for data storage:
+- Data from the same table should be stored together. So that less storage blocks need to be retrieved when reading and/or writing data within the one table. IO may be a huge bottleneck at least for some workloads under certain hardware settings.
+- The data arrangement within one table also depends on the query patterns:
+  - If the point query dominates, the hash table may be a better design. Yet, a sorted array may also work.
+  - If most of the queries are range queries, an sorted array might be better.
+- Whether to use row-store or column-store is also determined by query patterns. If the data from the same row needs to be read and/or written together quite often, it is better to be stored together.
 
-- First of all, from the perspective of single table operation, data from the same table should be stored together, so we can avoid reading data from other tables when processing one table
-- Second, how should we arrange the data in the same table? From the perspective of SQL filter conditions
-- If there are basically no filters, then it doesn't matter how you arrange them
-- If there are many equal value queries such as person = "xx", then an arrangement like a hash table is better, of course, an ordered array is fine
-- If there are many queries like number >= "xx", then an arrangement like an ordered array is better, because in this way we can avoid reading more useless data
-- Should we store the data on the same line separately or together? Once again, it depends on the data access pattern. If data on the same row always needs to be read at the same time, then it is better to exist together. In TinySQL, we chose to store data on the same row together.
+In TinyKV, we use a sorted array to arrange data. Both the key and the value will be serialized to bytes before storing into the store engine.
 
-From the above perspective, an arrangement similar to an sorted array is probably the easiest way, since it can almost satisfy all requirements in a uniform manner. Next, let's take a look at TinyKV. From the simplest point of view, we can think of it as a KV engine that provides the following properties:
+TinyKV should also provide the following APIs:
+- scan(startKey): Given a startKey, return all the values in order whose keys are greater than or equal to startKey.
+- set(key, value): Update the value of a key.
 
-- Both Key and Value are bytes arrays, which means that regardless of the original type, we need to serialize them before storing them
-- Scan (startKey), given any Key, this interface can return all data greater than or equal to this startKey in order.
-- Set (key, value) to set the value of key to value.
+From the discussion above, we can conclude that we need to store the data in the following way:
+- A unique table identifier should be places at the beginning of the key, since all the data from the same table needs to be stored together;
+- If a column needs to be sorted, then the value of this column needs to be placed inside key and right after the table unique identifier;
+- Value includes all the rest data.
 
-Combined with the above discussion, the data storage method is ready to come up:
-
-- Since the same table needs to be stored together, the unique label of the table should be placed in front of the Key, so the keys of the same table are continuous
-- For a table, place the columns that need to be sorted after the table's unique label and coded in the Key
-- Value holds all the other columns on a row
-
-Specifically, we will assign each table a tableID, and each row will be assigned a rowID (if the table has int Primary Key, then the value of Primary Key will be used as rowID), where tableId is unique within the whole cluster and rowId is unique within the table. These IDs are all int64 types.
-Each row of data is encoded into a key-value pair according to the following rules:
-
+Concretely, every table will have a `TableID`, and each row will have a `RowID`. In the case where the primary key is an integer, the primary key will be the `RowID`. `TableID` is unique in the whole cluster, and `RowID` is unique in the table. Both `TableID` and `RowID` are all `int64` types. There are also `tablePrefix` and `RecordPrefixSep` inside the key. There are both string constants for differentiating with other data within the Key-Value space. 
 ```
     Key： tablePrefix_tableID_recordPrefixSep_rowID
     Value: [col1, col2, col3, col4]
 ```
 
-Among them, Key's tablePrefix/RecordPrefixSep are all specific string constants used to differentiate other data within the KV space.
-For indexes, each index is assigned a unique IndexID within the table, and then encoded into a key-value pair according to the following rules:
+In terms of indexes, each index is assigned a unique `indexID` within the table. The `indexID` will also be encoded into the key-value pair:
 
 ```
     Key: tablePrefix_tableID_indexPrefixSep_indexID_indexColumnsValue
     Value: rowID
 ```
 
-Of course, we also need to consider non-unique indexes. At this point, the above method won't work. We need to also encode RowID into the Key to make it unique:
+For non-unique indexes, we also encode `rowID` into the key:
 
 ```
    Key: tablePrefix_tableID_indexPrefixSep_indexID_ColumnsValue_rowID
    Value：null
 ```
 
-Thoughts: If you think about it from a join perspective, how should the data be mapped?
+You may also consider how the data should be stored if `join` operation dominates the workload.
 
 ## Understanding the Code
 
-The main code for tablecodec is in [tablecodec.go](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go), and the code we need to focus on this time is mainly between [L33 to L147](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L33-L146).
+The main code for `tablecodec` is in [tablecodec.go](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go) line 33 to 47.
 
-At the beginning of the code, the three constants mentioned above are defined: tablePrefix, RecordPrefixSep, and indexPrefixSep.
+In line 33 to 37, three constants mentioned above are defined: `tablePrefix`, `recordPrefixSep`, and `indexPrefixSep`.
 
-Next, you can see that [encoderowkeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) and [encodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86) respectively implement the encoding of row data and index data as described above.
+In line 64, [encoderowkeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) implements the encoding of row data.
 
-## Job Description
+In line 86, [encodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86) implements the encoding of index data.
 
-Implement [DecodeRecord Key](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L72) and [decodeIndexKeyprefix](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L95) according to [encoderowkeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) and [encodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86) above. Note that since the parameter `key` may be illegal, error handling needs to be considered.
+## Task
+
+Implement [decodeRecordKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L72) and [decodeIndexKeyprefix](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L95) according to [encoderowkeyWithHandle](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L64) and [encodeIndexSeekKey](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec/tablecodec.go#L86) above. Note that since the parameter `key` may be illegal, error handling needs to be considered.
 
 ## Tests
 
-Passed all tests under [Tablecodec](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec).
+Pass all tests under [Tablecodec](https://github.com/pingcap-incubator/tinysql/blob/course/tablecodec).
 
-You can run all tests via `make test-proj1` in the root directory.
+You can run all tests by `make test-proj1` in the root directory.
 
-You can use `go test package_path -check.f func_name` to run a specific function. Take `TestDecodeIndexKey` as an example,
-You can use `go test github.com/pingcap/tidb/tablecodec -check.f TestDecodeIndexKey` to run this specific function.
+You can use `go test <package_path> -check.f <func_name>` to run a specific function. 
 
-## Rating
+Using `TestDecodeIndexKey` as an example, you can use `go test github.com/pingcap/tidb/tablecodec -check.f TestDecodeIndexKey` to run this specific function.
 
-`TestDecodeIndexKey` and `TestRecordKey` each scored 50 percent.
+## Grading
+
+- `decodeRecordKey` 50%
+- `decodeIndexKeyprefix` 50%
 
