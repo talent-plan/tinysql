@@ -15,7 +15,7 @@ Based on the data processing patterns mentioned in the previous section, here ar
 
 In TinyKV, we use a sorted array to arrange data. Both the key and the value will be serialized to bytes before storing into the store engine.
 
-TinyKV should also provide the following APIs:
+TinyKV should provide the following APIs:
 - scan(startKey): Given a startKey, return all the values in order whose keys are greater than or equal to startKey.
 - set(key, value): Update the value of a key.
 
