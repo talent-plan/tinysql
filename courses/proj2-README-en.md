@@ -2,36 +2,32 @@
 
 ## Introduction
 
-In the Parser section, we'll cover how TinySQL transforms text into AST.
+In the Parser section, we'll cover how TinySQL transforms SQL into AST.
 
-## SQL Processing Process
+## The Process for SQL Processing
 
-From previous learning, we know that in the database, we use SQL statements to manipulate data. However, SQL itself is only text data, and the database needs steps such as receiving the SQL text and verifying the validity before processing the SQL statement. This is actually a very classic compilation problem in computer science, very similar to a programming language compiler.
-
-Before we introduce Parser, we'll cover how SQL statements are processed in TinySQL.
+We have already known that, in the database, we use SQL statements to manipulate data. However, SQL itself is written in text. Database needs to validate the SQL statements before processing it. This is actually a very classic compilation problem in computer science. This step is similar to what a compiler does. Before we introduce the parser, we'll cover how SQL statements are processed in TinySQL.
 
 ![SQL](imgs/proj2-1.png)
 
-The figure above shows how SQL statements are processed in TinySQL. Looking from left to right, when a user establishes a connection to TinySQL using the MySQL client, it passes the logic in the Protocol Layer section of the figure. Immediately after that, the user may send a SQL statement through the MySQL client. At this time, through the protocol layer, TinySQL successfully receives the SQL statement and tries to process it. This part of the logic is the SQL Core Layer part of the diagram. This part of what I'm going to talk about is Parser at the top.
+The figure above shows how SQL statements are processed in TinySQL. In this part, we will talk about the parser.
 
-## About Parser
+## An introduction to Parser
 
-Parser's main function is to parse the text of an SQL statement according to pre-defined SQL syntax rules and transform it into an Abstract Syntax Tree (AST). An abstract syntax tree is a term for compilation principles in computer science. It represents the grammatical structure of a programming language in a tree form. As a simple example, for SQL:Select a from t where b > 0; it would be converted to:
+The main function of the parser is to parse the text of an SQL statement based on predefined SQL syntax rules, and then transform it into an Abstract Syntax Tree (AST). An abstract syntax tree is a term in compilation in computer science. It represents the grammatical structure of a programming language in a tree form. For example, the SQL: ```select a from t where b > 0;``` would be converted to:
 
 ![AST](imgs/proj2-2.png)
 
-Among them, Projection and Selection are projection and selection in relational algebra. Simply put, the meaning of this abstract syntax tree from the bottom up is to read data from table t, select only the data that satisfies the condition t.b > 0, and finally only need column t.a, which is consistent with the meaning of the original SQL statement.
+We can read the AST from bottom up. It first reads data from table `t`, then it selects the data that satisfies the condition `t.b > 0`, and finally only column `t.a` is projected. The meaning of this AST is consistent with the meaning of the original SQL statement.
 
-### Introducing Lex & Yacc
-In the principles of compilation, lexical analysis and grammatical analysis are tools used to generate abstract syntax trees from language texts. Among them, [Lex & Yacc](http://dinosaur.compilertools.net/) is a well-known but ancient tool for generating lexical analyzers and syntax analyzers.
-
-In this project, we don't need an in-depth understanding of the lexical analyzer and the syntax analyzer; we just need to be able to understand the syntax definition file and understand how the generated parse works. Here's a simple example:
+### An introduction to Lex & Yacc
+In compilation, lexical analysis and grammatical analysis are used to generate AST from texts. `Lex and yacc` are tools used to generate lexical analyzers and parsers. In this project, we only need to focus on understanding the syntax definition file and how the generated parser works. Here's an example:
 
 ![Lex & Yacc](imgs/proj2-3.png)
 
-The diagram above uses Lex & Yacc to build the compiler. Here, Lex generates a lexical analyzer based on user-defined patterns. The lexical analyzer reads the source code and converts the source code into tokens output according to patterns. Yacc generates a syntax analyzer based on user-defined syntax rules. The syntax analyzer takes the tokens output from the lexical analyzer as input and creates a syntax tree based on the rules of the syntax. Finally, the syntax tree is traversed to generate output. The result can either generate machine code or interpret execution while iterating through the AST.
+The diagram shows the process of compiling using Lex and Yacc. Lex generates a lexical analyzer based on user-defined patterns. The lexical analyzer reads the source code and converts the source code into tokens output according to patterns. Yacc generates a syntax analyzer based on user-defined syntax rules. The syntax analyzer takes the tokens output from the lexical analyzer as input and creates a syntax tree based on the rules of the syntax. Finally, the syntax tree is traversed to generate output. The result can either generate machine code or interpret execution while iterating through the AST.
 
-As can be seen from the above process, users need to separately provide Lex patterns definitions, provide Yacc with syntax rules files, and Lex & Yacc generate a lexical analyzer and syntax analyzer that meet their needs based on the input file provided by the user. Both of these configurations are text files and have the same structure:
+As shown in above process, users need to provide Lex patterns definitions and provide Yacc with syntax rules files separately.Lex & Yacc generate a lexical analyzer and syntax analyzer that meet their needs based on the input file provided by the user. Both of these configurations are text files and have the same structure:
 
 ```goyacc
 ... definitions ...
@@ -41,7 +37,7 @@ As can be seen from the above process, users need to separately provide Lex patt
 ... subroutines ...
 ```
 
-The content of the file is divided into three parts by%%, and we focus on the middle rule definition section. For the example above, Lex's input file is as follows:
+The content of the file is divided into three parts by `%%`, and we focus on the rule definition section in the middle. For the example above, Lex's input file is as follows:
 
 ```goyacc
 ...
@@ -110,9 +106,9 @@ expr:
 ...
 ```
 
-The first section defines the combination of token types and operator. All four types of operator are left associative. Operators on the same line have the same priority, and operator on different lines have higher priority for lines defined later.
+The first section defines the combination of token types and operators. All four types of operator are left associative. Operators on the same line have the same priority, and operator on different lines have higher priority for lines defined later.
 
-syntax grammatical rules use the BNF definition. BNF can be used to express context-free languages, and most modern programming languages can be expressed using BNF. The rules above define three types of generation. The item to the left of the colon in the generating formula (for example, statement) is called a non-terminator, and INTEGER and VARIABLE are called terminators; they are tokens return by Lex. The terminator can only appear on the right side of the generation formula. You can generate expressions using the generation-defined syntax:
+The syntax grammatical rules use the BNF definition. BNF can be used to express context-free languages, and most modern programming languages can be expressed using BNF. The rules above define three types of generation. The item to the left of the colon in the generating formula (e.g., statement) is called a non-terminator, and INTEGER and VARIABLE are called terminators; they are tokens returned by Lex. The terminator can only appear on the right side of the generation formula. You can generate expressions using the generation-defined syntax:
 
 ```goyacc
 expr -> expr * expr
@@ -122,7 +118,8 @@ expr -> expr * expr
      -> INTEGER + INTEGER * INTEGER
 ```
 
-parse an expression is the reverse operation of generating an expression. We need to reduce the expression to a non-terminator. The syntax analyzer generated by Yacc uses a bottom-up reduction (shift-reduce) method to parse the syntax while using the stack to save intermediate state. Let's take a look at the example. The parse process of the expression x+y*z:
+
+Parsing an expression is the reverse operation of generating an expression. We need to reduce the expression to a non-terminator. The syntax analyzer generated by Yacc uses a bottom-up reduction (shift-reduce) method to parse the syntax while using the stack to save intermediate state. Let's take a look at the example. The parse process of the expression x+y*z:
 
 ```goyacc
 1    . x + y * z
@@ -140,7 +137,7 @@ parse an expression is the reverse operation of generating an expression. We nee
 13   program  .
 ```
 
-point (.) indicates the current reading position along with "." moving from left to right, we push the token we read into the stack. When we find that the content in the stack matches the right side of a generation formula, the matching item is popped out of the stack, and the non-terminator on the left side of the generation formula is pushed into the stack. This process continues until all tokens have been read, and only the starting non-terminator (program in this case) remains on the stack.
+The point (.) indicates the current reading position. With `.` moving from left to right, we push the token we read into the stack. When we find that the content in the stack matches the right side of a generation formula, the matching item is popped out of the stack, and the non-terminator on the left side of the generation formula is pushed into the stack. This process continues until all tokens have been read, and only the starting non-terminator (`program` in this case) remains on the stack.
 
 Actions associated with this rule are defined in brackets on the right side of the generation formula, such as:
 
@@ -177,11 +174,11 @@ nodeType *opr(int oper, int nops, ...) {
 }    
 ```
 
-The above is a snippet of the syntax rule definition. We can see that the action associated with each rule is no longer an evaluation, but a corresponding function is called. The function return the node type nodeType of the abstract syntax tree, and then pushes this node back to the stack. When the parse is complete, we get an abstract syntax tree composed of NodeType. An iterative visit to this syntax tree can be performed by the machine code or by the interpreter as well.
+The above is a snippet of the syntax rule definition. We can see that the action associated with each rule is no longer a calculation, instead a corresponding function is called. The function returns the node type nodeType of the abstract syntax tree, and then pushes this node back to the stack. When the parse is complete, we get an abstract syntax tree composed of NodeType. An iterative visit to this syntax tree can be performed by the machine code or by the interpreter as well.
 
-At this point, we have a general understanding of the principles of Lex & Yacc. There are actually a lot of details, such as how to unobscure the syntax, but our goal is to use it in TinySQL, and it's enough to master these concepts.
+At this point, we have a general understanding of the principles of Lex & Yacc. There are actually a lot of details, such as how to unobscure the syntax. Since our goal is to use it in TinySQL, it is more than enough.
 
-### About Goyacc
+### An introduction to Goyacc
 
 [Goyacc](https://github.com/cznic/goyacc) is the golang version of Yacc. Similar to the functionality of Yacc, goyacc generates a go language parser for that syntax rule based on the input syntax rules file. The parser YYParse generated by goyacc requires the lexical analyzer to conform to the following interface:
 
@@ -202,7 +199,7 @@ type yyLexerEx interface {
 }
 ```
 
-TinySQL does not use tools like Lex to generate a lexical analyzer, but is entirely handmade. The code corresponding to the lexical analyzer is parser/lexer.go, which implement the interface required by goyacc:
+TinySQL does not use tools like Lex to generate a lexical analyzer, but is entirely made in-house. The code corresponding to the lexical analyzer is parser/lexer.go, which implement the interface required by goyacc:
 
 ```go
 ...
@@ -236,14 +233,14 @@ func (s *Scanner) Errors() []error {
 }
 ```
 
-In addition, Lexer uses trie technology for token identification. The specific implement code is in parser/misc.go. Interested students can study on their own, which is not a must for this course.
+In addition, Lexer uses trie technology for token identification. The specific implementation code is in `parser/misc.go`. 
 
 
 ### TinySQL Parser
 
-At this point, we have the necessary pre-requisite knowledge, and the next content will be easier to understand. Let's first look at our SQL syntax file, parser/parser.y. goyacc will generate the corresponding SQL syntax parser based on this file.
+At this point, we have the necessary prerequisite knowledge. Let's now look at our SQL syntax file `parser/parser.y`. goyacc will generate the corresponding SQL syntax parser based on this file.
 
-parser/parser.y has quite a few lines, but don't be afraid, the file is still structured as described above:
+`parser/parser.y` has quite a few lines, but it is still structured as described above:
 ```goyacc
 ... definitions ...
 %%
@@ -252,9 +249,9 @@ parser/parser.y has quite a few lines, but don't be afraid, the file is still st
 ... subroutines ...
 ```
 
-The third part of parser.y subroutines is blank and has no content, so we only need to focus on the first part, definitions, and the second part,rules.
+There is no content in the third part of `parser.y`. We only need to focus on the first part, definitions, and the second part,rules.
 
-The first part mainly defines the type, priority, and integrability of tokens. Note the union struct:
+The first part mainly defines the type, priority, and integrability of tokens. Please pay attention to the union struct:
 
 ```goyacc
 %union {
@@ -268,9 +265,9 @@ The first part mainly defines the type, priority, and integrability of tokens. N
 
 This union struct defines the properties and types of items that are pushed into the stack during syntactic parse.
 
-The item pressed into the stack may be a terminator, or token, and its type may be item or ident;
+The item pressed into the stack may be a terminator, or token, and its type may be item or ident.
 
-This item may also be a non-terminator, that is, the left side of the generating expression. Its type can be expr, statement, item, or ident.
+This item may also be a non-terminator, that is, on the left side of the generated expression. Its type can be `expr`, `statement`, `item`, or `ident`.
 
 Based on this union, goyacc generates the corresponding struct in the parse:
 
@@ -285,7 +282,7 @@ type yySymType struct {
 }
 ```
 
-During syntax parse, non-terminators are constructed as abstract syntax tree (AST) nodes AST.EXPRNode or AST.stmtNode. Data structures related to the abstract syntax tree are defined in the ast package, and most of them implement the ast.Node interface:
+During syntax parsing, non-terminators are constructed as abstract syntax tree (AST) nodes `AST.EXPRNode` or `AST.stmtNode`. Data structures related to the abstract syntax tree are defined in the ast package, and most of them implement the ast.Node interface:
 
 ```go
 // Node is the basic element of the AST.
@@ -307,7 +304,7 @@ type Visitor interface {
 }
 ```
 
-A union is followed by a separate definition of tokens and non-terminators by type:
+It is followed by a separate definition of tokens and non-terminators by type:
 
 ```goyacc
 /*  ident type */
@@ -373,7 +370,7 @@ A union is followed by a separate definition of tokens and non-terminators by ty
     ...
 ```
 
-The first section concludes with a definition of priority and associativity:
+The first section includes a definition of priority and associativity:
 
 ```goyacc
 ...
@@ -469,9 +466,9 @@ type SelectStmt struct {
 }
 ```
 
-As can be seen, the contents contained in the ast.selectStmt structure also correspond to the SELECT syntax.
+It is obvious that the contents contained in the `ast.selectStmt` structure corresponds to the `SELECT` syntax.
 
-Other generation expressions are also written according to the corresponding SQL syntax. As you can see from parser.y's comments, this file was initially generated from the BNF conversion tool. Writing this rules file by hand from scratch would be a huge amount of work.
+Other generation expressions are also written according to the corresponding SQL syntax. As you can see from `parser.y`'s comments, this file was initially generated from the BNF conversion tool. Writing this rules file by hand from scratch would be a huge amount of work.
 
 Once you've defined the parser.y syntax rules file, you can use goyacc to generate a syntax parse:
 
@@ -480,15 +477,16 @@ cd parser
 make
 ```
 
-Note: You can check the Makefile for specific commands. Also, the command includes a format check for parser.y and automatic formatting. If a format-related error occurs, make needs to be executed again.
+Note: You can check the Makefile for specific commands. Also, the command includes a format check for parser.y and automatic formatting. If a format-related error occurs, `make` needs to be executed again.
 
-## Job Description
+## Task
 
-After implement `JoinTable`, you can use the failed tests in the parser test to determine what syntax parts need to be added.
+Implement `JoinTable`, you can use the failed tests in the parser test to determine what syntax parts need to be added.
 
 ## Tests
 
-`TestDMLStmt` passed the test.
+Pass the test `TestDMLStmt`.
+
 Once the code is complete, execute it in the root directory
 
 ```bash
@@ -496,17 +494,17 @@ cd parser
 make
 ```
 
-and the tinysql parser generation can be completed. This command includes checking the format of parser.y and automatically organizing the format. If an error related to the format occurs, make needs to be executed again.
-then
+Then the tinysql parser can be generated. This command includes checking the format of parser.y and automatically organizing the format. If an error related to the format occurs, you need to execute the `make` command again.
+
 ```bash
 cd .. 
 make test-proj2
 ```
 Execute tests
 
-## Rating
+## Grading
 
-Pass `TestDMLStmt` for a perfect score.
+Pass the test `TestDMLStmt`.
 
 ## References
 
