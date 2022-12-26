@@ -1,13 +1,13 @@
-# Optimizing
+# Query Optimization
 
 ## Overview
 
-In this section of optimization, we'll cover the two framework of the optimizer, how to use statistics to estimate data distribution and index selection, and some other classic questions.
+In this section, we will cover topics related to query optimization, including two frameworks of the optimizer, how to use statistics to estimate data distribution, and index selection.
 
-## Part I Search Framework System R and Cascades
+## Part I Search Frameworks: System R and Cascades
 
-[Part I Documentation](./proj4-part1-README-zh_CN.md)
+[Part I Documentation](./proj4-part1-README-en.md)
 
-## Part II Cost Estimation and Statistics and Join Reorder
+## Part II Cost Estimation, Statistics, and Join Reordering
 
-[Part II Documents](./proj4-part2-README-zh_CN.md)
+[Part II Documents](./proj4-part2-README-en.md)
