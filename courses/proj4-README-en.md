@@ -6,8 +6,8 @@ In this section, we will cover topics related to query optimization, including t
 
 ## Part I Search Frameworks: System R and Cascades
 
-[Part I Documentation](./proj4-part1-README-en.md)
+[Part I](./proj4-part1-README-en.md)
 
 ## Part II Cost Estimation, Statistics, and Join Reordering
 
-[Part II Documents](./proj4-part2-README-en.md)
+[Part II](./proj4-part2-README-en.md)
