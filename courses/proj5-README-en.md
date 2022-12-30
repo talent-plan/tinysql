@@ -1,21 +1,19 @@
 # Execution
--
-## Overview
 
-In this section, we will introduce the most core execution model of the execution layer and the execution algorithms of two more critical specific operators.
+In this section, we will introduce the core execution model in the execution layer and two execution algorithms.
 
 ## Part I Execution Model: Volcano Model and Vectorization
 
-[Part I Documentation](./proj5-part1-README-zh_CN.md)
+[Part I](./proj5-part1-README-en.md)
 
 ## Part II Hash Join
 
-[Part II Documents](./proj5-part2-README-zh_CN.md)
+[Part II](./proj5-part2-README-en.md)
 
 ## Part III Hash Aggregate
 
-[Part III Documents](./proj5-part3-README-zh_CN.md)
+[Part III](./proj5-part3-README-en.md)
 
-## Rating
+## Grading
 
-The details of the ratings for the three sub-tasks are detailed in their respective documentation, where the scores are summarized in a 2:4:4 ratio to the final score for Project 3.
+Part I consists of 20% of the score, while Part II and Part III consists 40% each.
