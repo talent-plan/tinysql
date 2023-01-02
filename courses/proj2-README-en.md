@@ -23,7 +23,7 @@ We can read the AST from bottom up. It first reads data from table `t`, then it 
 ### An introduction to Lex & Yacc
 In compilation, lexical analysis and grammatical analysis are used to generate AST from texts. `Lex and yacc` are tools used to generate lexical analyzers and parsers. In this project, we only need to focus on understanding the syntax definition file and how the generated parser works. Here's an example:
 
-![Lex & Yacc](imgs/proj2-3.png)
+![Lex & Yacc](imgs/proj2-3-en.png)
 
 The diagram shows the process of compiling using Lex and Yacc. Lex generates a lexical analyzer based on user-defined patterns. The lexical analyzer reads the source code and converts the source code into tokens output according to patterns. Yacc generates a syntax analyzer based on user-defined syntax rules. The syntax analyzer takes the tokens output from the lexical analyzer as input and creates a syntax tree based on the rules of the syntax. Finally, the syntax tree is traversed to generate output. The result can either generate machine code or interpret execution while iterating through the AST.
 
