@@ -65,7 +65,7 @@ mkdir -p data
 ```
 ## Start to learn and join the learning class
 
-Please register the talentplan course platform and join the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
+Please register the talentplan course platform and join the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234).By the way, you can find some other fundamental courses in the learning platform.
 
 ## Autograding
 
