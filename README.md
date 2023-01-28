@@ -17,7 +17,7 @@ The course is organized into six parts:
 - DDL [English](./courses/proj3-README-en.md) | [Chinese](./courses/proj3-README-zh_CN.md)
 - Optimizer [English](./courses/proj4-README-en.md) | [Chinese](./courses/proj4-README-zh_CN.md)
 - Executor [English](./courses/proj5-README-en.md) | [Chinese](./courses/proj5-README-zh_CN.md)
-- Percolator [English](./courses/proj5-README-en.md) | [Chinese](./courses/proj6-README-zh_CN.md)
+- Percolator [English](./courses/proj6-README-en.md) | [Chinese](./courses/proj6-README-zh_CN.md)
 
 ## Reference List
 
