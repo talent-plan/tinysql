@@ -63,13 +63,10 @@ mkdir -p data
 ./tinykv-server -path=data
 ./tidb-server --store=tikv --path="127.0.0.1:2379"
 ```
-## Start to learn and join the learning class
 
-Please register the talentplan course platform and join the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234). By the way, you can find some other fundamental courses in the learning platform.
+## Autograding and certification
 
-## Autograding
-
-Since Jun 2022, we start using [github classroom](./classroom.md) to accept labs and provide autograding timely. The github classroom invitation, the video content and the certification after you pass the class is  provided in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
+Since Jun 2022, we start using [github classroom](./classroom.md) to accept labs and provide autograding timely. The github classroom invitation, the discussion Wechat/Slack group and the certification after you pass the class is provided in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
 
 ## Contributing
 
