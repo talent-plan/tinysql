@@ -14,7 +14,7 @@ After that, we will create a private tinySQL repo under the orgnization talent-p
 
 ## Get a Classroom Invitation
 
-Since June 2022, tinySQL learning activities will run in two ways. One is learning camps organized periodically by Talent Plan community, you can get the learning camps information and invitation link from [here](https://github.com/talent-plan). The other one is the traditiona way, you can package all the tinySQL code and send to [talent-plan@tidb.io](mailto:talent-plan@tidb.io) with the subject **Apply for review of tinySQL labs**
+The classroom invitation can be found in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
 
 ## Autograding
 
