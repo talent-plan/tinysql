@@ -66,7 +66,7 @@ mkdir -p data
 
 ## Autograding and certification
 
-Since Jun 2022, we start using [github classroom](./classroom.md) to accept labs and provide autograding timely. The github classroom invitation, the discussion Wechat/Slack group and the certification after you pass the class is provided in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
+Since Jun 2022, we start using [github classroom](./classroom.md) to accept labs and provide autograding timely. The github classroom invitation is https://classroom.github.com/a/MZUEVGmB. The discussion Wechat/Slack group and the certification after you pass the class is provided in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
 
 ## Contributing
 
