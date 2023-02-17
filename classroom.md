@@ -14,7 +14,7 @@ After that, we will create a private tinySQL repo under the orgnization talent-p
 
 ## Get a Classroom Invitation
 
-The classroom invitation can be found in the [tinySQL learning class](https://talentplan.edu.pingcap.com/catalog/info/id:234)
+Please find it in the readme of the course repo
 
 ## Autograding
 
