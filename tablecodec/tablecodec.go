@@ -43,6 +43,7 @@ const (
 	RecordRowKeyLen       = prefixLen + idLen /*handle*/
 	tablePrefixLength     = 1
 	recordPrefixSepLength = 2
+	indexPrefixSepLength  = 2
 )
 
 // TableSplitKeyLen is the length of key 't{table_id}' which is used for table split.
@@ -98,7 +99,25 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
-	return
+	// check key is valid
+	if key == nil {
+		return 0, 0, errInvalidIndexKey.GenWithStack("invalid record key")
+	}
+	if len(key) != RecordRowKeyLen {
+		return 0, 0, errInvalidIndexKey.GenWithStack("invalid record key")
+	}
+	// decode and get the table prefix
+	key, tableID, err = codec.DecodeInt(key[tablePrefixLength:])
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+	// decode and get the handle
+	key, handle, err = codec.DecodeInt(key[recordPrefixSepLength:])
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+
+	return tableID, handle, nil
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -148,6 +167,18 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
+	if key == nil {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key")
+	}
+	key, tableID, err = codec.DecodeInt(key[tablePrefixLength:]) // tableID
+	if err != nil {
+		return 0, 0, nil, errors.Trace(err)
+	}
+	indexValues, indexID, err = codec.DecodeInt(key[indexPrefixSepLength:]) //indexID
+	if err != nil {
+		return 0, 0, nil, errors.Trace(err)
+	}
+
 	return tableID, indexID, indexValues, nil
 }
 
