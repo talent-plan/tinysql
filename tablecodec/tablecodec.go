@@ -98,7 +98,24 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
-	return
+
+	k := key
+	if !key.HasPrefix(tablePrefix) {
+		err = errInvalidRecordKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, err
+	}
+
+	key, tableID, err = codec.DecodeInt(key[tablePrefixLength:])
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+
+	key, handle, err = codec.DecodeInt(key[recordPrefixSepLength:])
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+
+	return tableID, handle, nil
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -148,6 +165,25 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	 *   5. understanding the coding rules is a prerequisite for implementing this function,
 	 *      you can learn it in the projection 1-2 course documentation.
 	 */
+
+	k := key
+	if !key.HasPrefix(tablePrefix) {
+		err = errInvalidRecordKey.GenWithStack("invalid key - %q", k)
+		return 0, 0, nil, err
+	}
+ 
+	key, tableID, err = codec.DecodeInt(key[tablePrefixLength:])
+	if err != nil {
+		return 0, 0, nil, errors.Trace(err)
+	}
+ 
+	key, indexID, err = codec.DecodeInt(key[len(indexPrefixSep):])
+	if err != nil {
+		return 0, 0, nil, errors.Trace(err)
+	}
+
+	indexValues = key
+
 	return tableID, indexID, indexValues, nil
 }
 
